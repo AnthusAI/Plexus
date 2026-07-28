@@ -21,6 +21,7 @@ include = [
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
 # --- Core (always installed) ---
+click = ">=8.1.7,<9.0.0"
 dateparser = ">=1.1.0"
 python-dotenv = ">=1.1.0"
 nest_asyncio = "*"
@@ -157,7 +158,7 @@ aws-cdk-lib = ">=2.100.0"
 constructs = ">=10.0.0"
 
 [tool.poetry.scripts]
-plexus = "plexus.cli.shared.CommandLineInterface:main"
+plexus = "plexus.cli.entrypoint:main"
 plexus-dashboard = "plexus.dashboard.cli:cli"
 
 [tool.pytest.ini_options]

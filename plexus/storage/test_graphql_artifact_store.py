@@ -122,6 +122,7 @@ def test_requests_batched_tickets_with_frozen_contract_fields():
         "https://storage.example/second",
     ]
     query, variables = executor.calls[0]
+    assert "$requests: [ArtifactTransferRequestInput!]!" in query
     assert "createArtifactTransferTickets" in query
     for field in ("objectKey", "method", "url", "requiredHeaders", "expiresAt"):
         assert field in query

@@ -1,0 +1,58 @@
+{
+  "id": "plx-378ed959-6032-46ff-b569-aa9d59b8269c",
+  "title": "Restore deployability of artifact-ticket sandbox backend",
+  "description": "## Problem\n\nThe additive artifact-ticket backend fails Amplify sandbox type validation because environment configuration is applied through an interface that does not expose that supported operation. This blocks the early application-authentication and transfer acceptance gate.\n\n## Expected behavior\n\nGiven the additive artifact-ticket backend is present\nWhen the existing Amplify sandbox is synthesized and deployed\nThen backend type validation succeeds\nAnd the ticket resolver receives its required table and bucket configuration\nAnd Cognito login plus a real signed artifact round trip can be tested before consumer migrations proceed.\n\n## Scope\n\nRepair the supported Amplify/CDK resource integration, add a regression contract, redeploy the existing sandbox, and record sanitized acceptance evidence. Do not add direct-storage, API-key, AWS-SSO, or silent fallback behavior.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "codex/root",
+  "creator": null,
+  "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "labels": [
+    "aws-login-free",
+    "sandbox-acceptance"
+  ],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f24c7c40-9072-4264-826d-836019b0eb58",
+      "author": "ryan.porter",
+      "text": "Kickoff: coordinator /root is working in /Users/ryan.porter/Projects/Plexus-aws-login-free-sandbox-fix on branch codex/aws-login-free-sandbox-deploy-fix, based on 815943c53. Owned scope: reproduce the Amplify type-validation failure, add a behavior-first regression contract, repair the supported backend resource integration, redeploy the existing sandbox, and run Cognito plus signed-transfer acceptance. Dependency boundary: Wave 2 consumer branches remain unmerged and the evaluation consumer lane remains paused until this gate passes.",
+      "created_at": "2026-07-28T13:41:55.610122Z"
+    },
+    {
+      "id": "ada5939a-30ba-4279-9fa5-7ae8386b30a5",
+      "author": "ryan.porter",
+      "text": "Milestone: early sandbox acceptance found two deployment defects before any Wave 2 merge. First, backend type validation rejected calling addEnvironment on the exposed IFunction; the repair uses the supported Amplify function resource method. Second, CloudFormation detected a data/function nested-stack cycle; the resolver is now assigned to the supported data resource group. Regression specifications failed for each defect before implementation and now pass. Focused contract: 3 passed. Generated schema contract is current and its check passes. Next: deploy once to the existing named sandbox, then exercise Cognito login and signed HTTPS transfer.",
+      "created_at": "2026-07-28T13:48:12.048455Z"
+    },
+    {
+      "id": "a1c29ede-8c4c-4b37-8260-20a46bb82993",
+      "author": "ryan.porter",
+      "text": "Sandbox acceptance found a second pre-login packaging defect after the infrastructure deployment passed: a clean locked Poetry installation could not start the `plexus` CLI because `click` is imported by the command framework but is not declared as a direct project dependency. This blocks the observable login scenario before the hosted authorization page opens.\n\nNext: add a behavior-first packaging regression, declare the runtime dependency explicitly, rerun the clean CLI smoke test, and then resume Cognito login, identity, refresh, GraphQL, and signed artifact-transfer acceptance with AWS credential environment variables removed.\n",
+      "created_at": "2026-07-28T13:56:10.331691Z"
+    },
+    {
+      "id": "2b295d13-6a03-4a6d-b2e8-a5b4570ac46d",
+      "author": "ryan.porter",
+      "text": "Behavior-first CLI startup coverage now passes after two minimal fixes: `click` is an explicit core runtime dependency, and the installed entrypoint dispatches `login`, `whoami`, and `logout` before importing the legacy scoring command graph. The observable `plexus login --help` startup dropped from tens of seconds in the full environment to 0.57 seconds. Focused auth tests are green except the deliberate occupied-port test while the real sandbox login listener is currently using that port.\n",
+      "created_at": "2026-07-28T14:04:12.185797Z"
+    },
+    {
+      "id": "adae1f1c-4ef7-4807-a3a0-be819389177b",
+      "author": "ryan.porter",
+      "text": "Live Cognito acceptance passed `plexus whoami` and an authenticated AppSync collection query with AWS credential variables and the API key removed. The first `GraphQLArtifactStore` write then failed closed before ticket issuance because its mutation declares `$requests` as `[ArtifactTransferRequest!]!`, while the deployed schema requires `[ArtifactTransferRequestInput!]!`. This unit-test blind spot allowed the returned object type to be confused with the mutation input type.\n\nNext: add an exact mutation-variable contract assertion, correct the operation, rerun focused tests, then repeat the same credential-free signed PUT/GET round trip.\n",
+      "created_at": "2026-07-28T15:11:40.341127Z"
+    },
+    {
+      "id": "cd0efa30-2894-4464-87bb-d563c9e23fb6",
+      "author": "ryan.porter",
+      "text": "Sandbox acceptance is green with all local AWS credential/profile variables and the API key removed.\n\nEvidence:\n- Real hosted Cognito authorization-code login completed and stored the refresh credential in the OS keychain.\n- `plexus whoami` returned the sandbox test identity.\n- A Cognito-authenticated AppSync collection query succeeded.\n- An explicitly expired access-token cache refreshed from the keychain without user or AWS-login intervention.\n- `GraphQLArtifactStore` completed a signed HTTPS PUT/GET round trip; 54 downloaded bytes matched the declared SHA-256.\n- Local `boto3.client(\"s3\")` was forced to raise during the round trip and was never invoked.\n- `plexus logout` revoked and removed the application session, and the temporary sandbox user was deleted.\n\nAcceptance exposed and fixed four defects before the storage-migration lanes merge: unsupported Amplify function environment mutation, a cross-stack dependency cycle, the Python mutation's wrong GraphQL input type, and an unsigned duplicate checksum header on signed PUTs. It also added explicit CLI framework packaging, lightweight auth-command dispatch, and a numeric-loopback callback server that does not wait on reverse DNS.\n",
+      "created_at": "2026-07-28T15:17:36.936097Z"
+    }
+  ],
+  "created_at": "2026-07-28T13:41:48.584217Z",
+  "updated_at": "2026-07-28T15:17:36.936097Z",
+  "closed_at": null,
+  "custom": {}
+}

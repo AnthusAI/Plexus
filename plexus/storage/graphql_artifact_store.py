@@ -19,7 +19,7 @@ import requests
 
 
 _TICKET_MUTATION = """
-mutation CreateArtifactTransferTickets($requests: [ArtifactTransferRequest!]!) {
+mutation CreateArtifactTransferTickets($requests: [ArtifactTransferRequestInput!]!) {
   createArtifactTransferTickets(requests: $requests) {
     objectKey
     method
