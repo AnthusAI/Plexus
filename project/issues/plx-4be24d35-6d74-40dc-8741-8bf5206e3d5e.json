@@ -76,10 +76,16 @@
       "author": "ryan.porter",
       "text": "Recovery CronJob specification first failed because PLEXUS_GRAPHQL_AUTH_MODE was absent. Added the same required explicit api_key value used by the worker deployment while retaining the existing shared Secret-backed PLEXUS_API_KEY. No authentication fallback was added. Rendered chart and demo harness checks are green: 19 passed; Ruff and diff checks pass. Next: deploy committed snapshot and require a terminally successful recovery Job plus no new BackoffLimitExceeded event.",
       "created_at": "2026-07-28T20:28:06.296079Z"
+    },
+    {
+      "id": "e2196ee1-e380-44cd-a037-fb9fb8574c27",
+      "author": "ryan.porter",
+      "text": "Recovery authentication repair passed live on committed snapshot d3a48e41f593bc5dced38cb543132d59dadc6773. Helm rendered and deployed PLEXUS_GRAPHQL_AUTH_MODE=api_key on the procedure-recovery CronJob. Manual proof Job completed with exit 0 and checked three completed local procedures; the next controller-scheduled Job plexus-plexus-worker-procedure-recovery-29754510 also succeeded. Final focused validation after this fix: 146 product/demo/chart/optimizer tests and 65 proxy tests passed, with 6 intentional proxy environment deselections; Ruff passed. The final local release remains running. Keep work in progress until the local commits land.",
+      "created_at": "2026-07-28T20:31:17.205768Z"
     }
   ],
   "created_at": "2026-07-28T17:58:38.910670Z",
-  "updated_at": "2026-07-28T20:28:06.296079Z",
+  "updated_at": "2026-07-28T20:31:17.205768Z",
   "closed_at": null,
   "custom": {}
 }
