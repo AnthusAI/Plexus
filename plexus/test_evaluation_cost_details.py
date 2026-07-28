@@ -1,8 +1,9 @@
 import pytest
 import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
-from plexus.Evaluation import Evaluation
+from plexus.Evaluation import AccuracyEvaluation, Evaluation
 from plexus.scores.Score import Score
 
 
@@ -192,6 +193,31 @@ def test_update_variables_writes_cost_details_without_existing_parameters():
     assert update_input["cost"] == pytest.approx(0.24)
     parsed = json.loads(update_input["parameters"])
     assert parsed["metadata"]["cost_details"]["total_usd"] == pytest.approx(0.24)
+
+
+def test_accuracy_evaluation_keeps_persisted_parameters_for_completion(monkeypatch):
+    persisted = {
+        "notes": "comparison run",
+        "metadata": {
+            "baseline": "eval-baseline",
+            "current_baseline": "eval-current",
+        },
+    }
+
+    def fake_evaluation_init(self, **kwargs):
+        self.scorecard = kwargs["scorecard"]
+        self.parameters = self._coerce_parameters_dict(kwargs.get("parameters"))
+        self.logging = __import__("logging").getLogger("test")
+
+    monkeypatch.setattr(Evaluation, "__init__", fake_evaluation_init)
+
+    evaluation = AccuracyEvaluation(
+        scorecard_name="scorecard",
+        scorecard=SimpleNamespace(scores=[]),
+        parameters=json.dumps(persisted),
+    )
+
+    assert evaluation.parameters == persisted
 
 
 @pytest.mark.asyncio

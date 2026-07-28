@@ -3163,6 +3163,7 @@ def accuracy(
                 scorecard_id=sc_id_for_eval,
                 score_id=score_id_for_eval,
                 score_version_id=score_version_id_for_eval,
+                parameters=evaluation_record.parameters,
                 override_folder=f"./overrides/{scorecard_name_resolved}",
                 allow_no_labels=allow_no_labels
             )
@@ -4815,6 +4816,7 @@ def feedback(
                     subset_of_score_names=[score_name_for_dataset],  # Only evaluate the target score
                     rca_pending=True,  # Outer code owns the COMPLETED write after RCA
                     labeled_samples=labeled_samples,
+                    parameters=evaluation_record.parameters,
                 )
                 
                 # Advance from Setup to Processing stage before running predictions
