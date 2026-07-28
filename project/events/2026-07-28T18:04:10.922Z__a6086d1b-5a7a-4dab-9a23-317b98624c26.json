@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a6086d1b-5a7a-4dab-9a23-317b98624c26",
+  "issue_id": "plx-8308fb30-5e2c-4ba0-b897-dbd6ab0a97d4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T18:04:10.922Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Refresh IAM GraphQL signing credentials in long-running workloads",
+    "description": "## Problem\n\nThe IAM GraphQL client freezes temporary role credentials when it is constructed. Long-running Lambda or container workloads can retain an expired signing key instead of using the SDK credential provider's automatic rotation.\n\n## Expected behavior\n\nGiven a deployed workload uses IAM GraphQL authentication\nWhen its temporary role credentials rotate\nThen every AppSync request is signed with currently valid credentials\nAnd the client never falls back to Cognito, API keys, AWS profiles, or stored access keys.\n\n## Acceptance\n\n- A behavior test proves the signer retains the refreshable credential provider.\n- A workload without role credentials fails closed.\n- A sandbox role completes an AppSync artifact round trip without stored credentials.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": []
+  }
+}
