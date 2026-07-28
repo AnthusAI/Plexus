@@ -102,9 +102,13 @@ def _metadata() -> ProcedureMetadata:
         execution_log=[
             CheckpointEntry(
                 position=0,
-                type="checkpoint",
-                result={"name": "started", "data": {"phase": "start"}},
+                type="explicit_checkpoint",
+                result={"phase": "start"},
                 timestamp=datetime.now(timezone.utc),
+                duration_ms=12.5,
+                input_hash="input-hash",
+                run_id="run-1",
+                captured_vars={"phase": "before-checkpoint"},
             )
         ],
         replay_index=1,
@@ -152,7 +156,53 @@ def test_start_checkpoint_stop_and_resume_use_graphql_artifacts_without_s3(monke
     assert client.status == "STOPPED"
     assert resumed.state["phase"] == "running"
     assert resumed.lua_state == {"cursor": 3}
-    assert [entry.result["name"] for entry in resumed.execution_log] == ["started", "paused"]
+    assert len(resumed.execution_log) == 2
+    assert resumed.execution_log[0].type == "explicit_checkpoint"
+    assert resumed.execution_log[0].result == {"phase": "start"}
+    assert resumed.execution_log[0].duration_ms == 12.5
+    assert resumed.execution_log[0].input_hash == "input-hash"
+    assert resumed.execution_log[0].run_id == "run-1"
+    assert resumed.execution_log[0].captured_vars == {"phase": "before-checkpoint"}
+    assert resumed.execution_log[1].type == "checkpoint"
+    assert resumed.execution_log[1].result == {
+        "name": "paused",
+        "data": {"phase": "checkpoint"},
+    }
+
+
+def test_resume_supports_legacy_named_checkpoint_object_format():
+    client = _ProcedureClient()
+    artifacts = _MemoryArtifactStore()
+    checkpoints = {
+        "started": {
+            "name": "started",
+            "result": {"phase": "start"},
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }
+    }
+    client.metadata = {
+        "state": {},
+        "lua_state": {},
+        "checkpoints": {
+            "_s3_key": "procedures/procedure-1/checkpoints.json",
+            "sha256": hashlib.sha256(json.dumps(checkpoints).encode()).hexdigest(),
+            "size_bytes": len(json.dumps(checkpoints).encode()),
+            "content_type": "application/json",
+        },
+    }
+    artifacts.objects["procedures/procedure-1/checkpoints.json"] = json.dumps(checkpoints).encode()
+
+    resumed = PlexusStorageAdapter(
+        client,
+        "procedure-1",
+        artifact_store=artifacts,
+    ).load_procedure_metadata("procedure-1")
+
+    assert resumed.execution_log[0].type == "checkpoint"
+    assert resumed.execution_log[0].result == {
+        "name": "started",
+        "data": {"phase": "start"},
+    }
 
 
 def test_resume_rejects_legacy_pointer_without_checksum_or_size():

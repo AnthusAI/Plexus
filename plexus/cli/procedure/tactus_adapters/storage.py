@@ -211,6 +211,60 @@ def _json_bytes(payload: Any) -> bytes:
     return json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
 
 
+def _serialize_execution_log(entries: List[CheckpointEntry]) -> List[Dict[str, Any]]:
+    """Preserve Tactus' position-based checkpoint records without narrowing their types."""
+    serialized = []
+    for entry in entries:
+        source_location = entry.source_location
+        if source_location is not None and hasattr(source_location, "model_dump"):
+            source_location = source_location.model_dump(mode="json")
+        serialized.append({
+            "position": entry.position,
+            "type": entry.type,
+            "result": _lua_to_serializable(entry.result),
+            "timestamp": entry.timestamp.isoformat(),
+            "duration_ms": entry.duration_ms,
+            "input_hash": entry.input_hash,
+            "run_id": entry.run_id,
+            "source_location": _lua_to_serializable(source_location),
+            "captured_vars": _lua_to_serializable(entry.captured_vars),
+        })
+    return serialized
+
+
+def _deserialize_execution_log(payload: Any) -> List[CheckpointEntry]:
+    """Load current ordered logs and the legacy named-checkpoint object format."""
+    if isinstance(payload, list):
+        entries = []
+        for raw_entry in payload:
+            if not isinstance(raw_entry, dict):
+                raise ProcedureArtifactStorageError("checkpoint artifact contains a malformed entry")
+            try:
+                entry_data = dict(raw_entry)
+                entry_data["timestamp"] = datetime.fromisoformat(entry_data["timestamp"])
+                entries.append(CheckpointEntry(**entry_data))
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ProcedureArtifactStorageError("checkpoint artifact is malformed") from exc
+        return entries
+
+    if not isinstance(payload, dict):
+        raise ProcedureArtifactStorageError("checkpoints artifact must contain an array or object")
+
+    entries = []
+    for position, (name, checkpoint_data) in enumerate(payload.items()):
+        try:
+            entries.append(CheckpointEntry(
+                position=position,
+                type="checkpoint",
+                result={"name": name, "data": checkpoint_data.get("result")},
+                timestamp=datetime.fromisoformat(checkpoint_data["completed_at"]),
+                run_id=checkpoint_data.get("run_id"),
+            ))
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise ProcedureArtifactStorageError("checkpoint artifact is malformed") from exc
+    return entries
+
+
 def _pointer_read_request(
     procedure_id: str,
     pointer: Any,
@@ -430,21 +484,7 @@ class PlexusStorageAdapter:
                         f"{field_name} artifact is not valid JSON"
                     ) from exc
 
-        checkpoints_dict = loaded_fields["checkpoints"]
-        if not isinstance(checkpoints_dict, dict):
-            raise ProcedureArtifactStorageError("checkpoints artifact must contain an object")
-        execution_log = []
-        for position, (name, ckpt_data) in enumerate(checkpoints_dict.items()):
-            try:
-                execution_log.append(CheckpointEntry(
-                    position=position,
-                    type='checkpoint',
-                    result={'name': name, 'data': ckpt_data.get('result')},
-                    timestamp=datetime.fromisoformat(ckpt_data['completed_at']),
-                    run_id=ckpt_data.get('run_id'),
-                ))
-            except (AttributeError, KeyError, TypeError, ValueError) as exc:
-                raise ProcedureArtifactStorageError("checkpoint artifact is malformed") from exc
+        execution_log = _deserialize_execution_log(loaded_fields["checkpoints"])
 
         if not isinstance(loaded_fields["state"], dict) or not isinstance(loaded_fields["lua_state"], dict):
             raise ProcedureArtifactStorageError("procedure state artifacts must contain objects")
@@ -468,19 +508,7 @@ class PlexusStorageAdapter:
             procedure_id: Procedure ID (for API compatibility)
             metadata: ProcedureMetadata to save
         """
-        # Convert execution_log to serializable format (store as checkpoints for backward compat)
-        checkpoints_dict = {}
-        for checkpoint in metadata.execution_log:
-            if checkpoint.type == 'checkpoint' and isinstance(checkpoint.result, dict):
-                name = checkpoint.result.get('name', f'checkpoint_{checkpoint.position}')
-                entry: dict = {
-                    'name': name,
-                    'result': checkpoint.result.get('data'),
-                    'completed_at': checkpoint.timestamp.isoformat(),
-                }
-                if checkpoint.run_id is not None:
-                    entry['run_id'] = checkpoint.run_id
-                checkpoints_dict[name] = entry
+        checkpoints = _serialize_execution_log(metadata.execution_log)
 
         # Update the Procedure index only after all attachment writes succeed.
         mutation = """
@@ -522,7 +550,7 @@ class PlexusStorageAdapter:
             "state": metadata.state,
             "dashboard_state": _build_dashboard_state(metadata.state or {}),
             "lua_state": metadata.lua_state,
-            "checkpoints": checkpoints_dict,
+            "checkpoints": checkpoints,
         }
         uploads = []
         upload_fields = []
