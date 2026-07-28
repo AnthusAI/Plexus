@@ -32,10 +32,16 @@
       "author": "ryan.porter",
       "text": "Integration kickoff: combine PRs #507, #508, and #509 on isolated branch codex/integrate-artifact-ticket-migrations from current develop. Keep the urgent production Amplify compile repair separate. Retarget the three migration PRs away from develop, preserve their histories, resolve cross-lane conflicts only on the integration branch, then run the task's complete local and sandbox acceptance gates before opening one integration-to-develop PR.",
       "created_at": "2026-07-28T16:51:59.187470Z"
+    },
+    {
+      "id": "8c954d58-4e46-4c24-9d7b-f81ddda06355",
+      "author": "ryan.porter",
+      "text": "Combined branch d3d60ede passed focused migration coverage (144 Python tests), ticket/schema contracts (19 tests), dashboard typecheck plus explicit Amplify backend typecheck, dashboard unit coverage (91 suites / 669 tests), and the dispatch regression net (13 tests). Full Python 3.12 found auth-migration test harness drift plus two pre-existing input-source test failures reproducible on develop a002fcbc. Repaired only test injection/expectations: patch the imported score-chat dependency, treat missing runtime auth as an execution failure rather than a Click parse failure, and inject the fake score through the explicit resolver seam. Focused rerun: 19 passed. No production auth fallback or runtime behavior changed.",
+      "created_at": "2026-07-28T17:03:57.797702Z"
     }
   ],
   "created_at": "2026-07-28T12:52:39.017652Z",
-  "updated_at": "2026-07-28T16:51:59.187470Z",
+  "updated_at": "2026-07-28T17:03:57.797702Z",
   "closed_at": null,
   "custom": {
     "source": "shared",
