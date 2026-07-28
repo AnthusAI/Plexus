@@ -18,6 +18,7 @@ def _card(
     score_updated_at: str = "2024-01-01T00:00:00Z",
     latest_version_id: str | None = None,
     latest_version_created_at: str = "2024-01-01T00:00:00Z",
+    champion_resolves: bool = True,
 ) -> dict[str, Any]:
     """Return an inventory row with deliberately old, valid activity evidence."""
     latest_version_id = latest_version_id or f"version-{score_id}"
@@ -28,6 +29,11 @@ def _card(
             "id": score_id,
             "name": f"{name} score",
             "championVersionId": f"version-{score_id}",
+            "championVersion": ({
+                "id": f"version-{score_id}",
+                "scoreId": score_id,
+                "createdAt": latest_version_created_at,
+            } if champion_resolves else None),
             "updatedAt": score_updated_at,
             "versions": {"items": [{
                 "id": latest_version_id,
@@ -35,6 +41,28 @@ def _card(
             }]},
         }]}}]},
     }
+
+
+def test_rank_scope_classifies_a_dangling_champion_as_structurally_unranked() -> None:
+    """A dead scalar pointer is not missing cooldown metadata for an eligible score."""
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-rank-dangling-champion"),
+        scorecards_lister=lambda _args: {
+            "items": [_card("card-a", "Alpha", champion_resolves=False)],
+            "nextToken": None,
+        },
+    )
+    module._feedback_aligner_batch = lambda _args: _complete_alignment(
+        [_alignment_row("card-a", "Alpha")], 1
+    )
+
+    result = module.optimization.rank({})
+
+    assert result["exact"] is True
+    assert result["ranked"] == []
+    assert result["coverage"]["activity"]["incomplete_score_count"] == 0
+    assert result["unranked"][0]["unranked_reason"] == "invalid_champion"
+    assert result["unranked"][0]["champion_version"] == "version-score"
 
 
 def _alignment_row(card_id: str, name: str, score_id: str = "score") -> dict[str, Any]:

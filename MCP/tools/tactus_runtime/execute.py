@@ -953,6 +953,7 @@ def _default_scorecards_list(args: dict[str, Any]) -> Any:
         scorecard_fields += (
             " sections { items { scores { items { "
             "id name championVersionId isDisabled updatedAt "
+            "championVersion { id scoreId createdAt } "
             "versions(sortDirection: DESC, limit: 1) { items { id createdAt } } "
             "} } } }"
         )
@@ -9847,6 +9848,15 @@ class PlexusRuntimeModule:
                         continue
                     inventory = inventory or {}
                     score_activity = evaluate_score_activity(inventory, as_of=as_of)
+                    champion_id = inventory.get("championVersionId")
+                    champion_relationship_valid: bool | None = None
+                    if champion_id and "championVersion" in inventory:
+                        champion_relationship = inventory.get("championVersion")
+                        champion_relationship_valid = bool(
+                            isinstance(champion_relationship, Mapping)
+                            and champion_relationship.get("id") == champion_id
+                            and champion_relationship.get("scoreId") == score_id
+                        )
                     rows.append({
                         **score,
                         # The feedback analyzer calls these total_items and
@@ -9854,7 +9864,8 @@ class PlexusRuntimeModule:
                         # valid feedback and reviewed disagreements.
                         "valid_feedback_count": score.get("valid_feedback_count", score.get("total_items", 0)),
                         "reviewed_disagreements": score.get("reviewed_disagreements", score.get("disagreements", 0)),
-                        "champion_version": score.get("champion_version") or inventory.get("championVersionId"),
+                        "champion_version": score.get("champion_version") or champion_id,
+                        "champion_relationship_valid": champion_relationship_valid,
                         "enabled": score.get("enabled", not bool(inventory.get("isDisabled", False))),
                         "scorecard_id": result_card_id,
                         "scorecard_name": score.get("scorecard_name") or card_result.get("scorecard_name"),
@@ -11771,6 +11782,8 @@ Rank scope: opaque `scorecard_ids` or literal case-insensitive
 the later of `score.updatedAt` or newest score-version `createdAt`;
 `recent_score_activity`; missing evidence is incomplete; assessment returns
 `cooldown_active`/`wait_for_cooldown`; run rechecks live activity before dispatch.
+An unresolved scalar champion ID is structurally unranked as `invalid_champion`,
+not misreported as missing cooldown evidence.
 
 Helper aliases are injected before the snippet: high-frequency short names and
 canonical `namespace_method` forms, including `docs_list/docs_get`,

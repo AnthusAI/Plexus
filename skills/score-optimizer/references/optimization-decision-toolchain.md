@@ -92,6 +92,9 @@ timestamp. Missing or malformed recency evidence fails closed and prevents an
 exact ranking. Assessment preserves this evidence and returns
 `cooldown_active` plus `wait_for_cooldown`. Launch rechecks the same live fields;
 a new edit or version after assessment is rejected without optimizer dispatch.
+Scores whose scalar champion ID does not resolve through the champion
+relationship are structurally unranked as `invalid_champion`; they cannot be
+optimized and do not make otherwise complete cooldown coverage incomplete.
 
 Offline CLI evidence must include complete activity coverage with the fixed
 policy version and frozen `as_of`, plus complete per-score activity evidence.

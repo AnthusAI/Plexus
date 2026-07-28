@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0d630185-5c7d-431d-8360-09e74e540afb",
+  "issue_id": "plx-36547116-59c9-44de-b62e-c428106ddad8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T18:41:17.382Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Restore complete newest-version activity evidence in optimization ranking",
+    "description": "As an optimization operator, I want portfolio ranking to retrieve the newest version activity for every versioned score, so that the cooldown policy can distinguish recent work from eligible work without incomplete coverage.\n\nObserved platform defect: the exhaustive score inventory can return a champion version identifier while its reverse versions relationship is empty, causing otherwise eligible scores to fail activity coverage. The fix must remain exhaustive, include unpromoted versions, preserve opaque identifiers, and avoid per-score N+1 reads.\n\nFeature: Complete score activity evidence\n\nScenario: A score has version history not visible through the reverse relationship\nGiven an exhaustive score inventory row has a champion version identifier and score update timestamp\nAnd the reverse score versions relationship is empty\nWhen optimization ranking collects newest-version activity\nThen it retrieves the newest version through a complete account-scoped version inventory\nAnd evaluates the fixed cooldown against the later activity timestamp\nAnd preserves exact coverage when all evidence is complete\n\nScenario: Version evidence remains incomplete\nGiven neither inventory path can establish a newest version for a versioned score\nWhen optimization ranking runs\nThen the score fails closed\nAnd the portfolio is not exact\nAnd the primary next action reports evidence repair rather than rank completion\n\nOut of scope: client-specific data repair, score mutation, optimizer launch, and cooldown-policy changes.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

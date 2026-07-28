@@ -700,6 +700,7 @@ def test_default_scorecards_list_requests_only_newest_version_activity_for_rank_
     assert result["items"][0]["sections"]["items"][0]["scores"]["items"][0]["versions"]["items"][0]["id"] == opaque_version_id
     query = queries[0]
     assert "id name championVersionId isDisabled updatedAt" in query
+    assert "championVersion { id scoreId createdAt }" in query
     assert "versions(sortDirection: DESC, limit: 1)" in query
     assert "items { id createdAt }" in query
 
@@ -1921,6 +1922,7 @@ def test_execute_tactus_description_documents_fixed_optimization_cooldown() -> N
     assert "recent_score_activity" in description
     assert "wait_for_cooldown" in description
     assert "rechecks live activity before dispatch" in description
+    assert "invalid_champion" in description
 
 
 def test_execute_tactus_description_teaches_progressive_disclosure() -> None:

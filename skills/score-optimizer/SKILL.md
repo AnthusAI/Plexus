@@ -158,6 +158,9 @@ Missing or malformed activity evidence fails closed and makes the portfolio
 incomplete. A direct assessment reports `cooldown_active` with
 `wait_for_cooldown`; an approved run rechecks live activity immediately before
 dispatch and rejects any newly modified target without starting its optimizer.
+If a scalar champion ID does not resolve through the champion relationship,
+the score is structurally ineligible and remains visible as
+`invalid_champion`; it is not an activity-coverage failure.
 
 ## Three-Phase Rubric-Memory SOP
 

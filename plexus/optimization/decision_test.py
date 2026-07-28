@@ -512,6 +512,26 @@ def test_rank_without_enumeration_evidence_is_never_exact():
 
     assert result["exact"] is False
     assert result["coverage"]["complete"] is False
+    assert result["primary_next_action"] == "repair_ranking_coverage"
+
+
+def test_rank_distinguishes_a_dangling_champion_from_incomplete_activity():
+    result = rank_portfolio(
+        [{
+            "scorecard_id": "card",
+            "score_id": "score",
+            "champion_version": "dangling-version",
+            "champion_relationship_valid": False,
+            "valid_feedback_count": 20,
+            "disagreement_rate": 0.5,
+        }],
+        coverage={"complete": True, "activity": _activity_coverage()},
+    )
+
+    assert result["exact"] is True
+    assert result["ranked"] == []
+    assert result["unranked"][0]["unranked_reason"] == "invalid_champion"
+    assert result["coverage"]["activity"]["incomplete_score_count"] == 0
 
 
 def test_rank_supports_alignment_aliases_and_excludes_declared_unusable_pairs():

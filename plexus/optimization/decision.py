@@ -599,6 +599,9 @@ def rank_portfolio(scores: Sequence[Mapping[str, Any]], *, coverage: Mapping[str
         elif not champion:
             row["unranked_reason"] = "missing_champion"
             unranked.append(row)
+        elif score.get("champion_relationship_valid") is False:
+            row["unranked_reason"] = "invalid_champion"
+            unranked.append(row)
         else:
             supplied_activity = score.get("score_activity")
             if isinstance(supplied_activity, Mapping):
@@ -691,6 +694,12 @@ def rank_portfolio(scores: Sequence[Mapping[str, Any]], *, coverage: Mapping[str
         "activity_policy": dict(coverage["activity"]),
         "ranked": ranked,
         "unranked": unranked,
+        "primary_next_action": (
+            "rank_complete" if complete else "repair_ranking_coverage"
+        ),
+        "blockers": ([] if complete else [
+            "Portfolio ranking coverage is incomplete."
+        ]),
     }
     return _packet_result("rank", result, {**context, "coverage": coverage})
 
