@@ -28,10 +28,16 @@
       "author": "ryan.porter",
       "text": "Sandbox evidence: with AWS profile/session variables, API keys, and model keys absent, the Cognito session listed scorecards and loaded one explicit score version through the evaluation configuration path. The loaded configuration retained its exact score and version identifiers. Model execution was intentionally not attempted because no model-provider credential is available in this validation environment.",
       "created_at": "2026-07-28T19:31:47.165327Z"
+    },
+    {
+      "id": "2110cbc1-a88b-47a4-ae0b-87a517679136",
+      "author": "ryan.porter",
+      "text": "Commit d6f60e219. Live Cognito discovery and evaluation-configuration loading also passed with AWS, API-key, and model-provider variables absent; complete model execution was not claimed because no model-provider credential was available. Publication handoff: fix is pushed to draft PR #513 at head d6f60e219. The final combined PR #513 + PR #495 candidate passed 470 cross-PR tests, 4,026 Python tests on both 3.11 and 3.12, dashboard typecheck and 680 unit tests, Storybook build, and 700 Chromium tests. Cognito and IAM-role sandbox canaries passed without direct S3 or stored AWS credentials. Keep this bug in progress until the fix lands in develop.",
+      "created_at": "2026-07-28T19:38:09.637989Z"
     }
   ],
   "created_at": "2026-07-28T19:21:22.041384Z",
-  "updated_at": "2026-07-28T19:31:47.165327Z",
+  "updated_at": "2026-07-28T19:38:09.637989Z",
   "closed_at": null,
   "custom": {}
 }

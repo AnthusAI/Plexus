@@ -22,10 +22,16 @@
       "author": "ryan.porter",
       "text": "Specification failed against the pinned PR head as expected: the IAM client called get_frozen_credentials and constructed a static AWS4Auth signer. Minimal implementation now retains the botocore credential provider through AWS4Auth(refreshable_credentials=...), avoids an explicit AWS profile, and fails closed when no role credentials exist. Focused dashboard-client suite: 31 passed.",
       "created_at": "2026-07-28T18:05:49.448795Z"
+    },
+    {
+      "id": "483afe7a-9f09-474d-a98c-681c5fddaccd",
+      "author": "ryan.porter",
+      "text": "Commit ad503fa59. The IAM-role canary issued a ticket and completed verified upload and download with no S3 permission or stored credentials; the no-AppSync-permission role was denied. Publication handoff: fix is pushed to draft PR #513 at head d6f60e219. The final combined PR #513 + PR #495 candidate passed 470 cross-PR tests, 4,026 Python tests on both 3.11 and 3.12, dashboard typecheck and 680 unit tests, Storybook build, and 700 Chromium tests. Cognito and IAM-role sandbox canaries passed without direct S3 or stored AWS credentials. Keep this bug in progress until the fix lands in develop.",
+      "created_at": "2026-07-28T19:38:09.938061Z"
     }
   ],
   "created_at": "2026-07-28T18:04:10.922459Z",
-  "updated_at": "2026-07-28T18:05:49.448795Z",
+  "updated_at": "2026-07-28T19:38:09.938061Z",
   "closed_at": null,
   "custom": {}
 }

@@ -22,10 +22,16 @@
       "author": "ryan.porter",
       "text": "Milestone: the behavior-first ordering test is green. Branch preparation creates the destination Task before cloning optimizer state and indexing its decision artifacts.",
       "created_at": "2026-07-28T19:11:14.089577Z"
+    },
+    {
+      "id": "35925b23-85db-4945-a51f-843d3fc226eb",
+      "author": "ryan.porter",
+      "text": "Commit 30c3c4f49. Publication handoff: fix is pushed to draft PR #513 at head d6f60e219. The final combined PR #513 + PR #495 candidate passed 470 cross-PR tests, 4,026 Python tests on both 3.11 and 3.12, dashboard typecheck and 680 unit tests, Storybook build, and 700 Chromium tests. Cognito and IAM-role sandbox canaries passed without direct S3 or stored AWS credentials. Keep this bug in progress until the fix lands in develop.",
+      "created_at": "2026-07-28T19:38:09.016824Z"
     }
   ],
   "created_at": "2026-07-28T18:54:53.106561Z",
-  "updated_at": "2026-07-28T19:11:14.089577Z",
+  "updated_at": "2026-07-28T19:38:09.016824Z",
   "closed_at": null,
   "custom": {}
 }
