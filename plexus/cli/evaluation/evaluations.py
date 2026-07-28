@@ -23,7 +23,7 @@ import boto3
 from botocore.exceptions import ClientError
 import yaml
 
-from plexus.CustomLogging import logging, set_log_group
+from plexus.CustomLogging import logging
 from plexus.Scorecard import Scorecard
 from plexus.Evaluation import AccuracyEvaluation, FeedbackEvaluation
 from plexus.cli.shared.console import console
@@ -101,8 +101,6 @@ def truncate_dict_strings(d, max_length=100):
     elif isinstance(d, str) and len(d) > max_length:
         return d[:max_length] + "..."
     return d
-
-set_log_group('plexus/cli/evaluation')
 
 from plexus.scores.Score import Score
 from plexus.dashboard.api.models.task import Task
@@ -1545,6 +1543,27 @@ async def _run_shared_feedback_root_cause_orchestration(
         "has_usable_root_cause": contract["has_usable_root_cause"],
         "error_message": contract["error_message"],
     }
+
+
+def _mark_metrics_terminal_before_optional_rca(
+    evaluation_record: Any,
+    *,
+    processed_items: Optional[int] = None,
+) -> None:
+    """Make scored metrics usable before optional root-cause work begins.
+
+    Root-cause analysis enriches an already-scored evaluation; it must not
+    hold the evaluation in RUNNING after every prediction and metric has been
+    durably written.  A later RCA update may add parameters or warnings, but
+    does not reopen the metric result.
+    """
+    update_fields: Dict[str, Any] = {
+        "status": "COMPLETED",
+        "estimatedRemainingSeconds": 0,
+    }
+    if processed_items is not None:
+        update_fields["processedItems"] = processed_items
+    evaluation_record.update(**update_fields)
 
 
 def _apply_feedback_rca_outcome_to_parameters(
@@ -3165,6 +3184,7 @@ def accuracy(
                 scorecard_id=sc_id_for_eval,
                 score_id=score_id_for_eval,
                 score_version_id=score_version_id_for_eval,
+                parameters=evaluation_record.parameters,
                 override_folder=f"./overrides/{scorecard_name_resolved}",
                 allow_no_labels=allow_no_labels
             )
@@ -3255,15 +3275,6 @@ def accuracy(
                         existing_parameters["dataset_id"] = data_set_id_for_eval
 
                     if dataset_backed_accuracy:
-                        try:
-                            eval_record_for_update.update(status="RUNNING")
-                        except Exception as status_exc:
-                            logging.debug(
-                                "Non-fatal status update failure before dataset-backed RCA: %s",
-                                status_exc,
-                                exc_info=True,
-                            )
-
                         rca_outcome = await _run_shared_feedback_root_cause_orchestration(
                             client=client,
                             account_key=account_key,
@@ -4815,8 +4826,11 @@ def feedback(
                     sampling_method="sequential",
                     random_seed=None,
                     subset_of_score_names=[score_name_for_dataset],  # Only evaluate the target score
-                    rca_pending=True,  # Outer code owns the COMPLETED write after RCA
+                    # Metrics become terminal as soon as scoring completes.  RCA only
+                    # enriches the completed record and must not gate its usability.
+                    rca_pending=False,
                     labeled_samples=labeled_samples,
+                    parameters=evaluation_record.parameters,
                 )
                 
                 # Advance from Setup to Processing stage before running predictions
@@ -4858,6 +4872,11 @@ def feedback(
                         tracker.fail_processing(error_msg, traceback.format_exc())
 
                     raise RuntimeError(error_msg) from e
+
+                _mark_metrics_terminal_before_optional_rca(
+                    evaluation_record,
+                    processed_items=len(labeled_samples),
+                )
 
                 # Update Analyzing stage status for root-cause analysis
                 # (AccuracyEvaluation.run() already advanced to Analyzing stage)

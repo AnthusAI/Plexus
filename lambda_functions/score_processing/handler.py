@@ -40,8 +40,7 @@ from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.scoring_job import ScoringJob
 from plexus.Scorecard import Scorecard
 from plexus.dashboard.api.models.item import Item
-from plexus.CustomLogging import logging, set_log_group
-from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
+from plexus.CustomLogging import logging
 from plexus.utils.score_result_timestamps import extract_score_result_timestamps
 
 # Import Item model for upsert functionality
@@ -50,9 +49,6 @@ try:
     PLEXUS_ITEM_AVAILABLE = True
 except ImportError:
     PLEXUS_ITEM_AVAILABLE = False
-
-set_log_group('plexus/lambda-score-processing')
-cloudwatch_logger = CloudWatchLogger(namespace="Plexus/LambdaScoreProcessing")
 
 # Default bucket name for score result attachments S3 storage
 # This should match the resource name in amplify/storage/resource.ts
@@ -354,7 +350,6 @@ async def create_score_result_for_api(
         }))
         
         # Use the dashboard client to execute the query
-        from plexus.dashboard.api.client import PlexusDashboardClient
         client = PlexusDashboardClient()
         
         # First, look up the Account ID using the key from the environment variable
@@ -744,15 +739,6 @@ async def create_score_result_for_api(
             "value": value,
             "status": status
         }))
-        
-        # Log cache created metric to CloudWatch
-        cloudwatch_logger.log_metric(
-            metric_name="CacheCreated",
-            metric_value=1,
-            dimensions={
-                "Environment": os.getenv('environment', 'unknown')
-            }
-        )
         
         # Handle trace data upload and attachment with improved reliability  
         trace_attachment_s3_path = None # Initialize to None

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4dbdfd62-157b-47de-8b23-88f7714ed365",
+  "issue_id": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-27T20:52:49.657Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Supported optimizer runtime integrations",
+    "description": "Purpose: Integrate Plexus optimization workflows through stable, supported Tactus lifecycle, model, telemetry, storage, and timeout interfaces.\n\nExclusions:\n- Runtime monkeypatching or private method replacement.\n- Silent storage, provider, or execution fallbacks.\n- Duplicating deployment commits owned by another active session.\n\nDependencies: Current Tactus package publication and Plexus dependency integration are external prerequisites owned by the deployment session. This epic records the durable integration contract and follow-up verification.\n\nDefinition of Done:\n- Plexus uses released public Tactus APIs for every optimizer runtime integration.\n- Dependency compatibility and supported extension points have contract tests.\n- Local and hosted storage behavior is explicit and fails clearly when unavailable.\n- Repository agent guidance explicitly prohibits monkeypatching owned dependencies instead of improving their public APIs.\n- No private runtime replacement or silent fallback remains.\n- Behavior-first specifications and focused tests pass.\n\nRunning log: Record sanitized decisions, attempts, outcomes, and next steps in this epic or its child issues.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-8570854c-bad6-4049-be38-e04836aae830",
+    "labels": []
+  }
+}

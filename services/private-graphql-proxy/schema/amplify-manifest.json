@@ -16,6 +16,10 @@
       "apiKey",
       "authenticated"
     ],
+    "createArtifactTransferTickets": [
+      "authenticated",
+      "iam"
+    ],
     "DataSet": [
       "apiKey",
       "authenticated"
@@ -26,6 +30,9 @@
     ],
     "DataSourceVersion": [
       "apiKey",
+      "authenticated"
+    ],
+    "dispatchConsoleChat": [
       "authenticated"
     ],
     "Evaluation": [
@@ -109,8 +116,49 @@
       "authenticated"
     ]
   },
-  "contractVersion": "b4c4856881fb2b67",
+  "contractVersion": "11e5f01a8b0fcb54",
   "customOperations": {
+    "createArtifactTransferTickets": {
+      "arguments": {
+        "requests": {
+          "isArray": true,
+          "isRequired": true,
+          "kind": "ref",
+          "name": "requests",
+          "type": "ArtifactTransferRequest"
+        }
+      },
+      "authRules": [
+        "authenticated",
+        "iam"
+      ],
+      "handler": "createArtifactTransferTicketsHandler",
+      "name": "createArtifactTransferTickets",
+      "operationType": "mutation",
+      "returnIsArray": true,
+      "returnIsRequired": true,
+      "returnType": "ArtifactTransferTicket"
+    },
+    "dispatchConsoleChat": {
+      "arguments": {
+        "messageId": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "messageId",
+          "type": "id"
+        }
+      },
+      "authRules": [
+        "authenticated"
+      ],
+      "handler": "dispatchConsoleChatHandler",
+      "name": "dispatchConsoleChat",
+      "operationType": "mutation",
+      "returnIsArray": false,
+      "returnIsRequired": false,
+      "returnType": "ConsoleChatDispatchResult"
+    },
     "getResourceByShareToken": {
       "arguments": {
         "token": {
@@ -129,10 +177,125 @@
       "handler": "getResourceByShareTokenHandler",
       "name": "getResourceByShareToken",
       "operationType": "query",
+      "returnIsArray": false,
+      "returnIsRequired": false,
       "returnType": "ResourceByShareTokenResponse"
     }
   },
   "customTypes": {
+    "ArtifactTransferRequest": {
+      "fields": {
+        "artifactType": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "artifactType",
+          "type": "string"
+        },
+        "contentType": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "contentType",
+          "type": "string"
+        },
+        "filename": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "filename",
+          "type": "string"
+        },
+        "operation": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "operation",
+          "type": "string"
+        },
+        "resourceId": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "resourceId",
+          "type": "id"
+        },
+        "resourceType": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "resourceType",
+          "type": "string"
+        },
+        "sha256": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "sha256",
+          "type": "string"
+        },
+        "sizeBytes": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "sizeBytes",
+          "type": "integer"
+        }
+      },
+      "name": "ArtifactTransferRequest"
+    },
+    "ArtifactTransferTicket": {
+      "fields": {
+        "expiresAt": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "expiresAt",
+          "type": "datetime"
+        },
+        "method": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "method",
+          "type": "string"
+        },
+        "objectKey": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "objectKey",
+          "type": "string"
+        },
+        "requiredHeaders": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "requiredHeaders",
+          "type": "json"
+        },
+        "url": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "url",
+          "type": "string"
+        }
+      },
+      "name": "ArtifactTransferTicket"
+    },
+    "ConsoleChatDispatchResult": {
+      "fields": {
+        "accepted": {
+          "isArray": false,
+          "isRequired": true,
+          "kind": "scalar",
+          "name": "accepted",
+          "type": "boolean"
+        }
+      },
+      "name": "ConsoleChatDispatchResult"
+    },
     "ResourceByShareTokenResponse": {
       "fields": {
         "data": {
@@ -165,7 +328,7 @@
       "fallback": "static-parser-for-checked-in-contract-generation"
     },
     "strategy": "amplify-runtime-first-with-static-dsl-fallback",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "indexes": {
     "Account": [
@@ -8238,10 +8401,10 @@
   ],
   "sources": {
     "dashboard/amplify/auth/resource.ts": {
-      "sha256": "a94820c924a6f9b58ddc3a1b7df5c1d31803f587c81860632382b30ab6aaf37a"
+      "sha256": "133affcbfc77be390e64a0274cc83c2017c45d2f7267569d3b5cd549cd8adc02"
     },
     "dashboard/amplify/data/resource.ts": {
-      "sha256": "10680011e4839f2a3567ea3fba43ead4744b2992a7b8dd2ebed3c42569d0b271"
+      "sha256": "ca1c66c25dae84f3a34ba28dd6b65048ce1060c7bb8a886c4db9ee802807ad90"
     },
     "dashboard/amplify/storage/resource.ts": {
       "sha256": "93c7b826a94e0105c875538f07e7fd07c56d572989475fe335726cd1b2d28ca3"

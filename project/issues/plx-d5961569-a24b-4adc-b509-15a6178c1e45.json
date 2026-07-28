@@ -1,0 +1,25 @@
+{
+  "id": "plx-d5961569-a24b-4adc-b509-15a6178c1e45",
+  "title": "Start Console responses without request-time runtime initialization",
+  "description": "As a Console user, I want the first response chunk promptly, so that interactive scorecard work feels responsive and predictable.\n\nFeature: Interactive Console latency\n\nScenario: First request on a provisioned instance\nGiven a provisioned Console responder is ready\nWhen a user sends a simple message\nThen Tactus model infrastructure was already initialized\nAnd the response records separate preparation, model initialization, provider first-chunk, and streaming timings\nAnd the client receives the first chunk in approximately five seconds or less under normal provider conditions\n\nScenario: Supported integration only\nGiven Plexus runs a Tactus agent\nWhen the agent executes\nThen Plexus uses released public Tactus APIs\nAnd does not replace Tactus private methods at runtime.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-0f79ddc4-5ad8-408b-a1cc-fbe32f7f20aa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5d49b5ba-4a21-47f4-b318-3718b05c3919",
+      "author": "ryan.porter",
+      "text": "Sandbox latency verification found two repeatable request-time costs before provider dispatch: the model prewarm cache does not match the effective agent configuration, and a short Console turn performs an unnecessary remote mid-run steering lookup. The first visible response was 15.2s; server telemetry showed 5.3s agent preparation, request-time LM initialization, and 3.9s provider first chunk. Warm turns repeated 4.2-4.6s preparation and request-time LM initialization. Fixing both before dependency publication and rerunning the benchmark.",
+      "created_at": "2026-07-23T20:11:07.214460Z"
+    }
+  ],
+  "created_at": "2026-07-23T18:45:38.514701Z",
+  "updated_at": "2026-07-23T20:11:07.214460Z",
+  "closed_at": null,
+  "custom": {}
+}

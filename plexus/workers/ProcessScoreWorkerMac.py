@@ -42,7 +42,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 # Setup logging - import but don't configure yet (will configure in each worker process after fork)
-from plexus.CustomLogging import logging, set_log_group
+from plexus.CustomLogging import logging
 
 # Import Plexus components
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -531,9 +531,7 @@ def _worker_process_function(worker_id, error_retry_delay, once=False):
     except ImportError:
         pass  # setproctitle is optional
     
-    # Pre-import heavy modules BEFORE setting up CloudWatch logging
-    # These imports can take 60+ seconds. If CloudWatch logging is active during imports,
-    # the background thread gets stuck and times out.
+    # Pre-import heavy modules before starting the worker.
     print(f"[Worker {worker_id}] 📦 Pre-loading heavy modules...")
     try:
         from plexus.Scorecard import Scorecard
@@ -545,8 +543,6 @@ def _worker_process_function(worker_id, error_retry_delay, once=False):
     except Exception as e:
         print(f"[Worker {worker_id}] ⚠️  Failed to pre-load some modules: {e}")
     
-    # NOW set up CloudWatch logging after all heavy imports are done
-    set_log_group('plexus/score/worker')
     logging.info(f"🚀 Starting worker process {worker_id}")
     
     async def run_worker():
@@ -635,7 +631,7 @@ class WorkerManager:
 
 async def run_single_worker():
     """Run a single worker (for backward compatibility)"""
-    # Pre-import heavy modules BEFORE setting up CloudWatch logging
+    # Pre-import heavy modules before starting the worker.
     print("📦 Pre-loading heavy modules...")
     try:
         from plexus.Scorecard import Scorecard
@@ -647,8 +643,6 @@ async def run_single_worker():
     except Exception as e:
         print(f"⚠️  Failed to pre-load some modules: {e}")
     
-    # NOW configure logging after imports are complete
-    set_log_group('plexus/score/worker')
     logging.info("🚀 Starting single worker mode")
     
     processor = JobProcessor()

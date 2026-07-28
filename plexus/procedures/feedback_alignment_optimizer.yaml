@@ -51,6 +51,12 @@ params:
     default: 0.02
     description: "Minimum AC1 (Gwet's alignment) improvement to continue iterating (0.02 = 2%)"
 
+  max_recall_regression:
+    type: number
+    default: 0.05
+    required: false
+    description: "Maximum allowed drop in protected-class recall when selecting candidates or synthesis leaders (0.05 = five percentage points). Set an explicitly reviewed larger value only when that tradeoff is intended."
+
   target_accuracy:
     type: number
     default: 0.95
@@ -68,12 +74,6 @@ params:
     default: 2
     required: false
     description: "Maximum concurrent evaluation processes. Bounds worker memory use when evaluating candidate hypotheses."
-
-  evaluation_stall_timeout_minutes:
-    type: number
-    default: 15
-    required: false
-    description: "Maximum minutes an evaluation may remain non-terminal without any processed-item or evaluation-update progress before it is treated as stalled."
 
   hint:
     type: string
@@ -120,6 +120,11 @@ params:
     type: object
     required: false
     description: "Optional per-agent model overrides, keyed by optimizer agent name. Example: {hypothesis_planner: gpt-5.4-mini, code_editor: gpt-5-mini, report_writer: gpt-5-mini}."
+
+  reviewed_model_change_justification:
+    type: string
+    required: false
+    description: "Explicit reviewed justification required before synthesis may change the cycle leader's score model configuration."
 
 outputs:
   success:
@@ -260,9 +265,11 @@ agents:
         `valid_classes: ['Extracted']`, `['Found']`, or similar extraction-like labels.
 
       MODEL CHANGES:
-      If you change the model: field, use the base model name WITHOUT a date suffix
-      (e.g. "gpt-5-mini" not "gpt-5-mini-2025-01-01"). The API resolves the alias
-      to the latest snapshot automatically. Getting the date wrong causes a hard failure.
+      The cycle leader's score model configuration is pinned. Do NOT change it during
+      synthesis unless the run includes an explicit reviewed model-change justification.
+      If a reviewed model change is authorized, use the base model name WITHOUT a date
+      suffix (e.g. "gpt-5-mini" not "gpt-5-mini-2025-01-01"). The API resolves the
+      alias to the latest snapshot automatically. Getting the date wrong causes a hard failure.
 
       OPTIMIZATION PHILOSOPHY — read this carefully:
       The highest-value changes are almost always about POLICY CLARITY, not examples.
@@ -430,6 +437,9 @@ agents:
         regression this large is not acceptable, even if feedback improved.
       - If feedback delta is negative AND accuracy delta is <= 0: call done(decision="revert")
         — both metrics got worse, no reason to keep this.
+      - Compare to the current cycle leader on the identical frozen recent and regression
+        cohorts. Any negative leader-relative delta requires done(decision="revert"); do
+        not accept a candidate merely because it remains above the original baseline.
       - If feedback delta is positive and accuracy delta is >= -0.02: call done(decision="keep")
         — this is a good change, accept it.
       - For borderline cases (feedback improved slightly but accuracy regressed slightly):
@@ -711,21 +721,44 @@ code: |
   end
 
   local function same_id_set(left, right)
-    if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
-    local counts = {}
+    if type(left) ~= "table" or type(right) ~= "table" then
+      return false, { missing = 0, extra = 0, actual_duplicates = 0, expected_duplicates = 0 }
+    end
+    local left_counts = {}
+    local right_counts = {}
+    local actual_duplicates = 0
+    local expected_duplicates = 0
     for _, item_id in ipairs(left) do
       local key = tostring(item_id)
-      counts[key] = (counts[key] or 0) + 1
+      left_counts[key] = (left_counts[key] or 0) + 1
+      if left_counts[key] > 1 then actual_duplicates = actual_duplicates + 1 end
     end
     for _, item_id in ipairs(right) do
       local key = tostring(item_id)
-      if not counts[key] or counts[key] == 0 then return false end
-      counts[key] = counts[key] - 1
+      right_counts[key] = (right_counts[key] or 0) + 1
+      if right_counts[key] > 1 then expected_duplicates = expected_duplicates + 1 end
     end
-    for _, count in pairs(counts) do
-      if count ~= 0 then return false end
+    local missing = 0
+    local extra = 0
+    for key, expected_count in pairs(right_counts) do
+      local actual_count = left_counts[key] or 0
+      if actual_count < expected_count then missing = missing + (expected_count - actual_count) end
     end
-    return true
+    for key, actual_count in pairs(left_counts) do
+      local expected_count = right_counts[key] or 0
+      if actual_count > expected_count then extra = extra + (actual_count - expected_count) end
+    end
+    local exact = #left == #right
+      and missing == 0
+      and extra == 0
+      and actual_duplicates == 0
+      and expected_duplicates == 0
+    return exact, {
+      missing = missing,
+      extra = extra,
+      actual_duplicates = actual_duplicates,
+      expected_duplicates = expected_duplicates
+    }
   end
 
   local function prediction_mode_collapse_reason(metrics)
@@ -1032,11 +1065,12 @@ code: |
   -- before the full diag implementation is defined at the start of the main body
   local diag = function(msg) end  -- no-op until overwritten at line ~1415
 
-  -- Budget for dispatched evaluations (each evaluation can take up to 90 minutes)
+  -- Budget for dispatched evaluations. Runtime budget is a resource ceiling,
+  -- not a success deadline; healthy evaluations may legitimately take longer
+  -- while scoring or finalizing RCA.
   local EVAL_BUDGET = {usd = 5.0, wallclock_seconds = 5400, depth = 0, tool_calls = 1000}
   local REPORT_BUDGET = {usd = 2.0, wallclock_seconds = 3600, depth = 0, tool_calls = 200}
   local EVAL_AWAIT_POLL_TIMEOUT = "PT1M"
-  local EVAL_STALL_POLL_LIMIT = math.max(1, math.ceil(tonumber(params.evaluation_stall_timeout_minutes) or 15))
 
   local function evaluation_progress_marker(eval_data, waited)
     eval_data = type(eval_data) == "table" and eval_data or {}
@@ -1056,9 +1090,7 @@ code: |
   local function _await_eval_handle(h, label, dispatch_args)
     label = label or tostring(h and h.id or "?")
     diag("Awaiting evaluation handle " .. label .. " id=" .. tostring(h.id)
-      .. " with progress-aware stall detection...")
-    local last_progress_marker = nil
-    local stalled_polls = 0
+      .. " until it reaches a terminal state...")
     while true do
       local waited = plexus.handle.await({id = h.id, timeout = EVAL_AWAIT_POLL_TIMEOUT})
       -- After await, the evaluation data lives in waited.evaluation.
@@ -1100,7 +1132,11 @@ code: |
         end
       end
       local eval_status = string.upper(tostring((eval_data and eval_data.status) or waited.status or ""))
-      if eval_status == "COMPLETED" then
+      local handle_status = string.upper(tostring(waited.status or ""))
+      if eval_status == "COMPLETED"
+        and (handle_status == "COMPLETED" or handle_status == "COMPLETED_UNKNOWN")
+        and type(eval_data) == "table"
+        and not eval_data.completion_pending_process_exit then
         return eval_data
       end
       if eval_status == "FAILED" or eval_status == "CANCELLED" or eval_status == "CANCELED" then
@@ -1118,21 +1154,7 @@ code: |
       end
 
       local progress_marker = evaluation_progress_marker(eval_data, waited)
-      if progress_marker ~= last_progress_marker then
-        last_progress_marker = progress_marker
-        stalled_polls = 0
-      else
-        stalled_polls = stalled_polls + 1
-      end
-      if stalled_polls >= EVAL_STALL_POLL_LIMIT then
-        return {
-          error = "Evaluation stalled without progress for " .. tostring(EVAL_STALL_POLL_LIMIT)
-            .. " minute(s): status=" .. tostring((eval_data and eval_data.status) or waited.status)
-            .. " evaluation_id=" .. tostring((eval_data and (eval_data.evaluation_id or eval_data.id)) or waited.evaluation_id or h.id)
-        }
-      end
-      diag("Evaluation " .. label .. " remains active; progress=" .. progress_marker
-        .. " stalled_polls=" .. tostring(stalled_polls))
+      diag("Evaluation " .. label .. " remains active; progress=" .. progress_marker)
     end
   end
 
@@ -1352,14 +1374,90 @@ code: |
     if not actual_ids then
       return false, "candidate evaluation does not expose selected_feedback_item_ids"
     end
-    if not same_id_set(actual_ids, expected_ids) then
+    local exact_cohort, cohort_diff = same_id_set(actual_ids, expected_ids)
+    if cohort_diff.expected_duplicates > 0 then
       return false, string.format(
-        "candidate feedback cohort differs from baseline (expected=%d actual=%d)",
+        "expected recent feedback cohort contains duplicate IDs (duplicates=%d)",
+        cohort_diff.expected_duplicates
+      )
+    end
+    if cohort_diff.actual_duplicates > 0 then
+      return false, string.format(
+        "candidate feedback cohort contains duplicate IDs (duplicates=%d)",
+        cohort_diff.actual_duplicates
+      )
+    end
+    if not exact_cohort then
+      return false, string.format(
+        "candidate feedback cohort differs from baseline (expected=%d actual=%d missing=%d extra=%d)",
         #expected_ids,
-        #actual_ids
+        #actual_ids,
+        cohort_diff.missing,
+        cohort_diff.extra
       )
     end
     return true, nil
+  end
+
+  local function require_exact_regression_cohort(eval_result, expected_dataset_id)
+    if not has_text(expected_dataset_id) then
+      return false, "expected regression dataset is unavailable"
+    end
+    local eval_info = eval_result
+    local parameters = type(eval_info) == "table" and eval_info.parameters or nil
+    if type(parameters) == "string" then
+      local decoded = safe_decode(parameters)
+      if type(decoded) == "table" then parameters = decoded end
+    end
+    if type(parameters) ~= "table" and type(eval_result) == "table" then
+      local eval_id = eval_result.id or eval_result.evaluation_id
+      if has_text(eval_id) then
+        eval_info = call_plexus_tool("plexus_evaluation_info", {
+          evaluation_id = eval_id,
+          output_format = "json"
+        })
+        parameters = eval_info and eval_info.parameters or nil
+        if type(parameters) == "string" then
+          local decoded = safe_decode(parameters)
+          if type(decoded) == "table" then parameters = decoded end
+        end
+      end
+    end
+    local actual_dataset_id = type(parameters) == "table"
+      and (parameters.dataset_id or parameters.datasetId) or nil
+    if not has_text(actual_dataset_id) then
+      return false, "candidate regression evaluation does not expose dataset_id"
+    end
+    if tostring(actual_dataset_id) ~= tostring(expected_dataset_id) then
+      return false, string.format(
+        "candidate regression cohort differs from cycle leader (expected=%s actual=%s)",
+        tostring(expected_dataset_id), tostring(actual_dataset_id)
+      )
+    end
+    return true, nil
+  end
+
+  local function model_configuration_fingerprint(code_text)
+    if not has_text(code_text) then return "" end
+    local models = {}
+    for line in tostring(code_text):gmatch("[^\r\n]+") do
+      local value = line:match("^%s*model%s*:%s*(.-)%s*$")
+        or line:match("^%s*model_name%s*:%s*(.-)%s*$")
+      if has_text(value) then table.insert(models, value) end
+    end
+    return table.concat(models, "|")
+  end
+
+  local function model_change_requires_reviewed_justification(candidate_code, pinned_model_fingerprint)
+    local candidate_fingerprint = model_configuration_fingerprint(candidate_code)
+    if candidate_fingerprint == pinned_model_fingerprint then
+      return false, nil
+    end
+    local justification = params.reviewed_model_change_justification
+    if has_text(justification) then
+      return false, justification
+    end
+    return true, "model_change_requires_reviewed_justification"
   end
 
   -- Build version history table for agent context
@@ -1493,13 +1591,31 @@ code: |
     return hypotheses
   end
 
-  -- Exploration success classification: either metric improving is enough,
-  -- as long as the other doesn't significantly regress.
+  -- Exploration success classification: aggregate improvement is necessary but
+  -- never sufficient when it regresses protected-class recall beyond the
+  -- configured, explicitly reviewable limit. Rejected candidates remain in
+  -- the evidence log but cannot become synthesis leaders.
   local IMPROVEMENT_THRESHOLD = 0.005   -- meaningful positive delta on the improving metric
   local REGRESSION_FLOOR      = -0.05   -- the other metric must not drop more than this
 
   local function classify_exploration_success(cand)
     if not cand.fb_deltas then return false end
+    cand.class_safety_rejection = nil
+    local recall_floor = -params.max_recall_regression
+    local recent_recall_delta = cand.fb_deltas.recall or 0
+    local historical_recall_delta = cand.acc_deltas and (cand.acc_deltas.recall or 0) or 0
+    if recent_recall_delta < recall_floor then
+      cand.class_safety_rejection = string.format(
+        "recent recall regression %.4f exceeds allowed %.4f",
+        recent_recall_delta, params.max_recall_regression)
+      return false
+    end
+    if cand.acc_deltas and historical_recall_delta < recall_floor then
+      cand.class_safety_rejection = string.format(
+        "historical recall regression %.4f exceeds allowed %.4f",
+        historical_recall_delta, params.max_recall_regression)
+      return false
+    end
     local fb_d = cand.fb_deltas.alignment or 0
     local acc_d = cand.acc_deltas and cand.acc_deltas.alignment or 0
     local fb_improves  = fb_d  > IMPROVEMENT_THRESHOLD and acc_d >= REGRESSION_FLOOR
@@ -3816,6 +3932,7 @@ code: |
   params.max_parallel_evaluations = math.max(1, math.floor(tonumber(params.max_parallel_evaluations) or 2))
   params.max_cost_usd          = tonumber(params.max_cost_usd) or 10.0
   params.improvement_threshold = tonumber(params.improvement_threshold) or 0.02
+  params.max_recall_regression = math.max(0, tonumber(params.max_recall_regression) or 0.05)
   params.target_accuracy       = tonumber(params.target_accuracy) or 0.95
   params.context_window        = tonumber(params.context_window) or 180000
 
@@ -4448,7 +4565,13 @@ code: |
     table.insert(parts, string.format("Iteration %d change:", opts.iteration))
     table.insert(parts, string.format('  "%s"', opts.done_reason or "(no reason given)"))
     table.insert(parts, string.format("  New version: %s", tostring(opts.new_version_id)))
-    table.insert(parts, string.format("  Prior version (reverts to): %s", tostring(opts.prior_version_id)))
+    table.insert(parts, string.format("  Current cycle leader (reverts to): %s", tostring(opts.prior_version_id)))
+    table.insert(parts, "  Comparison basis: current cycle leader on identical frozen cohorts")
+    table.insert(parts, string.format(
+      "  Recent cohort: %s | Regression cohort: %s",
+      tostring(opts.recent_cohort_id or "unavailable"),
+      tostring(opts.regression_cohort_id or "unavailable")
+    ))
     table.insert(parts, "")
 
     table.insert(parts, "Feedback alignment (vs baseline):")
@@ -4467,6 +4590,15 @@ code: |
     else
       table.insert(parts, "  (not available)")
     end
+    table.insert(parts, "")
+
+    table.insert(parts, "Leader-relative deltas (the promotion-safety gate):")
+    table.insert(parts, string.format(
+      "  Recent AC1: %+.3f | Regression AC1: %+.3f",
+      opts.leader_fb_delta or 0,
+      opts.leader_acc_delta or 0
+    ))
+    table.insert(parts, "  Any negative delta against the current cycle leader requires revert.")
     table.insert(parts, "")
 
     table.insert(parts, "Accuracy on regression dataset (vs baseline):")
@@ -4498,9 +4630,8 @@ code: |
     end
 
     table.insert(parts, "=== YOUR ASSESSMENT ===")
-    table.insert(parts, "The system will automatically carry this version forward unless metrics regressed.")
-    table.insert(parts, "A result that doesn't improve things is still useful — it gets carried forward as the new base")
-    table.insert(parts, "so future cycles can build on it. Only a genuine regression (metrics went DOWN) causes a revert.")
+    table.insert(parts, "The system can carry forward only a non-regressing version on both leader-matched cohorts.")
+    table.insert(parts, "Human approval remains required before any promotion outside this optimizer workflow.")
     table.insert(parts, "")
     table.insert(parts, "Provide your assessment:")
     table.insert(parts, 'Call done(decision="keep", reason="...") — confirm you agree with carrying this forward.')
@@ -7196,6 +7327,28 @@ code: |
         end
       end
 
+      -- A dispatched batch is not evidence of a completed comparison.  Never
+      -- allow missing handles/metrics to become zero-delta candidate results:
+      -- that would let synthesis reason from an unevaluated edit.
+      local incomplete_candidates = {}
+      for _, sv in ipairs(submitted_versions) do
+        sv.evaluation_incomplete = (not sv.fb_eval_id)
+          or (regression_available and not sv.acc_eval_id)
+        if sv.evaluation_incomplete then
+          table.insert(incomplete_candidates, tostring(sv.version_id or sv.index))
+        end
+      end
+      if #incomplete_candidates > 0 then
+        local incomplete_message = "Candidate evaluation batch returned no terminal evidence for: "
+          .. table.concat(incomplete_candidates, ", ")
+        State.set("candidate_evaluation_incomplete", {
+          cycle = cycle,
+          candidates = incomplete_candidates,
+          message = incomplete_message,
+        })
+        error("candidate_evaluation_incomplete: " .. incomplete_message)
+      end
+
       -- Classify hypotheses as succeeded/failed
       local succeeded = {}
       local failed = {}
@@ -7213,6 +7366,7 @@ code: |
         "  Results: %d succeeded, %d failed", #succeeded, #failed), level = "info"})
       for _, sv in ipairs(submitted_versions) do
         local status_label = sv.succeeded and "SUCCEEDED" or "FAILED"
+        local rejection_detail = sv.class_safety_rejection and ("; rejected: " .. sv.class_safety_rejection) or ""
         local fb_d = sv.fb_deltas and sv.fb_deltas.alignment or 0
         local acc_d = sv.acc_deltas and sv.acc_deltas.alignment or 0
         local fb_d_cur = sv.fb_deltas_vs_current and sv.fb_deltas_vs_current.alignment or 0
@@ -7220,11 +7374,11 @@ code: |
         Human.notify({message = string.format(
           "    Hyp %d [%s]: Recent AC1 %+.3f (vs current %+.3f), Regression AC1 %+.3f (vs current %+.3f)  [%s]",
           sv.index, status_label, fb_d, fb_d_cur, acc_d, acc_d_cur,
-          trunc(sv.done_reason or "", 60)
+          trunc((sv.done_reason or "") .. rejection_detail, 100)
         ), level = "info"})
-        diag(string.format("Hyp %d [%s] version=%s: Recent AC1 %+.3f (cur %+.3f), Regression AC1 %+.3f (cur %+.3f) — %s",
+        diag(string.format("Hyp %d [%s] version=%s: Recent AC1 %+.3f (cur %+.3f), Regression AC1 %+.3f (cur %+.3f) — %s%s",
           sv.index, status_label, tostring(sv.version_id or "?"),
-          fb_d, fb_d_cur, acc_d, acc_d_cur, trunc(sv.done_reason or sv.hypothesis and sv.hypothesis.name or "", 80)))
+          fb_d, fb_d_cur, acc_d, acc_d_cur, trunc(sv.done_reason or sv.hypothesis and sv.hypothesis.name or "", 80), rejection_detail))
       end
 
       -- ================================================================
@@ -7243,10 +7397,11 @@ code: |
       local selected_strategy = nil     -- "A" or "B"
       local synthesis_eval_results = nil  -- winner's eval results from dual-strategy selection
       local synthesis_decision_log = nil  -- visible cycle-level synthesis artifact, even when no version is evaluated
+      local pinned_model_fingerprint = model_configuration_fingerprint(current_code)
 
       -- Helper: run a synthesis ReAct loop with a given prompt and starting code.
       -- Returns: version_id (or nil), done_reason, reasoning_parts table
-      local function run_synthesis_react(prompt_text, start_code, start_label, parent_version_id, max_steps, strategy_label)
+      local function run_synthesis_react(prompt_text, start_code, start_label, parent_version_id, max_steps, strategy_label, leader_model_fingerprint)
         local react_version_id = nil
         local react_done_reason = ""
         local react_reasoning = {}
@@ -7462,7 +7617,21 @@ code: |
               local smoke_detail = ""
               local submitted_editor_content = call_plexus_tool("score_editor_get_content", {})
               local submitted_file_content = submitted_editor_content and submitted_editor_content.file_content or ""
-              if protect_mechanical_prompt_lines and contains_legacy_xcc_placeholders(submitted_file_content) then
+              local model_change_rejected, model_change_detail = model_change_requires_reviewed_justification(
+                submitted_file_content,
+                leader_model_fingerprint
+              )
+              if model_change_rejected then
+                smoke_detail = "MODEL SAFETY GUARD FAILURE: " .. tostring(model_change_detail)
+                  .. ". The cycle leader model configuration is pinned; provide reviewed_model_change_justification before changing it."
+              elseif has_text(model_change_detail) then
+                Human.notify({message = string.format(
+                  "  %s: reviewed model change justification recorded: %s",
+                  strategy_label, trunc(model_change_detail, 240)), level = "warning"})
+              end
+              if model_change_rejected then
+                -- Keep smoke_passed false so this version cannot enter synthesis selection.
+              elseif protect_mechanical_prompt_lines and contains_legacy_xcc_placeholders(submitted_file_content) then
                 smoke_detail = build_legacy_placeholder_guard_failure(candidate_id, submitted_file_content)
               else
                 local test_ok, test_result = pcall(call_plexus_tool, "plexus_score_test", {
@@ -7801,7 +7970,7 @@ code: |
       Human.notify({message = string.format(
         "  Strategy A (cycle synthesis): starting from %s, max 8 steps", synth_start_label), level = "info"})
       local strategy_a_version_id, strategy_a_done_reason, strategy_a_reasoning =
-        run_synthesis_react(table.concat(strategy_a_parts, "\n"), synth_start_code, synth_start_label, synth_parent_version_id, 8, "Strategy-A")
+        run_synthesis_react(table.concat(strategy_a_parts, "\n"), synth_start_code, synth_start_label, synth_parent_version_id, 8, "Strategy-A", pinned_model_fingerprint)
 
       -- ================================================================
       -- STRATEGY B — "Arc-focused" (pattern-based) — cycle 2+ only
@@ -7930,7 +8099,7 @@ code: |
         Human.notify({message = string.format(
           "  Strategy B (arc-focused): starting from %s, max 10 steps", strategy_b_start_label), level = "info"})
         strategy_b_version_id, strategy_b_done_reason, strategy_b_reasoning =
-          run_synthesis_react(table.concat(strategy_b_parts, "\n"), strategy_b_start_code, strategy_b_start_label, strategy_b_parent_version_id, 10, "Strategy-B")
+          run_synthesis_react(table.concat(strategy_b_parts, "\n"), strategy_b_start_code, strategy_b_start_label, strategy_b_parent_version_id, 10, "Strategy-B", pinned_model_fingerprint)
       end
 
       -- ================================================================
@@ -8073,6 +8242,10 @@ code: |
           if regression_available then
             local acc_r = eval_results and eval_results[offset + 1]
             if acc_r and (acc_r.id or acc_r.evaluation_id) then
+              local cohort_ok, cohort_error = require_exact_regression_cohort(acc_r, dataset_id)
+              if not cohort_ok then
+                error("Invalid strategy comparison: " .. tostring(cohort_error))
+              end
               sv.acc_metrics = extract_metrics(acc_r)
               sv.acc_cost_per_item = extract_cost_per_item(acc_r)
               sv.acc_deltas = calculate_deltas(sv.acc_metrics, regression_baseline_metrics)
@@ -8109,22 +8282,32 @@ code: |
         -- Programmatic selection: pick the better strategy version
         -- Uses objective_config to support parameterized optimization objectives
         local function score_strategy(sv)
+          local leader_recent_delta = sv.fb_deltas_vs_current and sv.fb_deltas_vs_current.alignment or -999
+          if leader_recent_delta < 0 then
+            return -999, "strategy_recent_regression_vs_cycle_leader"
+          end
+          if regression_available then
+            local leader_regression_delta = sv.acc_deltas_vs_current and sv.acc_deltas_vs_current.alignment or -999
+            if leader_regression_delta < 0 then
+              return -999, "strategy_regression_regression_vs_cycle_leader"
+            end
+          end
           -- Hard veto checks (objective-specific thresholds)
           if objective_config.hard_veto_alignment and regression_available then
-            local align_d = sv.acc_deltas and sv.acc_deltas.alignment or -999
+            local align_d = sv.acc_deltas_vs_current and sv.acc_deltas_vs_current.alignment or -999
             if align_d < objective_config.hard_veto_alignment then return -999 end
           end
           if objective_config.hard_veto_accuracy and regression_available then
-            local acc_d = sv.acc_deltas and sv.acc_deltas.alignment or -999
+            local acc_d = sv.acc_deltas_vs_current and sv.acc_deltas_vs_current.alignment or -999
             if acc_d < objective_config.hard_veto_accuracy then return -999 end
           end
-          -- Primary metric always comes from fb_deltas
-          local primary_d = sv.fb_deltas and sv.fb_deltas[objective_config.primary_metric] or -999
+          -- Selection is always relative to the current cycle leader, never the original baseline.
+          local primary_d = sv.fb_deltas_vs_current and sv.fb_deltas_vs_current[objective_config.primary_metric] or -999
           local score = primary_d * (objective_config.primary_weight or 1.0)
-          -- Secondary metric: source is fb_deltas unless secondary_source == "acc"
+          -- Secondary metric: source is leader-relative recent deltas unless secondary_source == "acc".
           if objective_config.secondary_metric and objective_config.secondary_weight then
             local sec_source = (objective_config.secondary_source == "acc")
-              and sv.acc_deltas or sv.fb_deltas
+              and sv.acc_deltas_vs_current or sv.fb_deltas_vs_current
             local sec_d = sec_source and sec_source[objective_config.secondary_metric] or -999
             if sec_d > -999 then
               score = score + sec_d * objective_config.secondary_weight
@@ -8153,7 +8336,7 @@ code: |
 
         if best_sv_score <= -999 then
           selection_reason = string.format(
-            "scores: %s -> no viable synthesis strategy",
+            "comparison basis: current cycle leader; scores: %s -> no viable synthesis strategy",
             table.concat(scores_str, ", "))
           diag("Strategy selection skipped — " .. selection_reason)
           Human.notify({message = string.format(
@@ -8166,9 +8349,9 @@ code: |
             selection_reason)
         else
           if #strategy_versions == 1 then
-            selection_reason = string.format("only Strategy %s produced a version", best_sv.label)
+            selection_reason = string.format("comparison basis: current cycle leader; only Strategy %s produced a non-regressing version", best_sv.label)
           else
-            selection_reason = string.format("scores: %s -> selected %s",
+            selection_reason = string.format("comparison basis: current cycle leader; scores: %s -> selected %s",
               table.concat(scores_str, ", "), best_sv.label)
           end
 
@@ -8378,6 +8561,10 @@ code: |
           if regression_available then
             local b_acc_r = b_results and b_results[1]
             if b_acc_r and (b_acc_r.id or b_acc_r.evaluation_id) then
+              local cohort_ok, cohort_error = require_exact_regression_cohort(b_acc_r, dataset_id)
+              if not cohort_ok then
+                error("Invalid synthesis comparison: " .. tostring(cohort_error))
+              end
               b_acc_metrics = extract_metrics(b_acc_r)
               b_acc_cost_per_item = extract_cost_per_item(b_acc_r)
               b_acc_deltas = calculate_deltas(b_acc_metrics, regression_baseline_metrics)
@@ -8447,20 +8634,20 @@ code: |
           disqualification_reason = string.format("recent_regression_vs_baseline_%.3f", b_fb_deltas.alignment)
         end
 
-        -- Dual-threshold: also check regression vs last accepted version
-        -- Uses looser threshold (-0.05 vs -0.02) to account for evaluation noise
+        -- The current cycle leader is the decision baseline. A candidate may not
+        -- lose either frozen cohort to that leader, even when it exceeds the original baseline.
         if not disqualified and last_accepted_fb_metrics then
           local vs_accepted_fb = calculate_deltas(b_fb_metrics or recent_baseline_metrics, last_accepted_fb_metrics)
           local vs_accepted_acc = regression_available and last_accepted_acc_metrics and b_acc_metrics
             and calculate_deltas(b_acc_metrics, last_accepted_acc_metrics) or nil
 
-          local accepted_regression_threshold = -0.05
+          local accepted_regression_threshold = 0
           if vs_accepted_acc and vs_accepted_acc.alignment < accepted_regression_threshold then
             disqualified = true
-            disqualification_reason = string.format("regression_regression_vs_accepted_%.3f", vs_accepted_acc.alignment)
+            disqualification_reason = string.format("synthesis_regression_regression_vs_cycle_leader_%.3f", vs_accepted_acc.alignment)
           elseif vs_accepted_fb.alignment < accepted_regression_threshold then
             disqualified = true
-            disqualification_reason = string.format("recent_regression_vs_accepted_%.3f", vs_accepted_fb.alignment)
+            disqualification_reason = string.format("synthesis_recent_regression_vs_cycle_leader_%.3f", vs_accepted_fb.alignment)
           end
         end
         diag(string.format("disqualified=%s reason=%s", tostring(disqualified), tostring(disqualification_reason)))
@@ -8522,6 +8709,10 @@ code: |
             acc_metrics = iter_accuracy_ok and b_acc_metrics or nil,
             baseline_fb_ac1 = recent_baseline_metrics.alignment,
             baseline_acc_ac1 = regression_baseline_metrics and regression_baseline_metrics.alignment or 0,
+            leader_fb_delta = b_fb_deltas_vs_current and b_fb_deltas_vs_current.alignment or 0,
+            leader_acc_delta = b_acc_deltas_vs_current and b_acc_deltas_vs_current.alignment or 0,
+            recent_cohort_id = recent_baseline_feedback_item_ids and table.concat(recent_baseline_feedback_item_ids, ",") or nil,
+            regression_cohort_id = dataset_id,
             candidates = submitted_versions
           })
           diag(string.format("Review msg length: %d chars, invoking reviewer...", #review_msg))
@@ -8550,7 +8741,7 @@ code: |
           -- A neutral result (no improvement) is still carried forward — we accumulate
           -- many small changes across cycles, only rejecting when things actually got worse.
           local regression_threshold = -0.02
-          local accepted_regression_threshold = -0.05
+          local accepted_regression_threshold = 0
           local acc_regressed = regression_available and iter_accuracy_ok and (b_acc_deltas.alignment < regression_threshold)
           local fb_regressed = b_fb_deltas.alignment < regression_threshold
 
@@ -8580,13 +8771,13 @@ code: |
           elseif acc_regressed_vs_accepted then
             local vs_acc = calculate_deltas(b_acc_metrics, last_accepted_acc_metrics)
             decision_str = "REJECTED"
-            decision_reason = string.format("accuracy regressed vs last accepted by %.4f", math.abs(vs_acc.alignment))
+            decision_reason = string.format("synthesis_regression_regression_vs_cycle_leader %.4f", math.abs(vs_acc.alignment))
             status_msg(string.format("Cycle %d/%d — REJECTED: %s", cycle, max_cycles, decision_reason))
             Human.notify({message = string.format("Cycle %d REJECTED: %s", cycle, decision_reason), level = "warning"})
           elseif fb_regressed_vs_accepted then
             local vs_fb = calculate_deltas(b_fb_metrics, last_accepted_fb_metrics)
             decision_str = "REJECTED"
-            decision_reason = string.format("feedback regressed vs last accepted by %.4f", math.abs(vs_fb.alignment))
+            decision_reason = string.format("synthesis_recent_regression_vs_cycle_leader %.4f", math.abs(vs_fb.alignment))
             status_msg(string.format("Cycle %d/%d — REJECTED: %s", cycle, max_cycles, decision_reason))
             Human.notify({message = string.format("Cycle %d REJECTED: %s", cycle, decision_reason), level = "warning"})
           else

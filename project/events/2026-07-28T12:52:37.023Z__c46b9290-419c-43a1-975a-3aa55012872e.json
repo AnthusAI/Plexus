@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "event_id": "c46b9290-419c-43a1-975a-3aa55012872e",
+  "issue_id": "plx-0431ae55-b911-4124-a65a-a6e9acced05f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T12:52:37.023Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Implement Cognito CLI authentication and dashboard client support",
+    "description": "Purpose: Implement the official human authentication path.\n\nOwned scope:\n- Cognito hosted authorization configuration required for authorization-code PKCE.\n- plexus login, plexus whoami, and plexus logout.\n- Operating-system keychain credential storage and automatic refresh.\n- Explicit Cognito bearer-token transport in PlexusDashboardClient while retaining explicit IAM workload authentication.\n\nExclusions:\n- Artifact ticket resolver and storage-consumer migrations.\n- AWS SSO, public API-key, or automatic authentication fallbacks.\n\nAcceptance:\n- Behavior-first tests cover login, loopback callback validation, PKCE, keychain persistence, refresh, whoami, logout, revoked sessions, and explicit auth modes.\n- Protected commands fail with plexus login guidance when application authentication is unavailable.\n- Existing workload IAM behavior remains supported.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": [
+      "aws-login-free",
+      "wave-1",
+      "lane-auth"
+    ]
+  }
+}

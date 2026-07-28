@@ -1,32 +1,78 @@
 """
-The plexus.scores module provides a collection of classes and methods for scoring and classification tasks.
-It includes various classifiers such as machine learning classifiers, deep learning semantic classifiers,
-and explainable classifiers.  These are the score classes that are referenced in the scorecard YAML files.
-"""
-from plexus.scores.Score import Score
-# from plexus.scores.CompositeScore import CompositeScore
-# from plexus.scores.DeepLearningSemanticClassifier import DeepLearningSemanticClassifier
-# from plexus.scores.DeepLearningOneStepSemanticClassifier import DeepLearningOneStepSemanticClassifier
-# from plexus.scores.DeepLearningSlidingWindowSemanticClassifier import DeepLearningSlidingWindowSemanticClassifier
-# from plexus.scores.FastTextClassifier import FastTextClassifier
-# from plexus.scores.ExplainableClassifier import ExplainableClassifier
-from plexus.scores.AgenticExtractor import AgenticExtractor
-from plexus.scores.AgenticValidator import AgenticValidator
-from plexus.scores.AWSComprehendEntityExtractor import AWSComprehendEntityExtractor
-from plexus.scores.AWSComprehendSentimentScore import AWSComprehendSentimentScore
-# from plexus.scores.LangGraphClassifier import LangGraphClassifier
-# from plexus.scores.LLMClassifier import LLMClassifier
-from plexus.scores.LangGraphScore import LangGraphScore
-from plexus.scores.TactusScore import TactusScore
-from plexus.scores.OpenAIEmbeddingsClassifier import OpenAIEmbeddingsClassifier
+Score class namespace.
 
-# Import node classes that are used in YAML files
-from plexus.scores.nodes.MultiClassClassifier import MultiClassClassifier
-from plexus.scores.nodes.YesOrNoClassifier import YesOrNoClassifier
-from plexus.scores.nodes.NumericClassifier import NumericClassifier
-from plexus.scores.nodes.Extractor import Extractor
-from plexus.scores.nodes.Classifier import Classifier
-from plexus.scores.nodes.ContextExtractor import ContextExtractor
-from plexus.scores.nodes.LogicalClassifier import LogicalClassifier
-from plexus.scores.nodes.Generator import Generator
-from plexus.scores.nodes.BeforeAfterSlicer import BeforeAfterSlicer
+Scorecard loading resolves score classes dynamically with
+``getattr(plexus.scores, class_name)``. Keep that behavior, but do not import
+every score implementation at package import time. Many score types require
+optional training, ML, provider, or workflow dependencies that should only load
+when that score class is selected.
+"""
+
+from importlib import import_module
+
+from plexus.scores.Score import Score
+
+
+_SCORE_CLASS_MODULES = {
+    "AgenticExtractor": "plexus.scores.AgenticExtractor",
+    "AgenticValidator": "plexus.scores.AgenticValidator",
+    "AWSComprehendEntityExtractor": "plexus.scores.AWSComprehendEntityExtractor",
+    "AWSComprehendSentimentScore": "plexus.scores.AWSComprehendSentimentScore",
+    "CompositeScore": "plexus.scores.CompositeScore",
+    "DeepLearningOneStepSemanticClassifier": (
+        "plexus.scores.DeepLearningOneStepSemanticClassifier"
+    ),
+    "DeepLearningSemanticClassifier": "plexus.scores.DeepLearningSemanticClassifier",
+    "DeepLearningSlidingWindowSemanticClassifier": (
+        "plexus.scores.DeepLearningSlidingWindowSemanticClassifier"
+    ),
+    "ExplainableClassifier": "plexus.scores.ExplainableClassifier",
+    "FastTextClassifier": "plexus.scores.FastTextClassifier",
+    "KeywordClassifier": "plexus.scores.KeywordClassifier",
+    "LangGraphScore": "plexus.scores.LangGraphScore",
+    "OpenAIEmbeddingsClassifier": "plexus.scores.OpenAIEmbeddingsClassifier",
+    "SVMClassifier": "plexus.scores.SVMClassifier",
+    "TactusScore": "plexus.scores.TactusScore",
+}
+
+_NODE_CLASS_MODULES = {
+    "BeforeAfterSlicer": "plexus.scores.nodes.BeforeAfterSlicer",
+    "Classifier": "plexus.scores.nodes.Classifier",
+    "ContextExtractor": "plexus.scores.nodes.ContextExtractor",
+    "Extractor": "plexus.scores.nodes.Extractor",
+    "Generator": "plexus.scores.nodes.Generator",
+    "LogicalClassifier": "plexus.scores.nodes.LogicalClassifier",
+    "MultiClassClassifier": "plexus.scores.nodes.MultiClassClassifier",
+    "NumericClassifier": "plexus.scores.nodes.NumericClassifier",
+    "YesOrNoClassifier": "plexus.scores.nodes.YesOrNoClassifier",
+}
+
+_CLASS_MODULES = {
+    **_SCORE_CLASS_MODULES,
+    **_NODE_CLASS_MODULES,
+}
+
+
+def resolve_score_class(name: str):
+    """Resolve a configured score class without trusting package attributes.
+
+    Importing ``plexus.scores.<ClassName>`` makes Python cache that submodule on
+    this package under ``ClassName``.  Looking up the package attribute after
+    that point returns the module instead of invoking ``__getattr__``.  Resolve
+    through the explicit module map so registry behavior is import-order safe.
+    """
+    module_name = _CLASS_MODULES.get(name)
+    if not module_name:
+        raise AttributeError(f"module 'plexus.scores' has no attribute {name!r}")
+
+    module = import_module(module_name)
+    return getattr(module, name)
+
+
+def __getattr__(name: str):
+    value = resolve_score_class(name)
+    globals()[name] = value
+    return value
+
+
+__all__ = ["Score", "resolve_score_class", *_CLASS_MODULES.keys()]

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "97386007-2293-4370-886b-45e1638c2f35",
+  "issue_id": "plx-dd510e42-23da-43fb-879e-05c322f758c9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-27T20:11:47.250Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Adopt supported Tactus Console runtime APIs",
+    "description": "Upgrade Plexus to the released Tactus lifecycle API package, remove private Tactus Agent method replacement from the Console execution path, preserve telemetry and request timeout behavior through supported APIs, and validate the resulting runtime before deployment.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+    "labels": []
+  }
+}

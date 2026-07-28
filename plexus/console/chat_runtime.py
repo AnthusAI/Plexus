@@ -17,10 +17,17 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from openai import OpenAI
 
-from plexus.cli.procedure.builtin_procedures import CONSOLE_CHAT_BUILTIN_ID
+from plexus.cli.procedure.builtin_procedures import (
+    CONSOLE_CHAT_BUILTIN_ID,
+    CONSOLE_CHAT_DEFAULT_MODEL,
+    CONSOLE_CHAT_DEFAULT_PROVIDER,
+    CONSOLE_CHAT_MAX_TOKENS,
+    CONSOLE_CHAT_REASONING_EFFORT,
+    CONSOLE_CHAT_VERBOSITY,
+)
 from plexus.cli.procedure.service import ProcedureService
+from plexus.cli.procedure.tactus_runtime_controls import llm_request_timeout_seconds
 from plexus.dashboard.api.client import PlexusDashboardClient
-from plexus.logging.cloudwatch_logger import PlexusCloudWatchLogger
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +39,7 @@ FAILED = "FAILED"
 HANDLED_HUMAN_INTERACTIONS = {"CHAT"}
 DEFAULT_SESSION_TITLE_MODEL = "gpt-5.4-mini"
 SESSION_TITLE_MAX_WORDS = 8
-_PROCEDURE_SERVICE_CACHE: Dict[int, ProcedureService] = {}
+_PROCEDURE_SERVICE_ATTRIBUTE = "_plexus_console_procedure_service"
 _CONSOLE_MCP_SERVER: Any = None
 _CONSOLE_MCP_SERVER_LOCK: Optional[asyncio.Lock] = None
 
@@ -716,24 +723,19 @@ def _current_code_sha() -> Optional[str]:
     return sha or None
 
 
-def _env_truthy(name: str) -> bool:
-    return str(os.getenv(name) or "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _should_log_cloudwatch_for_message(message: ConsoleMessage) -> bool:
-    if message.response_target.startswith("local:"):
-        return _env_truthy("PLEXUS_CONSOLE_LOCAL_CLOUDWATCH")
-    return not _env_truthy("PLEXUS_CONSOLE_DISABLE_CLOUDWATCH")
-
-
 def _server_latency_metadata(summary: Dict[str, Any], *, owner: str) -> Dict[str, Any]:
     keys = (
         "client_to_claim_ms",
         "direct_message_fetch_ms",
-        "pre_model_ms",
-        "model_first_chunk_ms",
-        "model_stream_ms",
-        "post_model_persist_ms",
+        "runtime_to_provider_dispatch_ms",
+        "agent_preparation_ms",
+        "lm_initialization_ms",
+        "lm_initialized_during_request",
+        "provider_first_chunk_ms",
+        "provider_stream_ms",
+        "provider_request_count",
+        "assistant_stream_ms",
+        "post_stream_persist_ms",
         "client_total_ms",
         "first_token_ms",
         "claim_to_first_token_ms",
@@ -806,28 +808,70 @@ def _build_latency_summary(trace: Dict[str, Any], *, status: str) -> Dict[str, A
         "t_first_assistant_chunk": trace.get("t_first_assistant_chunk"),
         "t_first_chunk_lookup_completed": trace.get("t_first_chunk_lookup_completed"),
         "t_completed": trace.get("t_completed"),
-        "queue_to_worker_ms": _duration_ms(trace.get("t_received"), trace.get("t_worker_started")),
-        "queue_to_claim_ms": _duration_ms(trace.get("t_received"), trace.get("t_claimed")),
-        "client_to_claim_ms": _duration_ms(trace.get("t_client_send_started"), trace.get("t_claimed")),
+        "queue_to_worker_ms": _duration_ms(
+            trace.get("t_received"), trace.get("t_worker_started")
+        ),
+        "queue_to_claim_ms": _duration_ms(
+            trace.get("t_received"), trace.get("t_claimed")
+        ),
+        "client_to_claim_ms": _duration_ms(
+            trace.get("t_client_send_started"), trace.get("t_claimed")
+        ),
         "claim_ms": _duration_ms(trace.get("t_received"), trace.get("t_claimed")),
         "claim_roundtrip_ms": trace.get("claim_roundtrip_ms"),
-        "history_load_ms": _duration_ms(trace.get("t_history_load_started"), trace.get("t_history_loaded")),
-        "history_ms": _duration_ms(trace.get("t_claimed"), trace.get("t_history_loaded")),
-        "startup_ms": _duration_ms(trace.get("t_history_loaded"), trace.get("t_run_started")),
-        "first_token_ms": _duration_ms(trace.get("t_run_started"), trace.get("t_first_assistant_chunk")),
-        "pre_model_ms": _duration_ms(trace.get("t_run_started"), trace.get("t_backend_execution_started")),
-        "model_first_chunk_ms": _duration_ms(
-            trace.get("t_backend_execution_started"),
-            trace.get("t_first_assistant_chunk"),
+        "history_load_ms": _duration_ms(
+            trace.get("t_history_load_started"), trace.get("t_history_loaded")
         ),
-        "model_stream_ms": _duration_ms(trace.get("t_first_assistant_chunk"), trace.get("t_last_assistant_chunk")),
-        "post_model_persist_ms": _duration_ms(trace.get("t_last_assistant_chunk"), trace.get("t_run_completed")),
-        "claim_to_first_token_ms": _duration_ms(trace.get("t_claimed"), trace.get("t_first_assistant_chunk")),
-        "client_to_first_token_ms": _duration_ms(trace.get("t_client_send_started"), trace.get("t_first_assistant_chunk")),
+        "history_ms": _duration_ms(
+            trace.get("t_claimed"), trace.get("t_history_loaded")
+        ),
+        "startup_ms": _duration_ms(
+            trace.get("t_history_loaded"), trace.get("t_run_started")
+        ),
+        "first_token_ms": _duration_ms(
+            trace.get("t_run_started"), trace.get("t_first_assistant_chunk")
+        ),
+        "runtime_to_provider_dispatch_ms": _duration_ms(
+            trace.get("t_run_started"), trace.get("t_provider_request_started")
+        ),
+        "agent_preparation_ms": _duration_ms(
+            trace.get("t_agent_preparation_started"),
+            trace.get("t_agent_preparation_completed"),
+        ),
+        "lm_initialization_ms": _duration_ms(
+            trace.get("t_lm_initialization_started"),
+            trace.get("t_lm_initialization_completed"),
+        ),
+        "lm_initialized_during_request": bool(trace.get("t_lm_initialization_started")),
+        "provider_first_chunk_ms": _duration_ms(
+            trace.get("t_provider_request_started"),
+            trace.get("t_provider_first_chunk"),
+        ),
+        "provider_stream_ms": _duration_ms(
+            trace.get("t_provider_first_chunk"),
+            trace.get("t_provider_request_completed"),
+        ),
+        "provider_request_count": trace.get("provider_request_count"),
+        "assistant_stream_ms": _duration_ms(
+            trace.get("t_first_assistant_chunk"), trace.get("t_last_assistant_chunk")
+        ),
+        "post_stream_persist_ms": _duration_ms(
+            trace.get("t_last_assistant_chunk"), trace.get("t_run_completed")
+        ),
+        "claim_to_first_token_ms": _duration_ms(
+            trace.get("t_claimed"), trace.get("t_first_assistant_chunk")
+        ),
+        "client_to_first_token_ms": _duration_ms(
+            trace.get("t_client_send_started"), trace.get("t_first_assistant_chunk")
+        ),
         "first_chunk_lookup_ms": trace.get("first_chunk_lookup_ms"),
-        "run_ms": _duration_ms(trace.get("t_run_started"), trace.get("t_run_completed")),
+        "run_ms": _duration_ms(
+            trace.get("t_run_started"), trace.get("t_run_completed")
+        ),
         "total_ms": _duration_ms(trace.get("t_received"), trace.get("t_completed")),
-        "client_total_ms": _duration_ms(trace.get("t_client_send_started"), trace.get("t_completed")),
+        "client_total_ms": _duration_ms(
+            trace.get("t_client_send_started"), trace.get("t_completed")
+        ),
         "t_client_init_started": trace.get("t_client_init_started"),
         "t_client_init_completed": trace.get("t_client_init_completed"),
         "t_service_acquire_started": trace.get("t_service_acquire_started"),
@@ -835,6 +879,13 @@ def _build_latency_summary(trace: Dict[str, Any], *, status: str) -> Dict[str, A
         "t_procedure_bootstrap_started": trace.get("t_procedure_bootstrap_started"),
         "t_procedure_bootstrap_completed": trace.get("t_procedure_bootstrap_completed"),
         "t_backend_execution_started": trace.get("t_backend_execution_started"),
+        "t_agent_preparation_started": trace.get("t_agent_preparation_started"),
+        "t_agent_preparation_completed": trace.get("t_agent_preparation_completed"),
+        "t_lm_initialization_started": trace.get("t_lm_initialization_started"),
+        "t_lm_initialization_completed": trace.get("t_lm_initialization_completed"),
+        "t_provider_request_started": trace.get("t_provider_request_started"),
+        "t_provider_first_chunk": trace.get("t_provider_first_chunk"),
+        "t_provider_request_completed": trace.get("t_provider_request_completed"),
         "t_last_assistant_chunk": trace.get("t_last_assistant_chunk"),
     }
     error = trace.get("error")
@@ -844,11 +895,10 @@ def _build_latency_summary(trace: Dict[str, Any], *, status: str) -> Dict[str, A
 
 
 def _get_procedure_service(client: PlexusDashboardClient) -> ProcedureService:
-    cache_key = id(client)
-    cached = _PROCEDURE_SERVICE_CACHE.get(cache_key)
+    cached = getattr(client, _PROCEDURE_SERVICE_ATTRIBUTE, None)
     if cached is None:
         cached = ProcedureService(client)
-        _PROCEDURE_SERVICE_CACHE[cache_key] = cached
+        setattr(client, _PROCEDURE_SERVICE_ATTRIBUTE, cached)
     return cached
 
 
@@ -860,6 +910,15 @@ def warm_console_runtime(client: PlexusDashboardClient) -> None:
     # ready within its initialization budget.
     _get_procedure_service(client)
     asyncio.run(_get_or_create_console_mcp_server({}))
+    tactus_dspy = import_module("tactus.dspy")
+    tactus_dspy.prewarm_agent_runtime(
+        CONSOLE_CHAT_DEFAULT_MODEL,
+        provider=CONSOLE_CHAT_DEFAULT_PROVIDER,
+        max_tokens=CONSOLE_CHAT_MAX_TOKENS,
+        reasoning_effort=CONSOLE_CHAT_REASONING_EFFORT,
+        verbosity=CONSOLE_CHAT_VERBOSITY,
+        request_timeout=llm_request_timeout_seconds(),
+    )
 
 
 async def _get_or_create_console_mcp_server(runtime_context: Dict[str, Any]) -> Any:
@@ -1426,21 +1485,6 @@ async def run_console_chat_response_async(
     owner: str,
     latency_trace: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    # Create CloudWatch logger for console chat
-    account_key = str(os.getenv("PLEXUS_ACCOUNT_KEY") or "").strip() or message.account_id
-    cw_logger = None
-    if _should_log_cloudwatch_for_message(message):
-        try:
-            cw_logger = PlexusCloudWatchLogger(
-                account_key=account_key,
-                component_name="console-chat",
-                invocation_id=message.id,
-                log_category="console",
-            )
-            cw_logger.open()
-        except Exception as exc:
-            logger.debug("Could not create CloudWatch logger for console chat: %s", exc)
-
     if latency_trace is not None:
         latency_trace["t_history_load_started"] = utc_now()
 
@@ -1453,28 +1497,6 @@ async def run_console_chat_response_async(
         latency_trace["t_history_loaded"] = utc_now()
     if not history or history[-1].get("content") != message.content:
         history.append({"role": "USER", "content": message.content})
-
-    # Log session history to CloudWatch
-    if cw_logger:
-        history_stats = {
-            "session_id": message.session_id,
-            "message_id": message.id,
-            "history_message_count": len(history),
-            "history_total_chars": sum(len(str(msg.get("content", ""))) for msg in history),
-        }
-        try:
-            import tiktoken
-            enc = tiktoken.get_encoding("cl100k_base")
-            history_stats["history_total_tokens"] = sum(
-                len(enc.encode(str(msg.get("content", "")))) for msg in history
-            )
-        except Exception as exc:
-            logger.debug("Skipped session history token counting: %s", exc, exc_info=True)
-        cw_logger.log_llm_context({
-            "event": "session_history_loaded",
-            "stats": history_stats,
-            "history": history,
-        })
 
     if latency_trace is not None:
         latency_trace["t_service_acquire_started"] = utc_now()
@@ -1557,92 +1579,77 @@ async def run_console_chat_response_async(
     if latency_trace is not None:
         latency_trace["t_procedure_bootstrap_completed"] = utc_now()
 
-    # Log procedure invocation context
-    if cw_logger:
-        cw_logger.log_llm_context({
-            "event": "procedure_invocation",
-            "procedure_id": CONSOLE_CHAT_BUILTIN_ID,
-            "context": context,
-            "tool_access_mode": tool_access_mode,
-        })
+    result = await service.run_procedure(
+        CONSOLE_CHAT_BUILTIN_ID,
+        account_id=message.account_id,
+        console_user_message=message.content,
+        console_session_history=history,
+        console_tool_access_mode=tool_access_mode,
+        console_async_tasks_available=async_tasks_available,
+        console_selected_model=message.selected_model or "",
+        console_scorecard_id=scorecard_id,
+        console_score_id=score_id,
+        console_scorecard_name=scorecard_name,
+        console_score_name=score_name,
+        console_latest_score_edit_version_id=(latest_score_edit_audit or {}).get(
+            "version_id", ""
+        ),
+        console_latest_score_edit_parent_version_id=(
+            latest_score_edit_audit or {}
+        ).get("parent_version_id", ""),
+        console_latest_score_edit_promoted=bool(
+            (latest_score_edit_audit or {}).get("promoted")
+        ),
+        console_latest_score_edit_smoke_status=(latest_score_edit_audit or {}).get(
+            "smoke_status", ""
+        ),
+        console_latest_report_task_id=(latest_report_task or {}).get("task_id", ""),
+        enable_mcp=True,
+        mcp_server=mcp_server,
+        context=context,
+        lifecycle_trace=latency_trace,
+    )
+    if latency_trace is not None:
+        latency_trace["t_run_completed"] = utc_now()
+    first_chunk_lookup_started = time.monotonic()
+    first_chunk_details = fetch_first_assistant_chunk_details(
+        client,
+        message.session_id,
+        after_iso=run_started,
+    )
+    first_chunk_lookup_ms = int(max(0.0, (time.monotonic() - first_chunk_lookup_started) * 1000.0))
+    first_chunk_received_at = (
+        str(first_chunk_details.get("timestamp") or "").strip()
+        if isinstance(first_chunk_details, dict)
+        else None
+    )
+    if latency_trace is not None:
+        latency_trace["t_first_assistant_chunk"] = first_chunk_received_at
+        latency_trace["t_first_chunk_lookup_completed"] = utc_now()
+        latency_trace["first_chunk_lookup_ms"] = first_chunk_lookup_ms
+        if isinstance(first_chunk_details, dict):
+            for key in (
+                "assistant_message_id",
+                "resolved_model",
+                "assistant_prompt_tokens",
+                "assistant_completion_tokens",
+                "assistant_total_tokens",
+                "assistant_chunk_count",
+                "assistant_persisted_update_count",
+                "assistant_first_chunk_persisted_at",
+                "assistant_last_chunk_received_at",
+                "assistant_last_chunk_persisted_at",
+            ):
+                latency_trace[key] = first_chunk_details.get(key)
+            latency_trace["t_backend_execution_started"] = first_chunk_details.get(
+                "assistant_backend_execution_started_at"
+            )
+            latency_trace["t_last_assistant_chunk"] = (
+                first_chunk_details.get("assistant_last_chunk_received_at")
+                or first_chunk_details.get("assistant_last_chunk_persisted_at")
+            )
 
-    try:
-        result = await service.run_procedure(
-            CONSOLE_CHAT_BUILTIN_ID,
-            account_id=message.account_id,
-            console_user_message=message.content,
-            console_session_history=history,
-            console_tool_access_mode=tool_access_mode,
-            console_async_tasks_available=async_tasks_available,
-            console_selected_model=message.selected_model or "",
-            console_scorecard_id=scorecard_id,
-            console_score_id=score_id,
-            console_scorecard_name=scorecard_name,
-            console_score_name=score_name,
-            console_latest_score_edit_version_id=(latest_score_edit_audit or {}).get("version_id", ""),
-            console_latest_score_edit_parent_version_id=(latest_score_edit_audit or {}).get("parent_version_id", ""),
-            console_latest_score_edit_promoted=bool((latest_score_edit_audit or {}).get("promoted")),
-            console_latest_score_edit_smoke_status=(latest_score_edit_audit or {}).get("smoke_status", ""),
-            console_latest_report_task_id=(latest_report_task or {}).get("task_id", ""),
-            enable_mcp=True,
-            mcp_server=mcp_server,
-            context=context,
-        )
-        if latency_trace is not None:
-            latency_trace["t_run_completed"] = utc_now()
-        first_chunk_lookup_started = time.monotonic()
-        first_chunk_details = fetch_first_assistant_chunk_details(
-            client,
-            message.session_id,
-            after_iso=run_started,
-        )
-        first_chunk_lookup_ms = int(max(0.0, (time.monotonic() - first_chunk_lookup_started) * 1000.0))
-        first_chunk_received_at = (
-            str(first_chunk_details.get("timestamp") or "").strip()
-            if isinstance(first_chunk_details, dict)
-            else None
-        )
-        if latency_trace is not None:
-            latency_trace["t_first_assistant_chunk"] = first_chunk_received_at
-            latency_trace["t_first_chunk_lookup_completed"] = utc_now()
-            latency_trace["first_chunk_lookup_ms"] = first_chunk_lookup_ms
-            if isinstance(first_chunk_details, dict):
-                for key in (
-                    "assistant_message_id",
-                    "resolved_model",
-                    "assistant_prompt_tokens",
-                    "assistant_completion_tokens",
-                    "assistant_total_tokens",
-                    "assistant_chunk_count",
-                    "assistant_persisted_update_count",
-                    "assistant_first_chunk_persisted_at",
-                    "assistant_last_chunk_received_at",
-                    "assistant_last_chunk_persisted_at",
-                ):
-                    latency_trace[key] = first_chunk_details.get(key)
-                latency_trace["t_backend_execution_started"] = first_chunk_details.get(
-                    "assistant_backend_execution_started_at"
-                )
-                latency_trace["t_last_assistant_chunk"] = (
-                    first_chunk_details.get("assistant_last_chunk_received_at")
-                    or first_chunk_details.get("assistant_last_chunk_persisted_at")
-                )
-
-        # Log successful completion
-        if cw_logger:
-            cw_logger.log_llm_context({
-                "event": "procedure_completed",
-                "procedure_id": CONSOLE_CHAT_BUILTIN_ID,
-                "success": True,
-            })
-
-        return result
-    finally:
-        if cw_logger:
-            try:
-                cw_logger.close()
-            except Exception as exc:
-                logger.debug("Could not close CloudWatch logger: %s", exc)
+    return result
 
 
 def run_console_chat_response(

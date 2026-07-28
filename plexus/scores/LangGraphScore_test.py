@@ -1,12 +1,17 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from plexus.scores.LangGraphScore import LangGraphScore, BatchProcessingPause
+from plexus.scores.LangGraphScore import (
+    LangGraphScore,
+    BatchProcessingPause,
+    _await_with_nonblocking_timeout,
+)
 from plexus.scores.Score import Score
 from typing import Optional
 from types import SimpleNamespace
 from pydantic import BaseModel, Field, ConfigDict
 import logging
 import os
+import asyncio
 
 # Set the default fixture loop scope to function
 pytest.asyncio_fixture_scope = "function"
@@ -36,6 +41,29 @@ class AsyncIteratorMock:
             return next(self.iter)
         except StopIteration:
             raise StopAsyncIteration
+
+
+@pytest.mark.asyncio
+async def test_nonblocking_timeout_returns_when_provider_ignores_cancellation():
+    """A stuck provider must not make the evaluation wait for cancellation."""
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def stubborn_provider():
+        started.set()
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            # Model a provider awaitable that does not cooperate with the first
+            # cancellation request while its I/O remains live.
+            await release.wait()
+
+    with pytest.raises(TimeoutError, match="workflow deadline exceeded"):
+        await _await_with_nonblocking_timeout(stubborn_provider(), 0.01)
+
+    assert started.is_set()
+    release.set()
+    await asyncio.sleep(0)
 
 @pytest.fixture
 def basic_graph_config():
@@ -139,7 +167,7 @@ async def test_timestamp_enrichment_uses_recorded_deepgram_attachment_key():
         "plexus.utils.score_result_s3_utils.download_score_result_trace_file",
         side_effect=download_only_recorded_key,
     ) as download, patch(
-        "plexus.scores.LangGraphScore.TactusRuntime",
+        "tactus.core.runtime.TactusRuntime",
         return_value=runtime,
     ):
         enriched = await score._enrich_explanation_with_timestamps(
@@ -163,7 +191,7 @@ async def test_timestamp_enrichment_does_not_derive_legacy_deepgram_key_without_
         "plexus.utils.score_result_s3_utils.download_score_result_trace_file",
         side_effect=AssertionError("legacy DeepGram key should not be requested"),
     ) as download, patch(
-        "plexus.scores.LangGraphScore.TactusRuntime",
+        "tactus.core.runtime.TactusRuntime",
     ) as runtime:
         enriched = await score._enrich_explanation_with_timestamps(
             explanation,

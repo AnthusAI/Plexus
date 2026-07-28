@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "event_id": "3f3c46aa-4a37-482b-a43c-bd36dd69db99",
+  "issue_id": "plx-52c1bdf5-4909-42d7-be59-691423a2c10a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T12:52:38.022Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Migrate procedure and Tactus persistence to GraphQLArtifactStore",
+    "description": "Purpose: Remove default AWS credential requirements from local procedure persistence.\n\nOwned scope:\n- Tactus procedure state, Lua state, checkpoints, dashboard projection, procedure code, and resume paths.\n- Use the existing supported Plexus Tactus storage adapter interface without monkeypatching Tactus.\n\nAcceptance:\n- Procedure start, checkpoint, stop, and resume work through GraphQLArtifactStore.\n- Existing object keys and dashboard readers remain compatible.\n- Core-path tests make boto3.client for S3 raise and still pass.\n- Missing or invalid transfers fail clearly without storage fallback.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": [
+      "aws-login-free",
+      "wave-2",
+      "lane-procedure"
+    ]
+  }
+}

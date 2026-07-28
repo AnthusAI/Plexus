@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "event_id": "b413de6f-51fe-4e93-bea4-eb2162a26256",
+  "issue_id": "plx-0c9d2eb7-2e23-47c6-8a99-cccccf93216d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T12:52:36.691Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Freeze authentication and artifact-transfer contracts",
+    "description": "Purpose: Freeze the shared interfaces and rollout boundaries before parallel implementation begins.\n\nAuthentication contract:\n- Public commands are plexus login, plexus whoami, and plexus logout.\n- Interactive authentication uses Cognito authorization-code flow with PKCE and operating-system keychain storage.\n- Access tokens refresh automatically through a single token-provider interface.\n- GraphQL authentication modes are explicit Cognito for humans and IAM for workloads.\n- Expired authentication directs users to plexus login and never falls back to AWS SSO or an API key.\n\nArtifact ticket contract:\n- createArtifactTransferTickets accepts one to twenty READ or WRITE requests.\n- Each request includes resource type, resource ID, artifact type, filename, content type, size in bytes, and SHA-256.\n- Each response includes canonical object key, HTTP method, signed URL, required headers, and expiration.\n- URLs expire after five minutes and writes are limited to 100 MiB.\n- Bucket and object paths are derived server-side.\n- GraphQLArtifactStore retries once only for URL expiration and fails closed for authorization, transfer, or checksum errors.\n- Metadata retains _s3_key compatibility and adds checksum, size, and content type.\n\nRollout contract: Deploy additive authentication and ticket support before migrating local storage consumers.\n\nDefinition of Done:\n- All story and task IDs are linked from the parent epic.\n- Dependencies and lane ownership boundaries are recorded.\n- Kanbus validation passes.\n- No client-specific information is present.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": [
+      "aws-login-free",
+      "coordination"
+    ]
+  }
+}

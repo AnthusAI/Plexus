@@ -202,16 +202,22 @@ class FakeSessionTitleClient(FakeClient):
         return super().execute(query, variables, **_kwargs)
 
 
-def test_warm_console_runtime_prepares_mcp_server_without_preloading_optional_score_runtime(monkeypatch):
+def test_warm_console_runtime_prepares_mcp_server_and_prewarms_default_agent(
+    monkeypatch,
+):
     imported_modules = []
+    prewarm_calls = []
 
-    class FakeTactusCore:
-        TactusRuntime = object()
+    class FakeTactusDSPy:
+        @staticmethod
+        def prewarm_agent_runtime(model, **config):
+            prewarm_calls.append((model, config))
+            return object()
 
     def fake_import_module(name):
         imported_modules.append(name)
-        if name == "tactus.core":
-            return FakeTactusCore
+        if name == "tactus.dspy":
+            return FakeTactusDSPy
         return object()
 
     async def fake_get_or_create_console_mcp_server(_runtime_context):
@@ -227,7 +233,19 @@ def test_warm_console_runtime_prepares_mcp_server_without_preloading_optional_sc
 
     chat_runtime.warm_console_runtime(FakeClient())
 
-    assert imported_modules == []
+    assert imported_modules == ["tactus.dspy"]
+    assert prewarm_calls == [
+        (
+            "gpt-5.4-mini",
+            {
+                "provider": "openai",
+                "max_tokens": 4096,
+                "reasoning_effort": "low",
+                "verbosity": "low",
+                "request_timeout": 300.0,
+            },
+        )
+    ]
 
 
 def test_should_handle_only_matching_pending_user_chat_message():
@@ -464,6 +482,12 @@ def test_process_console_message_logs_latency_summary(monkeypatch):
         latency_trace["t_history_loaded"] = now
         latency_trace["t_run_started"] = now
         latency_trace["t_backend_execution_started"] = now
+        latency_trace["t_agent_preparation_started"] = now
+        latency_trace["t_agent_preparation_completed"] = now
+        latency_trace["t_provider_request_started"] = now
+        latency_trace["t_provider_first_chunk"] = now
+        latency_trace["t_provider_request_completed"] = now
+        latency_trace["provider_request_count"] = 1
         latency_trace["t_first_assistant_chunk"] = now
         latency_trace["t_last_assistant_chunk"] = now
         latency_trace["t_run_completed"] = now
@@ -503,20 +527,27 @@ def test_process_console_message_logs_latency_summary(monkeypatch):
     assert isinstance(summary["history_ms"], int)
     assert isinstance(summary["startup_ms"], int)
     assert isinstance(summary["first_token_ms"], int)
-    assert isinstance(summary["pre_model_ms"], int)
-    assert isinstance(summary["model_first_chunk_ms"], int)
-    assert isinstance(summary["model_stream_ms"], int)
-    assert isinstance(summary["post_model_persist_ms"], int)
+    assert isinstance(summary["runtime_to_provider_dispatch_ms"], int)
+    assert isinstance(summary["agent_preparation_ms"], int)
+    assert summary["lm_initialization_ms"] is None
+    assert summary["lm_initialized_during_request"] is False
+    assert isinstance(summary["provider_first_chunk_ms"], int)
+    assert isinstance(summary["provider_stream_ms"], int)
+    assert isinstance(summary["assistant_stream_ms"], int)
+    assert isinstance(summary["post_stream_persist_ms"], int)
+    assert summary["provider_request_count"] == 1
     assert isinstance(summary["total_ms"], int)
     assert summary["claim_ms"] >= 0
     assert summary["history_ms"] >= 0
     assert summary["startup_ms"] >= 0
     assert summary["first_token_ms"] >= 0
-    assert summary["pre_model_ms"] >= 0
-    assert summary["model_first_chunk_ms"] >= 0
-    assert summary["model_stream_ms"] >= 0
-    assert summary["post_model_persist_ms"] >= 0
-    assert summary["first_token_ms"] == summary["pre_model_ms"] + summary["model_first_chunk_ms"]
+    assert summary["runtime_to_provider_dispatch_ms"] >= 0
+    assert summary["agent_preparation_ms"] >= 0
+    assert summary["provider_first_chunk_ms"] >= 0
+    assert summary["provider_stream_ms"] >= 0
+    assert summary["assistant_stream_ms"] >= 0
+    assert summary["post_stream_persist_ms"] >= 0
+    assert "model_first_chunk_ms" not in summary
     assert summary["total_ms"] >= 0
     assert isinstance(summary["client_to_claim_ms"], int)
     assert isinstance(summary["client_total_ms"], int)
@@ -533,22 +564,15 @@ def test_process_console_message_logs_latency_summary(monkeypatch):
     assert server_latency["direct_message_fetch_ms"] == 321
     assert server_latency["code_sha"] == "test-sha"
     assert isinstance(server_latency["client_to_claim_ms"], int)
-    assert isinstance(server_latency["pre_model_ms"], int)
-    assert isinstance(server_latency["model_first_chunk_ms"], int)
-    assert isinstance(server_latency["model_stream_ms"], int)
-    assert isinstance(server_latency["post_model_persist_ms"], int)
+    assert isinstance(server_latency["runtime_to_provider_dispatch_ms"], int)
+    assert isinstance(server_latency["agent_preparation_ms"], int)
+    assert server_latency["lm_initialized_during_request"] is False
+    assert isinstance(server_latency["provider_first_chunk_ms"], int)
+    assert isinstance(server_latency["provider_stream_ms"], int)
+    assert isinstance(server_latency["assistant_stream_ms"], int)
+    assert isinstance(server_latency["post_stream_persist_ms"], int)
+    assert "model_first_chunk_ms" not in server_latency
     assert isinstance(server_latency["client_total_ms"], int)
-
-
-def test_local_targets_skip_cloudwatch_logging_by_default(monkeypatch):
-    message = chat_runtime.parse_chat_message(_raw_message(responseTarget="local:ryan"))
-    assert message is not None
-
-    monkeypatch.delenv("PLEXUS_CONSOLE_LOCAL_CLOUDWATCH", raising=False)
-    assert chat_runtime._should_log_cloudwatch_for_message(message) is False
-
-    monkeypatch.setenv("PLEXUS_CONSOLE_LOCAL_CLOUDWATCH", "true")
-    assert chat_runtime._should_log_cloudwatch_for_message(message) is True
 
 
 def test_process_console_message_marks_failed_when_harness_raises(monkeypatch):
@@ -715,10 +739,20 @@ def test_run_console_chat_response_passes_console_context_to_builtin(monkeypatch
             calls.append((procedure_id, kwargs, self.service_client))
             return {"success": True, "response": "42"}
 
-    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        chat_runtime,
+        "_get_procedure_service",
+        lambda service_client: FakeProcedureService(service_client),
+    )
 
     assert message is not None
-    result = chat_runtime.run_console_chat_response(client, message, owner="local:ryan:test")
+    latency_trace = {}
+    result = chat_runtime.run_console_chat_response(
+        client,
+        message,
+        owner="local:ryan:test",
+        latency_trace=latency_trace,
+    )
 
     assert result == {"success": True, "response": "42"}
     procedure_id, kwargs, service_client = calls[0]
@@ -732,6 +766,7 @@ def test_run_console_chat_response_passes_console_context_to_builtin(monkeypatch
     }
     assert kwargs["console_tool_access_mode"] == "execution"
     assert kwargs["enable_mcp"] is True
+    assert kwargs["lifecycle_trace"] is latency_trace
     assert kwargs["context"] == {
         "account_id": "acct-1",
         "chat_session_id": "sess-1",
@@ -755,7 +790,9 @@ def test_console_async_tasks_available_respects_explicit_false(monkeypatch):
 
 def test_run_console_chat_response_passes_session_score_scope_to_builtin(monkeypatch):
     client = FakeClient()
-    message = chat_runtime.parse_chat_message(_raw_message(content="Check the selected scope"))
+    message = chat_runtime.parse_chat_message(
+        _raw_message(content="Check the selected scope")
+    )
     calls = []
 
     class FakeProcedureService:
@@ -766,7 +803,11 @@ def test_run_console_chat_response_passes_session_score_scope_to_builtin(monkeyp
             calls.append(kwargs)
             return {"success": True, "response": "ok"}
 
-    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        chat_runtime,
+        "_get_procedure_service",
+        lambda service_client: FakeProcedureService(service_client),
+    )
     monkeypatch.setattr(
         chat_runtime,
         "fetch_chat_session",
@@ -794,15 +835,21 @@ def test_run_console_chat_response_passes_session_score_scope_to_builtin(monkeyp
     assert calls[0]["console_score_name"] == "Score One"
 
 
-def test_run_console_chat_response_uses_session_scope_fetched_with_direct_message(monkeypatch):
+def test_run_console_chat_response_uses_session_scope_fetched_with_direct_message(
+    monkeypatch,
+):
     client = FakeClient()
-    message = chat_runtime.parse_chat_message(_raw_message(session={
-        "id": "sess-1",
-        "scorecardId": "scorecard-1",
-        "scoreId": "score-1",
-        "scorecard": {"name": "Scorecard One"},
-        "score": {"name": "Score One"},
-    }))
+    message = chat_runtime.parse_chat_message(
+        _raw_message(
+            session={
+                "id": "sess-1",
+                "scorecardId": "scorecard-1",
+                "scoreId": "score-1",
+                "scorecard": {"name": "Scorecard One"},
+                "score": {"name": "Score One"},
+            }
+        )
+    )
     calls = []
 
     class FakeProcedureService:
@@ -810,11 +857,15 @@ def test_run_console_chat_response_uses_session_scope_fetched_with_direct_messag
             calls.append(kwargs)
             return {"success": True, "response": "ok"}
 
-    monkeypatch.setattr(chat_runtime, "ProcedureService", lambda _client: FakeProcedureService())
+    monkeypatch.setattr(
+        chat_runtime, "ProcedureService", lambda _client: FakeProcedureService()
+    )
     monkeypatch.setattr(
         chat_runtime,
         "fetch_chat_session",
-        lambda *_args: (_ for _ in ()).throw(AssertionError("direct scope should avoid a session fetch")),
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("direct scope should avoid a session fetch")
+        ),
     )
 
     assert message is not None
@@ -832,11 +883,16 @@ def test_run_console_chat_response_passes_durable_unpromoted_edit_state(monkeypa
     class FakeProcedureService:
         def __init__(self, service_client):
             pass
+
         async def run_procedure(self, procedure_id, **kwargs):
             calls.append(kwargs)
             return {"success": True, "response": "ok"}
 
-    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        chat_runtime,
+        "_get_procedure_service",
+        lambda service_client: FakeProcedureService(service_client),
+    )
     monkeypatch.setattr(
         chat_runtime,
         "fetch_session_history",
@@ -846,10 +902,17 @@ def test_run_console_chat_response_passes_durable_unpromoted_edit_state(monkeypa
             {"role": "USER", "content": "is it live?"},
         ],
     )
-    monkeypatch.setattr(chat_runtime, "fetch_latest_score_edit_audit", lambda *_args: {
-        "version_id": "candidate-1", "parent_version_id": "champion-1",
-        "promoted": False, "push_outcome": "not_pushed", "smoke_status": "failed",
-    })
+    monkeypatch.setattr(
+        chat_runtime,
+        "fetch_latest_score_edit_audit",
+        lambda *_args: {
+            "version_id": "candidate-1",
+            "parent_version_id": "champion-1",
+            "promoted": False,
+            "push_outcome": "not_pushed",
+            "smoke_status": "failed",
+        },
+    )
     assert message is not None
     chat_runtime.run_console_chat_response(client, message, owner="local:ryan:test")
     assert calls[0]["console_latest_score_edit_version_id"] == "candidate-1"
@@ -857,7 +920,9 @@ def test_run_console_chat_response_passes_durable_unpromoted_edit_state(monkeypa
     assert calls[0]["context"]["console_latest_score_edit_smoke_status"] == "failed"
 
 
-def test_run_console_chat_response_skips_empty_followup_state_on_first_turn(monkeypatch):
+def test_run_console_chat_response_skips_empty_followup_state_on_first_turn(
+    monkeypatch,
+):
     client = FakeClient()
     message = chat_runtime.parse_chat_message(_raw_message(content="first turn"))
 
@@ -865,7 +930,9 @@ def test_run_console_chat_response_skips_empty_followup_state_on_first_turn(monk
         async def run_procedure(self, _procedure_id, **_kwargs):
             return {"success": True, "response": "ok"}
 
-    monkeypatch.setattr(chat_runtime, "ProcedureService", lambda _client: FakeProcedureService())
+    monkeypatch.setattr(
+        chat_runtime, "ProcedureService", lambda _client: FakeProcedureService()
+    )
     monkeypatch.setattr(
         chat_runtime,
         "fetch_session_history",
@@ -874,12 +941,16 @@ def test_run_console_chat_response_skips_empty_followup_state_on_first_turn(monk
     monkeypatch.setattr(
         chat_runtime,
         "fetch_latest_score_edit_audit",
-        lambda *_args: (_ for _ in ()).throw(AssertionError("score edit lookup should be skipped")),
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("score edit lookup should be skipped")
+        ),
     )
     monkeypatch.setattr(
         chat_runtime,
         "fetch_latest_report_task",
-        lambda *_args: (_ for _ in ()).throw(AssertionError("report lookup should be skipped")),
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("report lookup should be skipped")
+        ),
     )
 
     assert message is not None
@@ -889,11 +960,27 @@ def test_run_console_chat_response_skips_empty_followup_state_on_first_turn(monk
 
 
 def test_score_edit_audit_from_metadata_reads_persisted_audit():
-    audit = chat_runtime._score_edit_audit_from_metadata(json.dumps({"score_change_audit": {
-        "kind": "score_edit", "version_id": "candidate-1", "parent_version_id": "champion-1",
-        "promoted": False, "push_outcome": "not_pushed", "post_submit_test": {"status": "failed"},
-    }}))
-    assert audit == {"version_id": "candidate-1", "parent_version_id": "champion-1", "promoted": False, "push_outcome": "not_pushed", "smoke_status": "failed"}
+    audit = chat_runtime._score_edit_audit_from_metadata(
+        json.dumps(
+            {
+                "score_change_audit": {
+                    "kind": "score_edit",
+                    "version_id": "candidate-1",
+                    "parent_version_id": "champion-1",
+                    "promoted": False,
+                    "push_outcome": "not_pushed",
+                    "post_submit_test": {"status": "failed"},
+                }
+            }
+        )
+    )
+    assert audit == {
+        "version_id": "candidate-1",
+        "parent_version_id": "champion-1",
+        "promoted": False,
+        "push_outcome": "not_pushed",
+        "smoke_status": "failed",
+    }
 
 
 def test_console_message_metadata_snapshots_tool_mode_and_private():
@@ -923,7 +1010,11 @@ def test_console_tool_mode_message_snapshot_overrides_session(monkeypatch):
             calls.append((procedure_id, kwargs, self.service_client))
             return {"success": True, "response": "ok"}
 
-    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        chat_runtime,
+        "_get_procedure_service",
+        lambda service_client: FakeProcedureService(service_client),
+    )
 
     assert message is not None
     chat_runtime.run_console_chat_response(client, message, owner="local:ryan:test")
@@ -949,7 +1040,11 @@ def test_console_tool_mode_uses_session_metadata_when_message_has_no_snapshot(mo
             calls.append((procedure_id, kwargs, self.service_client))
             return {"success": True, "response": "ok"}
 
-    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        chat_runtime,
+        "_get_procedure_service",
+        lambda service_client: FakeProcedureService(service_client),
+    )
 
     assert message is not None
     chat_runtime.run_console_chat_response(client, message, owner="local:ryan:test")
@@ -975,7 +1070,11 @@ def test_run_console_chat_response_passes_selected_model_override(monkeypatch):
             calls.append((procedure_id, kwargs, self.service_client))
             return {"success": True, "response": "ok"}
 
-    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        chat_runtime,
+        "_get_procedure_service",
+        lambda service_client: FakeProcedureService(service_client),
+    )
 
     assert message is not None
     result = chat_runtime.run_console_chat_response(client, message, owner="local:ryan:test")

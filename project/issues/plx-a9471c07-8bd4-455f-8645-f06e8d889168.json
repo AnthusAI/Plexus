@@ -1,0 +1,37 @@
+{
+  "id": "plx-a9471c07-8bd4-455f-8645-f06e8d889168",
+  "title": "CLI users authenticate without AWS credentials",
+  "description": "As a Plexus CLI user, I want to authenticate with my Plexus application identity, so that I can run local workflows without an AWS CLI session.\n\nFeature: Plexus application login\n\nScenario: Sign in from the CLI\nGiven no AWS credentials or Plexus access token are available\nWhen the user runs plexus login and completes the browser authorization\nThen the CLI stores refresh credentials in the operating system keychain\nAnd plexus whoami reports the authenticated identity and account\n\nScenario: Refresh an expired access token\nGiven a valid refresh credential is stored\nAnd the access token has expired\nWhen an authenticated GraphQL operation runs\nThen the CLI refreshes the access token without AWS intervention\n\nScenario: Authentication is unavailable\nGiven application authentication is expired or revoked\nWhen a protected local command runs\nThen it fails with guidance to run plexus login\nAnd it does not use AWS SSO or an API key\n\nScenario: Sign out\nGiven the user is authenticated\nWhen the user runs plexus logout\nThen stored refresh credentials are removed\nAnd subsequent protected commands require plexus login\n\nExclusions: Remote task execution and shared API-key authentication.",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "labels": [
+    "aws-login-free",
+    "behavior"
+  ],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "540412dc-8f4d-4b97-aa45-22f339666680",
+      "author": "ryan.porter",
+      "text": "Implementation detail added: the official CLI flow uses Cognito authorization-code plus S256 PKCE with the fixed registered callback http://127.0.0.1:8765/callback. The callback binds only to loopback, validates state with constant-time comparison, stops after its single response, and reports an occupied port clearly. Runtime discovery contract: PLEXUS_COGNITO_DOMAIN is the HTTPS hosted-authorization domain, PLEXUS_COGNITO_CLIENT_ID is the User Pool application client ID, and PLEXUS_COGNITO_REGION carries deployment identity metadata. Only standard Cognito claims such as sub and email are used; account membership remains server-side. The credentials boundary is OS-keychain refresh credential only; bearer access tokens are refreshed on demand.",
+      "created_at": "2026-07-28T13:03:36.244048Z"
+    },
+    {
+      "id": "2f904eee-b505-4d41-91b1-1bfce9e0250d",
+      "author": "ryan.porter",
+      "text": "Clarification for the existing account-reporting acceptance: this lane exposes standard Cognito identity only. It does not create or require an account-membership custom claim; any account or resource relationship remains a server-side authorization concern.",
+      "created_at": "2026-07-28T13:03:45.393756Z"
+    }
+  ],
+  "created_at": "2026-07-28T12:52:35.678209Z",
+  "updated_at": "2026-07-28T13:03:45.393756Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

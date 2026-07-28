@@ -8,10 +8,11 @@ from plexus.cli.procedure.mcp_transport import create_procedure_mcp_server
 from plexus.cli.procedure.procedure_executor import (
     _PlexusTraceLogBridge,
     _execute_tactus,
-    _install_tactus_dspy_legacy_turn_compatibility_patch,
-    _install_tactus_dspy_request_timeout_patch,
-    _install_tactus_json_pydantic_patch,
     _score_edit_audit_markdown,
+)
+from plexus.cli.procedure.tactus_runtime_controls import (
+    apply_default_agent_request_timeout,
+    llm_request_timeout_seconds,
 )
 
 
@@ -28,95 +29,41 @@ def test_score_change_audit_calls_out_guidelines_only_candidate() -> None:
     assert "- Changed fields: `guidelines`" in markdown
 
 
-def test_tactus_agent_request_timeout_is_configurable_per_agent(monkeypatch) -> None:
-    from tactus.dspy import agent as tactus_agent
-
-    class FakeDSPyAgentHandle:
-        def _agent_lm_config(self, _opts=None):
-            return "openai/gpt-5.4-nano", {"max_tokens": 200}
-
-        def _turn_without_streaming(self, _opts, _prompt_context):
-            return None
-
-    monkeypatch.setattr(tactus_agent, "DSPyAgentHandle", FakeDSPyAgentHandle)
+def test_tactus_agent_request_timeout_uses_supported_agent_config(monkeypatch) -> None:
     monkeypatch.setenv("PLEXUS_LLM_REQUEST_TIMEOUT_SECONDS", "47")
+    source = yaml.safe_dump(
+        {
+            "agents": {
+                "defaulted": {"model": "gpt-5.4-nano"},
+                "explicit": {"model": "gpt-5.4-mini", "request_timeout": 12},
+            }
+        },
+        sort_keys=False,
+    )
 
-    _install_tactus_dspy_request_timeout_patch()
+    configured = yaml.safe_load(apply_default_agent_request_timeout(source))
 
-    _, kwargs = FakeDSPyAgentHandle()._agent_lm_config()
-    assert kwargs == {"max_tokens": 200, "timeout": 47.0}
-
-
-def test_tactus_legacy_turn_delegates_to_callable_agent(monkeypatch) -> None:
-    """Shipped YAML procedures retain their documented Agent.turn() surface."""
-    from tactus.dspy import agent as tactus_agent
-
-    class FakeDSPyAgentHandle:
-        def __init__(self):
-            self.inputs = None
-
-        def __call__(self, inputs):
-            self.inputs = inputs
-            return "called"
-
-    monkeypatch.setattr(tactus_agent, "DSPyAgentHandle", FakeDSPyAgentHandle)
-
-    _install_tactus_dspy_legacy_turn_compatibility_patch()
-    agent = FakeDSPyAgentHandle()
-    assert agent.turn({"inject": "continue"}) == "called"
-    assert agent.inputs == {"message": "continue"}
+    assert configured["agents"]["defaulted"]["request_timeout"] == 47.0
+    assert configured["agents"]["explicit"]["request_timeout"] == 12
 
 
-def test_tactus_legacy_turn_rejects_ambiguous_message(monkeypatch) -> None:
-    from tactus.dspy import agent as tactus_agent
+def test_invalid_tactus_request_timeout_uses_safe_default(monkeypatch) -> None:
+    monkeypatch.setenv("PLEXUS_LLM_REQUEST_TIMEOUT_SECONDS", "invalid")
 
-    class FakeDSPyAgentHandle:
-        def __call__(self, _inputs):
-            return None
-
-    monkeypatch.setattr(tactus_agent, "DSPyAgentHandle", FakeDSPyAgentHandle)
-    _install_tactus_dspy_legacy_turn_compatibility_patch()
-
-    with pytest.raises(ValueError, match="either inject or message"):
-        FakeDSPyAgentHandle().turn({"inject": "one", "message": "two"})
+    assert llm_request_timeout_seconds() == 300.0
 
 
-def test_tactus_non_streaming_turn_uses_scoped_lm_context(monkeypatch) -> None:
-    """Non-streaming agents must receive the same scoped timeout as streams."""
-    from contextlib import contextmanager
-    from tactus.dspy import agent as tactus_agent
+def test_shipped_tactus_procedures_use_callable_agent_api() -> None:
+    procedures_root = Path(__file__).parents[2] / "procedures"
 
-    class FakeDSPyAgentHandle:
-        def __init__(self):
-            self.in_lm_context = False
-
-        def _agent_lm_config(self, _opts=None):
-            return "openai/gpt-5.4-nano", {}
-
-        @contextmanager
-        def _dspy_lm_context(self, _opts=None):
-            self.in_lm_context = True
-            try:
-                yield
-            finally:
-                self.in_lm_context = False
-
-        def _turn_without_streaming(self, _opts, _prompt_context):
-            return self.in_lm_context
-
-    monkeypatch.setattr(tactus_agent, "DSPyAgentHandle", FakeDSPyAgentHandle)
-
-    _install_tactus_dspy_request_timeout_patch()
-
-    assert FakeDSPyAgentHandle()._turn_without_streaming({}, {}) is True
+    for path in procedures_root.rglob("*.yaml"):
+        assert ".turn(" not in path.read_text(), path
 
 
-def test_tactus_json_patch_serializes_pydantic_events_without_error_log(caplog) -> None:
+def test_tactus_json_serializes_pydantic_events_without_error_log(caplog) -> None:
     """Pydantic diagnostics remain serializable without a spurious error."""
     from tactus.primitives.json import JsonPrimitive
     from tactus.protocols.models import CostEvent
-
-    _install_tactus_json_pydantic_patch()
 
     with caplog.at_level("ERROR"):
         payload = JsonPrimitive().encode(
@@ -550,6 +497,81 @@ async def test_trace_bridge_forwards_cost_events_to_trace_sink():
     assert len(bridge.cost_events) == 1
     assert len(sink.events) == 1
     assert getattr(sink.events[0], "event_type", None) == "cost"
+
+
+@pytest.mark.asyncio
+async def test_trace_bridge_consumes_supported_agent_lifecycle_events(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from tactus.protocols.models import AgentLifecycleEvent
+
+    captured_contexts = []
+    lifecycle_trace = {}
+    sink = _CollectingTraceSink()
+    monkeypatch.setattr(
+        "plexus.cli.procedure.logging_utils.capture_tactus_dspy_context_for_agent",
+        lambda **kwargs: captured_contexts.append(kwargs),
+    )
+    bridge = _PlexusTraceLogBridge(
+        sink,
+        lifecycle_trace=lifecycle_trace,
+    )
+    started = datetime(2026, 7, 23, 12, 0, 0, tzinfo=timezone.utc)
+    events = [
+        AgentLifecycleEvent(
+            agent_name="assistant", phase="agent_preparation_started", timestamp=started
+        ),
+        AgentLifecycleEvent(
+            agent_name="assistant",
+            phase="agent_preparation_completed",
+            timestamp=started + timedelta(milliseconds=20),
+        ),
+        AgentLifecycleEvent(
+            agent_name="assistant",
+            phase="provider_request_started",
+            request_id="assistant:1",
+            prompt_context={"user_message": "hello", "tools": []},
+            timestamp=started + timedelta(milliseconds=25),
+        ),
+        AgentLifecycleEvent(
+            agent_name="assistant",
+            phase="provider_first_chunk",
+            request_id="assistant:1",
+            timestamp=started + timedelta(milliseconds=125),
+        ),
+        AgentLifecycleEvent(
+            agent_name="assistant",
+            phase="provider_request_completed",
+            request_id="assistant:1",
+            timestamp=started + timedelta(milliseconds=225),
+        ),
+    ]
+
+    for event in events:
+        bridge.log(event)
+    await bridge.flush()
+    await bridge.close()
+
+    assert lifecycle_trace["provider_request_count"] == 1
+    assert lifecycle_trace["t_agent_preparation_started"] == started.isoformat()
+    assert (
+        lifecycle_trace["t_agent_preparation_completed"]
+        == (started + timedelta(milliseconds=20)).isoformat()
+    )
+    assert (
+        lifecycle_trace["t_provider_request_started"]
+        == (started + timedelta(milliseconds=25)).isoformat()
+    )
+    assert (
+        lifecycle_trace["t_provider_first_chunk"]
+        == (started + timedelta(milliseconds=125)).isoformat()
+    )
+    assert (
+        lifecycle_trace["t_provider_request_completed"]
+        == (started + timedelta(milliseconds=225)).isoformat()
+    )
+    assert captured_contexts[0]["prompt_context"]["user_message"] == "hello"
+    assert sink.events == []
 
 
 @pytest.mark.asyncio

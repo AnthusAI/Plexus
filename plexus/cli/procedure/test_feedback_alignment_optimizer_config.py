@@ -67,6 +67,41 @@ def _build_optimizer_candidate_collapse_checker():
     return lua, check
 
 
+def _build_exact_feedback_cohort_checker():
+    from lupa import LuaRuntime
+
+    code = _load_optimizer_config()["code"]
+    helper_start = code.index(
+        "local function extract_selected_feedback_item_ids(eval_result)"
+    )
+    helper_end = code.index("local function prediction_mode_collapse_reason(metrics)")
+    validator_start = code.index(
+        "local function require_exact_feedback_cohort(eval_result, expected_ids)"
+    )
+    validator_end = code.index(
+        "local function require_exact_regression_cohort(eval_result, expected_dataset_id)"
+    )
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    check = lua.execute(
+        """
+local function has_text(value)
+  return type(value) == "string" and value:match("%S") ~= nil
+end
+local function safe_decode(value) return nil end
+local function call_plexus_tool(tool_name, args) error("unexpected tool call") end
+"""
+        + code[helper_start:helper_end]
+        + code[validator_start:validator_end]
+        + "\nreturn require_exact_feedback_cohort"
+    )
+    return lua, check
+
+
+def _feedback_eval_with_ids(lua, item_ids):
+    parameters = lua.table_from({"feedback_item_ids": lua.table_from(item_ids)})
+    return lua.table_from({"parameters": parameters})
+
+
 def _lua_list(lua_table):
     return [lua_table[i] for i in range(1, len(lua_table) + 1)]
 
@@ -405,6 +440,44 @@ def test_optimizer_yaml_skips_invalid_synthesis_strategy_selection():
     assert "No viable synthesis strategy selected" in code
 
 
+def test_optimizer_synthesis_is_fail_closed_against_the_current_cycle_leader():
+    """Feature: synthesis safety
+
+    Scenario: a synthesis candidate loses either frozen cohort to the current cycle leader
+      Given the current cycle leader was evaluated on the frozen recent and regression cohorts
+      When a synthesis candidate has a negative delta on either cohort against that leader
+      Then the candidate is not selected or carried forward
+      And the reviewer receives the leader, its cohort identity, and leader-relative deltas
+    """
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local function require_exact_regression_cohort" in code
+    assert "strategy_recent_regression_vs_cycle_leader" in code
+    assert "strategy_regression_regression_vs_cycle_leader" in code
+    assert "synthesis_recent_regression_vs_cycle_leader" in code
+    assert "synthesis_regression_regression_vs_cycle_leader" in code
+    assert "Comparison basis: current cycle leader" in code
+    assert "Current cycle leader (reverts to)" in code
+
+
+def test_optimizer_synthesis_pins_model_without_reviewed_justification():
+    """Feature: synthesis safety
+
+    Scenario: synthesis changes a score model without review
+      Given the cycle leader has a pinned model configuration
+      When synthesis submits a version with a different model configuration
+      Then the version is rejected before selection unless an explicit reviewed justification is supplied
+    """
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "reviewed_model_change_justification" in config["params"]
+    assert "local function model_configuration_fingerprint" in code
+    assert "model_change_requires_reviewed_justification" in code
+    assert "pinned_model_fingerprint" in code
+
+
 def test_optimizer_yaml_ignores_code_editor_prose_after_terminal_tools():
     config = _load_optimizer_config()
     code = config["code"]
@@ -673,7 +746,7 @@ def test_optimizer_yaml_strategy_b_uses_clean_starting_point_when_baseline_is_me
     assert 'strategy_b_start_code = synth_start_code' in code
     assert 'strategy_b_start_label = "MECHANICALLY CLEAN STARTING POINT (" .. synth_start_label .. ")"' in code
     assert 'diag("Strategy B switching from mechanically dirty baseline to smoke-test-clean starting point")' in code
-    assert 'run_synthesis_react(table.concat(strategy_b_parts, "\\n"), strategy_b_start_code, strategy_b_start_label, strategy_b_parent_version_id, 10, "Strategy-B")' in code
+    assert 'run_synthesis_react(table.concat(strategy_b_parts, "\\n"), strategy_b_start_code, strategy_b_start_label, strategy_b_parent_version_id, 10, "Strategy-B", pinned_model_fingerprint)' in code
 
 
 def test_optimizer_yaml_defines_safe_encode_for_score_test_failure_details():
@@ -818,12 +891,26 @@ def test_optimizer_yaml_rejects_non_completed_evaluation_handles():
     config = _load_optimizer_config()
     code = config["code"]
 
-    assert 'if eval_status == "COMPLETED" then' in code
+    assert 'if eval_status == "COMPLETED"\n' in code
     assert 'if eval_status == "FAILED" or eval_status == "CANCELLED" or eval_status == "CANCELED" then' in code
     assert "local eval_error = (eval_data and (eval_data.error_message or eval_data.errorMessage" in code
     assert '" error_message=" .. tostring(eval_error)' in code
     assert '"Evaluation did not complete: status=" .. tostring((eval_data and eval_data.status) or waited.status)' in code
     assert "score_version_id = eval_result.score_version_id or eval_result.scoreVersionId" in code
+
+
+def test_optimizer_waits_for_a_terminal_evaluation_state_without_a_time_deadline():
+    code = _load_optimizer_config()["code"]
+
+    assert 'local EVAL_AWAIT_POLL_TIMEOUT = "PT1M"' in code
+    assert "local function evaluation_progress_marker(eval_data, waited)" in code
+    assert "not eval_data.completion_pending_process_exit" in code
+    assert "while true do" in code
+    assert "remains active; progress=" in code
+    assert "EVAL_STALL_POLL_LIMIT" not in code
+    assert "Evaluation stalled without progress" not in code
+    assert 'local EVAL_AWAIT_TIMEOUT = "PT90M"' not in code
+    assert "Evaluation did not complete: status=RUNNING" not in code
 
 
 def test_optimizer_yaml_skips_scores_with_no_recent_feedback_baseline():
@@ -857,6 +944,19 @@ def test_optimizer_yaml_marks_one_cycle_runs_as_verification_only():
 
     assert "Single-cycle verification run: this will validate one optimization cycle only and will not perform champion promotion." in code
     assert 'local completion_mode = params.max_iterations == 1 and "Verification complete" or "Optimization complete"' in code
+
+
+def test_optimizer_yaml_rejects_aggregate_gains_that_regress_protected_recall():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert config["params"]["max_recall_regression"]["default"] == 0.05
+    assert "local function classify_exploration_success(cand)" in code
+    assert "local recall_floor = -params.max_recall_regression" in code
+    assert "cand.class_safety_rejection" in code
+    assert "recent recall regression" in code
+    assert "historical recall regression" in code
+    assert '"; rejected: " .. sv.class_safety_rejection' in code
 
 
 def test_optimizer_yaml_runs_diagnostic_synthesis_when_no_hypothesis_has_positive_signal():
@@ -1039,18 +1139,25 @@ def test_optimizer_yaml_bounds_parallel_evaluation_processes():
     assert "local batch_results = _dispatch_evaluation_batch(batch)" in code
 
 
-def test_optimizer_waits_while_evaluation_progress_advances_and_only_fails_when_stalled():
+def test_optimizer_yaml_rejects_incomplete_candidate_evaluation_batches():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "candidate_evaluation_incomplete" in code
+    assert "Candidate evaluation batch returned no terminal evidence" in code
+    assert "sv.evaluation_incomplete" in code
+
+
+def test_optimizer_does_not_treat_elapsed_or_inactive_time_as_evaluation_failure():
     config = _load_optimizer_config()
     code = config["code"]
 
     assert "evaluation_timeout_minutes" not in config["params"]
-    assert config["params"]["evaluation_stall_timeout_minutes"]["default"] == 15
+    assert "evaluation_stall_timeout_minutes" not in config["params"]
     assert 'local EVAL_AWAIT_POLL_TIMEOUT = "PT1M"' in code
     assert "local function evaluation_progress_marker(eval_data, waited)" in code
-    assert "if progress_marker ~= last_progress_marker then" in code
-    assert "stalled_polls = 0" in code
-    assert "stalled_polls = stalled_polls + 1" in code
-    assert "Evaluation stalled without progress" in code
+    assert "EVAL_STALL_POLL_LIMIT" not in code
+    assert "Evaluation stalled without progress" not in code
     assert "Evaluation did not complete: status=RUNNING" not in code
 
 
@@ -1109,9 +1216,57 @@ def test_optimizer_yaml_replays_and_verifies_exact_recent_feedback_cohort():
     assert code.count("feedback_item_ids = recent_baseline_feedback_item_ids") == 3
     assert "require_exact_feedback_cohort" in code
     assert "candidate feedback cohort differs from baseline" in code
+    assert "candidate feedback cohort order differs from baseline" not in code
     assert "Invalid candidate comparison" in code
     assert "Invalid strategy comparison" in code
     assert "Invalid synthesis comparison" in code
+
+
+def test_optimizer_accepts_exact_feedback_cohort_in_a_different_order():
+    """Feature: frozen feedback cohort validation
+
+    Scenario: Evaluation service returns the frozen cohort in another order
+      Given a baseline cohort with unique feedback item IDs
+      When a candidate evaluation contains exactly those IDs in a different order
+      Then cohort validation succeeds
+    """
+    lua, check = _build_exact_feedback_cohort_checker()
+
+    valid, error = check(
+        _feedback_eval_with_ids(lua, ["item-c", "item-a", "item-b"]),
+        lua.table_from(["item-a", "item-b", "item-c"]),
+    )
+
+    assert valid is True
+    assert error is None
+
+
+def test_optimizer_rejects_feedback_cohort_membership_or_duplicate_changes():
+    """Feature: frozen feedback cohort validation
+
+    Scenario: Candidate cohort is not the exact frozen membership
+      Given a baseline cohort with unique feedback item IDs
+      When a candidate has a missing, extra, or duplicate ID
+      Then cohort validation fails with a cohort-difference diagnostic
+    """
+    lua, check = _build_exact_feedback_cohort_checker()
+    expected = lua.table_from(["item-a", "item-b", "item-c"])
+
+    cases = (
+        (["item-a", "item-b"], "candidate feedback cohort differs from baseline"),
+        (
+            ["item-a", "item-b", "item-c", "item-d"],
+            "candidate feedback cohort differs from baseline",
+        ),
+        (
+            ["item-a", "item-a", "item-c"],
+            "candidate feedback cohort contains duplicate IDs",
+        ),
+    )
+    for actual, expected_error in cases:
+        valid, error = check(_feedback_eval_with_ids(lua, actual), expected)
+        assert valid is False
+        assert expected_error in error
 
 
 def test_optimizer_yaml_is_valid_lua_after_exact_cohort_wiring():

@@ -45,10 +45,9 @@ from plexus.feedback_item_explanations import (
 
 from plexus.scores.LangGraphScore import LangGraphScore
 import inspect
-from plexus.CustomLogging import logging, setup_logging, set_log_group
+from plexus.CustomLogging import logging, setup_logging
 
 # Set up logging for evaluations
-set_log_group('plexus/evaluation')
 setup_logging()
 
 
@@ -395,6 +394,7 @@ class Evaluation:
         visualize: bool = False,
         task_id: str = None,
         allow_no_labels: bool = False,
+        parameters: Optional[Any] = None,
     ):
         # Immediately store task_id so that it is available for evaluation record creation
         self.allow_no_labels = allow_no_labels
@@ -423,6 +423,10 @@ class Evaluation:
         self.account_key = account_key  # Store the account key
         self.visualize = visualize
         self.task_id = task_id  # Ensure task_id is stored
+        # Evaluations created by the CLI already have persisted parameters (for
+        # example notes and baseline lineage). Keep a local copy so completion
+        # updates can merge cost details without replacing that metadata.
+        self.parameters = self._coerce_parameters_dict(parameters)
         
         # Parse lists, if available.
         self.session_ids_to_sample = session_ids_to_sample
