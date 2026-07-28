@@ -3,7 +3,7 @@
   "title": "Implement Cognito CLI authentication and dashboard client support",
   "description": "Purpose: Implement the official human authentication path.\n\nOwned scope:\n- Cognito hosted authorization configuration required for authorization-code PKCE.\n- plexus login, plexus whoami, and plexus logout.\n- Operating-system keychain credential storage and automatic refresh.\n- Explicit Cognito bearer-token transport in PlexusDashboardClient while retaining explicit IAM workload authentication.\n\nExclusions:\n- Artifact ticket resolver and storage-consumer migrations.\n- AWS SSO, public API-key, or automatic authentication fallbacks.\n\nAcceptance:\n- Behavior-first tests cover login, loopback callback validation, PKCE, keychain persistence, refresh, whoami, logout, revoked sessions, and explicit auth modes.\n- Protected commands fail with plexus login guidance when application authentication is unavailable.\n- Existing workload IAM behavior remains supported.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -19,9 +19,58 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "e94092b4-f9d6-4d5f-923d-3a24a9ea1884",
+      "author": "ryan.porter",
+      "text": "Kickoff: canonical agent /root/aws_login_auth in /Users/ryan.porter/Projects/Plexus-auth-login on codex/aws-login-free-auth, based on 03e0b04b67a162c37fbcf3cc9bd28d0c363b571a. Owned scope: official Plexus CLI login, identity, logout, Cognito authorization-code plus PKCE loopback flow, secure credential storage and refresh, dashboard Cognito bearer support, and hosted authorization configuration. Dependency boundary: artifact-store work may consume the client but does not modify it; no artifact ticket resolver or storage migrations in this lane. Behavior specifications will precede production code.",
+      "created_at": "2026-07-28T12:57:19.438344Z"
+    },
+    {
+      "id": "75409b68-2bea-4a9b-95cc-e76f6893238c",
+      "author": "ryan.porter",
+      "text": "Behavior specification is being tracked in the child story created for the official CLI application authentication flow. Initial investigation confirms the existing client accepts API key or explicit IAM only; the new mode will be explicit bearer auth with no implicit fallback.",
+      "created_at": "2026-07-28T12:57:50.869820Z"
+    },
+    {
+      "id": "924e33b1-f08d-4802-b0ce-19ee284675d3",
+      "author": "ryan.porter",
+      "text": "Milestone: behavior-first focused Python suite is green (41 tests). Hosted authorization contract is fixed to the pre-registered loopback callback http://127.0.0.1:8765/callback; deployment supplies Cognito domain, client ID, and region. No account-membership claim is required or inferred. Explicit Cognito bearer mode refreshes from the OS keychain and reports plexus login guidance without API-key or AWS SSO fallback.",
+      "created_at": "2026-07-28T13:03:45.628570Z"
+    },
+    {
+      "id": "64a760c5-45b3-44f9-ad56-e20b92987b42",
+      "author": "ryan.porter",
+      "text": "Risk recorded for follow-up: multi-account membership and account-to-identity mapping are intentionally not part of Wave 1. This login implementation exposes only standard Cognito identity claims and leaves resource/account authorization server-side; a future platform authorization story should define membership semantics before surfacing account selection in the CLI.",
+      "created_at": "2026-07-28T13:07:49.933925Z"
+    },
+    {
+      "id": "2cd77e81-a18a-48e4-ae3a-8994898bb04a",
+      "author": "ryan.porter",
+      "text": "Handoff milestone: committed Wave 1 authentication lane as 8ef51770f. Focused behavior coverage is green: 43 tests for PKCE/state/loopback/keychain/refresh/revocation/whoami/logout, explicit Cognito bearer transport, and explicit IAM preservation. Python lint and locked dependency validation passed. Dashboard typecheck could not run because the worktree initially lacked node_modules and a fresh npm install did not complete cleanly; the Amplify auth configuration was checked against the installed backend-auth type definitions (callbackUrls, logoutUrls, uppercase scopes).",
+      "created_at": "2026-07-28T13:08:14.840661Z"
+    },
+    {
+      "id": "7292e4d6-2c0b-4647-a0f2-da5021c24279",
+      "author": "ryan.porter",
+      "text": "PR handoff: https://github.com/AnthusAI/Plexus/pull/503 (draft), branch codex/aws-login-free-auth, commit 8ef51770f. The branch contains only the Wave 1 lane source, tests, documentation, and dependency lock changes; Kanbus metadata remains unstaged. Please keep this task open until the PR lands, per coordination boundary.",
+      "created_at": "2026-07-28T13:08:57.495645Z"
+    },
+    {
+      "id": "05e49156-0724-4522-8a7e-8f5a96974a83",
+      "author": "ryan.porter",
+      "text": "Review-fix milestone: listener binding now precedes browser launch; tokens are memory-cached with a 60-second pre-expiry refresh; dashboard client accepts explicit auth_mode; keychain deletion only suppresses the keyring missing-credential condition; and CLI config discovers deployed Cognito OAuth output with environment precedence. Token-exchange failures now provide actionable login guidance. Focused suite: 53 passed; flake8 and poetry lock validation passed. Kanbus task/story records and events will be included with this review follow-up.",
+      "created_at": "2026-07-28T13:13:56.939492Z"
+    },
+    {
+      "id": "9cddeedd-74a3-429d-93ce-6ecbb5ca34b4",
+      "author": "ryan.porter",
+      "text": "Blocking type-review fix complete: Amplify externalProviders now uses the supported direct callbackUrls, logoutUrls, and scopes properties (the backend factory supplies domainPrefix). Direct TypeScript compile against installed backend-auth definitions passed. The browser-launch fallback now prints the authorization URL and keeps the bound callback listener available. Focused suite is 54 passed; flake8 and poetry lock validation passed.",
+      "created_at": "2026-07-28T13:19:20.766119Z"
+    }
+  ],
   "created_at": "2026-07-28T12:52:37.023332Z",
-  "updated_at": "2026-07-28T12:52:37.023332Z",
+  "updated_at": "2026-07-28T13:19:20.766119Z",
   "closed_at": null,
   "custom": {
     "source": "shared",
