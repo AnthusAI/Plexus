@@ -547,6 +547,32 @@ test-tox = ["celery", "click", "docutils (>=0.22.0)", "equinox ; sys_platform ==
 test-tox-coverage = ["coverage (>=5.5)"]
 
 [[package]]
+name = "behave"
+version = "1.3.3"
+description = "behave is behaviour-driven development, Python style"
+optional = false
+python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,>=2.7"
+groups = ["dev"]
+files = [
+    {file = "behave-1.3.3-py2.py3-none-any.whl", hash = "sha256:89bdb62af8fb9f147ce245736a5de69f025e5edfb66f1fbe16c5007493f842c0"},
+    {file = "behave-1.3.3.tar.gz", hash = "sha256:2b8f4b64ed2ea756a5a2a73e23defc1c4631e9e724c499e46661778453ebaf51"},
+]
+
+[package.dependencies]
+colorama = ">=0.3.7"
+cucumber-expressions = {version = ">=17.1.0", markers = "python_version >= \"3.8\""}
+cucumber-tag-expressions = ">=4.1.0"
+parse = ">=1.18.0"
+parse-type = ">=0.6.0"
+six = ">=1.15.0"
+
+[package.extras]
+develop = ["PyHamcrest (<2.0) ; python_version < \"3.0\"", "PyHamcrest (>=2.0.2) ; python_version >= \"3.0\"", "build (>=0.5.1)", "coverage (>=5.0)", "invoke (>=1.7.0) ; python_version >= \"3.6\"", "invoke (>=1.7.0,<2.0) ; python_version < \"3.6\"", "mock (<4.0) ; python_version < \"3.6\"", "mock (>=4.0) ; python_version >= \"3.6\"", "modernize (>=0.5)", "path (>=13.1.0) ; python_version >= \"3.5\"", "path.py (>=11.5.0) ; python_version < \"3.5\"", "pycmd", "pylint", "pytest (>=4.2,<5.0) ; python_version < \"3.0\"", "pytest (>=5.0) ; python_version >= \"3.0\"", "pytest-cov", "pytest-html (>=1.19.0,<2.0) ; python_version < \"3.0\"", "pytest-html (>=2.0) ; python_version >= \"3.0\"", "ruff ; python_version >= \"3.7\"", "tox (>=3.28.0,<4.0)", "twine (>=1.13.0)", "virtualenv (<20.22.0) ; python_version < \"3.7\"", "virtualenv (>=20.26.6) ; python_version >= \"3.7\""]
+docs = ["furo (>=2024.4.27) ; python_version >= \"3.8\"", "sphinx (>=1.6,<4.4) ; python_version < \"3.7\"", "sphinx (>=7.4.0) ; python_version >= \"3.7\"", "sphinx-copybutton (>=0.5.2) ; python_version >= \"3.7\"", "sphinxcontrib-applehelp (>=1.0.8) ; python_version >= \"3.7\"", "sphinxcontrib-htmlhelp (>=2.0.5) ; python_version >= \"3.7\""]
+formatters = ["behave-html-formatter (>=0.9.10) ; python_version >= \"3.6\"", "behave-html-pretty-formatter (>=1.9.1) ; python_version >= \"3.6\""]
+testing = ["PyHamcrest (<2.0) ; python_version < \"3.0\"", "PyHamcrest (>=2.0.2) ; python_version >= \"3.0\"", "assertpy (>=1.1)", "chardet", "freezegun (>=1.5.1) ; python_version > \"3.7\"", "mock (<4.0) ; python_version < \"3.6\"", "mock (>=4.0) ; python_version >= \"3.6\"", "path (>=13.1.0) ; python_version >= \"3.5\"", "path.py (>=11.5.0,<13.0) ; python_version < \"3.5\"", "pytest (<5.0) ; python_version < \"3.0\"", "pytest (>=5.0) ; python_version >= \"3.0\"", "pytest-html (>=1.19.0,<2.0) ; python_version < \"3.0\"", "pytest-html (>=2.0) ; python_version >= \"3.0\""]
+
+[[package]]
 name = "bertopic"
 version = "0.17.4"
 description = "BERTopic performs topic Modeling with state-of-the-art transformer models."
@@ -1582,6 +1608,30 @@ cffi = {version = ">=2.0.0", markers = "platform_python_implementation != \"PyPy
 ssh = ["bcrypt (>=3.1.5)"]
 
 [[package]]
+name = "cucumber-expressions"
+version = "20.0.0"
+description = "Cucumber Expressions - a simpler alternative to Regular Expressions"
+optional = false
+python-versions = ">=3.10"
+groups = ["dev"]
+files = [
+    {file = "cucumber_expressions-20.0.0-py3-none-any.whl", hash = "sha256:8a0434529efd7ca6e2052934ec8d677c7e24edc0fad3b1d1b1bc4bbca5e521f3"},
+    {file = "cucumber_expressions-20.0.0.tar.gz", hash = "sha256:5cbd4012c66584aa82ada990a6e7cb131274796e132e905d27d95ae9a2ca0f48"},
+]
+
+[[package]]
+name = "cucumber-tag-expressions"
+version = "11.0.0"
+description = "Provides a tag-expression parser and evaluation logic for cucumber/behave"
+optional = false
+python-versions = ">=3.10"
+groups = ["dev"]
+files = [
+    {file = "cucumber_tag_expressions-11.0.0-py3-none-any.whl", hash = "sha256:86ce0647bed1e52d6a634649c31758faa22821531541848f221b1f6c4f75c9f7"},
+    {file = "cucumber_tag_expressions-11.0.0.tar.gz", hash = "sha256:9739a7b3e04b3ee9f77748d2b48dc9e7ff41b041ed6b651283cfec022f0e6d0b"},
+]
+
+[[package]]
 name = "cuda-bindings"
 version = "13.3.1"
 description = "Python bindings for CUDA"
@@ -2563,6 +2613,21 @@ build = ["build", "packaging", "requests", "semver", "setuptools (>=77.0.1)", "t
 dev = ["build (>=1.0.3)", "gepa[build]", "gepa[test]", "pre-commit", "ruff (>=0.3.0)"]
 full = ["datasets (>=2.14.6) ; python_version < \"3.14\"", "datasets (>=4.5.0) ; python_version >= \"3.14\"", "litellm (>=1.64.0) ; python_version < \"3.14\"", "litellm (>=1.81.0) ; python_version >= \"3.14\"", "mlflow (>=3.0.0) ; python_version < \"3.14\"", "mlflow-skinny (>=3.8.1) ; python_version >= \"3.14\"", "pyarrow (>=22.0.0) ; python_version >= \"3.14\"", "pydantic (>=2.12.0) ; python_version >= \"3.14\"", "tiktoken (>=0.12.0) ; python_version >= \"3.14\"", "tqdm (>=4.66.1)", "wandb (>=0.23.0) ; python_version >= \"3.14\"", "wandb ; python_version < \"3.14\""]
 test = ["gepa[full]", "pyright", "pytest"]
+
+[[package]]
+name = "gherkin-official"
+version = "42.0.0"
+description = "Gherkin parser (official, by Cucumber team)"
+optional = false
+python-versions = ">=3.10"
+groups = ["dev"]
+files = [
+    {file = "gherkin_official-42.0.0-py3-none-any.whl", hash = "sha256:7f95d926878bbfde2a0414683f88029b9dc7feba5a6c27ca26f2cf58edd482c4"},
+    {file = "gherkin_official-42.0.0.tar.gz", hash = "sha256:2ae52b6d510bfa78b70bde7ceb1f2afd59e28fa36c7ddbdacc96db2b65f5978f"},
+]
+
+[package.dependencies]
+typing-extensions = ">=4"
 
 [[package]]
 name = "google-api-core"
@@ -6447,6 +6512,39 @@ spss = ["pyreadstat (>=1.1.5)"]
 sql-other = ["SQLAlchemy (>=1.4.36)"]
 test = ["hypothesis (>=6.46.1)", "pytest (>=7.3.2)", "pytest-xdist (>=2.2.0)"]
 xml = ["lxml (>=4.8.0)"]
+
+[[package]]
+name = "parse"
+version = "1.22.1"
+description = "parse() is the opposite of format()"
+optional = false
+python-versions = "*"
+groups = ["dev"]
+files = [
+    {file = "parse-1.22.1-py2.py3-none-any.whl", hash = "sha256:20f0925a46f06602485ac90d751764d0697fd8455aaa97489ba8953a4b66de32"},
+    {file = "parse-1.22.1.tar.gz", hash = "sha256:d3a4740ec3da338e2b258b2d69741b731eadfddca59e24a14bc4ee5fce38c911"},
+]
+
+[[package]]
+name = "parse-type"
+version = "0.6.6"
+description = "Simplifies to build parse types based on the parse module"
+optional = false
+python-versions = "!=3.0.*,!=3.1.*,>=2.7"
+groups = ["dev"]
+files = [
+    {file = "parse_type-0.6.6-py2.py3-none-any.whl", hash = "sha256:3ca79bbe71e170dfccc8ec6c341edfd1c2a0fc1e5cfd18330f93af938de2348c"},
+    {file = "parse_type-0.6.6.tar.gz", hash = "sha256:513a3784104839770d690e04339a8b4d33439fcd5dd99f2e4580f9fc1097bfb2"},
+]
+
+[package.dependencies]
+parse = {version = ">=1.18.0", markers = "python_version >= \"3.0\""}
+six = ">=1.15"
+
+[package.extras]
+develop = ["build (>=0.5.1)", "coverage (>=4.4)", "pylint", "pytest (<5.0) ; python_version < \"3.0\"", "pytest (>=5.0) ; python_version >= \"3.0\"", "pytest-cov", "pytest-html (>=1.19.0)", "ruff ; python_version >= \"3.7\"", "setuptools", "setuptools-scm", "tox (>=2.8,<4.0)", "twine (>=1.13.0)", "virtualenv (<20.22.0) ; python_version <= \"3.6\"", "virtualenv (>=20.0.0) ; python_version > \"3.6\"", "wheel"]
+docs = ["Sphinx (>=1.6)", "sphinx_bootstrap_theme (>=0.6.0)"]
+testing = ["pytest (<5.0) ; python_version < \"3.0\"", "pytest (>=5.0) ; python_version >= \"3.0\"", "pytest-html (>=1.19.0)"]
 
 [[package]]
 name = "pathable"
@@ -11174,4 +11272,4 @@ scoring = ["contractions", "graphviz", "nltk", "pandas", "pydot", "scikit-learn"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.13"
-content-hash = "3c8a23419115279880c9f54c9e4dedec8946c1a13d3632fb420ece6fb884be10"
+content-hash = "9e4f2310f5f7f399a763e1b2b0ead6cf810029df347fdee6c87db1d4d3e7773a"

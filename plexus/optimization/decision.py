@@ -33,6 +33,7 @@ POLICY_PROFILE_V1: dict[str, Any] = {
     "weekly_minimum_count": None,
 }
 _WILSON_Z_95 = 1.959963984540054
+_RANK_SELECTOR_FIELDS = ("scorecard_ids", "scorecard_name_prefixes")
 
 
 def _jsonable(value: Any) -> Any:
@@ -191,6 +192,69 @@ def frozen_utc_window(now: datetime | None = None, complete_days: int | None = N
     return {"start": _iso_z(start), "end": _iso_z(end), "timezone": "UTC", "complete_days": complete_days}
 
 
+def normalize_rank_scope(request: Mapping[str, Any] | None) -> dict[str, list[str]]:
+    """Validate and normalize optional scorecard selectors for portfolio ranking.
+
+    Omitted selectors mean account-wide ranking. Explicit selector arrays must
+    each contain at least one non-blank string so a malformed scoped request can
+    never widen silently to the whole account. Values are deduplicated without
+    changing opaque IDs. Prefixes are case-folded because their matching
+    semantics are case-insensitive and equivalent scopes need one fingerprint.
+    """
+    source = dict(request or {})
+    nested = source.get("scope")
+    selector_source: Mapping[str, Any] = source
+    if not any(field in source for field in _RANK_SELECTOR_FIELDS) and isinstance(nested, Mapping):
+        selector_source = nested
+
+    present = [field for field in _RANK_SELECTOR_FIELDS if field in selector_source]
+    if not present:
+        return {}
+
+    normalized: dict[str, list[str]] = {}
+    for field in _RANK_SELECTOR_FIELDS:
+        if field not in selector_source:
+            normalized[field] = []
+            continue
+        raw = selector_source[field]
+        if not isinstance(raw, (list, tuple)):
+            raise ValueError(f"{field} selector must be an array of strings")
+        if not raw:
+            raise ValueError(f"explicitly supplied empty selector: {field}")
+        values: list[str] = []
+        for value in raw:
+            if not isinstance(value, str):
+                raise ValueError(f"{field} selector entries must be strings")
+            if not value.strip():
+                raise ValueError(f"{field} selector entries must not be blank")
+            normalized_value = (
+                value.casefold() if field == "scorecard_name_prefixes" else value
+            )
+            if normalized_value not in values:
+                values.append(normalized_value)
+        normalized[field] = values
+    return normalized
+
+
+def rank_scope_matches(
+    scorecard_id: Any,
+    scorecard_name: Any,
+    scope: Mapping[str, Sequence[str]] | None,
+) -> bool:
+    """Return whether one scorecard belongs to a normalized rank scope."""
+    if not scope:
+        return True
+    card_id = scorecard_id if isinstance(scorecard_id, str) else ""
+    card_name = scorecard_name if isinstance(scorecard_name, str) else ""
+    if card_id in scope.get("scorecard_ids", ()):
+        return True
+    folded_name = card_name.casefold()
+    return any(
+        folded_name.startswith(prefix.casefold())
+        for prefix in scope.get("scorecard_name_prefixes", ())
+    )
+
+
 def wilson_interval(successes: int | float, total: int | float, confidence: float = 0.95) -> tuple[float, float]:
     """Two-sided Wilson score interval, including exact zero and one endpoints."""
     if total < 0 or successes < 0 or successes > total:
@@ -264,7 +328,37 @@ def _disagreement(score: Mapping[str, Any]) -> tuple[int, float, float]:
 
 def rank_portfolio(scores: Sequence[Mapping[str, Any]], *, coverage: Mapping[str, Any] | None = None, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Rank fully analyzed scores without silently treating partial enumeration as exact."""
+    context = dict(context or {})
+    scope = normalize_rank_scope(context)
+    if scope:
+        scores = [
+            score
+            for score in scores
+            if rank_scope_matches(
+                score.get("scorecard_id", score.get("scorecardId")),
+                score.get("scorecard_name", score.get("scorecardName")),
+                scope,
+            )
+        ]
+        context["scope"] = scope
     coverage = dict(coverage or {})
+    if scope:
+        required_scope_evidence = {
+            "requested_scorecard_ids",
+            "requested_scorecard_name_prefixes",
+            "matched_scorecard_ids",
+            "matched_scorecard_count",
+            "unmatched_scorecard_ids",
+            "unmatched_scorecard_name_prefixes",
+            "total_scorecards_inspected",
+        }
+        scope_evidence = coverage.get("scope")
+        if not isinstance(scope_evidence, Mapping) or not required_scope_evidence.issubset(
+            scope_evidence
+        ):
+            failures = list(coverage.get("failures") or [])
+            failures.append("complete scope coverage evidence is required")
+            coverage.update({"complete": False, "failures": failures})
     # Absence of coverage evidence is not evidence of exhaustive enumeration.
     complete = bool(coverage.get("complete", coverage.get("coverage_complete", False)))
     ranked: list[dict[str, Any]] = []
@@ -313,7 +407,7 @@ def rank_portfolio(scores: Sequence[Mapping[str, Any]], *, coverage: Mapping[str
         "ranked": ranked,
         "unranked": unranked,
     }
-    return _packet_result("rank", result, {**dict(context or {}), "coverage": coverage})
+    return _packet_result("rank", result, {**context, "coverage": coverage})
 
 
 rank_opportunities = rank_portfolio

@@ -97,6 +97,81 @@ def test_optimization_commands_merge_typed_options_and_reject_non_object_input(m
     assert "JSON object" in bad_result.output
 
 
+def test_optimization_rank_cli_scopes_supplied_complete_evidence() -> None:
+    from plexus.cli.optimization import commands
+
+    payload = {
+        "scores": [
+            {
+                "scorecard_id": "card-a", "scorecard_name": "Alpha",
+                "score_id": "score-a", "score_name": "One",
+                "champion_version": "version-a", "total_items": 10,
+                "disagreements": 2,
+            },
+            {
+                "scorecard_id": "card-b", "scorecard_name": "Beta",
+                "score_id": "score-b", "score_name": "Two",
+                "champion_version": "version-b", "total_items": 10,
+                "disagreements": 3,
+            },
+        ],
+        "coverage": {
+            "complete": True,
+            "scope": {
+                "requested_scorecard_ids": ["card-a"],
+                "requested_scorecard_name_prefixes": [],
+                "matched_scorecard_ids": ["card-a"],
+                "matched_scorecard_count": 1,
+                "unmatched_scorecard_ids": [],
+                "unmatched_scorecard_name_prefixes": [],
+                "total_scorecards_inspected": 2,
+            },
+        },
+    }
+    result = CliRunner().invoke(
+        commands.optimization,
+        [
+            "rank", "--input", json.dumps(payload),
+            "--option", 'scorecard_ids=["card-a"]',
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    packet = json.loads(result.output)
+    assert [row["scorecard_id"] for row in packet["ranked"]] == ["card-a"]
+    assert packet["scope"] == {
+        "scorecard_ids": ["card-a"],
+        "scorecard_name_prefixes": [],
+    }
+    assert packet["exact"] is True
+
+
+def test_optimization_rank_cli_does_not_claim_exact_without_scope_coverage() -> None:
+    from plexus.cli.optimization import commands
+
+    result = CliRunner().invoke(
+        commands.optimization,
+        [
+            "rank",
+            "--input",
+            json.dumps({
+                "scores": [{
+                    "scorecard_id": "card-a", "scorecard_name": "Alpha",
+                    "score_id": "score-a", "champion_version": "version-a",
+                    "total_items": 10, "disagreements": 2,
+                }],
+                "coverage": {"complete": True},
+            }),
+            "--option", 'scorecard_ids=["card-a"]',
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    packet = json.loads(result.output)
+    assert packet["exact"] is False
+    assert "scope coverage" in str(packet["coverage"]["failures"]).lower()
+
+
 def test_persist_false_does_not_invoke_cli_persistence(monkeypatch) -> None:
     from plexus.cli.optimization import commands
 

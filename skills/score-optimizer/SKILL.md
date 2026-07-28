@@ -119,6 +119,34 @@ readiness as separate signals. A score can need continued feedback collection
 and still be ready to optimize, or have strong alignment while remaining
 blocked by missing or contradictory rubric evidence.
 
+### Scope portfolio ranking deliberately
+
+Use `plexus.optimization.rank({})` for the whole account. To restrict the
+portfolio, supply one or both optional selectors:
+
+```lua
+plexus.optimization.rank({
+  scorecard_ids = { "opaque-scorecard-id" },
+  scorecard_name_prefixes = { "Example Portfolio" },
+})
+```
+
+- `scorecard_ids` are exact opaque values. Preserve returned IDs unchanged;
+  never resolve, abbreviate, repair, or retype them.
+- `scorecard_name_prefixes` are literal, case-insensitive prefixes of complete
+  scorecard names. Do not use fuzzy matching or regular expressions.
+- When both selectors are present, their matches form a deduplicated union.
+  An explicitly supplied empty selector is invalid; omit both only when the
+  intended scope is account-wide.
+- The ranker still paginates the canonical account-wide collection completely,
+  filters locally, and passes only the matched returned IDs to analysis. Its
+  packet and evidence fingerprint retain the normalized requested scope.
+- Return matched and unmatched selectors, inspected and matched counts, and
+  collection plus analysis coverage. A fully enumerated zero-match scope is an
+  exact empty result and must not invoke feedback analysis. A page or downstream
+  failure is incomplete coverage: report partial evidence, never an exact rank
+  or count, and never include out-of-scope scorecards.
+
 ## Three-Phase Rubric-Memory SOP
 
 Run optimizer work in this order. Do not skip directly to prompt/code optimization

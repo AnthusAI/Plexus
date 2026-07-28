@@ -1,0 +1,25 @@
+{
+  "id": "plx-5359eae6-8d9a-41cb-b489-2f4bf9b8223d",
+  "title": "Scope opportunity ranking to selected scorecards",
+  "description": "As an optimization operator, I want to restrict portfolio ranking by exact scorecard IDs or literal name prefixes, so that I can focus analysis without losing complete-coverage guarantees.\n\nOut of scope: fuzzy matching, regex/glob selectors, alternate ranking paths, automatic optimization, and client-specific policy.\n\nFeature: Scoped optimization opportunity ranking\n\n  Scenario: Rank exact scorecard identifiers\n    Given a completely enumerated account scorecard collection\n    When ranking is requested with exact opaque scorecard identifiers\n    Then only matched identifiers are analyzed\n    And every identifier reaches downstream analysis unchanged\n\n  Scenario: Rank literal scorecard name prefixes\n    Given scorecard names with different letter casing\n    When ranking is requested with one or more literal name prefixes\n    Then matching is case-insensitive and prefix-only\n    And the union of exact and prefix matches is deduplicated\n\n  Scenario: Preserve scoped coverage evidence\n    Given a scoped ranking request\n    When enumeration and downstream analysis complete\n    Then the packet reports requested selectors, matches, unmatched selectors, inspected count, and complete coverage\n\n  Scenario: Return an exact empty scoped result\n    Given complete scorecard enumeration with no selector matches\n    When scoped ranking completes\n    Then the result is exactly empty\n    And downstream feedback analysis is not invoked\n\n  Scenario: Reject ambiguous empty scope\n    Given an explicitly supplied selector field with no values\n    When ranking is requested\n    Then the request is rejected instead of becoming account-wide\n\n  Scenario: Never overstate partial scoped evidence\n    Given enumeration or downstream analysis fails\n    When scoped ranking returns partial evidence\n    Then the result is marked incomplete and not exact",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b9f02aee-bd68-4059-acf2-eb0cb41b0ea6",
+      "author": "ryan.porter",
+      "text": "Implemented scorecard-scoped opportunity ranking with exact opaque-ID selectors, literal case-insensitive name-prefix selectors, union and deduplication, exhaustive enumeration before local filtering, exact zero-match behavior, scope coverage evidence, and scope-bound fingerprints. Local validation is complete: focused runtime suite 270 passed; full Python 3.11 and 3.12 suites each 3,940 passed with 13 dispatch-regression tests passing on each version; version synchronization, lock validation, lint, and diff checks passed; Node 20 dashboard typecheck and 650 unit tests passed; Storybook built and 700 Chromium tests passed. Independent implementation, CI, and delivery audits found no blocking defects. The story remains in progress until the change merges to develop.",
+      "created_at": "2026-07-28T01:04:36.584095Z"
+    }
+  ],
+  "created_at": "2026-07-28T00:40:41.295656Z",
+  "updated_at": "2026-07-28T01:04:36.584095Z",
+  "closed_at": null,
+  "custom": {}
+}

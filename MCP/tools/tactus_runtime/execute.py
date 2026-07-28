@@ -2386,11 +2386,17 @@ def _default_feedback_alignment_batch(
             raise ValueError(
                 "plexus.feedback.alignment_batch scorecards must be a list"
             )
-        scorecard_identifiers = [
-            str(identifier).strip()
-            for identifier in raw_scorecards
-            if str(identifier).strip()
-        ]
+        scorecard_identifiers: list[str] = []
+        for identifier in raw_scorecards:
+            if not isinstance(identifier, str):
+                raise ValueError(
+                    "plexus.feedback.alignment_batch scorecards entries must be strings"
+                )
+            if not identifier.strip():
+                raise ValueError(
+                    "plexus.feedback.alignment_batch scorecards entries must not be blank"
+                )
+            scorecard_identifiers.append(identifier)
         if not scorecard_identifiers and portfolio_selection_rule is not None:
             return {
                 "days": int(float(args.get("days", 7))),
@@ -9500,7 +9506,7 @@ class PlexusRuntimeModule:
         }
 
     def _rank_payload_from_runtime(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Collect an account-wide, frozen alignment input for `optimization.rank`.
+        """Collect a frozen, optionally scorecard-scoped input for `optimization.rank`.
 
         Pagination belongs to this transport adapter because it is the layer
         that owns the scorecard list API.  Each cursor is retried exactly once;
@@ -9544,15 +9550,73 @@ class PlexusRuntimeModule:
             "failures": failures,
             "scorecards_discovered": len(cards),
         }
-        card_ids = [str(card["id"]) for card in cards if card.get("id")]
-        if not card_ids:
-            return {"scores": [], "coverage": coverage}
-        from plexus.optimization.decision import frozen_utc_window
+        from plexus.optimization.decision import (
+            frozen_utc_window,
+            normalize_rank_scope,
+            rank_scope_matches,
+        )
 
+        scope = normalize_rank_scope(args)
+        requested_ids = list(args.get("scorecard_ids", scope.get("scorecard_ids", ())))
+        requested_prefixes = list(
+            args.get(
+                "scorecard_name_prefixes",
+                scope.get("scorecard_name_prefixes", ()),
+            )
+        )
+        matched_ids: list[str] = []
+        selected_cards: list[dict[str, Any]] = []
+        for card in cards:
+            card_id = card.get("id")
+            if not isinstance(card_id, str) or not card_id:
+                continue
+            if card_id in matched_ids:
+                continue
+            if not rank_scope_matches(card_id, card.get("name"), scope):
+                continue
+            matched_ids.append(card_id)
+            selected_cards.append(card)
+
+        discovered_ids = {
+            card.get("id")
+            for card in cards
+            if isinstance(card.get("id"), str) and card.get("id")
+        }
+        unmatched_ids = [card_id for card_id in requested_ids if card_id not in discovered_ids]
+        unmatched_prefixes = [
+            prefix
+            for prefix in requested_prefixes
+            if not any(
+                isinstance(card.get("name"), str)
+                and card["name"].casefold().startswith(prefix.casefold())
+                for card in cards
+            )
+        ]
+        scope_evidence = {
+            "requested_scorecard_ids": requested_ids,
+            "requested_scorecard_name_prefixes": requested_prefixes,
+            "matched_scorecard_ids": matched_ids,
+            "matched_scorecard_count": len(matched_ids),
+            "unmatched_scorecard_ids": unmatched_ids,
+            "unmatched_scorecard_name_prefixes": unmatched_prefixes,
+            "total_scorecards_inspected": len(cards),
+        }
+        coverage["scope"] = scope_evidence
         window = frozen_utc_window(complete_days=90)
+        base_payload = {
+            "scores": [],
+            "coverage": coverage,
+            "window": window,
+            "scope": scope,
+        }
+        # Complete enumeration is a prerequisite for scoped analysis.  A
+        # partial collection cannot prove either inclusion or exclusion.
+        if failures or not matched_ids:
+            return base_payload
+
         try:
             alignment = self._feedback_aligner_batch({
-                "scorecards": card_ids,
+                "scorecards": matched_ids,
                 "days": 90,
                 "window_start": window["start"],
                 "window_end": window["end"],
@@ -9561,10 +9625,10 @@ class PlexusRuntimeModule:
         except Exception as exc:  # noqa: BLE001 - partial is observable, never exact
             coverage["complete"] = False
             coverage["failures"].append({"stage": "feedback_alignment", "error": str(exc)})
-            return {"scores": [], "coverage": coverage}
+            return base_payload
 
         downstream_coverage = alignment.get("coverage") if isinstance(alignment, dict) else None
-        expected_targets = len(card_ids)
+        expected_targets = len(matched_ids)
         if not isinstance(downstream_coverage, dict):
             coverage["complete"] = False
             coverage["failures"].append({
@@ -9594,22 +9658,49 @@ class PlexusRuntimeModule:
                     "reported_completed_count": completed_targets,
                 })
         inventory_scores: dict[tuple[str, str], dict[str, Any]] = {}
-        for card in cards:
+        scorecards_with_inventory_scores: set[str] = set()
+        for card in selected_cards:
             card_id = str(card.get("id") or "")
             for section in (card.get("sections") or {}).get("items") or []:
                 for score in (section.get("scores") or {}).get("items") or []:
                     if isinstance(score, dict) and score.get("id"):
                         inventory_scores[(card_id, str(score["id"]))] = score
+                        scorecards_with_inventory_scores.add(card_id)
 
         rows: list[dict[str, Any]] = []
+        matched_id_set = set(matched_ids)
+        unexpected_scorecard_ids: list[str] = []
+        unexpected_score_rows: list[dict[str, str]] = []
         for card_result in (alignment.get("scorecards") or []) if isinstance(alignment, dict) else []:
             if not isinstance(card_result, dict):
                 continue
+            result_card_id = str(
+                card_result.get("scorecard_id") or card_result.get("scorecardId") or ""
+            )
+            if result_card_id not in matched_id_set:
+                if result_card_id and result_card_id not in unexpected_scorecard_ids:
+                    unexpected_scorecard_ids.append(result_card_id)
+                continue
             for score in card_result.get("scores") or []:
                 if isinstance(score, dict):
-                    scorecard_id = str(score.get("scorecard_id") or card_result.get("scorecard_id") or "")
+                    nested_card_id = str(score.get("scorecard_id") or result_card_id)
                     score_id = str(score.get("score_id") or "")
-                    inventory = inventory_scores.get((scorecard_id, score_id), {})
+                    if nested_card_id != result_card_id:
+                        unexpected_score_rows.append({
+                            "scorecard_id": nested_card_id,
+                            "score_id": score_id,
+                            "reason": "scorecard attribution mismatch",
+                        })
+                        continue
+                    inventory = inventory_scores.get((result_card_id, score_id))
+                    if inventory is None and result_card_id in scorecards_with_inventory_scores:
+                        unexpected_score_rows.append({
+                            "scorecard_id": result_card_id,
+                            "score_id": score_id,
+                            "reason": "score is absent from selected inventory",
+                        })
+                        continue
+                    inventory = inventory or {}
                     rows.append({
                         **score,
                         # The feedback analyzer calls these total_items and
@@ -9619,15 +9710,28 @@ class PlexusRuntimeModule:
                         "reviewed_disagreements": score.get("reviewed_disagreements", score.get("disagreements", 0)),
                         "champion_version": score.get("champion_version") or inventory.get("championVersionId"),
                         "enabled": score.get("enabled", not bool(inventory.get("isDisabled", False))),
-                        "scorecard_id": scorecard_id,
+                        "scorecard_id": result_card_id,
                         "scorecard_name": score.get("scorecard_name") or card_result.get("scorecard_name"),
                     })
+        if unexpected_scorecard_ids or unexpected_score_rows:
+            coverage["complete"] = False
+            coverage["failures"].append({
+                "stage": "feedback_alignment",
+                "error": "analysis result included unexpected out-of-scope or malformed rows",
+                "scorecard_ids": unexpected_scorecard_ids,
+                "score_rows": unexpected_score_rows,
+            })
         analyzed_scorecards = {
             str(card_result.get("scorecard_id") or card_result.get("scorecardId") or "")
             for card_result in (alignment.get("scorecards") or [])
-            if isinstance(card_result, dict) and not card_result.get("error")
+            if (
+                isinstance(card_result, dict)
+                and not card_result.get("error")
+                and str(card_result.get("scorecard_id") or card_result.get("scorecardId") or "")
+                in matched_id_set
+            )
         }
-        missing_scorecards = sorted(set(card_ids) - analyzed_scorecards)
+        missing_scorecards = sorted(matched_id_set - analyzed_scorecards)
         if missing_scorecards:
             coverage["complete"] = False
             coverage["failures"].append({
@@ -9635,7 +9739,12 @@ class PlexusRuntimeModule:
                 "error": "analysis result omitted discovered scorecards",
                 "scorecard_ids": missing_scorecards,
             })
-        return {"scores": rows, "coverage": coverage, "window": window}
+        return {
+            "scores": rows,
+            "coverage": coverage,
+            "window": window,
+            "scope": scope,
+        }
 
     def _current_optimization_freshness(
         self, targets: Any
@@ -9979,8 +10088,15 @@ class PlexusRuntimeModule:
                     "plexus.optimization.decision.dispatch_optimization_operation is unavailable"
                 )
             dependencies = self._optimization_dependencies()
-            if method == "rank" and not args.get("scores"):
-                args = {**args, **self._rank_payload_from_runtime(args)}
+            if method == "rank":
+                # Validate selectors before the injected-evidence bypass so an
+                # explicitly empty or malformed scope can never widen to an
+                # account-wide rank.
+                normalized_scope = decision.normalize_rank_scope(args)
+                if not args.get("scores"):
+                    args = {**args, **self._rank_payload_from_runtime(args)}
+                else:
+                    args = {**args, "scope": normalized_scope}
             elif method == "assess":
                 args = self._optimization_assessment_payload(args)
             elif method == "diagnose":
@@ -11473,6 +11589,9 @@ Optimization: `plexus.optimization.rank/assess/diagnose/review/summary` plan.
 `plexus.optimization.run` needs `approved = true`, at most five exact targets,
 and never promotes a champion. `persist = true` has no inline output fallback.
 
+Rank account-wide; scope with opaque `scorecard_ids` or literal case-insensitive
+`scorecard_name_prefixes`; empty arrays are invalid.
+
 Helper aliases injected before your snippet runs:
 - High-frequency: `evaluate`, `predict`, `scorecards`, `scorecard`, `score`,
   `item`, `last_item`, `feedback`, `feedback_alignment`, `acceptance_rate`,
@@ -11637,24 +11756,34 @@ The response envelope always has `ok`, `value`, `error`, `cost`, `trace_id`,
 def register_tactus_tools(mcp: FastMCP) -> None:
     """Register Tactus runtime tools with the MCP server."""
 
-    @mcp.tool(description=EXECUTE_TACTUS_DESCRIPTION)
-    async def execute_tactus(
-        tactus: Annotated[
-            str,
-            Field(
-                description=(
-                    "Tactus (Lua) snippet to execute. `plexus` is global; helper "
-                    "aliases like `evaluate`, `predict`, `score`, `item`, "
-                    "`scorecards`, `api_list`, `docs_list`, `docs_get`, "
-                    "`skills_list`, `skills_get`, `handle_status` are injected. "
-                    "Async long-running calls "
-                    "(`evaluation.run`, `report.run`, `procedure.run` with "
-                    "`async = true`) require an explicit child `budget = { usd, "
-                    "wallclock_seconds, depth, tool_calls }`. Read "
-                    "`plexus.docs.get{ key = \"mcp.execute-tactus-overview\" }` for the full guide."
-                )
-            ),
-        ],
-        ctx: Context,
-    ) -> dict[str, Any]:
+    tactus_parameter = Annotated[
+        str,
+        Field(
+            description=(
+                "Tactus (Lua) snippet to execute. `plexus` is global; helper "
+                "aliases like `evaluate`, `predict`, `score`, `item`, "
+                "`scorecards`, `api_list`, `docs_list`, `docs_get`, "
+                "`skills_list`, `skills_get`, `handle_status` are injected. "
+                "Async long-running calls "
+                "(`evaluation.run`, `report.run`, `procedure.run` with "
+                "`async = true`) require an explicit child `budget = { usd, "
+                "wallclock_seconds, depth, tool_calls }`. Read "
+                "`plexus.docs.get{ key = \"mcp.execute-tactus-overview\" }` for the full guide."
+            )
+        ),
+    ]
+
+    async def execute_tactus(tactus, ctx):
         return await _execute_tactus_tool(tactus, mcp, ctx=ctx)
+
+    # This module uses postponed annotations. FastMCP wraps tool functions in
+    # its own module, where string annotations such as ``Annotated`` and
+    # ``Context`` cannot be resolved reliably. Give the public tool concrete
+    # runtime types before registration so schema construction is deterministic
+    # in a clean process and independent of test/import order.
+    execute_tactus.__annotations__ = {
+        "tactus": tactus_parameter,
+        "ctx": Context,
+        "return": dict[str, Any],
+    }
+    mcp.tool(description=EXECUTE_TACTUS_DESCRIPTION)(execute_tactus)

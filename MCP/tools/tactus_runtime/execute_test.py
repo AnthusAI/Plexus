@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from fastmcp import FastMCP
+from fastmcp import Client, FastMCP
 
 from . import execute
 
@@ -1678,9 +1678,10 @@ async def test_execute_tactus_tool_schema_uses_tactus_parameter() -> None:
     mcp = FastMCP("test-execute-tactus")
     execute.register_tactus_tools(mcp)
 
-    tools = await mcp.list_tools()
+    async with Client(mcp) as client:
+        tools = await client.list_tools()
     tool = next(tool for tool in tools if tool.name == "execute_tactus")
-    schema = tool.parameters
+    schema = tool.inputSchema
 
     assert "tactus" in schema["properties"]
     assert "lua" not in schema["properties"]
@@ -1693,7 +1694,8 @@ async def test_execute_tactus_tool_description_contains_curated_examples() -> No
     mcp = FastMCP("test-execute-tactus")
     execute.register_tactus_tools(mcp)
 
-    tools = await mcp.list_tools()
+    async with Client(mcp) as client:
+        tools = await client.list_tools()
     tool = next(tool for tool in tools if tool.name == "execute_tactus")
     description = tool.description or ""
 
@@ -1781,6 +1783,16 @@ def test_execute_tactus_description_documents_optimization_approval_boundary() -
     assert "no inline output fallback" in description
     assert "total_items * disagreement_rate" in description
     assert "evaluation-feedback.batch-operations-cookbook" in description
+
+
+def test_execute_tactus_description_documents_scoped_optimization_ranking() -> None:
+    description = execute.EXECUTE_TACTUS_DESCRIPTION
+
+    assert "scorecard_ids" in description
+    assert "scorecard_name_prefixes" in description
+    assert "opaque" in description
+    assert "literal case-insensitive" in description
+    assert "empty arrays are invalid" in description
 
 
 def test_execute_tactus_description_teaches_progressive_disclosure() -> None:
@@ -2014,7 +2026,10 @@ async def test_execute_tactus_tool_returns_structured_contract(monkeypatch) -> N
 
     monkeypatch.setattr(execute, "_run_tactus_sync", fake_run_tactus_sync)
 
-    result = await mcp.call_tool("execute_tactus", {"tactus": "return { ok = true }"})
+    async with Client(mcp) as client:
+        result = await client.call_tool(
+            "execute_tactus", {"tactus": "return { ok = true }"}
+        )
 
     structured = result.structured_content
     assert structured["ok"] is True
@@ -8477,6 +8492,40 @@ def test_feedback_alignment_batch_accepts_bounded_scorecard_list(monkeypatch) ->
         "Two",
         "Three",
     ]
+
+
+def test_feedback_alignment_batch_preserves_opaque_list_identifier(monkeypatch) -> None:
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    opaque_id = "  opaque_UUID:with/slashes+punctuation  "
+    resolved: list[str] = []
+
+    class FakeClient:
+        def execute(self, query, _variables=None):
+            if "ListFeedbackItemsByEditedTime" in query:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [], "nextToken": None,
+                    }
+                }
+            return {
+                "getScorecard": {
+                    "id": opaque_id, "name": "Opaque", "sections": {"items": []},
+                }
+            }
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: resolved.append(identifier) or identifier,
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+
+    result = execute._default_feedback_alignment_batch({"scorecards": [opaque_id]})
+
+    assert resolved == [opaque_id]
+    assert result["scorecards"][0]["scorecard_id"] == opaque_id
 
 
 def test_feedback_alignment_batch_selects_bounded_portfolio_in_one_call(monkeypatch) -> None:

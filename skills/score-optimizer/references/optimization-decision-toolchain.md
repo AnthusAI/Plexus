@@ -35,6 +35,48 @@ partial result and do not describe ranks or counts as exact. A compact top-N
 response may still be complete when it states the full `ranked_from_count` and
 coverage evidence; compact output is not sampling.
 
+### Ranking scope
+
+Use account-wide ranking when no selector is supplied:
+
+```lua
+plexus.optimization.rank({})
+```
+
+To restrict the portfolio, supply exact opaque IDs, literal name prefixes, or
+both. Prefix matching is case-insensitive and begins at the complete scorecard
+name; it is not fuzzy matching or a regular expression.
+
+```lua
+plexus.optimization.rank({ scorecard_ids = { "opaque-scorecard-id" } })
+plexus.optimization.rank({ scorecard_name_prefixes = { "Example Portfolio" } })
+plexus.optimization.rank({
+  scorecard_ids = { "opaque-scorecard-id" },
+  scorecard_name_prefixes = { "Example Portfolio" },
+})
+```
+
+Preserve IDs exactly. When both selectors are present, use their deduplicated
+union. Reject an explicitly supplied empty selector instead of treating it as
+account-wide. The ranker exhaustively paginates the canonical account-wide
+collection, filters locally, and analyzes only the matched returned IDs.
+
+Return requested, matched, and unmatched selectors; inspected and matched
+counts; and collection and analysis coverage. A fully enumerated zero-match
+scope is an exact empty result and does not invoke feedback analysis. A failed
+page or downstream read remains incomplete after one retry: return partial
+evidence, never an exact rank or count, and never include out-of-scope rows.
+
+The CLI can deterministically re-rank already collected complete evidence:
+
+```bash
+plexus optimization rank --input @complete-rank-evidence.json \
+  --option 'scorecard_ids=["opaque-scorecard-id"]'
+```
+
+This CLI form consumes the supplied evidence file; use the Tactus method above
+when live exhaustive discovery and feedback analysis are required.
+
 ## Assessment and diagnosis
 
 Preserve the frozen UTC window, champion version, feedback watermark, policy
