@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { basename, dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-const GENERATOR_VERSION = "1.0.0"
+const GENERATOR_VERSION = "1.1.0"
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const dashboardDir = resolve(scriptDir, "..")
@@ -90,6 +90,8 @@ type CustomOperationManifest = {
   operationType: "query" | "mutation" | "subscription"
   arguments: Record<string, FieldManifest>
   returnType?: string
+  returnIsArray?: boolean
+  returnIsRequired?: boolean
   authRules: string[]
   handler?: string
 }
@@ -208,8 +210,12 @@ function buildManifest(): Manifest {
       }
     } else if (expression.includes("a.customType(")) {
       customTypes[name] = parseCustomType(name, expression)
-    } else if (expression.includes(".query(")) {
-      const operation = parseCustomOperation(name, "query", expression)
+    } else if (expression.includes(".query(") || expression.includes(".mutation(")) {
+      const operation = parseCustomOperation(
+        name,
+        expression.includes(".mutation(") ? "mutation" : "query",
+        expression,
+      )
       customOperations[name] = operation
       authRules[name] = operation.authRules
     }
@@ -285,13 +291,16 @@ function parseCustomOperation(
   for (const [argName, argExpression] of args) {
     operationArgs[argName] = parseField(argName, argExpression)
   }
-  const returnsMatch = expression.match(/\.returns\(\s*a\.ref\(['"]([^'"]+)['"]\)\s*\)/)
+  const returnsExpression = findOptionalCall(expression, ".returns")
+  const returnsMatch = returnsExpression?.match(/a\.ref\(['"]([^'"]+)['"]\)/)
   const handlerMatch = expression.match(/\.handler\(\s*a\.handler\.function\(([^)]+)\)\s*\)/)
   return {
     name,
     operationType,
     arguments: operationArgs,
     returnType: returnsMatch?.[1],
+    returnIsArray: returnsExpression?.includes(".array()"),
+    returnIsRequired: returnsExpression?.includes(".required()"),
     authRules: parseAuthRules(expression),
     handler: handlerMatch?.[1]?.trim(),
   }
@@ -405,6 +414,9 @@ function parseAuthRules(expression: string): string[] {
   if (call.includes("allow.authenticated()")) {
     rules.add("authenticated")
   }
+  if (call.includes("allow.authenticated('identityPool')") || call.includes('allow.authenticated("identityPool")')) {
+    rules.add("iam")
+  }
   return [...rules]
 }
 
@@ -460,7 +472,28 @@ function buildGraphqlSchema(manifest: Manifest): string {
   }
 
   for (const customType of Object.values(manifest.customTypes)) {
+    for (const field of Object.values(customType.fields)) {
+      if (field.kind === "enum" && field.enumValues?.length) {
+        enumBlocks.push(`enum ${pascalCase(field.name)}Enum {\n${field.enumValues.map((value) => `  ${value}`).join("\n")}\n}`)
+      }
+    }
+  }
+
+  for (const customType of Object.values(manifest.customTypes)) {
     typeBlocks.push(`type ${customType.name} {\n${Object.values(customType.fields).map((field) => `  ${field.name}: ${graphqlFieldType(field)}`).join("\n")}\n}`)
+  }
+
+  const customInputTypes = new Set<string>()
+  for (const operation of Object.values(manifest.customOperations)) {
+    for (const argument of Object.values(operation.arguments)) {
+      if (argument.kind === "ref" && manifest.customTypes[argument.type]) {
+        customInputTypes.add(argument.type)
+      }
+    }
+  }
+  for (const customTypeName of customInputTypes) {
+    const customType = manifest.customTypes[customTypeName]
+    inputBlocks.push(`input ${customType.name}Input {\n${Object.values(customType.fields).map((field) => `  ${field.name}: ${graphqlInputType(field)}`).join("\n")}\n}`)
   }
 
   for (const model of Object.values(manifest.models)) {
@@ -484,9 +517,12 @@ function buildGraphqlSchema(manifest: Manifest): string {
   }
 
   for (const operation of Object.values(manifest.customOperations)) {
-    const args = Object.values(operation.arguments).map((field) => `${field.name}: ${graphqlInputType(field)}`).join(", ")
+    const args = Object.values(operation.arguments).map((field) => `${field.name}: ${graphqlCustomOperationInputType(field, manifest.customTypes)}`).join(", ")
+    const returnType = graphqlCustomOperationReturnType(operation)
     if (operation.operationType === "query") {
-      queryFields.push(`  ${operation.name}(${args}): ${operation.returnType || "AWSJSON"}`)
+      queryFields.push(`  ${operation.name}(${args}): ${returnType}`)
+    } else if (operation.operationType === "mutation") {
+      mutationFields.push(`  ${operation.name}(${args}): ${returnType}`)
     }
   }
 
@@ -518,6 +554,23 @@ function graphqlInputType(field: FieldManifest): string {
   const type = graphqlScalar(field.type)
   const wrapped = field.isArray ? `[${type}]` : type
   return field.isRequired ? `${wrapped}!` : wrapped
+}
+
+function graphqlCustomOperationInputType(
+  field: FieldManifest,
+  customTypes: Manifest["customTypes"],
+): string {
+  const type = field.kind === "ref" && customTypes[field.type]
+    ? `${field.type}Input`
+    : graphqlScalar(field.type)
+  const wrapped = field.isArray ? `[${type}!]` : type
+  return field.isRequired ? `${wrapped}!` : wrapped
+}
+
+function graphqlCustomOperationReturnType(operation: CustomOperationManifest): string {
+  const type = operation.returnType || "AWSJSON"
+  const wrapped = operation.returnIsArray ? `[${type}!]` : type
+  return operation.returnIsRequired ? `${wrapped}!` : wrapped
 }
 
 function indexArgumentType(arg: string, index: IndexManifest): string {

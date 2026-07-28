@@ -1,5 +1,5 @@
 import { defineBackend } from '@aws-amplify/backend';
-import { data, dispatchConsoleChatHandler } from './data/resource.js';
+import { createArtifactTransferTicketsHandler, data, dispatchConsoleChatHandler } from './data/resource.js';
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments, rubricMemory } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
@@ -22,6 +22,7 @@ const backend = defineBackend({
     taskAttachments,
     rubricMemory,
     dispatchConsoleChatHandler,
+    createArtifactTransferTicketsHandler,
 });
 
 // Enable PITR on all Amplify Data DynamoDB tables (AWS default retention is 35 days).
@@ -34,6 +35,7 @@ for (const table of Object.values(amplifyDynamoDbTables)) {
 
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
 const dispatchConsoleChatFunction = backend.dispatchConsoleChatHandler.resources.lambda;
+const createArtifactTransferTicketsFunction = backend.createArtifactTransferTicketsHandler.resources.lambda;
 
 // Add AppSync permissions to the getResourceByShareToken function
 if (getResourceByShareTokenFunction) {
@@ -43,6 +45,60 @@ if (getResourceByShareTokenFunction) {
             resources: ['*']
         })
     );
+}
+
+if (createArtifactTransferTicketsFunction) {
+    const ticketedResources = [
+        {
+            table: backend.data.resources.tables.DataSet,
+            tableEnvironmentName: 'DATA_SET_TABLE_NAME',
+            bucket: backend.dataSources.resources.bucket,
+            bucketEnvironmentName: 'DATA_SOURCES_BUCKET_NAME',
+            objectPrefixes: ['datasets/*'],
+        },
+        {
+            table: backend.data.resources.tables.Procedure,
+            tableEnvironmentName: 'PROCEDURE_TABLE_NAME',
+            bucket: backend.reportBlockDetails.resources.bucket,
+            bucketEnvironmentName: 'REPORT_BLOCK_DETAILS_BUCKET_NAME',
+            objectPrefixes: ['procedures/*', 'reportblocks/procedures/*'],
+        },
+        {
+            table: backend.data.resources.tables.ScoreResult,
+            tableEnvironmentName: 'SCORE_RESULT_TABLE_NAME',
+            bucket: backend.scoreResultAttachments.resources.bucket,
+            bucketEnvironmentName: 'SCORE_RESULT_ATTACHMENTS_BUCKET_NAME',
+            objectPrefixes: ['scoreresults/*'],
+        },
+        {
+            table: backend.data.resources.tables.Task,
+            tableEnvironmentName: 'TASK_TABLE_NAME',
+            bucket: backend.taskAttachments.resources.bucket,
+            bucketEnvironmentName: 'TASK_ATTACHMENTS_BUCKET_NAME',
+            objectPrefixes: ['tasks/*'],
+        },
+    ];
+
+    for (const resource of ticketedResources) {
+        createArtifactTransferTicketsFunction.addEnvironment(
+            resource.tableEnvironmentName,
+            resource.table.tableName,
+        );
+        createArtifactTransferTicketsFunction.addEnvironment(
+            resource.bucketEnvironmentName,
+            resource.bucket.bucketName,
+        );
+        createArtifactTransferTicketsFunction.addToRolePolicy(new PolicyStatement({
+            effect: Effect.ALLOW,
+            actions: ['dynamodb:GetItem'],
+            resources: [resource.table.tableArn],
+        }));
+        createArtifactTransferTicketsFunction.addToRolePolicy(new PolicyStatement({
+            effect: Effect.ALLOW,
+            actions: ['s3:GetObject', 's3:PutObject'],
+            resources: resource.objectPrefixes.map((prefix) => resource.bucket.arnForObjects(prefix)),
+        }));
+    }
 }
 
 // Detect sandbox environment
