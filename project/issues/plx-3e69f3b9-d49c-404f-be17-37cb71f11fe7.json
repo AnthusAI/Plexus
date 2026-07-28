@@ -1,0 +1,31 @@
+{
+  "id": "plx-3e69f3b9-d49c-404f-be17-37cb71f11fe7",
+  "title": "Restore standard GitHub Actions validation triggers",
+  "description": "GitHub Actions were temporarily restricted while release automation was being repaired. Restore the repository validation workflows to their established pull-request and branch triggers without redesigning the workflows or changing release credentials.\n\nAcceptance:\n- The restored triggers match the last intentional enabled configuration.\n- Workflow YAML parses successfully.\n- The change remains separate from release-authentication redesign.",
+  "type": "chore",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-5e52c459-fd59-4313-9a6a-211e99cdd156",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "49b9c55c-f075-4351-b300-a323af8c2104",
+      "author": "ryan.porter",
+      "text": "Implementation started. Scope is limited to reversing the four temporary .bak renames from commit 7f3bf775d; release authentication and workflow redesign are explicitly deferred. The workflow-enabled specification failed first because ci.yaml was disabled.",
+      "created_at": "2026-07-28T20:16:12.770779Z"
+    },
+    {
+      "id": "39a23cc6-9155-4512-a621-b77a0bbea919",
+      "author": "ryan.porter",
+      "text": "Restored the four standard workflow filenames as exact 100 percent renames reversing the temporary disable commit; no trigger, credential, or workflow-body redesign was included. Validation: workflow contract tests parse all four enabled YAML files and confirm no backup filenames remain; focused suite passes 8 of 8 and diff check passes.",
+      "created_at": "2026-07-28T20:21:20.848435Z"
+    }
+  ],
+  "created_at": "2026-07-28T20:15:59.732603Z",
+  "updated_at": "2026-07-28T20:21:20.848435Z",
+  "closed_at": null,
+  "custom": {}
+}

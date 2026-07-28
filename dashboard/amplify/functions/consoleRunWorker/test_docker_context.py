@@ -1,4 +1,5 @@
 from pathlib import Path
+import tomllib
 
 
 def test_console_worker_docker_context_includes_mcp_python_tools():
@@ -25,14 +26,28 @@ def test_console_worker_dockerfile_verifies_mcp_tool_modules():
     assert "test -f /workspace/MCP/server.py" in dockerfile
 
 
-def test_console_worker_installs_scoring_runtime_dependencies():
+def test_console_worker_installs_declared_runtime_dependencies():
     repo_root = Path(__file__).resolve().parents[4]
     dockerfile = repo_root.joinpath(
         "dashboard/amplify/functions/consoleRunWorker/Dockerfile"
     ).read_text()
+    pyproject = tomllib.loads(repo_root.joinpath("pyproject.toml").read_text())
 
-    assert 'pip install --progress-bar off -e "/workspace[scoring]"' in dockerfile
-    assert '"celery>=5.4.0"' in dockerfile
+    assert pyproject["tool"]["poetry"]["extras"]["console"] == [
+        "celery",
+        "fastmcp",
+        "requests-aws4auth",
+    ]
+    assert (
+        'pip install --progress-bar off -e "/workspace[scoring,console]"'
+        in dockerfile
+    )
+    assert '"celery>=5.4.0"' not in dockerfile
+    assert " requests-aws4auth " not in dockerfile
+    assert (
+        "import awslambdaric, boto3, celery, fastmcp, requests_aws4auth"
+        in dockerfile
+    )
 
 
 def test_console_worker_uses_a_preinitialized_interactive_alias():

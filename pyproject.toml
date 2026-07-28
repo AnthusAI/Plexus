@@ -113,6 +113,9 @@ scoring = [
     "psycopg", "tactus", "nltk", "graphviz",
     "pandas", "pyarrow", "contractions", "seaborn", "openpyxl",
 ]
+# Direct dependencies used by the interactive Console worker in addition to
+# the scoring runtime. Keep broad service infrastructure out of this image.
+console = ["celery", "fastmcp", "requests-aws4auth"]
 google-vertexai = [
     "langchain-google-vertexai",
 ]

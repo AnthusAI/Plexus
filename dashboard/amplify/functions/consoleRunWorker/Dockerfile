@@ -25,12 +25,12 @@ RUN test -f /workspace/MCP/tools/tactus_runtime/execute.py && \
 # Install Plexus, Lambda runtime interface client, and required dependencies.
 # `plexus.score.test` imports the Celery-backed score-task module even when it
 # runs synchronously, so the Console's post-submit verification needs Celery
-# in addition to the lightweight scoring extra.
+# in addition to the lightweight scoring extra. Console-specific optional
+# dependencies are declared by the package instead of resolved ad hoc here.
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --progress-bar off --upgrade pip && \
-    python -m pip install --progress-bar off -e "/workspace[scoring]" && \
-    python -m pip install --progress-bar off "python-statemachine>=2.5.0" "celery>=5.4.0" requests-aws4auth awslambdaric && \
-    python -c "import boto3, requests_aws4auth"
+    python -m pip install --progress-bar off -e "/workspace[scoring,console]" awslambdaric && \
+    python -c "import awslambdaric, boto3, celery, fastmcp, requests_aws4auth"
 
 COPY dashboard/amplify/functions/consoleRunWorker/app.py /var/task/app.py
 
