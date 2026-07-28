@@ -1380,7 +1380,7 @@ def optimizer_cli_command(manifest: DemoManifest, ids: Mapping[str, str]) -> lis
         ids["score"], "--days", "7", "--max-samples", "100", "--max-iterations",
         str(manifest.max_iterations), "--num-candidates", "1", "--max-cost-usd",
         str(manifest.max_cost_usd), "--improvement-threshold", "0.05",
-        "--evaluation-timeout-minutes", "30", "--resume-recent-eval",
+        "--evaluation-stall-timeout-minutes", "30", "--resume-recent-eval",
         str(recent_baseline_id), "--resume-regression-eval", str(regression_baseline_id),
         "--agent-model", "hypothesis_planner=gpt-5.4-nano", "--agent-model",
         "code_editor=gpt-5.4-nano", "--agent-model", "cycle_analyst=gpt-5.4-nano",

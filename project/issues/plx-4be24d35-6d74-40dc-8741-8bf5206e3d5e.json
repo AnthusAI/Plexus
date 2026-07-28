@@ -28,10 +28,16 @@
       "author": "ryan.porter",
       "text": "Outside-in compatibility results: the unchanged PR branch first failed during run-scoped dataset curation because the lean worker extra omitted direct CLI import dependencies. Added an executable dependency contract and the minimal declared runtime set. Implemented local GraphQL artifact transfer tickets with resource/account/key/size/checksum validation, HTTPS-only signed URLs, explicit API-key auth, reusable MinIO TLS/CA wiring, integrity-bearing task output envelopes, GraphQL-ticket resume, and a one-shot post-optimizer interruption hook. Focused evidence is green: 73 product/demo/chart tests and 63 private-proxy tests. Live immutable-image deployment and strict runs remain pending.",
       "created_at": "2026-07-28T18:22:02.121814Z"
+    },
+    {
+      "id": "d99483d2-cb18-4ff8-bee8-6da4d24592cd",
+      "author": "ryan.porter",
+      "text": "Fresh live run 20260728T182500Z-pr513a passed TLS ticket smoke, infrastructure, seeding, predictions, paired 100-item evaluations, and reporting. Baseline was intentionally imperfect (accuracy 0.77; feedback AC1 0.563111; regression AC1 0.504006). Optimization did not dispatch: the unchanged demo command failed closed because PR 513 exposes --evaluation-stall-timeout-minutes instead of the harness's --evaluation-timeout-minutes. No optimizer retry was attempted. Next: specify the supported CLI flag, repair only this command seam, and start a fresh strict run ID.",
+      "created_at": "2026-07-28T18:39:46.551147Z"
     }
   ],
   "created_at": "2026-07-28T17:58:38.910670Z",
-  "updated_at": "2026-07-28T18:22:02.121814Z",
+  "updated_at": "2026-07-28T18:39:46.551147Z",
   "closed_at": null,
   "custom": {}
 }

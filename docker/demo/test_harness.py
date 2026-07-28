@@ -199,6 +199,8 @@ def test_optimizer_reuses_verified_paired_baselines_and_required_nano_agents() -
     # The optimizer adds one protected structural lane to the normal rubric
     # lanes, so requesting one normal lane yields two candidates.
     assert command[command.index("--num-candidates") + 1] == "1"
+    assert command[command.index("--evaluation-stall-timeout-minutes") + 1] == "30"
+    assert "--evaluation-timeout-minutes" not in command
     agent_models = [command[index + 1] for index, item in enumerate(command) if item == "--agent-model"]
     assert agent_models
     assert all(model.endswith("=gpt-5.4-nano") for model in agent_models)
