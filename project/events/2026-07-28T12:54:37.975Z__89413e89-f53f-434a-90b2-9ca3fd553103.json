@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "event_id": "89413e89-f53f-434a-90b2-9ca3fd553103",
+  "issue_id": "plx-dbe0cf75-d423-4525-ad4e-c60079078d87",
+  "event_type": "dependency_removed",
+  "occurred_at": "2026-07-28T12:54:37.975Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "dependency_type": "blocked-by",
+    "target_id": "plx-18708d"
+  }
+}

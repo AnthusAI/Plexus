@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "event_id": "fb009fb7-a6e2-4add-a350-6c6fc4f717b3",
+  "issue_id": "plx-dbe0cf75-d423-4525-ad4e-c60079078d87",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T12:52:38.690Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Migrate optimizer and task artifacts to GraphQLArtifactStore",
+    "description": "Purpose: Remove default AWS credential requirements from optimizer and task artifact paths.\n\nOwned scope:\n- Optimizer manifests, event logs, runtime logs, and final artifacts.\n- Task output attachments.\n- Remaining API-key-only conditionals in optimizer, progress tracking, MCP, and procedure control paths that are part of the local workflow.\n\nAcceptance:\n- Optimizer artifacts and task output remain visible through existing dashboard pointers.\n- Core-path tests make boto3.client for S3 raise and still pass.\n- Existing artifact metadata remains readable.\n- No silent storage or authentication fallback remains.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": [
+      "aws-login-free",
+      "wave-2",
+      "lane-optimizer-task"
+    ]
+  }
+}

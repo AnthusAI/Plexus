@@ -1,0 +1,37 @@
+{
+  "id": "plx-9b1f3d62-4f3a-4443-9b96-6031ba585a98",
+  "title": "Run credential-free integration acceptance and rollout",
+  "description": "Purpose: Integrate, verify, and roll out the application-authenticated local workflow.\n\nAcceptance:\n- Python 3.11 and 3.12 CI pass.\n- Dashboard typecheck, unit, Storybook build, and browser tests pass.\n- Sandbox environment contains no AWS profile or session variables.\n- One plexus login supports an accuracy evaluation with a stored dataset.\n- A feedback evaluation persists complete root-cause evidence.\n- A local optimizer checkpoints and resumes with final artifacts visible in the dashboard.\n- An expired access token refreshes without user or AWS intervention.\n- Additive backend support deploys before migrated clients.\n- Production acceptance uses a controlled evaluation with no local AWS credentials.\n\nClose only after final rollout verification is recorded.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "labels": [
+    "aws-login-free",
+    "integration"
+  ],
+  "dependencies": [
+    {
+      "target": "plx-52c1bdf5-4909-42d7-be59-691423a2c10a",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-5dc03585-82a5-44ac-ac42-caa1f542a2c1",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-dbe0cf75-d423-4525-ad4e-c60079078d87",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-07-28T12:52:39.017652Z",
+  "updated_at": "2026-07-28T12:52:39.017652Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

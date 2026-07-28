@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "event_id": "aa142eb1-6614-4658-bdf1-0d4cc6ad60f7",
+  "issue_id": "plx-9b1f3d62-4f3a-4443-9b96-6031ba585a98",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T12:52:39.017Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Run credential-free integration acceptance and rollout",
+    "description": "Purpose: Integrate, verify, and roll out the application-authenticated local workflow.\n\nAcceptance:\n- Python 3.11 and 3.12 CI pass.\n- Dashboard typecheck, unit, Storybook build, and browser tests pass.\n- Sandbox environment contains no AWS profile or session variables.\n- One plexus login supports an accuracy evaluation with a stored dataset.\n- A feedback evaluation persists complete root-cause evidence.\n- A local optimizer checkpoints and resumes with final artifacts visible in the dashboard.\n- An expired access token refreshes without user or AWS intervention.\n- Additive backend support deploys before migrated clients.\n- Production acceptance uses a controlled evaluation with no local AWS credentials.\n\nClose only after final rollout verification is recorded.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": [
+      "aws-login-free",
+      "integration"
+    ]
+  }
+}
