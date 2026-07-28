@@ -880,17 +880,16 @@ class Score(ABC):
     @classmethod
     def _create_score_from_config(cls, config: dict):
         """Create a Score instance from configuration dictionary."""
-        import importlib
-        
         # Get the score class
         class_name = config.get('class')
         if not class_name:
             raise ValueError("No 'class' field found in score configuration")
         
         try:
-            # Import the score class
-            module = importlib.import_module('plexus.scores')
-            score_class = getattr(module, class_name)
+            # Import locally to avoid the Score -> scores namespace cycle.
+            from plexus.scores import resolve_score_class
+
+            score_class = resolve_score_class(class_name)
             
             # Create instance with parameters from config
             parameters = {k: v for k, v in config.items() if k != 'class'}
