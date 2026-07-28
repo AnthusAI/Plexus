@@ -3,9 +3,9 @@
   "title": "Run credential-free integration acceptance and rollout",
   "description": "Purpose: Integrate, verify, and roll out the application-authenticated local workflow.\n\nAcceptance:\n- Python 3.11 and 3.12 CI pass.\n- Dashboard typecheck, unit, Storybook build, and browser tests pass.\n- Sandbox environment contains no AWS profile or session variables.\n- One plexus login supports an accuracy evaluation with a stored dataset.\n- A feedback evaluation persists complete root-cause evidence.\n- A local optimizer checkpoints and resumes with final artifacts visible in the dashboard.\n- An expired access token refreshes without user or AWS intervention.\n- Additive backend support deploys before migrated clients.\n- Production acceptance uses a controlled evaluation with no local AWS credentials.\n\nClose only after final rollout verification is recorded.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
-  "assignee": null,
+  "assignee": "codex/root",
   "creator": null,
   "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
   "labels": [
@@ -26,9 +26,16 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "f4821449-f403-4b31-a524-a22919f453d0",
+      "author": "ryan.porter",
+      "text": "Integration kickoff: combine PRs #507, #508, and #509 on isolated branch codex/integrate-artifact-ticket-migrations from current develop. Keep the urgent production Amplify compile repair separate. Retarget the three migration PRs away from develop, preserve their histories, resolve cross-lane conflicts only on the integration branch, then run the task's complete local and sandbox acceptance gates before opening one integration-to-develop PR.",
+      "created_at": "2026-07-28T16:51:59.187470Z"
+    }
+  ],
   "created_at": "2026-07-28T12:52:39.017652Z",
-  "updated_at": "2026-07-28T12:52:39.017652Z",
+  "updated_at": "2026-07-28T16:51:59.187470Z",
   "closed_at": null,
   "custom": {
     "source": "shared",
