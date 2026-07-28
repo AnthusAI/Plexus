@@ -110,6 +110,9 @@ scoring = [
     "langchain-ollama", "langchain-anthropic", "langgraph-checkpoint-postgres",
     "psycopg", "tactus", "nltk", "graphviz",
 ]
+# Direct dependencies used by the interactive Console worker in addition to
+# the scoring runtime. Keep broad service infrastructure out of this image.
+console = ["celery", "fastmcp", "requests-aws4auth"]
 google-vertexai = [
     "langchain-google-vertexai",
 ]

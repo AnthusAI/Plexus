@@ -1,0 +1,31 @@
+{
+  "id": "plx-708aebee-441e-4a92-928b-6c9abd5bcdda",
+  "title": "Declare Console worker runtime dependencies through a dedicated package extra",
+  "description": "The Console worker image currently installs some direct runtime dependencies in a separate Dockerfile layer and obtains another transitively. This makes dependency ownership and version resolution less explicit.\n\nExpected behavior:\n- The Plexus package exposes a narrow Console worker extra containing only the optional dependencies required by that runtime beyond the scoring extra.\n- The Console worker installs the scoring and Console extras together.\n- Broad infrastructure-only dependencies are not added to the latency-sensitive image.\n- The image build verifies its direct runtime imports.\n\nAcceptance scenario:\nGiven a clean Console worker image build\nWhen Plexus is installed with the scoring and Console extras\nThen Celery, FastMCP, and IAM request signing imports are available without separate unpinned installs\nAnd unrelated infrastructure services are not requested by the Console extra.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-0f79ddc4-5ad8-408b-a1cc-fbe32f7f20aa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d07a7f07-03ab-4259-a232-5893b43bb76e",
+      "author": "ryan.porter",
+      "text": "Implementation started. Decision: add a narrow Console extra for Celery, FastMCP, and IAM request signing; keep the broad infrastructure extra out of the latency-sensitive image; retain the Lambda runtime interface client as an image-specific dependency. Focused specifications failed first because the extra and declared install path were absent.",
+      "created_at": "2026-07-28T20:16:11.856073Z"
+    },
+    {
+      "id": "f08e1575-8f0e-4040-b7aa-b15fd87fb89b",
+      "author": "ryan.porter",
+      "text": "Implemented the narrow Console package extra and updated the worker image to install the scoring and Console extras together. Removed redundant ad hoc dependency installs while keeping the Lambda runtime interface client image-specific. Validation: focused contract tests pass 8 of 8, poetry lock validation passes, diff check passes, and a clean Docker image build completed with all required imports verified.",
+      "created_at": "2026-07-28T20:21:20.533201Z"
+    }
+  ],
+  "created_at": "2026-07-28T20:15:35.648720Z",
+  "updated_at": "2026-07-28T20:21:20.533201Z",
+  "closed_at": null,
+  "custom": {}
+}
