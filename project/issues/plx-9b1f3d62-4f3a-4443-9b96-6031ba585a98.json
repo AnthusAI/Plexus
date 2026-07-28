@@ -28,32 +28,44 @@
   ],
   "comments": [
     {
-      "id": "f4821449-f403-4b31-a524-a22919f453d0",
+      "id": "d47afe53-4875-438a-92fb-7b8b7b492cc1",
       "author": "ryan.porter",
-      "text": "Integration kickoff: combine PRs #507, #508, and #509 on isolated branch codex/integrate-artifact-ticket-migrations from current develop. Keep the urgent production Amplify compile repair separate. Retarget the three migration PRs away from develop, preserve their histories, resolve cross-lane conflicts only on the integration branch, then run the task's complete local and sandbox acceptance gates before opening one integration-to-develop PR.",
-      "created_at": "2026-07-28T16:51:59.187470Z"
+      "text": "Production Amplify compile failure confirmed: the CDK L1 function is typed as IFunction, so addEnvironment is unavailable. Use the supported Amplify function resource for environment injection while retaining the L1 function for IAM policy attachment, and add the Amplify backend TypeScript project to the standard dashboard typecheck so this cannot pass local CI unnoticed again.",
+      "created_at": "2026-07-28T17:39:52.940567Z"
     },
     {
-      "id": "8c954d58-4e46-4c24-9d7b-f81ddda06355",
+      "id": "0eef6027-c9ef-455d-8b6a-c8a2c11fe84c",
       "author": "ryan.porter",
-      "text": "Combined branch d3d60ede passed focused migration coverage (144 Python tests), ticket/schema contracts (19 tests), dashboard typecheck plus explicit Amplify backend typecheck, dashboard unit coverage (91 suites / 669 tests), and the dispatch regression net (13 tests). Full Python 3.12 found auth-migration test harness drift plus two pre-existing input-source test failures reproducible on develop a002fcbc. Repaired only test injection/expectations: patch the imported score-chat dependency, treat missing runtime auth as an execution failure rather than a Click parse failure, and inject the fake score through the explicit resolver seam. Focused rerun: 19 passed. No production auth fallback or runtime behavior changed.",
-      "created_at": "2026-07-28T17:03:57.797702Z"
+      "text": "Implemented the supported Amplify function environment configuration and added backend compilation to the standard dashboard typecheck. Validation passed: backend TypeScript, web TypeScript, git diff check, and Kanbus validation.",
+      "created_at": "2026-07-28T17:41:30.365982Z"
     },
     {
-      "id": "1173a0a8-1812-42f0-a6de-92cb3a2052b9",
+      "id": "55f60ddc-688b-4971-abd1-66c57b824e6c",
       "author": "ryan.porter",
-      "text": "Combined sandbox acceptance found that persisted procedure state survives credential-free reload, but Tactus checkpoint entries using concrete types such as explicit_checkpoint are omitted because the migration serializer accepts only the literal type checkpoint. Fix must preserve all execution-log checkpoint types and replay metadata, then rerun live checkpoint reload and focused CI before the integration PR.",
-      "created_at": "2026-07-28T17:20:22.369305Z"
+      "text": "Live deployment validation: the configured Amplify staging branch is substantially behind current development and cannot provide representative proof. Use a temporary Amplify development branch tied to the focused fix branch, monitor its real build/deploy result, then remove the temporary cloud branch.",
+      "created_at": "2026-07-28T17:44:30.431522Z"
     },
     {
-      "id": "c581f0fd-d466-4428-aa38-51243d0d3345",
+      "id": "85c550ca-4019-4376-9be8-292e7010d707",
       "author": "ryan.porter",
-      "text": "Checkpoint repair is committed and published as 390e4eed. Sandbox acceptance with AWS credential/profile variables and API key removed passed: Cognito identity and AppSync reads; verified procedure artifact PUT/GET; state reload; concrete Tactus checkpoint type and payload preservation; same-run checkpoint replay without executing the body; and three optimizer artifacts indexed and read back. Direct boto3 S3 creation was forced to fail. Corrected full CI passed on Python 3.11 and 3.12 with 3,928 passed per runtime; focused migration suite passed 23 tests; lint, compilation, diff check, and Kanbus validation passed. Dashboard, Storybook, Amplify, dispatch, and schema suites remain green from combined-head validation. The separate evaluation-consumer lane is still required before stored-dataset accuracy and complete feedback-evidence gates can pass; its additive ticket foundation is already in develop.",
-      "created_at": "2026-07-28T17:31:00.988983Z"
+      "text": "The live Amplify preview cleared the original backend TypeScript failure, then exposed a CloudFormation circular dependency between data, function, and backup stacks. The artifact-ticket AppSync resolver belongs in the data resource group; applying Amplify's supported resourceGroupName placement and rerunning the same preview deployment.",
+      "created_at": "2026-07-28T18:09:11.625073Z"
+    },
+    {
+      "id": "774255df-c30b-430c-9cae-d913f76f4f1f",
+      "author": "ryan.porter",
+      "text": "The corrected resource graph deployed until provisioned-concurrency initialization. CloudWatch showed the Console image lacked requests_aws4auth even though IAM GraphQL auth is enabled. Add the existing locked dependency explicitly to the Console image and fail image construction unless both boto3 and requests_aws4auth import successfully.",
+      "created_at": "2026-07-28T18:29:52.035964Z"
+    },
+    {
+      "id": "5f2a033c-42d1-4341-a765-62a45c782830",
+      "author": "ryan.porter",
+      "text": "Live Amplify validation succeeded end-to-end on commit 8a598edf. Job 4 completed BUILD, DEPLOY, and VERIFY successfully after backend TypeScript compilation, CloudFormation creation, and Console provisioned-concurrency initialization. PR 514 is ready for review; keep the issue open until the fix lands.",
+      "created_at": "2026-07-28T19:15:25.052719Z"
     }
   ],
   "created_at": "2026-07-28T12:52:39.017652Z",
-  "updated_at": "2026-07-28T17:31:00.988983Z",
+  "updated_at": "2026-07-28T19:15:25.052719Z",
   "closed_at": null,
   "custom": {
     "source": "shared",
