@@ -1,0 +1,18 @@
+{
+  "id": "plx-5e52c459-fd59-4313-9a6a-211e99cdd156",
+  "title": "Maintain reliable Plexus CI and release pipeline",
+  "description": "Keep the repository validation and release path available, reproducible, and aligned with supported runtime targets.\n\nDefinition of done:\n- Pull requests and protected release branches invoke the intended validation workflows.\n- Temporary CI restrictions are removed through reviewed workflow changes.\n- Workflow behavior is validated without broadening unrelated release automation.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-07-28T20:15:41.639249Z",
+  "updated_at": "2026-07-28T20:15:41.639249Z",
+  "closed_at": null,
+  "custom": {}
+}

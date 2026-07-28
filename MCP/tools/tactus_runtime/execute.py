@@ -16,10 +16,9 @@ import time
 import traceback
 import uuid
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Optional
+from typing import Any, Callable, Optional
 
 from fastmcp import Context, FastMCP
-from pydantic import Field
 from plexus.runtime_budget import RuntimeBudgetSpec
 from plexus.attribution.actor_context import (
     apply_actor_attribution,
@@ -10984,22 +10983,7 @@ def register_tactus_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(description=EXECUTE_TACTUS_DESCRIPTION)
     async def execute_tactus(
-        tactus: Annotated[
-            str,
-            Field(
-                description=(
-                    "Tactus (Lua) snippet to execute. `plexus` is global; helper "
-                    "aliases like `evaluate`, `predict`, `score`, `item`, "
-                    "`scorecards`, `api_list`, `docs_list`, `docs_get`, "
-                    "`skills_list`, `skills_get`, `handle_status` are injected. "
-                    "Async long-running calls "
-                    "(`evaluation.run`, `report.run`, `procedure.run` with "
-                    "`async = true`) require an explicit child `budget = { usd, "
-                    "wallclock_seconds, depth, tool_calls }`. Read "
-                    "`plexus.docs.get{ key = \"mcp.execute-tactus-overview\" }` for the full guide."
-                )
-            ),
-        ],
+        tactus: str,
         ctx: Context,
     ) -> dict[str, Any]:
         return await _execute_tactus_tool(tactus, mcp, ctx=ctx)

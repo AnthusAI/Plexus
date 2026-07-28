@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d91007f3-3b50-4c3b-aba2-6119c998c52f",
+  "issue_id": "plx-d1f74c18-d48c-4458-8ce0-140aa6e82975",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T20:39:46.877Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Stabilize restored CI on the production Python runtime",
+    "description": "Restored GitHub Actions exposed deterministic failures in the production Python job and re-enabled a ruleset synchronization workflow whose administrative token is unavailable. The Python matrix also spends Actions minutes on a non-production runtime.\n\nExpected behavior:\n- Pull-request Python validation runs once on the production Python 3.11 runtime.\n- The local Helm chart test provisions its repository metadata in an isolated test environment.\n- Evaluation item lookup tests patch the supported explicit score resolver.\n- Ruleset synchronization remains disabled until supported administrative authentication is available.\n- Core CI, documentation, and release workflows remain enabled.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-5e52c459-fd59-4313-9a6a-211e99cdd156",
+    "labels": []
+  }
+}

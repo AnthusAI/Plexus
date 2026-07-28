@@ -1741,7 +1741,7 @@ async def test_execute_tactus_tool_schema_uses_tactus_parameter() -> None:
     mcp = FastMCP("test-execute-tactus")
     execute.register_tactus_tools(mcp)
 
-    tools = await mcp.list_tools()
+    tools = (await mcp.get_tools()).values()
     tool = next(tool for tool in tools if tool.name == "execute_tactus")
     schema = tool.parameters
 
@@ -1756,7 +1756,7 @@ async def test_execute_tactus_tool_description_contains_curated_examples() -> No
     mcp = FastMCP("test-execute-tactus")
     execute.register_tactus_tools(mcp)
 
-    tools = await mcp.list_tools()
+    tools = (await mcp.get_tools()).values()
     tool = next(tool for tool in tools if tool.name == "execute_tactus")
     description = tool.description or ""
 
@@ -2064,9 +2064,9 @@ async def test_execute_tactus_tool_returns_structured_contract(monkeypatch) -> N
 
     monkeypatch.setattr(execute, "_run_tactus_sync", fake_run_tactus_sync)
 
-    result = await mcp.call_tool("execute_tactus", {"tactus": "return { ok = true }"})
+    result = await execute._execute_tactus_tool("return { ok = true }", mcp)
 
-    structured = result.structured_content
+    structured = result
     assert structured["ok"] is True
     assert structured["value"] == {"ok": True, "source": "return { ok = true }"}
     assert structured["error"] is None

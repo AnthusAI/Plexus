@@ -11,6 +11,7 @@ This code is shared between:
 """
 
 import logging
+import numpy as np
 from typing import List, Dict, Any, Optional, Mapping, Tuple
 from collections import Counter
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
@@ -126,8 +127,12 @@ def analyze_feedback_pair_counts(
             combined_counts[str(label)] += count
         for label, count in initial_distribution.items():
             combined_counts[str(label)] += count
-        pi_values = [combined_counts[label] / (2 * total_items) for label in all_classes]
-        expected_agreement = sum(value * (1 - value) for value in pi_values) / (len(all_classes) - 1)
+        # Match GwetAC1's NumPy aggregation exactly so compact paged analysis
+        # has the same AC1 value as the item-by-item code path.
+        pi_values = np.array(
+            [combined_counts[label] / (2 * total_items) for label in all_classes]
+        )
+        expected_agreement = np.sum(pi_values * (1 - pi_values)) / (len(all_classes) - 1)
         denominator = 1 - expected_agreement
         ac1_value = (agreements / total_items - expected_agreement) / denominator if denominator else float("nan")
 
