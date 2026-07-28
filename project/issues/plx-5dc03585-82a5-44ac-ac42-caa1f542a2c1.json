@@ -1,0 +1,69 @@
+{
+  "id": "plx-5dc03585-82a5-44ac-ac42-caa1f542a2c1",
+  "title": "Migrate evaluation datasets evidence logs and traces",
+  "description": "Purpose: Remove default AWS credential requirements from local evaluation artifact paths.\n\nOwned scope:\n- Reference dataset downloads.\n- Evaluation root-cause evidence.\n- Score-result log and trace uploads and downloads.\n- Centralized authenticated dashboard-client use in evaluation paths.\n\nAcceptance:\n- Accuracy evaluation loads a stored dataset without AWS credentials.\n- Feedback evaluation persists complete error evidence.\n- Core-path tests make boto3.client for S3 raise and still pass.\n- Transfer and checksum failures are visible and never produce partial-success fallbacks.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "labels": [
+    "aws-login-free",
+    "wave-2",
+    "lane-evaluation"
+  ],
+  "dependencies": [
+    {
+      "target": "plx-0431ae55-b911-4124-a65a-a6e9acced05f",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-8b44b93a-a837-44e9-86f3-4b35fd9a3f6c",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-18708d95-45f6-4cd5-a6fc-98b40a1ebd96",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "2bf1df67-b6a1-4ba9-9992-8b131f2e2674",
+      "author": "ryan.porter",
+      "text": "Kickoff: canonical agent /root/artifact_ticket_api is working in /Users/ryan.porter/Projects/Plexus-aws-login-free-evaluation on branch codex/aws-login-free-evaluation, based on 06d9af09a8bf5ed3cb25535fdeb06c0a14a1e3e2. Owned files are the local evaluation dataset, root-cause evidence, score-result log, trace, and centralized dashboard-client storage call sites plus their behavior tests. Dependency boundary: this lane consumes the shared authenticated dashboard client and GraphQLArtifactStore interfaces; it does not change artifact-ticket API, CLI authentication, procedure persistence, optimizer storage, or consumer work outside local evaluation paths.",
+      "created_at": "2026-07-28T13:24:29.578124Z"
+    },
+    {
+      "id": "8496aeba-658a-4192-8e18-88b974f7a4f3",
+      "author": "ryan.porter",
+      "text": "Dependency resolved: evaluation artifacts receive an additive EVALUATION/EVALUATION_RCA ticket route, backed by the Evaluation table and existing attachment bucket. Canonical key remains evaluations/{evaluationId}/root_cause.full.json; no TASK or SCORE_RESULT mapping.",
+      "created_at": "2026-07-28T13:27:01.475144Z"
+    },
+    {
+      "id": "eb7b5d15-afd8-4812-8d60-5cc1d113f950",
+      "author": "ryan.porter",
+      "text": "Dependency expanded: foundation-only PR must first repair the dashboard lockfile and add EVALUATION/EVALUATION_RCA schema, resolver, IAM, and contract coverage. Evaluation consumers will be rebased onto deployed develop only after coordinator confirmation.",
+      "created_at": "2026-07-28T13:29:13.989996Z"
+    },
+    {
+      "id": "3312d612-e342-4bf5-bd6a-0b6773005888",
+      "author": "ryan.porter",
+      "text": "Foundation green: EVALUATION/EVALUATION_RCA ticket route preserves evaluations/{evaluationId}/root_cause.full.json and has resolver, IAM-prefix, generated contract, and focused test coverage. Fresh npm ci dry-run now validates after lockfile repair. Consumer migration remains intentionally deferred pending deployment.",
+      "created_at": "2026-07-28T13:35:07.463442Z"
+    },
+    {
+      "id": "7993089e-0497-4c8e-94fe-67c984402b30",
+      "author": "ryan.porter",
+      "text": "Foundation handoff: draft PR #506 (commit dabf04a2c) adds the evaluation ticket route and lockfile repair. Awaiting merge/deploy; no consumer migration is included.",
+      "created_at": "2026-07-28T13:35:37.032740Z"
+    }
+  ],
+  "created_at": "2026-07-28T12:52:38.359197Z",
+  "updated_at": "2026-07-28T13:35:37.032740Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

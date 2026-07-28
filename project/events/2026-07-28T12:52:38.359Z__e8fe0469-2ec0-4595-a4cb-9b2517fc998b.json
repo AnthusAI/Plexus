@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "event_id": "e8fe0469-2ec0-4595-a4cb-9b2517fc998b",
+  "issue_id": "plx-5dc03585-82a5-44ac-ac42-caa1f542a2c1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T12:52:38.359Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Migrate evaluation datasets evidence logs and traces",
+    "description": "Purpose: Remove default AWS credential requirements from local evaluation artifact paths.\n\nOwned scope:\n- Reference dataset downloads.\n- Evaluation root-cause evidence.\n- Score-result log and trace uploads and downloads.\n- Centralized authenticated dashboard-client use in evaluation paths.\n\nAcceptance:\n- Accuracy evaluation loads a stored dataset without AWS credentials.\n- Feedback evaluation persists complete error evidence.\n- Core-path tests make boto3.client for S3 raise and still pass.\n- Transfer and checksum failures are visible and never produce partial-success fallbacks.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": [
+      "aws-login-free",
+      "wave-2",
+      "lane-evaluation"
+    ]
+  }
+}

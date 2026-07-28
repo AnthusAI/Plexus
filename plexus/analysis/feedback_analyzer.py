@@ -11,13 +11,162 @@ This code is shared between:
 """
 
 import logging
-from typing import List, Dict, Any, Optional
+import numpy as np
+from typing import List, Dict, Any, Optional, Mapping, Tuple
 from collections import Counter
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
 from plexus.analysis.metrics import GwetAC1
 from plexus.analysis.metrics.metric import Metric
 
 logger = logging.getLogger(__name__)
+
+
+def analyze_feedback_pair_counts(
+    pair_counts: Mapping[Tuple[Any, Any], int],
+) -> Dict[str, Any]:
+    """Analyze aggregated ``(final, initial)`` feedback-pair counts.
+
+    This is equivalent to :func:`analyze_feedback_items` but does not require
+    callers to retain every feedback record.  It is intentionally expressed in
+    terms of the same output schema so portfolio analysis can consume paged
+    feedback windows with bounded memory.
+    """
+    normalized = Counter(
+        {
+            (final_value, initial_value): int(count)
+            for (final_value, initial_value), count in pair_counts.items()
+            if final_value is not None and initial_value is not None and int(count) > 0
+        }
+    )
+    if not normalized:
+        return {
+            "ac1": None,
+            "accuracy": None,
+            "total_items": 0,
+            "agreements": 0,
+            "disagreements": 0,
+            "confusion_matrix": None,
+            "precision": None,
+            "recall": None,
+            "class_distribution": [],
+            "predicted_class_distribution": [],
+            "warning": "No feedback items found",
+        }
+
+    final_distribution: Counter[Any] = Counter()
+    initial_distribution: Counter[Any] = Counter()
+    total_items = 0
+    agreements = 0
+    for (final_value, initial_value), count in normalized.items():
+        total_items += count
+        final_distribution[final_value] += count
+        initial_distribution[initial_value] += count
+        if final_value == initial_value:
+            agreements += count
+    disagreements = total_items - agreements
+
+    all_classes = sorted(
+        {str(value) for value in final_distribution} | {str(value) for value in initial_distribution}
+    )
+    matrix_rows = []
+    for actual in all_classes:
+        predicted_counts = {}
+        for predicted in all_classes:
+            predicted_counts[predicted] = sum(
+                count
+                for (final_value, initial_value), count in normalized.items()
+                if str(final_value) == actual and str(initial_value) == predicted
+            )
+        matrix_rows.append(
+            {"actualClassLabel": actual, "predictedClassCounts": predicted_counts}
+        )
+    confusion_matrix = {"labels": all_classes, "matrix": matrix_rows}
+
+    if len(all_classes) == 2:
+        positive_class = all_classes[0]
+        true_positive = confusion_matrix["matrix"][0]["predictedClassCounts"].get(positive_class, 0)
+        false_positive = sum(
+            row["predictedClassCounts"].get(positive_class, 0)
+            for row in confusion_matrix["matrix"]
+            if row["actualClassLabel"] != positive_class
+        )
+        false_negative = sum(
+            count
+            for predicted, count in confusion_matrix["matrix"][0]["predictedClassCounts"].items()
+            if predicted != positive_class
+        )
+        precision_recall = {
+            "precision": 100 * true_positive / (true_positive + false_positive)
+            if true_positive + false_positive else 0,
+            "recall": 100 * true_positive / (true_positive + false_negative)
+            if true_positive + false_negative else 0,
+        }
+    else:
+        precisions, recalls = [], []
+        for label in all_classes:
+            row = next(row for row in confusion_matrix["matrix"] if row["actualClassLabel"] == label)
+            true_positive = row["predictedClassCounts"].get(label, 0)
+            false_positive = sum(
+                other["predictedClassCounts"].get(label, 0)
+                for other in confusion_matrix["matrix"]
+                if other["actualClassLabel"] != label
+            )
+            false_negative = sum(count for predicted, count in row["predictedClassCounts"].items() if predicted != label)
+            precisions.append(true_positive / (true_positive + false_positive) if true_positive + false_positive else 0)
+            recalls.append(true_positive / (true_positive + false_negative) if true_positive + false_negative else 0)
+        precision_recall = {
+            "precision": sum(precisions) / len(precisions) * 100 if precisions else 0,
+            "recall": sum(recalls) / len(recalls) * 100 if recalls else 0,
+        }
+
+    if len(all_classes) <= 1:
+        ac1_value = 1.0
+    else:
+        combined_counts = Counter()
+        for label, count in final_distribution.items():
+            combined_counts[str(label)] += count
+        for label, count in initial_distribution.items():
+            combined_counts[str(label)] += count
+        # Match GwetAC1's NumPy aggregation exactly so compact paged analysis
+        # has the same AC1 value as the item-by-item code path.
+        pi_values = np.array(
+            [combined_counts[label] / (2 * total_items) for label in all_classes]
+        )
+        expected_agreement = np.sum(pi_values * (1 - pi_values)) / (len(all_classes) - 1)
+        denominator = 1 - expected_agreement
+        ac1_value = (agreements / total_items - expected_agreement) / denominator if denominator else float("nan")
+
+    warnings = []
+    if ac1_value < 0:
+        warnings.append("Systematic disagreement")
+    elif ac1_value == 0:
+        warnings.append("Random chance agreement")
+    if len(final_distribution) == 1:
+        warnings.append(f"Single class ({next(iter(final_distribution))})")
+    elif len(final_distribution) > 1:
+        expected_count = total_items / len(final_distribution)
+        if not all(abs(count - expected_count) <= expected_count * 0.2 for count in final_distribution.values()):
+            warnings.append("Imbalanced classes")
+
+    return {
+        "ac1": ac1_value,
+        "accuracy": agreements / total_items * 100,
+        "total_items": total_items,
+        "agreements": agreements,
+        "disagreements": disagreements,
+        "confusion_matrix": confusion_matrix,
+        "precision": precision_recall["precision"],
+        "recall": precision_recall["recall"],
+        "class_distribution": sorted(
+            ({"label": str(label), "count": count} for label, count in final_distribution.items()),
+            key=lambda item: item["count"], reverse=True,
+        ),
+        "predicted_class_distribution": sorted(
+            ({"label": str(label), "count": count} for label, count in initial_distribution.items()),
+            key=lambda item: item["count"], reverse=True,
+        ),
+        "warning": "; ".join(warnings) if warnings else None,
+    }
 
 
 def analyze_feedback_items(
@@ -354,5 +503,3 @@ def generate_recommendation(analysis: Dict[str, Any]) -> str:
         recommendations.append("No specific recommendations. Continue monitoring feedback.")
     
     return "\n\n".join(recommendations)
-
-

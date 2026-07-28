@@ -32,6 +32,7 @@ from plexus.cli.rubric_memory.commands import rubric_memory
 from plexus.cli.chat.chats import chat
 from plexus.cli.execute.execute import execute
 from plexus.cli.optimization.commands import optimization
+from plexus.cli.auth.commands import login, logout, whoami
 
 _OPTIONAL_COMMAND_IMPORT_ERRORS: Dict[str, Exception] = {}
 
@@ -100,6 +101,10 @@ cli.add_command(procedure)
 cli.add_command(rubric_memory)
 cli.add_command(chat)
 cli.add_command(execute)
+cli.add_command(optimization)
+cli.add_command(login)
+cli.add_command(whoami)
+cli.add_command(logout)
 cli.add_command(optimization)
 
 if data is not None:

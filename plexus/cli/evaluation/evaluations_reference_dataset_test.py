@@ -9,6 +9,7 @@ import pandas as pd
 from click.testing import CliRunner
 
 from plexus.cli.evaluation.evaluations import (
+    _mark_metrics_terminal_before_optional_rca,
     assert_dataset_materialized_for_accuracy,
     accuracy,
     _apply_feedback_rca_outcome_to_parameters,
@@ -22,6 +23,22 @@ from plexus.cli.evaluation.evaluations import (
     list_associated_datasets_for_score,
     validate_dataset_materialization,
 )
+
+
+def test_metrics_are_terminal_before_optional_root_cause_analysis():
+    """Slow RCA cannot keep a fully scored evaluation in a non-terminal state."""
+    evaluation = MagicMock()
+
+    _mark_metrics_terminal_before_optional_rca(
+        evaluation,
+        processed_items=200,
+    )
+
+    evaluation.update.assert_called_once_with(
+        status="COMPLETED",
+        estimatedRemainingSeconds=0,
+        processedItems=200,
+    )
 
 
 def test_data_driven_samples_fails_when_score_has_no_data_configuration(monkeypatch):

@@ -1,0 +1,73 @@
+{
+  "id": "plx-8b44b93a-a837-44e9-86f3-4b35fd9a3f6c",
+  "title": "Implement authenticated GraphQL artifact-transfer tickets",
+  "description": "Purpose: Add the server-authorized transfer plane for large artifacts.\n\nOwned scope:\n- Add createArtifactTransferTickets to the Amplify GraphQL schema.\n- Add its resolver, storage permissions, and canonical key policy.\n- Accept Cognito and workload IAM identities, never public API keys.\n- Validate resource existence, ownership boundary, artifact type, filename, content type, size, and SHA-256.\n- Return five-minute signed HTTPS transfers in batches of at most twenty.\n- Enforce a 100 MiB write limit and prevent caller-selected buckets or paths.\n\nAcceptance:\n- Contract tests cover typed validation, authorization rejection, canonical keys, batching, methods, headers, and expiry.\n- The operation is additive and deployable before any consumer migration.\n- No client-specific information or public transfer capability is introduced.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "labels": [
+    "aws-login-free",
+    "wave-1",
+    "lane-ticket-api"
+  ],
+  "dependencies": [
+    {
+      "target": "plx-0c9d2eb7-2e23-47c6-8a99-cccccf93216d",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "61bf36fd-fcd8-44f1-8171-f271f6607563",
+      "author": "ryan.porter",
+      "text": "Kickoff: canonical agent /root/artifact_ticket_api is working in /Users/ryan.porter/Projects/Plexus-artifact-ticket-api on branch codex/aws-login-free-ticket-api, based on 03e0b04b67a162c37fbcf3cc9bd28d0c363b571a. Owned scope: additive authenticated GraphQL artifact-transfer ticket schema, resolver, least-privilege storage permissions, canonical object-key policy, and contract tests. Dependency boundary: this lane does not implement CLI authentication, dashboard client support, Python GraphQL store, or consumer migrations; it depends on the parent design contract and will remain deployable before those consumers.",
+      "created_at": "2026-07-28T12:57:40.313631Z"
+    },
+    {
+      "id": "452dc630-256f-4034-9768-19c437097190",
+      "author": "ryan.porter",
+      "text": "Milestone: implemented the additive createArtifactTransferTickets mutation and resolver. It accepts one to twenty typed READ/WRITE requests; derives canonical keys server-side for dataset, procedure, score-result, and task artifacts; validates filename, media type, nonnegative size, lowercase SHA-256, resource existence, trusted-account consistency, and the 100 MiB write cap. Tickets expire after five minutes and return objectKey, method, url, requiredHeaders, and expiresAt. The mutation allows Cognito and IAM identity-pool authorization only; API keys are excluded. Resolver IAM is scoped to DynamoDB GetItem and canonical object prefixes only. Focused resolver and schema/infra contract suites pass (11 tests); schema generation/check and resolver TypeScript compile pass. Risk/follow-up: current deployment has no universal Plexus account-membership claim for every identity. The resolver fails closed when a trusted account claim/context is present and otherwise relies on the existing authenticated AppSync boundary while deriving the referenced resource account server-side. Membership rearchitecture is intentionally outside this lane.",
+      "created_at": "2026-07-28T13:12:39.042720Z"
+    },
+    {
+      "id": "ec09a165-8523-4165-b72a-9eb8d90d378e",
+      "author": "ryan.porter",
+      "text": "Compatibility follow-up complete: GraphQL now requires operation, resourceType, and artifactType fields. Dataset keys preserve the account-scoped canonical layout . SHA-256 input is normalized case-insensitively before signing to interoperate with the shared artifact store. Safe nested relative filenames are supported for task artifacts while traversal and unsafe path segments are rejected. To preserve existing dashboard-state pointers, PROCEDURE_DASHBOARD_STATE explicitly maps to ; its IAM scope is limited to that legacy prefix. Added behavior coverage for all four cases; focused suites now pass 14 tests.",
+      "created_at": "2026-07-28T13:15:06.847294Z"
+    },
+    {
+      "id": "50b14134-3144-4483-92cf-b395c9fb97cc",
+      "author": "ryan.porter",
+      "text": "Correction to the prior compatibility note: Dataset keys preserve the account-scoped layout datasets/{accountId}/{resourceId}/{filename}. PROCEDURE_DASHBOARD_STATE maps to reportblocks/procedures/{procedureId}/dashboard_state.json. No shell-expanded text is part of the intended record.",
+      "created_at": "2026-07-28T13:15:13.120381Z"
+    },
+    {
+      "id": "a231e4b1-4a5d-4e63-a16c-e4d24c106f91",
+      "author": "ryan.porter",
+      "text": "Handoff: committed and pushed 7c63fcb47bfe2b36146bd1cd631f7bc95c52b6b7 on codex/aws-login-free-ticket-api. Draft PR: https://github.com/AnthusAI/Plexus/pull/504 targeting develop. Validation: focused resolver and schema/infra contracts pass (14 tests), schema generation check passes, resolver TypeScript compile passes, and the Amplify data schema imports successfully. Broad dashboard typecheck was attempted but did not complete and was stopped; it excludes amplify sources. Known follow-up remains the platform-wide account-membership claim model; this resolver enforces trusted claims when present and otherwise uses the existing authenticated AppSync boundary. Task remains in_progress for coordinator landing; do not close from this lane.",
+      "created_at": "2026-07-28T13:15:53.000254Z"
+    },
+    {
+      "id": "211e5fd8-4b51-4760-8e7d-74b69f1b2369",
+      "author": "ryan.porter",
+      "text": "Final compatibility correction: canonical keys now match existing consumers exactly. DATA_SET is datasets/{accountId}/{resourceId}/{filename}; PROCEDURE is procedures/{resourceId}/{filename}; PROCEDURE_DASHBOARD_STATE is reportblocks/procedures/{resourceId}/dashboard_state.json; SCORE_RESULT is scoreresults/{resourceId}/{filename}; TASK is tasks/{resourceId}/{filename}. Empty Cognito claims no longer authorize ticket issuance. Focused tests cover all five layouts and identity rejection.",
+      "created_at": "2026-07-28T13:17:43.150868Z"
+    },
+    {
+      "id": "0ccf8954-facf-4fb2-b0b3-7b3425d8bf36",
+      "author": "ryan.porter",
+      "text": "Landed in develop through PR #504 at merge commit 3136f8d43. Independent verification: 17 resolver/schema contract tests passed, schema generation check passed, canonical legacy object-key layouts were preserved, and Kanbus validates. The behavior story remains open until deployed transfer acceptance.",
+      "created_at": "2026-07-28T13:21:58.699445Z"
+    }
+  ],
+  "created_at": "2026-07-28T12:52:37.356177Z",
+  "updated_at": "2026-07-28T13:21:58.961481Z",
+  "closed_at": "2026-07-28T13:21:58.961481Z",
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

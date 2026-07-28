@@ -83,6 +83,10 @@ export const dispatchConsoleChatHandler = defineFunction({
     },
 });
 
+export const createArtifactTransferTicketsHandler = defineFunction({
+    entry: './resolvers/createArtifactTransferTickets.ts',
+});
+
 const schema = a.schema({
     Account: a
         .model({
@@ -586,12 +590,41 @@ const schema = a.schema({
         accepted: a.boolean().required(),
     }),
 
+    ArtifactTransferRequest: a.customType({
+        operation: a.string().required(),
+        resourceType: a.string().required(),
+        resourceId: a.id().required(),
+        artifactType: a.string().required(),
+        filename: a.string().required(),
+        contentType: a.string().required(),
+        sizeBytes: a.integer().required(),
+        sha256: a.string().required(),
+    }),
+
+    ArtifactTransferTicket: a.customType({
+        objectKey: a.string().required(),
+        method: a.string().required(),
+        url: a.string().required(),
+        requiredHeaders: a.json().required(),
+        expiresAt: a.datetime().required(),
+    }),
+
     dispatchConsoleChat: a
         .mutation()
         .arguments({ messageId: a.id().required() })
         .returns(a.ref('ConsoleChatDispatchResult'))
         .authorization((allow) => [allow.authenticated()])
         .handler(a.handler.function(dispatchConsoleChatHandler)),
+
+    createArtifactTransferTickets: a
+        .mutation()
+        .arguments({ requests: a.ref('ArtifactTransferRequest').array().required() })
+        .returns(a.ref('ArtifactTransferTicket').array().required())
+        .authorization((allow) => [
+            allow.authenticated(),
+            allow.authenticated('identityPool'),
+        ])
+        .handler(a.handler.function(createArtifactTransferTicketsHandler)),
 
     ReportConfiguration: a
         .model({

@@ -185,11 +185,14 @@ class _BaseAPIClient:
         self,
         api_url: Optional[str] = None,
         api_key: Optional[str] = None,
-        context: Optional[ClientContext] = None
+        context: Optional[ClientContext] = None,
+        token_provider: Optional[Any] = None,
+        auth_mode: Optional[str] = None,
     ):
         self.api_url = api_url or os.getenv('PLEXUS_API_URL')
         self.api_key = api_key or os.getenv('PLEXUS_API_KEY')
-        self.auth_mode = (os.getenv('PLEXUS_GRAPHQL_AUTH_MODE') or 'api_key').strip().lower()
+        self.auth_mode = (auth_mode or os.getenv('PLEXUS_GRAPHQL_AUTH_MODE') or 'api_key').strip().lower()
+        self._token_provider = token_provider
         self.api_region = (
             os.getenv('PLEXUS_API_REGION')
             or os.getenv('NEXT_PUBLIC_PLEXUS_API_REGION')
@@ -206,8 +209,12 @@ class _BaseAPIClient:
             'PLEXUS_DISABLE_BACKGROUND_LOGGING', 'false'
         ).lower() not in ('true', '1', 'yes')
         
-        if not self.api_url or (self.auth_mode != 'iam' and not self.api_key):
+        if not self.api_url:
             raise ValueError("Missing required API URL or API key")
+        if self.auth_mode == "api_key" and not self.api_key:
+            raise ValueError("Missing required API URL or API key")
+        if self.auth_mode not in {"api_key", "iam", "cognito"}:
+            raise ValueError(f"Unsupported GraphQL auth mode: {self.auth_mode}")
 
         # Check environment variable for schema introspection setting
         # Default to False — introspection adds 500ms-2s per execute() call (full schema fetch).
@@ -283,6 +290,17 @@ class _BaseAPIClient:
                 "appsync",
                 session_token=frozen.token,
             )
+        elif self.auth_mode == "cognito":
+            try:
+                if self._token_provider is None:
+                    from plexus.auth.cognito import CognitoAuthService
+                    self._token_provider = CognitoAuthService()
+                access_token = self._token_provider.get_access_token()
+            except Exception as exc:
+                raise ValueError(
+                    "Plexus application authentication is unavailable. Run `plexus login` to authenticate."
+                ) from exc
+            headers["Authorization"] = f"Bearer {access_token}"
         else:
             headers["x-api-key"] = self.api_key
 
@@ -1060,9 +1078,17 @@ class PlexusDashboardClient(_BaseAPIClient):
         self,
         api_url: Optional[str] = None,
         api_key: Optional[str] = None,
-        context: Optional[ClientContext] = None
+        context: Optional[ClientContext] = None,
+        token_provider: Optional[Any] = None,
+        auth_mode: Optional[str] = None,
     ):
-        super().__init__(api_url=api_url, api_key=api_key, context=context)
+        super().__init__(
+            api_url=api_url,
+            api_key=api_key,
+            context=context,
+            token_provider=token_provider,
+            auth_mode=auth_mode,
+        )
         
     # Context manager methods
     def __enter__(self):

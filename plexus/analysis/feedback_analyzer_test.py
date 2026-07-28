@@ -3,11 +3,13 @@ Tests for the feedback_analyzer module.
 """
 
 import pytest
+from collections import Counter
 from unittest.mock import MagicMock
 from plexus.analysis.feedback_analyzer import (
     analyze_feedback_items,
     build_confusion_matrix,
     calculate_precision_recall,
+    analyze_feedback_pair_counts,
     generate_recommendation
 )
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
@@ -47,6 +49,56 @@ def invalid_feedback_items():
         item.finalAnswerValue = None
         items.append(item)
     return items
+
+
+def test_analyze_feedback_pair_counts_matches_item_analysis_without_raw_rows(
+    mock_feedback_items,
+):
+    """Aggregate pair counts preserve alignment metrics without retaining rows."""
+    expected = analyze_feedback_items(mock_feedback_items)
+    counts = Counter(
+        (item.finalAnswerValue, item.initialAnswerValue)
+        for item in mock_feedback_items
+    )
+
+    actual = analyze_feedback_pair_counts(counts)
+
+    for field in (
+        "ac1",
+        "accuracy",
+        "total_items",
+        "agreements",
+        "disagreements",
+        "confusion_matrix",
+        "precision",
+        "recall",
+        "class_distribution",
+        "predicted_class_distribution",
+        "warning",
+    ):
+        assert actual[field] == expected[field]
+
+
+def test_analyze_feedback_pair_counts_matches_multiclass_item_analysis() -> None:
+    pairs = [
+        ("A", "A"),
+        ("A", "B"),
+        ("B", "B"),
+        ("C", "A"),
+        ("C", "C"),
+        ("C", "C"),
+    ]
+    items = []
+    for final_value, initial_value in pairs:
+        item = MagicMock(spec=FeedbackItem)
+        item.finalAnswerValue = final_value
+        item.initialAnswerValue = initial_value
+        items.append(item)
+
+    expected = analyze_feedback_items(items)
+    actual = analyze_feedback_pair_counts(Counter(pairs))
+
+    assert actual == expected
 
 
 class TestAnalyzeFeedbackItems:
@@ -277,5 +329,3 @@ class TestGenerateRecommendation:
         
         assert result is not None
         assert "imbalance" in result.lower()
-
-

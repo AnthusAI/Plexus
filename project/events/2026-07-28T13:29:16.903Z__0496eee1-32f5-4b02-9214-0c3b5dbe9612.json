@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0496eee1-32f5-4b02-9214-0c3b5dbe9612",
+  "issue_id": "plx-76cd1e6a-fdd9-44d0-91de-6b50efed4eee",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T13:29:16.903Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Repair dashboard dependency lockfile for clean installs",
+    "description": "Fresh Node 20 dashboard dependency installation fails because the package manifest and lockfile disagree. Restore reproducible clean installs before ticket-route deployment.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": []
+  }
+}

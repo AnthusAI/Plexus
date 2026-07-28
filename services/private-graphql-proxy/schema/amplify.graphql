@@ -62,6 +62,29 @@ type ResourceByShareTokenResponse {
   data: AWSJSON
 }
 
+type ConsoleChatDispatchResult {
+  accepted: Boolean!
+}
+
+type ArtifactTransferRequest {
+  operation: String!
+  resourceType: String!
+  resourceId: ID!
+  artifactType: String!
+  filename: String!
+  contentType: String!
+  sizeBytes: Int!
+  sha256: String!
+}
+
+type ArtifactTransferTicket {
+  objectKey: String!
+  method: String!
+  url: String!
+  requiredHeaders: AWSJSON!
+  expiresAt: AWSDateTime!
+}
+
 type Account {
   name: String!
   key: String!
@@ -753,6 +776,17 @@ type ChatMessage {
 type ModelChatMessageConnection {
   items: [ChatMessage]
   nextToken: String
+}
+
+input ArtifactTransferRequestInput {
+  operation: String!
+  resourceType: String!
+  resourceId: ID!
+  artifactType: String!
+  filename: String!
+  contentType: String!
+  sizeBytes: Int!
+  sha256: String!
 }
 
 input CreateAccountInput {
@@ -2324,6 +2358,8 @@ type Mutation {
   createChatMessage(input: CreateChatMessageInput!): ChatMessage
   updateChatMessage(input: UpdateChatMessageInput!): ChatMessage
   deleteChatMessage(input: DeleteChatMessageInput!): ChatMessage
+  dispatchConsoleChat(messageId: ID!): ConsoleChatDispatchResult
+  createArtifactTransferTickets(requests: [ArtifactTransferRequestInput!]!): [ArtifactTransferTicket!]!
 }
 
 type Subscription {

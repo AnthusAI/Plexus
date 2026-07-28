@@ -1338,6 +1338,69 @@ def test_default_score_update_preserves_parent_guidelines_for_code_only_edits(
     assert result["diffs"]["code"]["has_changes"] is True
 
 
+def test_default_score_update_preserves_empty_parent_guidelines_for_code_only_edits(
+    monkeypatch,
+) -> None:
+    captured_inputs: list[dict] = []
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            if "GetScoreChampionId" in query:
+                return {
+                    "getScore": {
+                        "championVersionId": "version-parent",
+                        "championVersion": {"guidelines": None},
+                    }
+                }
+            if "GetScoreVersionForConsoleAudit" in query:
+                if variables["id"] == "version-parent":
+                    return {
+                        "getScoreVersion": {
+                            "id": "version-parent",
+                            "configuration": "name: baseline\n",
+                            "guidelines": None,
+                        }
+                    }
+                return {
+                    "getScoreVersion": {
+                        "id": "version-child",
+                        "configuration": "name: updated\n",
+                        "guidelines": "",
+                    }
+                }
+            if "CreateScoreVersion" in query:
+                captured_inputs.append(variables["input"])
+                return {"createScoreVersion": {"id": "version-child", "createdAt": "now"}}
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: FakeClient(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.direct_identifier_resolution.direct_resolve_scorecard_identifier",
+        lambda _client, _identifier: "scorecard-1",
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.direct_identifier_resolution.direct_resolve_score_identifier",
+        lambda _client, _scorecard_id, _identifier: "score-1",
+    )
+
+    result = execute._default_score_update(
+        {
+            "scorecard_identifier": "Scorecard",
+            "score_identifier": "Score",
+            "code": "name: updated\n",
+            "version_note": "code-only",
+        }
+    )
+
+    assert result["success"] is True
+    assert result["guidelines_preserved"] is True
+    assert result["guidelines_source"] == "parent_version"
+    assert captured_inputs[0]["guidelines"] == ""
+
+
 def test_default_score_set_champion_does_not_duplicate_open_history_entry(
     monkeypatch,
 ) -> None:
@@ -8449,6 +8512,60 @@ def test_feedback_alignment_batch_accepts_scorecard_id(monkeypatch) -> None:
     assert result["scores"] == []
 
 
+def test_feedback_alignment_window_aggregates_pages_without_retaining_raw_items() -> None:
+    """Complete windows keep only compact pair counts across continuation pages."""
+    requests = []
+
+    class FakeClient:
+        def execute(self, _query, variables):
+            requests.append(variables["nextToken"])
+            if variables["nextToken"] is None:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [
+                            {
+                                "scorecardId": "card-1",
+                                "scoreId": "score-1",
+                                "initialAnswerValue": "No",
+                                "finalAnswerValue": "Yes",
+                                "isInvalid": False,
+                            },
+                            {
+                                "scorecardId": "card-1",
+                                "scoreId": "score-1",
+                                "initialAnswerValue": "No",
+                                "finalAnswerValue": "Yes",
+                                "isInvalid": True,
+                            },
+                        ],
+                        "nextToken": "page-2",
+                    }
+                }
+            return {
+                "listFeedbackItemByAccountIdAndEditedAt": {
+                    "items": [
+                        {
+                            "scorecardId": "card-1",
+                            "scoreId": "score-1",
+                            "initialAnswerValue": "Yes",
+                            "finalAnswerValue": "Yes",
+                            "isInvalid": False,
+                        },
+                    ],
+                    "nextToken": None,
+                }
+            }
+
+    aggregates = execute._aggregate_feedback_alignment_window(
+        FakeClient(), account_id="account-1", days=14
+    )
+
+    assert requests == [None, "page-2"]
+    assert aggregates == {
+        ("card-1", "score-1"): {("Yes", "No"): 1, ("Yes", "Yes"): 1}
+    }
+
+
 def test_feedback_alignment_batch_accepts_bounded_scorecard_list(monkeypatch) -> None:
     from plexus.cli.shared import client_utils, memoized_resolvers
 
@@ -8664,6 +8781,57 @@ def test_feedback_alignment_batch_prefetches_portfolio_window_once(monkeypatch) 
     assert result["scorecards"][1]["scores"][0]["disagreements"] == 0
     assert result["scorecards"][1]["scores"][0]["disagreement_rate"] is None
     assert result["scorecards"][1]["scores"][0]["reviewed_error_opportunity"] == 0.0
+
+
+def test_feedback_alignment_batch_derives_percent_accuracy_from_reviewed_counts(
+    monkeypatch,
+) -> None:
+    """Portfolio results have one percent accuracy contract, regardless of source units."""
+    from plexus.cli.feedback.feedback_service import FeedbackService
+
+    monkeypatch.setattr(
+        FeedbackService,
+        "_analyze_feedback_items",
+        staticmethod(
+            lambda _items: {
+                # Simulate a legacy ratio-valued upstream analysis.  The
+                # reviewed counts remain the canonical portfolio evidence.
+                "accuracy": 0.25,
+                "total_items": 4,
+                "disagreements": 1,
+            }
+        ),
+    )
+
+    result = execute._default_feedback_alignment_batch(
+        {"scorecard": "Example", "days": 30},
+        _prefetched_account_id="account-1",
+        _prefetched_scorecard_data={
+            "id": "scorecard-1",
+            "name": "Example",
+            "sections": {
+                "items": [
+                    {"scores": {"items": [{"id": "score-1", "name": "Score"}]}}
+                ]
+            },
+        },
+        _prefetched_feedback_items=[
+            {
+                "id": f"feedback-{index}",
+                "scorecardId": "scorecard-1",
+                "scoreId": "score-1",
+                "initialAnswerValue": "No" if index == 1 else "Yes",
+                "finalAnswerValue": "Yes",
+                "isInvalid": False,
+            }
+            for index in range(1, 5)
+        ],
+    )
+
+    row = result["scores"][0]
+    assert row["accuracy"] == 75.0
+    assert row["disagreement_rate"] == 0.25
+    assert row["reviewed_error_opportunity"] == 1.0
 
 
 def test_feedback_alignment_batch_bounds_concurrent_score_reads(monkeypatch) -> None:
