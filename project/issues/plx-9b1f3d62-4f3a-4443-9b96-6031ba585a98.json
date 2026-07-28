@@ -56,10 +56,16 @@
       "author": "ryan.porter",
       "text": "The corrected resource graph deployed until provisioned-concurrency initialization. CloudWatch showed the Console image lacked requests_aws4auth even though IAM GraphQL auth is enabled. Add the existing locked dependency explicitly to the Console image and fail image construction unless both boto3 and requests_aws4auth import successfully.",
       "created_at": "2026-07-28T18:29:52.035964Z"
+    },
+    {
+      "id": "5f2a033c-42d1-4341-a765-62a45c782830",
+      "author": "ryan.porter",
+      "text": "Live Amplify validation succeeded end-to-end on commit 8a598edf. Job 4 completed BUILD, DEPLOY, and VERIFY successfully after backend TypeScript compilation, CloudFormation creation, and Console provisioned-concurrency initialization. PR 514 is ready for review; keep the issue open until the fix lands.",
+      "created_at": "2026-07-28T19:15:25.052719Z"
     }
   ],
   "created_at": "2026-07-28T12:52:39.017652Z",
-  "updated_at": "2026-07-28T18:29:52.035964Z",
+  "updated_at": "2026-07-28T19:15:25.052719Z",
   "closed_at": null,
   "custom": {
     "source": "shared",
