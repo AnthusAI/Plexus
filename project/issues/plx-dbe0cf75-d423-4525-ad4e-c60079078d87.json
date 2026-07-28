@@ -3,7 +3,7 @@
   "title": "Migrate optimizer and task artifacts to GraphQLArtifactStore",
   "description": "Purpose: Remove default AWS credential requirements from optimizer and task artifact paths.\n\nOwned scope:\n- Optimizer manifests, event logs, runtime logs, and final artifacts.\n- Task output attachments.\n- Remaining API-key-only conditionals in optimizer, progress tracking, MCP, and procedure control paths that are part of the local workflow.\n\nAcceptance:\n- Optimizer artifacts and task output remain visible through existing dashboard pointers.\n- Core-path tests make boto3.client for S3 raise and still pass.\n- Existing artifact metadata remains readable.\n- No silent storage or authentication fallback remains.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -27,9 +27,34 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "00f9e5f9-2cc3-42f1-bcae-cc0b24e7c3ac",
+      "author": "ryan.porter",
+      "text": "Kickoff: canonical agent /root/aws_login_auth in /Users/ryan.porter/Projects/Plexus-aws-login-free-optimizer-task on codex/aws-login-free-optimizer-task, based on 06d9af09a8bf5ed3cb25535fdeb06c0a14a1e3e2. Owned scope: GraphQLArtifactStore migration for optimizer manifests/events/runtime/final artifacts and task output attachments, plus local-workflow API-key-only conditionals in optimizer/progress/MCP/procedure control. Dependency boundary: consume the centralized explicit Cognito/IAM dashboard-client modes and GraphQLArtifactStore; do not modify their owning lanes, add direct S3, introduce credential fallbacks, or alter Tactus at runtime. Behavior tests will first prove persistence while boto3.client('s3') fails.",
+      "created_at": "2026-07-28T13:24:24.654945Z"
+    },
+    {
+      "id": "fbf19940-9b4f-4b4a-bad8-1ca66b84cf0e",
+      "author": "ryan.porter",
+      "text": "Migrated task-output and optimizer artifacts to GraphQL-authorized HTTPS transfers; direct S3 client use is blocked in regression tests. Local client factory now selects Cognito interactively, IAM in Lambda, and honors explicit mode. Focused suite: 90 passed.",
+      "created_at": "2026-07-28T13:31:23.254014Z"
+    },
+    {
+      "id": "56c2de1e-6d7f-4ed7-9ec4-fb433ff178e0",
+      "author": "ryan.porter",
+      "text": "Hardened completion semantics: required final task-output persistence now fails the task/procedure instead of reporting success without an attachment. Added Cognito/IAM selection coverage for local, Lambda, ECS, and explicit API-key compatibility. Focused suite now has 93 passing tests.",
+      "created_at": "2026-07-28T13:33:33.298569Z"
+    },
+    {
+      "id": "11ca7f59-e6bd-4cd9-aa10-b0964a569cfe",
+      "author": "ryan.porter",
+      "text": "Added CommandTasks execution-path coverage: canonical-output transfer failure records FAILED and never calls complete_processing. Focused migration suite: 97 passed; diff check clean.",
+      "created_at": "2026-07-28T13:35:35.924997Z"
+    }
+  ],
   "created_at": "2026-07-28T12:52:38.690249Z",
-  "updated_at": "2026-07-28T12:52:38.690249Z",
+  "updated_at": "2026-07-28T13:35:35.924997Z",
   "closed_at": null,
   "custom": {
     "source": "shared",
