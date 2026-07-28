@@ -1,0 +1,30 @@
+{
+  "id": "plx-8b44b93a-a837-44e9-86f3-4b35fd9a3f6c",
+  "title": "Implement authenticated GraphQL artifact-transfer tickets",
+  "description": "Purpose: Add the server-authorized transfer plane for large artifacts.\n\nOwned scope:\n- Add createArtifactTransferTickets to the Amplify GraphQL schema.\n- Add its resolver, storage permissions, and canonical key policy.\n- Accept Cognito and workload IAM identities, never public API keys.\n- Validate resource existence, ownership boundary, artifact type, filename, content type, size, and SHA-256.\n- Return five-minute signed HTTPS transfers in batches of at most twenty.\n- Enforce a 100 MiB write limit and prevent caller-selected buckets or paths.\n\nAcceptance:\n- Contract tests cover typed validation, authorization rejection, canonical keys, batching, methods, headers, and expiry.\n- The operation is additive and deployable before any consumer migration.\n- No client-specific information or public transfer capability is introduced.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "labels": [
+    "aws-login-free",
+    "wave-1",
+    "lane-ticket-api"
+  ],
+  "dependencies": [
+    {
+      "target": "plx-0c9d2eb7-2e23-47c6-8a99-cccccf93216d",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-07-28T12:52:37.356177Z",
+  "updated_at": "2026-07-28T12:52:37.356177Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

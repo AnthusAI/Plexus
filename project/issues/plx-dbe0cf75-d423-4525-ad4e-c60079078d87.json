@@ -1,0 +1,38 @@
+{
+  "id": "plx-dbe0cf75-d423-4525-ad4e-c60079078d87",
+  "title": "Migrate optimizer and task artifacts to GraphQLArtifactStore",
+  "description": "Purpose: Remove default AWS credential requirements from optimizer and task artifact paths.\n\nOwned scope:\n- Optimizer manifests, event logs, runtime logs, and final artifacts.\n- Task output attachments.\n- Remaining API-key-only conditionals in optimizer, progress tracking, MCP, and procedure control paths that are part of the local workflow.\n\nAcceptance:\n- Optimizer artifacts and task output remain visible through existing dashboard pointers.\n- Core-path tests make boto3.client for S3 raise and still pass.\n- Existing artifact metadata remains readable.\n- No silent storage or authentication fallback remains.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "labels": [
+    "aws-login-free",
+    "wave-2",
+    "lane-optimizer-task"
+  ],
+  "dependencies": [
+    {
+      "target": "plx-0431ae55-b911-4124-a65a-a6e9acced05f",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-8b44b93a-a837-44e9-86f3-4b35fd9a3f6c",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-18708d95-45f6-4cd5-a6fc-98b40a1ebd96",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-07-28T12:52:38.690249Z",
+  "updated_at": "2026-07-28T12:52:38.690249Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

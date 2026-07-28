@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "event_id": "43a25955-20aa-418f-8e47-c634bc5f55f7",
+  "issue_id": "plx-b75a391b-b32e-4279-815f-60497195fdc7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T12:52:36.361Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Local evaluations and optimizations run without AWS credentials",
+    "description": "As a Plexus operator, I want local evaluation and optimization workflows to use application-authorized artifacts, so that routine score improvement work does not depend on an AWS login.\n\nFeature: Credential-free local evaluation and optimization\n\nScenario: Run an evaluation without AWS credentials\nGiven the user completed plexus login\nAnd all AWS profile and session variables are absent\nWhen an evaluation loads a stored reference dataset and persists its evidence\nThen the evaluation completes through GraphQL and signed HTTPS artifact transfers\nAnd no direct S3 client is created\n\nScenario: Run and resume an optimizer without AWS credentials\nGiven the user completed plexus login\nAnd all AWS profile and session variables are absent\nWhen a local optimizer checkpoints, stops, and resumes\nThen procedure state and optimizer artifacts remain available in the dashboard\nAnd no direct S3 client is created\n\nScenario: A required artifact transfer fails\nGiven a required artifact cannot be authorized, transferred, or verified\nWhen the workflow reaches that artifact\nThen the workflow fails with actionable evidence\nAnd it does not use a storage fallback.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": [
+      "aws-login-free",
+      "behavior"
+    ]
+  }
+}
