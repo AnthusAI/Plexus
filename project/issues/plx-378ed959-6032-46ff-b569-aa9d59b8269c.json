@@ -49,10 +49,16 @@
       "author": "ryan.porter",
       "text": "Sandbox acceptance is green with all local AWS credential/profile variables and the API key removed.\n\nEvidence:\n- Real hosted Cognito authorization-code login completed and stored the refresh credential in the OS keychain.\n- `plexus whoami` returned the sandbox test identity.\n- A Cognito-authenticated AppSync collection query succeeded.\n- An explicitly expired access-token cache refreshed from the keychain without user or AWS-login intervention.\n- `GraphQLArtifactStore` completed a signed HTTPS PUT/GET round trip; 54 downloaded bytes matched the declared SHA-256.\n- Local `boto3.client(\"s3\")` was forced to raise during the round trip and was never invoked.\n- `plexus logout` revoked and removed the application session, and the temporary sandbox user was deleted.\n\nAcceptance exposed and fixed four defects before the storage-migration lanes merge: unsupported Amplify function environment mutation, a cross-stack dependency cycle, the Python mutation's wrong GraphQL input type, and an unsigned duplicate checksum header on signed PUTs. It also added explicit CLI framework packaging, lightweight auth-command dispatch, and a numeric-loopback callback server that does not wait on reverse DNS.\n",
       "created_at": "2026-07-28T15:17:36.936097Z"
+    },
+    {
+      "id": "65f12e6e-5fa6-403c-be47-6d4e33df6b95",
+      "author": "ryan.porter",
+      "text": "Handoff: commit `a492473fe` is pushed on `codex/aws-login-free-sandbox-deploy-fix`; draft PR #509 targets `develop`.\n\nValidation and live sandbox acceptance are recorded above. The PR is the foundation gate for the paused migration lanes. Keep those lanes paused until this PR lands and their branches are refreshed from the resulting `develop` commit.\n",
+      "created_at": "2026-07-28T15:19:56.322495Z"
     }
   ],
   "created_at": "2026-07-28T13:41:48.584217Z",
-  "updated_at": "2026-07-28T15:17:36.936097Z",
+  "updated_at": "2026-07-28T15:19:56.322495Z",
   "closed_at": null,
   "custom": {}
 }
