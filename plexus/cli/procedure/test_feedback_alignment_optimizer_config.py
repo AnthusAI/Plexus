@@ -1126,6 +1126,15 @@ def test_optimizer_yaml_bounds_parallel_evaluation_processes():
     assert "local batch_results = _dispatch_evaluation_batch(batch)" in code
 
 
+def test_optimizer_yaml_rejects_incomplete_candidate_evaluation_batches():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "candidate_evaluation_incomplete" in code
+    assert "Candidate evaluation batch returned no terminal evidence" in code
+    assert "sv.evaluation_incomplete" in code
+
+
 def test_optimizer_does_not_treat_elapsed_or_inactive_time_as_evaluation_failure():
     config = _load_optimizer_config()
     code = config["code"]

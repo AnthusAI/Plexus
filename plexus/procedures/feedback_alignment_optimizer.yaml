@@ -7302,6 +7302,28 @@ code: |
         end
       end
 
+      -- A dispatched batch is not evidence of a completed comparison.  Never
+      -- allow missing handles/metrics to become zero-delta candidate results:
+      -- that would let synthesis reason from an unevaluated edit.
+      local incomplete_candidates = {}
+      for _, sv in ipairs(submitted_versions) do
+        sv.evaluation_incomplete = (not sv.fb_eval_id)
+          or (regression_available and not sv.acc_eval_id)
+        if sv.evaluation_incomplete then
+          table.insert(incomplete_candidates, tostring(sv.version_id or sv.index))
+        end
+      end
+      if #incomplete_candidates > 0 then
+        local incomplete_message = "Candidate evaluation batch returned no terminal evidence for: "
+          .. table.concat(incomplete_candidates, ", ")
+        State.set("candidate_evaluation_incomplete", {
+          cycle = cycle,
+          candidates = incomplete_candidates,
+          message = incomplete_message,
+        })
+        error("candidate_evaluation_incomplete: " .. incomplete_message)
+      end
+
       -- Classify hypotheses as succeeded/failed
       local succeeded = {}
       local failed = {}
