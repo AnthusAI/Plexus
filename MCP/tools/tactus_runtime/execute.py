@@ -2251,10 +2251,100 @@ def _load_feedback_alignment_window(
         variables["nextToken"] = next_token
 
 
+def _aggregate_feedback_alignment_window(
+    client: Any,
+    *,
+    account_id: str,
+    days: int,
+) -> dict[tuple[str, str], dict[tuple[str, str], int]]:
+    """Stream one complete feedback window into compact per-score pair counts.
+
+    Portfolio analysis needs only final/predicted label pairs.  Keeping raw
+    feedback rows until every target has been analyzed makes large, complete
+    account reads needlessly memory-bound.
+    """
+    from collections import Counter, defaultdict
+    from datetime import datetime, timedelta, timezone
+
+    query = """
+    query ListFeedbackItemsByEditedTime(
+        $accountId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $nextToken: String
+    ) {
+        listFeedbackItemByAccountIdAndEditedAt(
+            accountId: $accountId,
+            editedAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+        ) {
+            items {
+                scorecardId
+                scoreId
+                initialAnswerValue
+                finalAnswerValue
+                isInvalid
+            }
+            nextToken
+        }
+    }
+    """
+    end_time = datetime.now(timezone.utc) + timedelta(minutes=5)
+    start_time = end_time - timedelta(days=days, minutes=5)
+    variables = {
+        "accountId": account_id,
+        "startTime": start_time.isoformat().replace("+00:00", "Z"),
+        "endTime": end_time.isoformat().replace("+00:00", "Z"),
+        "nextToken": None,
+    }
+    aggregates: dict[tuple[str, str], Counter[tuple[str, str]]] = defaultdict(Counter)
+
+    while True:
+        response = client.execute(query, variables)
+        if not isinstance(response, dict):
+            raise TypeError(
+                "plexus.feedback.alignment_batch received an invalid feedback-window response"
+            )
+        if response.get("errors"):
+            raise RuntimeError(
+                "plexus.feedback.alignment_batch feedback-window query failed: "
+                + json.dumps(response["errors"])
+            )
+        page = response.get("listFeedbackItemByAccountIdAndEditedAt")
+        if not isinstance(page, dict):
+            data = response.get("data")
+            page = (
+                data.get("listFeedbackItemByAccountIdAndEditedAt")
+                if isinstance(data, dict)
+                else None
+            )
+        if not isinstance(page, dict):
+            raise RuntimeError(
+                "plexus.feedback.alignment_batch feedback-window data was missing"
+            )
+        for item in page.get("items") or []:
+            if not isinstance(item, dict) or item.get("isInvalid"):
+                continue
+            scorecard_id = str(item.get("scorecardId") or "").strip()
+            score_id = str(item.get("scoreId") or "").strip()
+            initial = item.get("initialAnswerValue")
+            final = item.get("finalAnswerValue")
+            if scorecard_id and score_id and initial is not None and final is not None:
+                aggregates[(scorecard_id, score_id)][(final, initial)] += 1
+        next_token = page.get("nextToken")
+        if not next_token:
+            return {key: dict(counts) for key, counts in aggregates.items()}
+        variables["nextToken"] = next_token
+
+
 def _default_feedback_alignment_batch(
     args: dict[str, Any],
     *,
     _prefetched_feedback_items: list[dict[str, Any]] | None = None,
+    _prefetched_feedback_pair_counts: dict[
+        tuple[str, str], dict[tuple[str, str], int]
+    ] | None = None,
     _prefetched_account_id: str | None = None,
     _prefetched_scorecard_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -2396,7 +2486,7 @@ def _default_feedback_alignment_batch(
             args,
             "plexus.feedback.alignment_batch",
         )
-        portfolio_feedback_items = _load_feedback_alignment_window(
+        portfolio_feedback_pair_counts = _aggregate_feedback_alignment_window(
             portfolio_client,
             account_id=portfolio_account_id,
             days=int(float(args.get("days", 7))),
@@ -2406,7 +2496,7 @@ def _default_feedback_alignment_batch(
             try:
                 return _default_feedback_alignment_batch(
                     {**single_args, "scorecard": identifier},
-                    _prefetched_feedback_items=portfolio_feedback_items,
+                    _prefetched_feedback_pair_counts=portfolio_feedback_pair_counts,
                     _prefetched_account_id=portfolio_account_id,
                     _prefetched_scorecard_data=prefetched_scorecards_by_id.get(identifier),
                 )
@@ -2563,6 +2653,14 @@ def _default_feedback_alignment_batch(
                 )
             )
 
+    prefetched_pair_counts_by_score: dict[str, dict[tuple[str, str], int]] | None = None
+    if _prefetched_feedback_pair_counts is not None:
+        prefetched_pair_counts_by_score = {
+            score_id: counts
+            for (item_scorecard_id, score_id), counts in _prefetched_feedback_pair_counts.items()
+            if item_scorecard_id == scorecard_id
+        }
+
     async def analyze_scores() -> list[dict[str, Any] | None]:
         semaphore = asyncio.Semaphore(FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY)
 
@@ -2571,7 +2669,13 @@ def _default_feedback_alignment_batch(
             score_id = score["id"]
 
             try:
-                if prefetched_by_score is not None:
+                if prefetched_pair_counts_by_score is not None:
+                    from plexus.analysis.feedback_analyzer import analyze_feedback_pair_counts
+
+                    analysis = analyze_feedback_pair_counts(
+                        prefetched_pair_counts_by_score.get(score_id, {})
+                    )
+                elif prefetched_by_score is not None:
                     analysis = FeedbackService._analyze_feedback_items(
                         prefetched_by_score.get(score_id, [])
                     )

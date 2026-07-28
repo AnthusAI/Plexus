@@ -7805,6 +7805,60 @@ def test_feedback_alignment_batch_accepts_scorecard_id(monkeypatch) -> None:
     assert result["scores"] == []
 
 
+def test_feedback_alignment_window_aggregates_pages_without_retaining_raw_items() -> None:
+    """Complete windows keep only compact pair counts across continuation pages."""
+    requests = []
+
+    class FakeClient:
+        def execute(self, _query, variables):
+            requests.append(variables["nextToken"])
+            if variables["nextToken"] is None:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [
+                            {
+                                "scorecardId": "card-1",
+                                "scoreId": "score-1",
+                                "initialAnswerValue": "No",
+                                "finalAnswerValue": "Yes",
+                                "isInvalid": False,
+                            },
+                            {
+                                "scorecardId": "card-1",
+                                "scoreId": "score-1",
+                                "initialAnswerValue": "No",
+                                "finalAnswerValue": "Yes",
+                                "isInvalid": True,
+                            },
+                        ],
+                        "nextToken": "page-2",
+                    }
+                }
+            return {
+                "listFeedbackItemByAccountIdAndEditedAt": {
+                    "items": [
+                        {
+                            "scorecardId": "card-1",
+                            "scoreId": "score-1",
+                            "initialAnswerValue": "Yes",
+                            "finalAnswerValue": "Yes",
+                            "isInvalid": False,
+                        },
+                    ],
+                    "nextToken": None,
+                }
+            }
+
+    aggregates = execute._aggregate_feedback_alignment_window(
+        FakeClient(), account_id="account-1", days=14
+    )
+
+    assert requests == [None, "page-2"]
+    assert aggregates == {
+        ("card-1", "score-1"): {("Yes", "No"): 1, ("Yes", "Yes"): 1}
+    }
+
+
 def test_feedback_alignment_batch_accepts_bounded_scorecard_list(monkeypatch) -> None:
     from plexus.cli.shared import client_utils, memoized_resolvers
 
