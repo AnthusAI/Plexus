@@ -1,4 +1,6 @@
 import pytest
+import sys
+from types import SimpleNamespace
 import time
 from unittest.mock import Mock, patch
 from gql.transport.exceptions import TransportQueryError
@@ -82,6 +84,46 @@ def test_client_configures_transport_correctly(mock_env, mock_transport):
     assert transport_kwargs['verify'] is True
     assert transport_kwargs['retries'] == 3
     assert transport_kwargs['timeout'] == 15
+
+
+def test_client_sends_explicit_cognito_bearer_token(mock_transport, monkeypatch):
+    monkeypatch.setenv('PLEXUS_API_URL', 'https://test.api')
+    monkeypatch.setenv('PLEXUS_GRAPHQL_AUTH_MODE', 'cognito')
+    token_provider = Mock(get_access_token=Mock(return_value='access-token'))
+
+    PlexusDashboardClient(token_provider=token_provider)
+
+    transport_kwargs = mock_transport.call_args[1]
+    assert transport_kwargs['headers']['Authorization'] == 'Bearer access-token'
+    assert 'x-api-key' not in transport_kwargs['headers']
+
+
+def test_client_does_not_fall_back_to_api_key_when_cognito_session_is_unavailable(monkeypatch):
+    monkeypatch.setenv('PLEXUS_API_URL', 'https://test.api')
+    monkeypatch.setenv('PLEXUS_API_KEY', 'legacy-key')
+    monkeypatch.setenv('PLEXUS_GRAPHQL_AUTH_MODE', 'cognito')
+    token_provider = Mock(get_access_token=Mock(side_effect=RuntimeError('Run `plexus login` to authenticate.')))
+
+    with pytest.raises(ValueError, match='plexus login'):
+        PlexusDashboardClient(token_provider=token_provider)
+
+    token_provider.get_access_token.assert_called_once()
+
+
+def test_client_keeps_explicit_iam_workload_auth(mock_transport, monkeypatch):
+    monkeypatch.setenv('PLEXUS_API_URL', 'https://example.appsync-api.us-east-1.amazonaws.com/graphql')
+    monkeypatch.setenv('PLEXUS_GRAPHQL_AUTH_MODE', 'iam')
+    frozen = Mock(access_key='access', secret_key='secret', token='session')
+    session = Mock(get_credentials=Mock(return_value=Mock(get_frozen_credentials=Mock(return_value=frozen))))
+    aws_auth = Mock()
+    monkeypatch.setitem(sys.modules, 'boto3', SimpleNamespace(Session=Mock(return_value=session)))
+    monkeypatch.setitem(sys.modules, 'requests_aws4auth', SimpleNamespace(AWS4Auth=aws_auth))
+
+    PlexusDashboardClient()
+
+    aws_auth.assert_called_once_with('access', 'secret', 'us-east-1', 'appsync', session_token='session')
+    assert mock_transport.call_args.kwargs['auth'] is aws_auth.return_value
+    assert 'x-api-key' not in mock_transport.call_args.kwargs['headers']
 
 def test_execute_handles_query_error(mock_env, mock_gql_client):
     """Test that execute handles GraphQL query errors"""

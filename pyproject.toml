@@ -55,6 +55,7 @@ openai-cost-calculator = { git = "https://github.com/AnthusAI/openai_cost_calcul
 fastmcp = { version = ">=2.3.5", optional = true }
 ollama = { version = ">=0.1.6", optional = true }
 requests = ">=2.31.0"
+keyring = ">=25.7.0"
 requests-aws4auth = { version = "*", optional = true }
 qdrant-client = { version = ">=1.10.0", optional = true }
 # --- Optional: ML/scoring/visualization ---
