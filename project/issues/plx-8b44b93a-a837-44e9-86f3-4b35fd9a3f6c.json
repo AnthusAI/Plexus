@@ -3,7 +3,7 @@
   "title": "Implement authenticated GraphQL artifact-transfer tickets",
   "description": "Purpose: Add the server-authorized transfer plane for large artifacts.\n\nOwned scope:\n- Add createArtifactTransferTickets to the Amplify GraphQL schema.\n- Add its resolver, storage permissions, and canonical key policy.\n- Accept Cognito and workload IAM identities, never public API keys.\n- Validate resource existence, ownership boundary, artifact type, filename, content type, size, and SHA-256.\n- Return five-minute signed HTTPS transfers in batches of at most twenty.\n- Enforce a 100 MiB write limit and prevent caller-selected buckets or paths.\n\nAcceptance:\n- Contract tests cover typed validation, authorization rejection, canonical keys, batching, methods, headers, and expiry.\n- The operation is additive and deployable before any consumer migration.\n- No client-specific information or public transfer capability is introduced.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -55,11 +55,17 @@
       "author": "ryan.porter",
       "text": "Final compatibility correction: canonical keys now match existing consumers exactly. DATA_SET is datasets/{accountId}/{resourceId}/{filename}; PROCEDURE is procedures/{resourceId}/{filename}; PROCEDURE_DASHBOARD_STATE is reportblocks/procedures/{resourceId}/dashboard_state.json; SCORE_RESULT is scoreresults/{resourceId}/{filename}; TASK is tasks/{resourceId}/{filename}. Empty Cognito claims no longer authorize ticket issuance. Focused tests cover all five layouts and identity rejection.",
       "created_at": "2026-07-28T13:17:43.150868Z"
+    },
+    {
+      "id": "0ccf8954-facf-4fb2-b0b3-7b3425d8bf36",
+      "author": "ryan.porter",
+      "text": "Landed in develop through PR #504 at merge commit 3136f8d43. Independent verification: 17 resolver/schema contract tests passed, schema generation check passed, canonical legacy object-key layouts were preserved, and Kanbus validates. The behavior story remains open until deployed transfer acceptance.",
+      "created_at": "2026-07-28T13:21:58.699445Z"
     }
   ],
   "created_at": "2026-07-28T12:52:37.356177Z",
-  "updated_at": "2026-07-28T13:17:43.150868Z",
-  "closed_at": null,
+  "updated_at": "2026-07-28T13:21:58.961481Z",
+  "closed_at": "2026-07-28T13:21:58.961481Z",
   "custom": {
     "source": "shared",
     "project_label": "plx"

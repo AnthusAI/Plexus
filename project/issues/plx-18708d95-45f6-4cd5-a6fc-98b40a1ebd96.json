@@ -3,7 +3,7 @@
   "title": "Implement GraphQLArtifactStore",
   "description": "Purpose: Implement the single application-authorized artifact byte-transfer client.\n\nOwned scope:\n- Ticket batching through the frozen GraphQL contract.\n- HTTPS upload and download.\n- SHA-256 and size validation.\n- Upload bytes before persisting metadata pointers.\n- Preserve _s3_key while adding checksum, size, and content type.\n- Retry once by requesting a new ticket only when a signed URL expires.\n\nExclusions:\n- Direct S3, inline-data, API-key, and AWS-credential fallbacks.\n- Procedure, evaluation, optimizer, and task-specific migration logic.\n\nAcceptance:\n- Unit and contract tests use mocked GraphQL and HTTP responses.\n- Authorization, transfer, and integrity errors fail closed.\n- Tests prove no boto3 S3 client is constructed.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -49,11 +49,17 @@
       "author": "ryan.porter",
       "text": "Review fix: successful uploads now always set _s3_key to the newly authorized ticket objectKey while retaining unrelated metadata; this preserves the compatible field without retaining a stale pointer. Added explicit coverage for the standard S3 Request has expired response, which remains eligible for the single permitted ticket refresh. The revised metadata assertion failed before implementation; focused Python 3.12 validation now passes (10 passed), along with flake8, py_compile, git diff --check, and kanbus validate.",
       "created_at": "2026-07-28T13:06:07.902876Z"
+    },
+    {
+      "id": "771f331b-6dc2-460e-988e-10c68fb5fde3",
+      "author": "ryan.porter",
+      "text": "Landed in develop through PR #502 at merge commit e61ac6786. Independent verification covered ticket batching, HTTPS-only transfer, integrity checks, expiry-only retry, fresh object-key metadata, no direct S3 construction, lint, compilation, and Kanbus validation. The behavior story remains open for end-to-end acceptance.",
+      "created_at": "2026-07-28T13:21:59.215398Z"
     }
   ],
   "created_at": "2026-07-28T12:52:37.689199Z",
-  "updated_at": "2026-07-28T13:06:07.902876Z",
-  "closed_at": null,
+  "updated_at": "2026-07-28T13:21:59.473175Z",
+  "closed_at": "2026-07-28T13:21:59.473175Z",
   "custom": {
     "source": "shared",
     "project_label": "plx"

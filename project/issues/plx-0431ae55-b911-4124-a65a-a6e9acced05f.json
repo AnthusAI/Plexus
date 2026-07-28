@@ -3,7 +3,7 @@
   "title": "Implement Cognito CLI authentication and dashboard client support",
   "description": "Purpose: Implement the official human authentication path.\n\nOwned scope:\n- Cognito hosted authorization configuration required for authorization-code PKCE.\n- plexus login, plexus whoami, and plexus logout.\n- Operating-system keychain credential storage and automatic refresh.\n- Explicit Cognito bearer-token transport in PlexusDashboardClient while retaining explicit IAM workload authentication.\n\nExclusions:\n- Artifact ticket resolver and storage-consumer migrations.\n- AWS SSO, public API-key, or automatic authentication fallbacks.\n\nAcceptance:\n- Behavior-first tests cover login, loopback callback validation, PKCE, keychain persistence, refresh, whoami, logout, revoked sessions, and explicit auth modes.\n- Protected commands fail with plexus login guidance when application authentication is unavailable.\n- Existing workload IAM behavior remains supported.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -67,11 +67,17 @@
       "author": "ryan.porter",
       "text": "Blocking type-review fix complete: Amplify externalProviders now uses the supported direct callbackUrls, logoutUrls, and scopes properties (the backend factory supplies domainPrefix). Direct TypeScript compile against installed backend-auth definitions passed. The browser-launch fallback now prints the authorization URL and keeps the bound callback listener available. Focused suite is 54 passed; flake8 and poetry lock validation passed.",
       "created_at": "2026-07-28T13:19:20.766119Z"
+    },
+    {
+      "id": "143d117c-661b-4620-9464-17931ae8f222",
+      "author": "ryan.porter",
+      "text": "Landed in develop through PR #503 at merge commit 3bebd8775. Independent verification: 54 focused authentication/client tests passed, the Amplify auth configuration uses supported externalProviders types, diff validation passed, and Kanbus validates. The behavior story remains open for credential-free integration acceptance.",
+      "created_at": "2026-07-28T13:21:58.149477Z"
     }
   ],
   "created_at": "2026-07-28T12:52:37.023332Z",
-  "updated_at": "2026-07-28T13:19:20.766119Z",
-  "closed_at": null,
+  "updated_at": "2026-07-28T13:21:58.444982Z",
+  "closed_at": "2026-07-28T13:21:58.444982Z",
   "custom": {
     "source": "shared",
     "project_label": "plx"
