@@ -16,10 +16,16 @@
       "author": "ryan.porter",
       "text": "Implemented scorecard-scoped opportunity ranking with exact opaque-ID selectors, literal case-insensitive name-prefix selectors, union and deduplication, exhaustive enumeration before local filtering, exact zero-match behavior, scope coverage evidence, and scope-bound fingerprints. Local validation is complete: focused runtime suite 270 passed; full Python 3.11 and 3.12 suites each 3,940 passed with 13 dispatch-regression tests passing on each version; version synchronization, lock validation, lint, and diff checks passed; Node 20 dashboard typecheck and 650 unit tests passed; Storybook built and 700 Chromium tests passed. Independent implementation, CI, and delivery audits found no blocking defects. The story remains in progress until the change merges to develop.",
       "created_at": "2026-07-28T01:04:36.584095Z"
+    },
+    {
+      "id": "4bd49fe9-d7f2-4bb8-bd80-5b7a6f986245",
+      "author": "ryan.porter",
+      "text": "Final integration validation completed after merging current develop. The merge exposed and resolved two compatibility issues: the dependency manifest now keeps the MCP framework on its supported major version, and input-source tests use the repository's explicit score-class resolver. Final results on the merge commit: Python 3.11 and 3.12 each passed 3,931 tests with 13 dispatch-regression tests passing per version; focused optimization/runtime coverage passed 293 tests; lint, version synchronization, lock validation, and diff checks passed. The unchanged dashboard tree retains the validated Node 20 results: typecheck, 650 unit tests, Storybook build, and 700 Chromium tests. The tracked scorecard-path symlink was restored after test-generated filesystem changes. Ready for PR review; keep this story open until merge to develop.",
+      "created_at": "2026-07-28T01:17:28.717497Z"
     }
   ],
   "created_at": "2026-07-28T00:40:41.295656Z",
-  "updated_at": "2026-07-28T01:04:36.584095Z",
+  "updated_at": "2026-07-28T01:17:28.717497Z",
   "closed_at": null,
   "custom": {}
 }
