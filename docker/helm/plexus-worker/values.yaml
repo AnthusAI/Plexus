@@ -197,6 +197,9 @@ plexus:
 
   api:
     url: ""  # Set via values override or Octopus variables
+    # Workload authentication is always explicit. Use api_key for existing
+    # deployments or iam when the service account supplies AWS role credentials.
+    authMode: api_key
     key: ""  # Set via values override or Octopus variables
 
   account:

@@ -59,8 +59,18 @@ def test_local_chart_renders_ready_persistent_object_store_with_secret_backed_wo
     assert env["AWS_SECRET_ACCESS_KEY"]["valueFrom"]["secretKeyRef"]["name"] == (
         "plexus-local-object-store"
     )
+    assert env["PLEXUS_GRAPHQL_AUTH_MODE"]["value"] == "api_key"
     assert "OPENAI_API_KEY" in env
     assert "ANTHROPIC_API_KEY" not in env
+
+    recovery = by_identity[("CronJob", "plexus-plexus-worker-procedure-recovery")]
+    recovery_env = {
+        item["name"]: item
+        for item in recovery["spec"]["jobTemplate"]["spec"]["template"]["spec"][
+            "containers"
+        ][0]["env"]
+    }
+    assert recovery_env["PLEXUS_GRAPHQL_AUTH_MODE"]["value"] == "api_key"
 
     bucket_job = by_identity[("Job", "plexus-local-object-store-buckets")]
     args = bucket_job["spec"]["template"]["spec"]["containers"][0]["args"]
@@ -96,3 +106,63 @@ def test_effective_values_pin_built_images_without_embedding_llm_secret(tmp_path
     }
     assert values["plexus-worker"]["llm"]["existingSecret"] == "plexus-local-llm-keys"
     assert "apiKey" not in values["plexus-worker"]["llm"]
+
+
+def test_worker_chart_accepts_explicit_iam_without_injecting_api_key() -> None:
+    chart = Path(__file__).resolve().parents[2] / "docker" / "helm" / "plexus-worker"
+    rendered = subprocess.run(
+        (
+            "helm",
+            "template",
+            "plexus",
+            str(chart),
+            "--set",
+            "plexus.api.url=https://example.invalid/graphql",
+            "--set",
+            "plexus.api.authMode=iam",
+            "--set",
+            "procedureRecovery.enabled=true",
+        ),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+
+    documents = [document for document in yaml.safe_load_all(rendered) if document]
+    workloads = [
+        document
+        for document in documents
+        if document["kind"] in {"Deployment", "CronJob"}
+    ]
+    assert {document["kind"] for document in workloads} == {"Deployment", "CronJob"}
+    for workload in workloads:
+        pod_spec = (
+            workload["spec"]["template"]["spec"]
+            if workload["kind"] == "Deployment"
+            else workload["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+        )
+        env = {item["name"]: item for item in pod_spec["containers"][0]["env"]}
+        assert env["PLEXUS_GRAPHQL_AUTH_MODE"]["value"] == "iam"
+        assert "PLEXUS_API_KEY" not in env
+
+
+def test_worker_chart_rejects_unknown_graphql_auth_mode() -> None:
+    chart = Path(__file__).resolve().parents[2] / "docker" / "helm" / "plexus-worker"
+    rendered = subprocess.run(
+        (
+            "helm",
+            "template",
+            "plexus",
+            str(chart),
+            "--set",
+            "plexus.api.url=https://example.invalid/graphql",
+            "--set",
+            "plexus.api.authMode=automatic",
+        ),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert rendered.returncode != 0
+    assert "plexus.api.authMode must be one of api_key or iam" in rendered.stderr

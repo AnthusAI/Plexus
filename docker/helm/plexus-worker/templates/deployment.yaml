@@ -88,11 +88,15 @@ spec:
             secretKeyRef:
               name: {{ include "plexus-worker.secretName" . }}
               key: api-url
+        - name: PLEXUS_GRAPHQL_AUTH_MODE
+          value: {{ .Values.plexus.api.authMode | quote }}
+        {{- if eq .Values.plexus.api.authMode "api_key" }}
         - name: PLEXUS_API_KEY
           valueFrom:
             secretKeyRef:
               name: {{ include "plexus-worker.secretName" . }}
               key: api-key
+        {{- end }}
         - name: PLEXUS_ACCOUNT_KEY
           valueFrom:
             secretKeyRef:
