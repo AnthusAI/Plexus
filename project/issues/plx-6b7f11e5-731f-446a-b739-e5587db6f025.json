@@ -1,0 +1,31 @@
+{
+  "id": "plx-6b7f11e5-731f-446a-b739-e5587db6f025",
+  "title": "Count and clear persisted checkpoints through the storage adapter",
+  "description": "## Problem\n\nThe continuation reset path treats the GraphQL artifact pointer stored in Procedure metadata as if it were an inline checkpoint collection. It reports the number of pointer fields as checkpoints and clears the pointer without using the supported storage protocol.\n\n## Expected behavior\n\nGiven procedure checkpoints are stored as authorized artifacts\nWhen an operator resets checkpoints while preserving State\nThen the command counts actual execution-log entries\nAnd clears them through the storage adapter\nAnd preserves State, Lua state, dashboard state, optimizer artifacts, and integrity metadata.\n\n## Acceptance\n\n- A behavior test first demonstrates that pointer-field count is not checkpoint count.\n- Reset reports the actual number of execution-log entries.\n- State remains unchanged and the saved execution log is empty.\n- No inline or direct-storage fallback is introduced.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "80ed3709-6c47-4200-888d-c0aeaa5c7701",
+      "author": "ryan.porter",
+      "text": "Kickoff: live continuation acceptance had an empty execution log but reset_checkpoints_only reported four cleared checkpoints because it counted the integrity-pointer fields. Writing a behavior test with two real execution-log entries and a four-field pointer before switching the operation to PlexusStorageAdapter.",
+      "created_at": "2026-07-28T18:56:58.915101Z"
+    },
+    {
+      "id": "1b9a7f9e-b051-47f7-a081-34dcdad69a66",
+      "author": "ryan.porter",
+      "text": "Milestone: the behavior-first test is green. Checkpoint reset now counts and clears the persisted execution log through PlexusStorageAdapter while preserving State and Lua state.",
+      "created_at": "2026-07-28T19:11:14.295845Z"
+    }
+  ],
+  "created_at": "2026-07-28T18:56:52.515639Z",
+  "updated_at": "2026-07-28T19:11:14.295845Z",
+  "closed_at": null,
+  "custom": {}
+}

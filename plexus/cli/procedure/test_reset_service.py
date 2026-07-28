@@ -1,8 +1,9 @@
+from datetime import datetime, timezone
 from typing import Any, Dict
 
-from tactus.protocols.models import ProcedureMetadata
+from tactus.protocols.models import CheckpointEntry, ProcedureMetadata
 
-from plexus.cli.procedure.reset_service import clone_state_for_branch
+from plexus.cli.procedure.reset_service import clone_state_for_branch, reset_checkpoints_only
 
 
 class _FakeStorageAdapter:
@@ -71,3 +72,68 @@ def test_clone_state_for_branch_clears_costs_and_runtime_mailbox_state(monkeypat
     assert "last_mailbox_check" not in target.state
     assert "_procedure_id" not in target.state
     assert _FakeStorageAdapter._status_by_id["target-proc"] == "PENDING"
+
+
+def test_reset_checkpoints_only_counts_execution_log_and_preserves_state(monkeypatch):
+    metadata = ProcedureMetadata(
+        procedure_id="procedure-1",
+        execution_log=[
+            CheckpointEntry(
+                position=0,
+                type="checkpoint",
+                result={"value": 1},
+                timestamp=datetime.now(timezone.utc),
+            ),
+            CheckpointEntry(
+                position=1,
+                type="checkpoint",
+                result={"value": 2},
+                timestamp=datetime.now(timezone.utc),
+            ),
+        ],
+        state={"preserved": True},
+        lua_state={"cursor": 7},
+    )
+    saved = []
+    statuses = []
+
+    class _Storage:
+        def __init__(self, _client, _procedure_id):
+            pass
+
+        def load_procedure_metadata(self, _procedure_id):
+            return metadata
+
+        def save_procedure_metadata(self, procedure_id, updated):
+            saved.append((procedure_id, updated))
+
+        def update_procedure_status(self, procedure_id, status, waiting_on_message_id=None):
+            statuses.append((procedure_id, status, waiting_on_message_id))
+
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.storage.PlexusStorageAdapter",
+        _Storage,
+    )
+
+    class _Client:
+        def execute(self, query, variables):
+            if "GetProcedure" in query:
+                return {
+                    "getProcedure": {
+                        "id": "procedure-1",
+                        "metadata": '{"checkpoints":{"_s3_key":"key","sha256":"sum","size_bytes":2,"content_type":"application/json"}}',
+                    }
+                }
+            if "UpdateProcedure" in query:
+                return {"updateProcedure": {"id": "procedure-1"}}
+            raise AssertionError(query)
+
+    result = reset_checkpoints_only(_Client(), "procedure-1")
+
+    assert result == {"cleared_count": 2, "remaining_count": 0}
+    assert len(saved) == 1
+    assert saved[0][0] == "procedure-1"
+    assert saved[0][1].execution_log == []
+    assert saved[0][1].state == {"preserved": True}
+    assert saved[0][1].lua_state == {"cursor": 7}
+    assert statuses == [("procedure-1", "PENDING", None)]

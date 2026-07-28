@@ -138,69 +138,21 @@ def reset_checkpoints_only(client, procedure_id: str) -> Dict[str, Any]:
     Returns:
         Dict with cleared_count and remaining_count
     """
-    query = """
-        query GetProcedure($id: ID!) {
-            getProcedure(id: $id) {
-                id
-                metadata
-            }
-        }
-    """
+    from plexus.cli.procedure.tactus_adapters.storage import PlexusStorageAdapter
 
-    result = client.execute(query, {'id': procedure_id})
-    procedure = result.get('getProcedure')
+    storage = PlexusStorageAdapter(client, procedure_id)
+    metadata = storage.load_procedure_metadata(procedure_id)
+    initial_count = len(metadata.execution_log)
 
-    if not procedure:
-        raise ValueError(f"Procedure {procedure_id} not found")
-
-    metadata_str = procedure.get('metadata')
-    if metadata_str:
-        try:
-            metadata = json.loads(metadata_str)
-        except json.JSONDecodeError:
-            metadata = {}
-    else:
-        metadata = {}
-
-    initial_count = len(metadata.get('checkpoints', {}))
-
-    # Clear ONLY checkpoints — state, lua_state are preserved intentionally
-    metadata['checkpoints'] = {}
-
-    mutation = """
-        mutation UpdateProcedureMetadata($id: ID!, $metadata: AWSJSON!) {
-            updateProcedure(input: {
-                id: $id
-                metadata: $metadata
-                status: "PENDING"
-            }) {
-                id
-                name
-                description
-                status
-                featured
-                isTemplate
-                code
-                category
-                version
-                isDefault
-                parentProcedureId
-                waitingOnMessageId
-                metadata
-                createdAt
-                updatedAt
-                accountId
-                scorecardId
-                scoreId
-                scoreVersionId
-            }
-        }
-    """
-
-    client.execute(mutation, {
-        'id': procedure_id,
-        'metadata': json.dumps(metadata)
-    })
+    # Clear the real persisted execution log through the supported storage
+    # protocol. State and Lua state stay on the same metadata object unchanged.
+    metadata.execution_log.clear()
+    storage.save_procedure_metadata(procedure_id, metadata)
+    storage.update_procedure_status(
+        procedure_id,
+        "PENDING",
+        waiting_on_message_id=None,
+    )
 
     logger.info(f"Cleared {initial_count} checkpoints from procedure {procedure_id} (State preserved)")
 

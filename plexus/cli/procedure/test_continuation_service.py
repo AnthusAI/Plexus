@@ -49,12 +49,28 @@ def test_prepare_branch_persists_verified_code_attachment_without_s3(monkeypatch
         "plexus.cli.procedure.tactus_adapters.storage.GraphQLArtifactStore",
         FakeArtifactStore,
     )
+    operation_order = []
+
+    class FakeProcedureService:
+        def __init__(self, _client):
+            pass
+
+        def _get_or_create_task_with_stages_for_procedure(self, **kwargs):
+            operation_order.append(("task", kwargs))
+            return SimpleNamespace(id="branch-task")
+
+    monkeypatch.setattr(
+        "plexus.cli.procedure.service.ProcedureService",
+        FakeProcedureService,
+    )
     clone_calls = []
     monkeypatch.setattr(
         "plexus.cli.procedure.reset_service.clone_state_for_branch",
-        lambda _client, source_id, target_id, cycle: clone_calls.append(
-            (source_id, target_id, cycle)
-        ) or {"iterations_copied": cycle},
+        lambda _client, source_id, target_id, cycle: (
+            operation_order.append(("clone", target_id)),
+            clone_calls.append((source_id, target_id, cycle)),
+            {"iterations_copied": cycle},
+        )[-1],
     )
 
     class FakeClient:
@@ -81,6 +97,19 @@ def test_prepare_branch_persists_verified_code_attachment_without_s3(monkeypatch
     assert metadata["code_s3_key"] == "procedures/branch-procedure/code.tac"
     assert metadata["code_artifact"]["sha256"] == upload.request.sha256
     assert clone_calls == [("source-procedure", "branch-procedure", 2)]
+    assert operation_order == [
+        (
+            "task",
+            {
+                "procedure_id": "branch-procedure",
+                "account_id": "account-1",
+                "scorecard_id": "scorecard-1",
+                "score_id": "score-1",
+                "dispatch_mode": "local",
+            },
+        ),
+        ("clone", "branch-procedure"),
+    ]
 
 
 def test_build_continuation_context_recovers_baseline_params_and_state_ids(monkeypatch):

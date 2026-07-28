@@ -441,6 +441,19 @@ def prepare_branch(
     )
     logger.info("Saved verified procedure definition for branch %s", target_id)
 
+    # Optimizer state persistence indexes the decision manifest, event stream,
+    # and runtime log against the branch Task. Establish that resource before
+    # cloning state so the storage adapter can remain fail-closed.
+    task = ProcedureService(client)._get_or_create_task_with_stages_for_procedure(
+        procedure_id=target_id,
+        account_id=account_id,
+        scorecard_id=source.get("scorecardId"),
+        score_id=source.get("scoreId"),
+        dispatch_mode="local",
+    )
+    if not task:
+        raise ValueError(f"Failed to create Task for branch procedure {target_id}")
+
     # Clone state truncated to cycle N
     clone_result = clone_state_for_branch(client, source_id, target_id, cycle)
     logger.info(
