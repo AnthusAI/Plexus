@@ -1,0 +1,37 @@
+{
+  "id": "plx-c472ed3d-3dd8-4c54-a9ae-f8cab7955bda",
+  "title": "Use application authentication in evaluation and resource CLI clients",
+  "description": "## Problem\n\nAfter a successful application login, several local CLI command modules still construct the dashboard client through the legacy API-key-only constructor. Identity commands succeed, but resource discovery and evaluation setup fail before making GraphQL requests when no API key is present.\n\n## Expected behavior\n\nGiven a user has an active Cognito application session\nAnd no AWS or API-key credentials are available\nWhen the user invokes scorecard discovery or starts an evaluation\nThen the command uses the centralized explicit-auth client factory\nAnd GraphQL requests use Cognito authorization\nAnd no API-key, IAM, AWS-profile, or direct-storage fallback occurs.\n\n## Acceptance\n\n- Behavior-first tests reproduce the stale constructor path.\n- Evaluation and resource CLI entrypoints delegate to the centralized client factory.\n- Existing command-level test doubles remain supported without runtime monkeypatching of Tactus.\n- Cognito sandbox discovery and representative evaluation setup succeed without AWS or API-key credentials.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2705b8d5-17b8-4e03-b9f6-41c4fc71d69e",
+      "author": "ryan.porter",
+      "text": "Kickoff: credential-free sandbox login succeeds, but scorecard discovery fails before GraphQL because its module-level client factory still invokes the legacy API-key constructor. Evaluation uses the same stale pattern. Adding a focused behavior test before routing these entrypoints through the centralized explicit-auth factory.",
+      "created_at": "2026-07-28T19:21:27.396725Z"
+    },
+    {
+      "id": "c4739eef-bd8f-46d5-a245-735af13c2c4a",
+      "author": "ryan.porter",
+      "text": "Milestone: four behavior specifications first failed against the stale module factories, and the endpoint-discovery specification failed when no API URL environment variable was present. The implementation now delegates evaluation, scorecard, score, and dataset entrypoints to the centralized auth factory and discovers the sandbox GraphQL URL from Amplify outputs. The focused regression suite is green (89 tests), and live Cognito scorecard discovery succeeds with AWS and API-key credentials absent.",
+      "created_at": "2026-07-28T19:27:47.021200Z"
+    },
+    {
+      "id": "506114d6-bfbe-459e-a4cc-7f81bf143f1b",
+      "author": "ryan.porter",
+      "text": "Sandbox evidence: with AWS profile/session variables, API keys, and model keys absent, the Cognito session listed scorecards and loaded one explicit score version through the evaluation configuration path. The loaded configuration retained its exact score and version identifiers. Model execution was intentionally not attempted because no model-provider credential is available in this validation environment.",
+      "created_at": "2026-07-28T19:31:47.165327Z"
+    }
+  ],
+  "created_at": "2026-07-28T19:21:22.041384Z",
+  "updated_at": "2026-07-28T19:31:47.165327Z",
+  "closed_at": null,
+  "custom": {}
+}

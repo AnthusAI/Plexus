@@ -69,6 +69,33 @@ def test_create_client_uses_iam_for_lambda_without_api_key(monkeypatch):
     assert captured["account_key"] == "acct-key"
 
 
+def test_create_client_discovers_graphql_url_from_amplify_outputs(monkeypatch, tmp_path):
+    output = tmp_path / "amplify_outputs.json"
+    output.write_text(
+        '{"data":{"url":"https://sandbox.example/graphql"}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(client_utils, "load_config", lambda: None)
+    monkeypatch.setattr(client_utils, "_amplify_output_paths", lambda: (output,))
+    monkeypatch.delenv("PLEXUS_API_URL", raising=False)
+    monkeypatch.delenv("NEXT_PUBLIC_PLEXUS_API_URL", raising=False)
+    captured = {}
+
+    class _StubClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.api_url = kwargs["api_url"]
+            self.context = kwargs["context"]
+
+    monkeypatch.setattr(client_utils, "PlexusDashboardClient", _StubClient)
+
+    client_utils.create_client()
+
+    assert captured["api_url"] == "https://sandbox.example/graphql"
+    assert captured["auth_mode"] == "cognito"
+    assert captured["api_key"] is None
+
+
 def test_cli_startup_preserves_explicit_runtime_env_over_dotenv(tmp_path):
     (tmp_path / ".env").write_text(
         "\n".join(

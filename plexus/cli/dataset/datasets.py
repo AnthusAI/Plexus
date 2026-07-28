@@ -28,8 +28,10 @@ from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier
 
 
 def create_client() -> PlexusDashboardClient:
-    """Create a client and log its configuration"""
-    client = PlexusDashboardClient()
+    """Create a client through the centralized explicit-auth factory."""
+    from plexus.cli.shared.client_utils import create_client as create_authenticated_client
+
+    client = create_authenticated_client()
     logging.debug(f"Using API URL: {client.api_url}")
     return client
 

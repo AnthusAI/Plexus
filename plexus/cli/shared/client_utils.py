@@ -5,6 +5,8 @@ This module provides centralized client creation functionality to avoid circular
 """
 
 import logging
+import json
+from pathlib import Path
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.client import ClientContext
 import os
@@ -12,6 +14,30 @@ from plexus.config.loader import load_config
 from plexus.attribution.actor_context import resolve_actor_context
 
 logger = logging.getLogger(__name__)
+
+
+def _amplify_output_paths():
+    repository_root = Path(__file__).resolve().parents[3]
+    return (
+        repository_root / "dashboard" / "amplify_outputs.json",
+        repository_root / "amplify_outputs.json",
+    )
+
+
+def _resolve_api_url() -> str | None:
+    configured = os.getenv("PLEXUS_API_URL") or os.getenv("NEXT_PUBLIC_PLEXUS_API_URL")
+    if configured:
+        return configured
+
+    for path in _amplify_output_paths():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            continue
+        discovered = payload.get("data", {}).get("url")
+        if discovered:
+            return str(discovered)
+    return None
 
 
 def _resolve_auth_mode() -> str:
@@ -45,10 +71,7 @@ def create_client() -> PlexusDashboardClient:
         
     # Dispatch-critical CLI/MCP flows must honor the explicit runtime endpoint first.
     # NEXT_PUBLIC values are frontend defaults and may point at a different checkout/env.
-    api_url = (
-        os.getenv('PLEXUS_API_URL')
-        or os.getenv('NEXT_PUBLIC_PLEXUS_API_URL')
-    )
+    api_url = _resolve_api_url()
     auth_mode = _resolve_auth_mode()
     api_key = (
         os.getenv('PLEXUS_API_KEY') or os.getenv('NEXT_PUBLIC_PLEXUS_API_KEY')
