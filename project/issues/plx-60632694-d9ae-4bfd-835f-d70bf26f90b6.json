@@ -1,0 +1,25 @@
+{
+  "id": "plx-60632694-d9ae-4bfd-835f-d70bf26f90b6",
+  "title": "Remove critical OS findings from scoring runtime artifact",
+  "description": "The newly published scoring-only image scan reports critical and high findings in unnecessary operating-system packages pulled by git, Graphviz, and related libraries. Remove unused packages, use a stable supported base variant, rebuild, and verify the ECR scan rather than dismissing the findings.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "944c3bca-e07a-4a97-a090-a23c52380122",
+      "author": "derek.norrbom",
+      "text": "Removed git, Graphviz, libcurl, and libpq from the scoring-only image, removed Graphviz from the scoring extra, and pinned the image to python:3.11-slim-bookworm instead of the rolling slim variant. Validation: artifact pipeline tests 7 passed; LangGraph and Tactus runtime tests 64 passed; formatting and lint pass. Local container build could not run because the Docker daemon is unavailable, so the branch will be built and scanned in an isolated AWS artifact channel before this bug is closed.",
+      "created_at": "2026-07-29T19:34:11.115605Z"
+    }
+  ],
+  "created_at": "2026-07-29T19:31:30.009738Z",
+  "updated_at": "2026-07-29T19:34:11.115605Z",
+  "closed_at": null,
+  "custom": {}
+}

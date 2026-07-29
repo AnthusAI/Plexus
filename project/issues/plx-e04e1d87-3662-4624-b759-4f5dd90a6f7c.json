@@ -28,10 +28,16 @@
       "author": "derek.norrbom",
       "text": "Opened PR #519 to develop. GitHub Actions did not start any jobs because the organization account reports failed payments or an exhausted spending limit; this is an external CI billing blocker, not a test failure. Local project validation remains green, and the task stays in progress until CI can run and the PR lands.",
       "created_at": "2026-07-29T19:24:27.235003Z"
+    },
+    {
+      "id": "9f7ee0d8-fc6b-4b72-a651-c6d7b188d76d",
+      "author": "derek.norrbom",
+      "text": "Live ECR validation of the new production artifact found 4 critical and 26 high OS-package findings. Root cause is the scoring Dockerfile installing git, Graphviz, libcurl, and libpq despite the scoring runtime using copied source and binary Python wheels. Security remediation is being tracked separately under the artifact epic; no production consumer will be deployed with this digest.",
+      "created_at": "2026-07-29T19:31:29.985176Z"
     }
   ],
   "created_at": "2026-07-29T19:00:32.527795Z",
-  "updated_at": "2026-07-29T19:24:27.235003Z",
+  "updated_at": "2026-07-29T19:31:29.985176Z",
   "closed_at": null,
   "custom": {}
 }

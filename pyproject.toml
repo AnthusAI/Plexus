@@ -108,7 +108,7 @@ scoring = [
     "langchain", "langchain-core", "langchain-community",
     "langgraph", "langchain-aws", "langchain-openai",
     "langchain-ollama", "langchain-anthropic", "langgraph-checkpoint-postgres",
-    "psycopg", "tactus", "nltk", "graphviz",
+    "psycopg", "tactus", "nltk",
 ]
 # Direct dependencies used by the interactive Console worker in addition to
 # the scoring runtime. Keep broad service infrastructure out of this image.

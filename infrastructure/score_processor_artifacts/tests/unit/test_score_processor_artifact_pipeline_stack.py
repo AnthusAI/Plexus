@@ -1,4 +1,5 @@
 import json
+import tomllib
 import sys
 from pathlib import Path
 
@@ -103,9 +104,7 @@ def test_scoring_runtime_dockerfile_is_isolated_from_legacy_build():
         repository_root / "score-processor-lambda" / "Dockerfile"
     ).read_text()
     scoring_dockerfile = (
-        repository_root
-        / "score-processor-lambda"
-        / "Dockerfile.scoring-runtime"
+        repository_root / "score-processor-lambda" / "Dockerfile.scoring-runtime"
     ).read_text()
     scoring_dockerignore = (
         repository_root
@@ -121,6 +120,21 @@ def test_scoring_runtime_dockerfile_is_isolated_from_legacy_build():
     assert "!score-processor-lambda/handler.py" in scoring_dockerignore
 
 
+def test_scoring_runtime_avoids_unnecessary_system_packages():
+    repository_root = Path(__file__).resolve().parents[4]
+    scoring_dockerfile = (
+        repository_root / "score-processor-lambda" / "Dockerfile.scoring-runtime"
+    ).read_text()
+    with (repository_root / "pyproject.toml").open("rb") as pyproject_file:
+        pyproject = tomllib.load(pyproject_file)
+
+    assert scoring_dockerfile.startswith("FROM python:3.11-slim-bookworm\n")
+    assert "apt-get" not in scoring_dockerfile
+    assert " graphviz" not in scoring_dockerfile
+    assert " git" not in scoring_dockerfile
+    assert "graphviz" not in pyproject["tool"]["poetry"]["extras"]["scoring"]
+
+
 def test_build_writes_generic_plexus_metadata_parameters():
     template_text = json.dumps(_template_json())
 
@@ -128,8 +142,7 @@ def test_build_writes_generic_plexus_metadata_parameters():
     assert "/plexus/score-processor-artifacts/development/image-digest" in template_text
     assert "/plexus/score-processor-artifacts/development/image-tag" in template_text
     assert (
-        "/plexus/score-processor-artifacts/development/source-revision"
-        in template_text
+        "/plexus/score-processor-artifacts/development/source-revision" in template_text
     )
     assert "aws ssm put-parameter" in template_text
     assert "capacity" not in template_text.lower()
