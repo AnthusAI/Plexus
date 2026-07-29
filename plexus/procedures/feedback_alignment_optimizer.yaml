@@ -152,6 +152,11 @@ outputs:
     type: string
     required: false
 
+  winning_version_id:
+    type: string
+    required: false
+    description: "Accepted score version selected for guarded external promotion"
+
   iterations:
     type: array
     required: false

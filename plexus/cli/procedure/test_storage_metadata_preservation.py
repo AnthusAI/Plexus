@@ -6,17 +6,28 @@ from plexus.cli.procedure.tactus_adapters.storage import PlexusStorageAdapter
 from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 
-class _FakeS3Client:
+class _FakeArtifactStore:
     def __init__(self):
-        self.objects = {}
-        self.put_calls = 0
+        self.upload_batches = []
 
-    def put_object(self, Bucket, Key, Body, ContentType):
-        self.put_calls += 1
-        self.objects[(Bucket, Key)] = {
-            "Body": Body,
-            "ContentType": ContentType,
-        }
+    def upload_batch(self, uploads):
+        self.upload_batches.append(list(uploads))
+        pointers = []
+        for upload in uploads:
+            prefix = (
+                "reportblocks/procedures"
+                if upload.request.artifact_type == "PROCEDURE_DASHBOARD_STATE"
+                else "procedures"
+            )
+            pointers.append(
+                {
+                    "_s3_key": f"{prefix}/{upload.request.resource_id}/{upload.request.filename}",
+                    "sha256": upload.request.sha256,
+                    "size_bytes": upload.request.size_bytes,
+                    "content_type": upload.request.content_type,
+                }
+            )
+        return pointers
 
 
 class _FakeClient:
@@ -54,26 +65,17 @@ class _FakeClient:
 
 def test_save_procedure_metadata_preserves_runtime_and_failure_fields(monkeypatch):
     fake_client = _FakeClient()
-    fake_s3 = _FakeS3Client()
+    artifact_store = _FakeArtifactStore()
     optimizer_index_calls = []
-
-    monkeypatch.setattr("plexus.cli.procedure.tactus_adapters.storage.boto3.client", lambda _name: fake_s3)
     monkeypatch.setattr(
         "plexus.cli.shared.optimizer_results.OptimizerResultsService.index_optimizer_run",
         lambda self, procedure_id, **kwargs: (
             optimizer_index_calls.append({"procedure_id": procedure_id, **kwargs})
-            or {
-                "pointer": {
-                    "task_id": "task-123",
-                    "manifest": "tasks/task-123/optimizer/manifest.json",
-                    "events": "tasks/task-123/optimizer/events.jsonl",
-                    "runtime_log": "tasks/task-123/optimizer/runtime.log",
-                }
-            }
+            or {"pointer": {"manifest": "tasks/task-123/optimizer/manifest.json"}}
         ),
     )
 
-    storage = PlexusStorageAdapter(fake_client, "proc-123")
+    storage = PlexusStorageAdapter(fake_client, "proc-123", artifact_store=artifact_store)
     metadata = ProcedureMetadata(
         procedure_id="proc-123",
         execution_log=[],
@@ -96,7 +98,8 @@ def test_save_procedure_metadata_preserves_runtime_and_failure_fields(monkeypatc
     assert fake_client.saved_metadata["checkpoints"]["_s3_key"].endswith("/checkpoints.json")
     assert fake_client.saved_metadata["optimizer_artifacts"]["manifest"] == "tasks/task-123/optimizer/manifest.json"
     assert fake_client.retry_policies[-1] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME
-    assert fake_s3.put_calls == 4
+    assert len(artifact_store.upload_batches) == 1
+    assert len(artifact_store.upload_batches[0]) == 4
     assert optimizer_index_calls and optimizer_index_calls[0]["procedure_id"] == "proc-123"
 
 

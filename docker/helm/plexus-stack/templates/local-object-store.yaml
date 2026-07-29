@@ -1,6 +1,7 @@
 {{- if .Values.localObjectStore.enabled }}
 {{- $name := printf "%s-local-object-store" .Release.Name | trunc 63 | trimSuffix "-" -}}
 {{- $secretName := default $name .Values.localObjectStore.auth.existingSecret -}}
+{{- $tlsSecretName := .Values.localObjectStore.tls.existingSecret -}}
 {{- if not .Values.localObjectStore.auth.existingSecret }}
 apiVersion: v1
 kind: Secret
@@ -78,7 +79,13 @@ spec:
         - name: minio
           image: "{{ .Values.localObjectStore.image.repository }}:{{ .Values.localObjectStore.image.tag }}"
           imagePullPolicy: {{ .Values.localObjectStore.image.pullPolicy }}
-          args: ["server", "/data"]
+          args:
+            - server
+            - /data
+            {{- if .Values.localObjectStore.tls.enabled }}
+            - --certs-dir
+            - /etc/minio/certs
+            {{- end }}
           env:
             - name: MINIO_ROOT_USER
               valueFrom:
@@ -97,6 +104,9 @@ spec:
             httpGet:
               path: /minio/health/ready
               port: api
+              {{- if .Values.localObjectStore.tls.enabled }}
+              scheme: HTTPS
+              {{- end }}
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 12
@@ -104,6 +114,9 @@ spec:
             httpGet:
               path: /minio/health/live
               port: api
+              {{- if .Values.localObjectStore.tls.enabled }}
+              scheme: HTTPS
+              {{- end }}
             initialDelaySeconds: 10
             periodSeconds: 10
           resources:
@@ -111,6 +124,11 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            {{- if .Values.localObjectStore.tls.enabled }}
+            - name: tls
+              mountPath: /etc/minio/certs
+              readOnly: true
+            {{- end }}
       volumes:
         - name: data
           {{- if .Values.localObjectStore.persistence.enabled }}
@@ -119,6 +137,18 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+        {{- if .Values.localObjectStore.tls.enabled }}
+        - name: tls
+          secret:
+            secretName: {{ required "localObjectStore.tls.existingSecret is required" $tlsSecretName | quote }}
+            items:
+              - key: {{ .Values.localObjectStore.tls.publicCertSecretKey | quote }}
+                path: public.crt
+              - key: {{ .Values.localObjectStore.tls.privateKeySecretKey | quote }}
+                path: private.key
+              - key: {{ .Values.localObjectStore.tls.caCertSecretKey | quote }}
+                path: CAs/ca.crt
+        {{- end }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -148,7 +178,7 @@ spec:
           command: ["/bin/sh", "-ec"]
           args:
             - |
-              until mc alias set local http://{{ $name }}:{{ .Values.localObjectStore.service.port }} "$ACCESS_KEY" "$SECRET_KEY"; do sleep 1; done
+              until mc alias set local {{ if .Values.localObjectStore.tls.enabled }}https{{ else }}http{{ end }}://{{ $name }}:{{ .Values.localObjectStore.service.port }} "$ACCESS_KEY" "$SECRET_KEY"; do sleep 1; done
               mc mb --ignore-existing local/{{ .Values.localObjectStore.buckets.datasets }}
               mc mb --ignore-existing local/{{ .Values.localObjectStore.buckets.reportBlockDetails }}
               mc mb --ignore-existing local/{{ .Values.localObjectStore.buckets.rubricMemory }}
@@ -165,4 +195,19 @@ spec:
                 secretKeyRef:
                   name: {{ $secretName }}
                   key: secret-access-key
+          {{- if .Values.localObjectStore.tls.enabled }}
+          volumeMounts:
+            - name: object-store-ca
+              mountPath: /root/.mc/certs/CAs
+              readOnly: true
+          {{- end }}
+      {{- if .Values.localObjectStore.tls.enabled }}
+      volumes:
+        - name: object-store-ca
+          secret:
+            secretName: {{ required "localObjectStore.tls.existingSecret is required" $tlsSecretName | quote }}
+            items:
+              - key: {{ .Values.localObjectStore.tls.caCertSecretKey | quote }}
+                path: ca.crt
+      {{- end }}
 {{- end }}

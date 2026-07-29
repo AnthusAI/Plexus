@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from socketserver import TCPServer
 from typing import Any, Callable, Mapping, Optional, Protocol
 from urllib.parse import parse_qs, urlencode, urlparse
 
@@ -141,6 +142,14 @@ class _LoopbackCallbackListener:
 
     def close(self) -> None:
         self._server.server_close()
+
+
+class _LoopbackHTTPServer(ThreadingHTTPServer):
+    """Bind a numeric loopback address without a potentially slow DNS lookup."""
+
+    def server_bind(self) -> None:
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 class KeyringRefreshTokenStore:
@@ -273,7 +282,7 @@ class CognitoAuthService:
                 return
 
         try:
-            server = ThreadingHTTPServer((redirect.hostname or "127.0.0.1", redirect.port or 8765), CallbackHandler)
+            server = _LoopbackHTTPServer((redirect.hostname or "127.0.0.1", redirect.port or 8765), CallbackHandler)
         except OSError as exc:
             raise LoopbackCallbackError(
                 f"The configured Plexus login callback port {redirect.port} is unavailable. "

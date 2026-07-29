@@ -1942,11 +1942,43 @@ async def _execute_tactus(
         result = _attach_persisted_costs_to_result(result, storage, procedure_id)
 
         execution_succeeded = bool(isinstance(result, dict) and result.get("success"))
+        waiting_on_message_id = None
+        if not execution_succeeded:
+            try:
+                persisted_metadata = storage.load_procedure_metadata(procedure_id)
+                persisted_status = str(getattr(persisted_metadata, "status", "") or "").upper()
+                persisted_message_id = getattr(
+                    persisted_metadata,
+                    "waiting_on_message_id",
+                    None,
+                )
+                if persisted_status == "WAITING_FOR_HUMAN" and persisted_message_id:
+                    waiting_on_message_id = str(persisted_message_id)
+                    result.pop("error", None)
+                    result.update(
+                        {
+                            "status": "WAITING_FOR_HUMAN",
+                            "waiting_on_message_id": waiting_on_message_id,
+                            "message": "Procedure is waiting for human response",
+                        }
+                    )
+            except Exception as waiting_state_error:
+                logger.debug(
+                    "Could not inspect persisted human-wait state for %s: %s",
+                    procedure_id,
+                    waiting_state_error,
+                )
 
         if _task_id:
             try:
                 if execution_succeeded:
                     _complete_all_task_stages(client, _task_id)
+                elif waiting_on_message_id:
+                    logger.info(
+                        "Procedure %s paused for human response %s; leaving task stages resumable",
+                        procedure_id,
+                        waiting_on_message_id,
+                    )
                 else:
                     task_error = ""
                     if isinstance(result, dict):

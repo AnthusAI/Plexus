@@ -79,6 +79,21 @@ spec:
               name: {{ include "graphql-proxy.secretName" . }}
               key: upstream-api-key
 
+        {{- if .Values.artifactStore.enabled }}
+        # Local object-store credentials are held by the proxy signer only;
+        # workers receive short-lived HTTPS tickets for migrated artifacts.
+        - name: PLEXUS_ARTIFACT_STORE_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "artifactStore.existingSecret is required" .Values.artifactStore.existingSecret | quote }}
+              key: {{ .Values.artifactStore.accessKeySecretKey | quote }}
+        - name: PLEXUS_ARTIFACT_STORE_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.artifactStore.existingSecret | quote }}
+              key: {{ .Values.artifactStore.secretKeySecretKey | quote }}
+        {{- end }}
+
         # Configuration from ConfigMap
         envFrom:
         - configMapRef:

@@ -28,6 +28,11 @@ def parser() -> argparse.ArgumentParser:
                 action="store_true",
                 help="Build an immutable HEAD snapshot and install or upgrade the local stack first.",
             )
+            command.add_argument(
+                "--interrupt-after-optimizer",
+                action="store_true",
+                help="Acceptance-only hook: fail once after optimization completes so resume is exercised.",
+            )
 
     cleanup = commands.add_parser("cleanup")
     cleanup.add_argument("--run-id", required=True)
@@ -79,6 +84,9 @@ def main(argv: list[str] | None = None) -> int:
             "PLEXUS_DEMO_OUTPUT_DIR": str(output_dir.resolve()),
             "PLEXUS_DEMO_PROMOTE": "1" if args.promote else "0",
             "PLEXUS_DEMO_RESUME": "1" if args.command == "resume" else "0",
+            "PLEXUS_DEMO_INTERRUPT_AFTER_OPTIMIZER": (
+                "1" if getattr(args, "interrupt_after_optimizer", False) else "0"
+            ),
         }
     )
     suite = Path(__file__).with_name("acceptance_suite.py")

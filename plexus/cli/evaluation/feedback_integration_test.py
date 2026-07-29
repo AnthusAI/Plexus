@@ -145,7 +145,7 @@ class TestFeedbackCommandModes:
             '--scorecard', 'test',
             '--score', 'test',
             '--days', '7'
-        ], catch_exceptions=False)
+        ])
         
         # Mode 2: With version (will fail but differently)
         result2 = runner.invoke(feedback, [
@@ -153,10 +153,12 @@ class TestFeedbackCommandModes:
             '--score', 'test',
             '--days', '7',
             '--version', 'v123'
-        ], catch_exceptions=False)
+        ])
         
-        # Both should fail (no real data), but the error messages might differ
-        # This test just verifies the parameter is accepted
+        # Both may fail because no real data or authentication is configured.
+        # This test only verifies that Click accepted the parameter shape.
+        assert result1.exit_code != 2
+        assert result2.exit_code != 2
         assert '--version' not in result2.output or 'unrecognized' not in result2.output.lower()
 
 

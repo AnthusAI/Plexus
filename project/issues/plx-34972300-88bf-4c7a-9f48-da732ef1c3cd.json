@@ -1,0 +1,37 @@
+{
+  "id": "plx-34972300-88bf-4c7a-9f48-da732ef1c3cd",
+  "title": "Create branch task before persisting optimizer artifacts",
+  "description": "## Problem\n\nOptimizer branch preparation creates the destination Procedure and immediately clones optimizer state. Application-authorized state persistence also indexes optimizer decision artifacts against the destination Task, but that Task does not yet exist, so the branch fails closed after leaving a partial Procedure.\n\n## Expected behavior\n\nGiven an optimizer procedure has persisted decision state\nWhen an operator prepares a branch from a completed cycle\nThen the destination Procedure and its Task exist before optimizer state is cloned\nAnd the cloned state plus decision artifacts are persisted through authorized transfer tickets\nAnd no partial branch is reported as ready.\n\n## Acceptance\n\n- An executable behavior test first reproduces the missing-Task ordering failure.\n- Branch preparation creates or reuses the destination Task before cloning state.\n- Optimizer manifest, event, and runtime-log attachments index successfully.\n- The source procedure remains unchanged and no fallback is introduced.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "26adefc0-1a6a-45ca-bbaa-797cc1fe744c",
+      "author": "ryan.porter",
+      "text": "Kickoff: combined PR #513 + #495 sandbox acceptance successfully indexed three optimizer artifacts on the source Task, then prepare_branch failed while cloning state because the new branch Procedure had no Task. Writing a focused ordering test before creating the destination Task ahead of state persistence.",
+      "created_at": "2026-07-28T18:54:59.531562Z"
+    },
+    {
+      "id": "dffa0cb8-8833-467f-95fb-7e857570effd",
+      "author": "ryan.porter",
+      "text": "Milestone: the behavior-first ordering test is green. Branch preparation creates the destination Task before cloning optimizer state and indexing its decision artifacts.",
+      "created_at": "2026-07-28T19:11:14.089577Z"
+    },
+    {
+      "id": "35925b23-85db-4945-a51f-843d3fc226eb",
+      "author": "ryan.porter",
+      "text": "Commit 30c3c4f49. Publication handoff: fix is pushed to draft PR #513 at head d6f60e219. The final combined PR #513 + PR #495 candidate passed 470 cross-PR tests, 4,026 Python tests on both 3.11 and 3.12, dashboard typecheck and 680 unit tests, Storybook build, and 700 Chromium tests. Cognito and IAM-role sandbox canaries passed without direct S3 or stored AWS credentials. Keep this bug in progress until the fix lands in develop.",
+      "created_at": "2026-07-28T19:38:09.016824Z"
+    }
+  ],
+  "created_at": "2026-07-28T18:54:53.106561Z",
+  "updated_at": "2026-07-28T19:38:09.016824Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bf07d595-44a5-4d8f-932f-7513f1ce9d30",
+  "issue_id": "plx-97c8af85-17af-4884-b125-f6b1216e2cf4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T18:51:54.595Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Finalize direct procedure state after human-response resume",
+    "description": "## Problem\n\nThe direct resume command replays a persisted human response and completes procedure logic, but it bypasses the task-tracked local execution path. The procedure and its task can remain marked running after successful completion, and final task output is not updated.\n\n## Expected behavior\n\nGiven a local procedure is waiting for a human response\nAnd a canonical response exists\nWhen the operator resumes the procedure\nThen execution reuses the supported local task-tracked path\nAnd the procedure and task reach their truthful terminal states\nAnd final task output is persisted through the application-authorized artifact path.\n\n## Acceptance\n\n- An executable behavior test first proves resume bypasses terminal-state finalization.\n- Resume uses the same local task-tracking path as initial execution.\n- Successful replay completes both procedure and task and persists final output.\n- No remote dispatch or storage fallback is introduced.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": []
+  }
+}

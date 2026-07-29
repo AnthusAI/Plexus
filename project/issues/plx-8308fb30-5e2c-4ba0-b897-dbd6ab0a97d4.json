@@ -1,0 +1,37 @@
+{
+  "id": "plx-8308fb30-5e2c-4ba0-b897-dbd6ab0a97d4",
+  "title": "Refresh IAM GraphQL signing credentials in long-running workloads",
+  "description": "## Problem\n\nThe IAM GraphQL client freezes temporary role credentials when it is constructed. Long-running Lambda or container workloads can retain an expired signing key instead of using the SDK credential provider's automatic rotation.\n\n## Expected behavior\n\nGiven a deployed workload uses IAM GraphQL authentication\nWhen its temporary role credentials rotate\nThen every AppSync request is signed with currently valid credentials\nAnd the client never falls back to Cognito, API keys, AWS profiles, or stored access keys.\n\n## Acceptance\n\n- A behavior test proves the signer retains the refreshable credential provider.\n- A workload without role credentials fails closed.\n- A sandbox role completes an AppSync artifact round trip without stored credentials.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "eaf3e3bc-a7f7-4129-a86b-6c7359017176",
+      "author": "ryan.porter",
+      "text": "Kickoff: validating PR #513 at pinned head b301bc50 in isolated worktree /Users/ryan.porter/Projects/Plexus-pr-513-validation on codex/pr-513-validation. First milestone is a failing signer-contract test, followed by the minimal refreshable-credential implementation and a deployed sandbox role round trip.",
+      "created_at": "2026-07-28T18:04:15.611701Z"
+    },
+    {
+      "id": "cabf6900-45e3-4d6b-8071-b5ea960a2a90",
+      "author": "ryan.porter",
+      "text": "Specification failed against the pinned PR head as expected: the IAM client called get_frozen_credentials and constructed a static AWS4Auth signer. Minimal implementation now retains the botocore credential provider through AWS4Auth(refreshable_credentials=...), avoids an explicit AWS profile, and fails closed when no role credentials exist. Focused dashboard-client suite: 31 passed.",
+      "created_at": "2026-07-28T18:05:49.448795Z"
+    },
+    {
+      "id": "483afe7a-9f09-474d-a98c-681c5fddaccd",
+      "author": "ryan.porter",
+      "text": "Commit ad503fa59. The IAM-role canary issued a ticket and completed verified upload and download with no S3 permission or stored credentials; the no-AppSync-permission role was denied. Publication handoff: fix is pushed to draft PR #513 at head d6f60e219. The final combined PR #513 + PR #495 candidate passed 470 cross-PR tests, 4,026 Python tests on both 3.11 and 3.12, dashboard typecheck and 680 unit tests, Storybook build, and 700 Chromium tests. Cognito and IAM-role sandbox canaries passed without direct S3 or stored AWS credentials. Keep this bug in progress until the fix lands in develop.",
+      "created_at": "2026-07-28T19:38:09.938061Z"
+    }
+  ],
+  "created_at": "2026-07-28T18:04:10.922459Z",
+  "updated_at": "2026-07-28T19:38:09.938061Z",
+  "closed_at": null,
+  "custom": {}
+}

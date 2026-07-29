@@ -298,7 +298,7 @@ description = "Unicode to ASCII transliteration"
 optional = true
 python-versions = ">=3.3"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\""
 files = [
     {file = "anyascii-0.3.3-py3-none-any.whl", hash = "sha256:f5ab5e53c8781a36b5a40e1296a0eeda2f48c649ef10c3921c1381b1d00dee7a"},
     {file = "anyascii-0.3.3.tar.gz", hash = "sha256:c94e9dd9d47b3d9494eca305fef9447d00b4bf1a32aff85aa746fa3ec7fb95c3"},
@@ -1232,10 +1232,9 @@ simplejson = ">=3.19.3"
 name = "click"
 version = "8.1.8"
 description = "Composable command line interface toolkit"
-optional = true
+optional = false
 python-versions = ">=3.7"
 groups = ["main"]
-markers = "extra == \"scoring\" or extra == \"procedures\" or extra == \"all\" or extra == \"console\" or extra == \"infra\" or extra == \"ml\""
 files = [
     {file = "click-8.1.8-py3-none-any.whl", hash = "sha256:63c132bbbed01578a06712a2d1f497bb62d9c1c0d329b7903a866228027263b2"},
     {file = "click-8.1.8.tar.gz", hash = "sha256:ed53c9d8990d83c2a27deae68e4ee337473f6330c040a31d4225c9574d16096a"},
@@ -1367,7 +1366,7 @@ description = "Python library for calculating contours of 2D quadrilateral grids
 optional = true
 python-versions = ">=3.11"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\""
 files = [
     {file = "contourpy-1.3.3-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:709a48ef9a690e1343202916450bc48b9e51c049b089c7f79a267b46cffcdaa1"},
     {file = "contourpy-1.3.3-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:23416f38bfd74d5d28ab8429cc4d63fa67d5068bd711a85edb1c3fb0c3e2f381"},
@@ -1460,7 +1459,7 @@ description = "Fixes contractions such as `you're` to you `are`"
 optional = true
 python-versions = "*"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\""
 files = [
     {file = "contractions-0.1.73-py2.py3-none-any.whl", hash = "sha256:398cee3b69c37307a50dce4930d961a0f42b48fdae9562df73bed5683008d3bc"},
 ]
@@ -1798,7 +1797,7 @@ description = "Composable style cycles"
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\""
 files = [
     {file = "cycler-0.12.1-py3-none-any.whl", hash = "sha256:85cef7cff222d8644161529808465972e51340599459b8ac3ccbac5a854e0d30"},
     {file = "cycler-0.12.1.tar.gz", hash = "sha256:88bb128f02ba341da8ef447245a9e138fae777f6a23943da4540077d3601eb1c"},
@@ -2112,7 +2111,7 @@ description = "An implementation of lxml.xmlfile for the standard library"
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\""
 files = [
     {file = "et_xmlfile-2.0.0-py3-none-any.whl", hash = "sha256:7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa"},
     {file = "et_xmlfile-2.0.0.tar.gz", hash = "sha256:dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54"},
@@ -2352,7 +2351,7 @@ description = "Tools to manipulate font files"
 optional = true
 python-versions = ">=3.10"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\""
 files = [
     {file = "fonttools-4.62.1-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:ad5cca75776cd453b1b035b530e943334957ae152a36a88a320e779d61fc980c"},
     {file = "fonttools-4.62.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:0b3ae47e8636156a9accff64c02c0924cbebad62854c4a6dbdc110cd5b4b341a"},
@@ -4180,7 +4179,7 @@ description = "A fast implementation of the Cassowary constraint solver"
 optional = true
 python-versions = ">=3.10"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\""
 files = [
     {file = "kiwisolver-1.5.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:32cc0a5365239a6ea0c6ed461e8838d053b57e397443c0ca894dcc8e388d4374"},
     {file = "kiwisolver-1.5.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:cc0b66c1eec9021353a4b4483afb12dfd50e3669ffbb9152d6842eb34c7e29fd"},
@@ -5173,7 +5172,7 @@ description = "Python plotting package"
 optional = true
 python-versions = ">=3.10"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\""
 files = [
     {file = "matplotlib-3.10.9-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:77210dce9cb8153dffc967efaae990543392563d5a376d4dd8539bebcb0ed217"},
     {file = "matplotlib-3.10.9-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:1e7698ac9868428e84d2c967424803b2472ff7167d9d6590d4204ed775343c3b"},
@@ -6287,7 +6286,7 @@ description = "A Python library to read/write Excel 2010 xlsx/xlsm files"
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\""
 files = [
     {file = "openpyxl-3.1.5-py2.py3-none-any.whl", hash = "sha256:5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2"},
     {file = "openpyxl-3.1.5.tar.gz", hash = "sha256:cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050"},
@@ -6506,7 +6505,7 @@ description = "Powerful data structures for data analysis, time series, and stat
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\" or extra == \"evaluation\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\" or extra == \"evaluation\""
 files = [
     {file = "pandas-2.1.4-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:bdec823dc6ec53f7a6339a0e34c68b144a7a1fd28d80c260534c39c62c5bf8c9"},
     {file = "pandas-2.1.4-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:294d96cfaf28d688f30c918a765ea2ae2e0e71d3536754f4b6de0ea4a496d034"},
@@ -6641,7 +6640,7 @@ description = "Python Imaging Library (fork)"
 optional = true
 python-versions = ">=3.10"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\""
 files = [
     {file = "pillow-12.2.0-cp310-cp310-macosx_10_10_x86_64.whl", hash = "sha256:a4e8f36e677d3336f35089648c8955c51c6d386a13cf6ee9c189c5f5bd713a9f"},
     {file = "pillow-12.2.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:2e589959f10d9824d39b350472b92f0ce3b443c0a3442ebf41c40cb8361c5b97"},
@@ -7225,7 +7224,7 @@ description = "pyahocorasick is a fast and memory efficient library for exact or
 optional = true
 python-versions = ">=3.10"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\""
 files = [
     {file = "pyahocorasick-2.3.1-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:d0dcad4cf8f472764870ab70bd810fe04b5fb9d290c13db1f3e112e62b91e023"},
     {file = "pyahocorasick-2.3.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:1b9bc8f48c78897fd6f073098f7007a87ce0a7e0ad38099a4aad4d760f2f3161"},
@@ -7298,7 +7297,7 @@ description = "Python library for Apache Arrow"
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "extra == \"google-vertexai\" or extra == \"all\" or extra == \"ml\""
+markers = "extra == \"google-vertexai\" or extra == \"all\" or extra == \"scoring\" or extra == \"ml\""
 files = [
     {file = "pyarrow-21.0.0-cp310-cp310-macosx_12_0_arm64.whl", hash = "sha256:e563271e2c5ff4d4a4cbeb2c83d5cf0d4938b891518e676025f7268c6fe5fe26"},
     {file = "pyarrow-21.0.0-cp310-cp310-macosx_12_0_x86_64.whl", hash = "sha256:fee33b0ca46f4c85443d6c450357101e47d53e6c3f008d658c27a2d020d44c79"},
@@ -7891,7 +7890,7 @@ description = "pyparsing - Classes and methods to define and execute parsing gra
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\""
 files = [
     {file = "pyparsing-3.3.2-py3-none-any.whl", hash = "sha256:850ba148bd908d7e2411587e247a1e4f0327839c40e2e5e6d05a007ecc69911d"},
     {file = "pyparsing-3.3.2.tar.gz", hash = "sha256:c777f4d763f140633dcb6d8a3eda953bf7a214dc4eff598413c070bcdc117cbc"},
@@ -8977,7 +8976,7 @@ description = "Statistical data visualization"
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\""
 files = [
     {file = "seaborn-0.13.2-py3-none-any.whl", hash = "sha256:636f8336facf092165e27924f223d3c62ca560b1f2bb5dff7ab7fad265361987"},
     {file = "seaborn-0.13.2.tar.gz", hash = "sha256:93e60a40988f4d65e9f4885df477e2fdaff6b73a9ded434c1ab356dd57eefff7"},
@@ -9719,7 +9718,7 @@ description = "Find strings/words in text; convenience and C speed"
 optional = true
 python-versions = "*"
 groups = ["main"]
-markers = "extra == \"ml\" or extra == \"all\""
+markers = "extra == \"ml\" or extra == \"scoring\" or extra == \"all\""
 files = [
     {file = "textsearch-0.0.24-py2.py3-none-any.whl", hash = "sha256:1bbc4cc36300fbf0bbaa865500f84e907c85f6a48faf37da6e098407b405ed09"},
     {file = "textsearch-0.0.24.tar.gz", hash = "sha256:2d23b5c3116715b65bccc18bc870ecc236ec8480d48cd5f257cc60bf66bb241a"},
@@ -10113,7 +10112,7 @@ description = "Provider of IANA time zone data"
 optional = false
 python-versions = ">=2"
 groups = ["main"]
-markers = "(extra == \"scoring\" or extra == \"all\" or extra == \"console\" or extra == \"infra\") and sys_platform == \"win32\" or platform_system == \"Windows\" or extra == \"ml\" or extra == \"all\" or extra == \"evaluation\" or extra == \"console\" or extra == \"infra\""
+markers = "platform_system == \"Windows\" or extra == \"scoring\" or extra == \"all\" or extra == \"console\" or extra == \"infra\" or extra == \"ml\" or extra == \"evaluation\""
 files = [
     {file = "tzdata-2026.2-py2.py3-none-any.whl", hash = "sha256:bbe9af844f658da81a5f95019480da3a89415801f6cc966806612cc7169bffe7"},
     {file = "tzdata-2026.2.tar.gz", hash = "sha256:9173fde7d80d9018e02a662e168e5a2d04f87c41ea174b139fbef642eda62d10"},
@@ -11212,16 +11211,16 @@ files = [
 cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and python_version < \"3.14\"", "cffi (>=2.0.0b0) ; platform_python_implementation != \"PyPy\" and python_version >= \"3.14\""]
 
 [extras]
-all = ["azure-identity", "behave", "bertopic", "boto3", "celery", "contractions", "datasets", "fastapi", "fastmcp", "gensim", "gherkin-official", "graphviz", "hdbscan", "imbalanced-learn", "imblearn", "kaleido", "langchain", "langchain-anthropic", "langchain-aws", "langchain-community", "langchain-core", "langchain-google-vertexai", "langchain-ollama", "langchain-openai", "langgraph", "langgraph-checkpoint-postgres", "nltk", "numba", "ollama", "openpyxl", "pandas", "psycopg", "pyairtable", "pycurl", "pydot", "pydotplus", "qdrant-client", "requests-aws4auth", "scikit-learn", "seaborn", "sentence-transformers", "shap", "sqlalchemy", "tables", "tactus", "transformers", "umap-learn", "uvicorn", "xgboost"]
+all = ["azure-identity", "behave", "bertopic", "boto3", "celery", "contractions", "datasets", "fastapi", "fastmcp", "gensim", "gherkin-official", "graphviz", "hdbscan", "imbalanced-learn", "imblearn", "kaleido", "langchain", "langchain-anthropic", "langchain-aws", "langchain-community", "langchain-core", "langchain-google-vertexai", "langchain-ollama", "langchain-openai", "langgraph", "langgraph-checkpoint-postgres", "nltk", "numba", "ollama", "openpyxl", "pandas", "psycopg", "pyairtable", "pyarrow", "pycurl", "pydot", "pydotplus", "qdrant-client", "requests-aws4auth", "scikit-learn", "seaborn", "sentence-transformers", "shap", "sqlalchemy", "tables", "tactus", "transformers", "umap-learn", "uvicorn", "xgboost"]
 console = ["celery", "fastmcp", "requests-aws4auth"]
 evaluation = ["biblicus", "sentence-transformers"]
 google-vertexai = ["langchain-google-vertexai"]
 infra = ["azure-identity", "celery", "fastapi", "fastmcp", "ollama", "pyairtable", "pycurl", "qdrant-client", "requests-aws4auth", "sqlalchemy", "uvicorn"]
 ml = ["bertopic", "contractions", "datasets", "gensim", "graphviz", "hdbscan", "imbalanced-learn", "imblearn", "kaleido", "nltk", "numba", "openpyxl", "pandas", "pydot", "pydotplus", "scikit-learn", "seaborn", "sentence-transformers", "shap", "tables", "transformers", "umap-learn", "xgboost"]
 procedures = ["behave", "gherkin-official", "tactus"]
-scoring = ["boto3", "graphviz", "langchain", "langchain-anthropic", "langchain-aws", "langchain-community", "langchain-core", "langchain-ollama", "langchain-openai", "langgraph", "langgraph-checkpoint-postgres", "nltk", "psycopg", "tactus"]
+scoring = ["boto3", "contractions", "graphviz", "langchain", "langchain-anthropic", "langchain-aws", "langchain-community", "langchain-core", "langchain-ollama", "langchain-openai", "langgraph", "langgraph-checkpoint-postgres", "nltk", "openpyxl", "pandas", "psycopg", "pyarrow", "seaborn", "tactus"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.13"
-content-hash = "7ba9a9e94b1e020d1a530ad1da288ec9f053d7e39f6068ac6a4341bb7f427ef4"
+content-hash = "586ce05e6406c2cd36e8183d7dcb4ab3541635d2342d6878212fe0d263d8e537"

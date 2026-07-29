@@ -10,10 +10,12 @@ import pytest
 from docker.demo.core import DemoManifest, PHASES
 from docker.demo.harness import (
     CommandRunner,
+    DemoHarness,
     completed_optimizer_identity,
     curated_dataset_identity,
     evaluation_accuracy_fraction,
     extract_last_json,
+    feedback_evaluation_cli_command,
     initial_score_configuration,
     load_banking77_rows,
     metric_value,
@@ -198,12 +200,38 @@ def test_optimizer_reuses_verified_paired_baselines_and_required_nano_agents() -
     # The optimizer adds one protected structural lane to the normal rubric
     # lanes, so requesting one normal lane yields two candidates.
     assert command[command.index("--num-candidates") + 1] == "1"
+    assert command[command.index("--evaluation-stall-timeout-minutes") + 1] == "30"
+    assert "--evaluation-timeout-minutes" not in command
     agent_models = [command[index + 1] for index, item in enumerate(command) if item == "--agent-model"]
     assert agent_models
     assert all(model.endswith("=gpt-5.4-nano") for model in agent_models)
+
+
+def test_feedback_baseline_freezes_the_run_scoped_seed_window() -> None:
+    manifest = DemoManifest.new("20260723T123456Z-ab12", "strict", 10.0, 2)
+    manifest.metadata["seed_anchor"] = "2026-07-23T12:34:56Z"
+
+    command = feedback_evaluation_cli_command(
+        manifest, {"scorecard": "scorecard-1", "score": "score-1", "version": "version-1"}
+    )
+
+    assert command[command.index("--feedback-start-at") + 1] == "2026-07-22T12:34:56Z"
+    assert command[command.index("--feedback-end-at") + 1] == "2026-07-23T12:34:56Z"
+    assert command[command.index("--days") + 1] == "7"
+    assert command[command.index("--max-items") + 1] == "100"
 
 
 def test_resume_and_verify_require_an_explicit_run_id() -> None:
     for command in ("resume", "verify"):
         with pytest.raises(SystemExit):
             parser().parse_args([command])
+
+
+def test_controlled_optimizer_interruption_is_run_only_and_resume_uses_graphql_tickets() -> None:
+    args = parser().parse_args(["run", "--interrupt-after-optimizer"])
+    assert args.interrupt_after_optimizer is True
+
+    resume_source = DemoHarness._resumable_optimizer_payload.__code__.co_consts
+    rendered_constants = " ".join(str(value) for value in resume_source)
+    assert "download_task_output_artifact" in rendered_constants
+    assert "boto3" not in rendered_constants

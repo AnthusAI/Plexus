@@ -887,6 +887,16 @@ def test_optimizer_yaml_never_promotes_champion_and_reports_manual_follow_up():
     assert "winning_version_id = last_accepted_version_id" in code
 
 
+def test_optimizer_yaml_declares_the_winning_version_in_its_persisted_output():
+    config = _load_optimizer_config()
+
+    assert config["outputs"]["winning_version_id"] == {
+        "type": "string",
+        "required": False,
+        "description": "Accepted score version selected for guarded external promotion",
+    }
+
+
 def test_optimizer_yaml_rejects_non_completed_evaluation_handles():
     config = _load_optimizer_config()
     code = config["code"]

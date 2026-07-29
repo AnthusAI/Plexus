@@ -28,6 +28,7 @@ import subprocess
 import socket
 from plexus.config.loader import ConfigLoader
 from plexus.dashboard.api.models.account import Account
+from plexus.cli.shared.client_utils import create_client
 
 class ItemCountColumn(ProgressColumn):
     """Renders item count and total."""
@@ -791,7 +792,7 @@ def dispatcher(account: Optional[str], interval: float, limit: int, once: bool, 
         _validate_celery_requirements()
         ensure_tasks_registered()
 
-    client = PlexusDashboardClient()
+    client = create_client()
     account_id = _resolve_required_dispatch_account_id(client, account)
     dispatcher_id = f"{socket.gethostname()}-{os.getpid()}"
     logging.info(
@@ -1100,16 +1101,8 @@ def demo(target: str, task_id: Optional[str] = None, fail: bool = False) -> None
         )
     }
     
-    # Verify API environment
-    api_url = os.environ.get('PLEXUS_API_URL')
-    api_key = os.environ.get('PLEXUS_API_KEY')
-    
-    if not api_url or not api_key:
-        logging.warning("PLEXUS_API_URL or PLEXUS_API_KEY not set, cannot track task")
-        return
-
-    # Initialize API client
-    client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+    # Initialize the same explicit-auth client used by local dispatcher paths.
+    client = create_client()
 
     # Get the account ID by key
     ACCOUNT_KEY = os.getenv('PLEXUS_ACCOUNT_KEY')
