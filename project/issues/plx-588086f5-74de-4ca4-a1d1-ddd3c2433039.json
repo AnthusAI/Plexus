@@ -1,0 +1,25 @@
+{
+  "id": "plx-588086f5-74de-4ca4-a1d1-ddd3c2433039",
+  "title": "Published scoring runtime excludes unnecessary vulnerable system packages",
+  "description": "As a platform operator, I want the scoring-only container to contain only required runtime packages and pass image vulnerability gates, so that promoted artifacts do not expose avoidable operating-system attack surface.\n\nFeature: Minimal secure scoring runtime image\n\nScenario: Build the scoring-only runtime\nGiven scoring dependencies are available as Python wheels or copied source\nWhen the scoring runtime container is built\nThen it does not install source-control, visualization, or native client packages that scoring does not execute\nAnd the published image contains no critical or high scan findings before promotion",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "488a237a-bf3e-43c6-80b3-b74e34466836",
+      "author": "derek.norrbom",
+      "text": "Executable specification now asserts the stable Bookworm base, no apt installation in the scoring-only Dockerfile, and no Graphviz membership in the scoring runtime extra. The specification failed against the prior image definition and passes after remediation.",
+      "created_at": "2026-07-29T19:34:11.115473Z"
+    }
+  ],
+  "created_at": "2026-07-29T19:31:30.009712Z",
+  "updated_at": "2026-07-29T19:34:11.115473Z",
+  "closed_at": null,
+  "custom": {}
+}

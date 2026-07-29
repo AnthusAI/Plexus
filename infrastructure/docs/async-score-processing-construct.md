@@ -15,6 +15,7 @@ By default, the construct creates:
 - score processor Lambda function from an ECR image reference
 - SQS event source mapping
 - Lambda execution role
+- explicit score processor log group
 - DLQ visibility alarms
 
 Deployment owners can pass existing request/response queues instead of letting the construct create queues.
@@ -87,6 +88,20 @@ Deployment owners must pass extra scoped permissions through `additional_policy_
 
 Bedrock model access is opt-in through `bedrock_model_resources`.
 
+## Runtime Safety Defaults
+
+Construct-owned queues use a 14-day retention period and are retained when the
+stack is deleted or the queue resource is replaced. The default queue visibility
+timeout is 1,800 seconds for the default 300-second Lambda timeout. The construct
+rejects configurations where visibility is less than six times the Lambda
+timeout, following the Lambda SQS event-source requirement.
+
+The score processor writes to an explicit log group named
+`/plexus/score-processor/<resource-prefix>`. It retains logs for 30 days and
+retains the log group when the stack is deleted by default. Deployment owners can
+override queue removal, log removal, and log retention through the corresponding
+properties.
+
 ## Exposed Properties
 
 The construct exposes:
@@ -97,4 +112,5 @@ The construct exposes:
 - `queues.response_dead_letter_queue`
 - `function`
 - `role`
+- `log_group`
 - `dead_letter_queue_alarms`

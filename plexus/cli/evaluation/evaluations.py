@@ -3533,7 +3533,15 @@ def get_data_driven_samples(
             logging.error("No dataframe available after data loading")
         
         logging.info("Processing data...")
-        score_instance.process_data()
+        process_data = getattr(score_instance, 'process_data', None)
+        if callable(process_data):
+            process_data()
+        else:
+            logging.info(
+                "Score '%s' does not implement optional dataset preprocessing; "
+                "evaluating its loaded dataframe directly",
+                score_name,
+            )
         
         # Basic dataset info after processing
         if hasattr(score_instance, 'dataframe') and score_instance.dataframe is not None:
@@ -3625,12 +3633,17 @@ def get_data_driven_samples(
             samples = [sample for sample in samples if sample['content_id'] in content_ids_as_integers]
             logging.info(f"Number of samples after filtering by specified content IDs: {len(samples)}")
 
+        stored_score_name = score_name
         score_name_column_name = score_name
         if score_config.get('label_score_name'):
             score_name = score_config['label_score_name']
             score_name_column_name = score_name
         if score_config.get('label_field'):
             score_name_column_name = f"{score_name} {score_config['label_field']}"
+
+        stored_score_name_column_name = stored_score_name
+        if score_config.get('label_field'):
+            stored_score_name_column_name = f"{stored_score_name} {score_config['label_field']}"
 
         processed_samples = []
         for sample in samples:
@@ -3645,9 +3658,16 @@ def get_data_driven_samples(
             
             # Create the sample dictionary with metadata included
             # Keep IDs column at top level for identifier extraction
+            label_value = ''
+            for candidate_column in (score_name_column_name, stored_score_name_column_name):
+                candidate_value = sample.get(candidate_column)
+                if candidate_value is not None and not pd.isna(candidate_value) and str(candidate_value).strip():
+                    label_value = candidate_value
+                    break
+
             processed_sample = {
                 'text': sample.get('text', ''),
-                f'{score_name_column_name}_label': sample.get(score_name_column_name, ''),
+                f'{score_name_column_name}_label': label_value,
                 'content_id': sample.get('content_id', ''),
                 'IDs': sample.get('IDs', ''),  # Keep IDs at top level
                 'columns': {

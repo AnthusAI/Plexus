@@ -37,7 +37,7 @@ class _CostCalculator:
                 output_tokens=completion_tokens,
             )
             return costs["input_cost"], costs["output_cost"]
-        except (KeyError, TypeError, ValueError):
+        except (ImportError, KeyError, TypeError, ValueError):
             from litellm import cost_per_token
 
             return cost_per_token(

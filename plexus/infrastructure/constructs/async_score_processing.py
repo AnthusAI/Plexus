@@ -3,15 +3,15 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from aws_cdk import Duration, aws_cloudwatch as cloudwatch
+from aws_cdk import Duration, RemovalPolicy, aws_cloudwatch as cloudwatch
 from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_lambda_event_sources as lambda_events
+from aws_cdk import aws_logs as logs
 from aws_cdk import aws_secretsmanager as secretsmanager
 from aws_cdk import aws_sqs as sqs
 from constructs import Construct
-
 
 DEFAULT_SECRET_ENVIRONMENT = {
     "PLEXUS_ACCOUNT_KEY": "account-key",
@@ -21,9 +21,7 @@ DEFAULT_SECRET_ENVIRONMENT = {
     "AMPLIFY_STORAGE_SCORERESULTATTACHMENTS_BUCKET_NAME": (
         "score-result-attachments-bucket"
     ),
-    "AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME": (
-        "report-block-details-bucket"
-    ),
+    "AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME": ("report-block-details-bucket"),
 }
 
 DEFAULT_STATIC_ENVIRONMENT = {
@@ -64,11 +62,14 @@ class AsyncScoreProcessingProps:
         default_factory=list
     )
     bedrock_model_resources: Sequence[str] = field(default_factory=list)
-    visibility_timeout: Duration = Duration.seconds(300)
+    visibility_timeout: Duration = Duration.seconds(1800)
     retention_period: Duration = Duration.days(14)
+    queue_removal_policy: RemovalPolicy = RemovalPolicy.RETAIN
     dead_letter_max_receive_count: int = 3
     lambda_timeout: Duration = Duration.seconds(300)
     lambda_memory_size: int = 3008
+    log_retention: logs.RetentionDays = logs.RetentionDays.ONE_MONTH
+    log_removal_policy: RemovalPolicy = RemovalPolicy.RETAIN
     reserved_concurrency: int | None = None
     max_event_source_concurrency: int | None = None
     batch_size: int = 1
@@ -88,8 +89,16 @@ class AsyncScoreProcessing(Construct):
         super().__init__(scope, construct_id)
 
         self.props = props
+        self._validate_props(props)
         self.queues = self._resolve_queues(props)
-        self.role = self._create_execution_role(props)
+        self.log_group = logs.LogGroup(
+            self,
+            "ScoreProcessorLogGroup",
+            log_group_name=f"/plexus/score-processor/{props.resource_prefix}",
+            retention=props.log_retention,
+            removal_policy=props.log_removal_policy,
+        )
+        self.role = self._create_execution_role(props, self.log_group)
         props.image_repository.grant_pull(self.role)
         props.runtime_config_secret.grant_read(self.role)
 
@@ -105,6 +114,7 @@ class AsyncScoreProcessing(Construct):
             timeout=props.lambda_timeout,
             memory_size=props.lambda_memory_size,
             reserved_concurrent_executions=props.reserved_concurrency,
+            log_group=self.log_group,
             environment=self._lambda_environment(props, self.queues),
             description=(
                 "Processes async scoring jobs from the standard request queue"
@@ -125,6 +135,15 @@ class AsyncScoreProcessing(Construct):
                 props, self.queues
             )
 
+    @staticmethod
+    def _validate_props(props: AsyncScoreProcessingProps) -> None:
+        minimum_visibility_seconds = props.lambda_timeout.to_seconds() * 6
+        if props.visibility_timeout.to_seconds() < minimum_visibility_seconds:
+            raise ValueError(
+                "visibility_timeout must be at least six times lambda_timeout "
+                f"({minimum_visibility_seconds} seconds)"
+            )
+
     def _resolve_queues(
         self, props: AsyncScoreProcessingProps
     ) -> AsyncScoreProcessingQueues:
@@ -139,6 +158,7 @@ class AsyncScoreProcessing(Construct):
                 encryption=sqs.QueueEncryption.SQS_MANAGED,
                 retention_period=props.retention_period,
             )
+            request_dlq.apply_removal_policy(props.queue_removal_policy)
             request_queue = sqs.Queue(
                 self,
                 "StandardRequestQueue",
@@ -151,6 +171,7 @@ class AsyncScoreProcessing(Construct):
                     queue=request_dlq,
                 ),
             )
+            request_queue.apply_removal_policy(props.queue_removal_policy)
         else:
             request_queue = props.request_queue
 
@@ -162,6 +183,7 @@ class AsyncScoreProcessing(Construct):
                 encryption=sqs.QueueEncryption.SQS_MANAGED,
                 retention_period=props.retention_period,
             )
+            response_dlq.apply_removal_policy(props.queue_removal_policy)
             response_queue = sqs.Queue(
                 self,
                 "ResponseQueue",
@@ -174,6 +196,7 @@ class AsyncScoreProcessing(Construct):
                     queue=response_dlq,
                 ),
             )
+            response_queue.apply_removal_policy(props.queue_removal_policy)
         else:
             response_queue = props.response_queue
 
@@ -185,35 +208,16 @@ class AsyncScoreProcessing(Construct):
         )
 
     def _create_execution_role(
-        self, props: AsyncScoreProcessingProps
+        self,
+        props: AsyncScoreProcessingProps,
+        log_group: logs.ILogGroup,
     ) -> iam.Role:
         role = iam.Role(
             self,
             "ScoreProcessorExecutionRole",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
-            inline_policies={
-                "LambdaLogging": iam.PolicyDocument(
-                    statements=[
-                        iam.PolicyStatement(
-                            actions=["logs:CreateLogGroup"],
-                            resources=["*"],
-                        ),
-                        iam.PolicyStatement(
-                            actions=[
-                                "logs:CreateLogStream",
-                                "logs:PutLogEvents",
-                            ],
-                            resources=[
-                                (
-                                    f"arn:aws:logs:*:*:log-group:/aws/lambda/"
-                                    f"{props.resource_prefix}-score-processor:*"
-                                )
-                            ],
-                        ),
-                    ]
-                )
-            },
         )
+        log_group.grant_write(role)
         self.queues.request_queue.grant_consume_messages(role)
         self.queues.response_queue.grant_send_messages(role)
 
@@ -247,11 +251,9 @@ class AsyncScoreProcessing(Construct):
             **DEFAULT_STATIC_ENVIRONMENT,
         }
         for env_name, secret_key in props.secret_environment.items():
-            environment[env_name] = (
-                props.runtime_config_secret.secret_value_from_json(
-                    secret_key
-                ).unsafe_unwrap()
-            )
+            environment[env_name] = props.runtime_config_secret.secret_value_from_json(
+                secret_key
+            ).unsafe_unwrap()
         environment.update(props.environment_variables)
         return environment
 
@@ -277,8 +279,7 @@ class AsyncScoreProcessing(Construct):
                     evaluation_periods=1,
                     datapoints_to_alarm=1,
                     comparison_operator=(
-                        cloudwatch.ComparisonOperator
-                        .GREATER_THAN_OR_EQUAL_TO_THRESHOLD
+                        cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD
                     ),
                     treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
                 )

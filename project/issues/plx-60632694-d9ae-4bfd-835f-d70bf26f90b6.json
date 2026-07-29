@@ -1,0 +1,61 @@
+{
+  "id": "plx-60632694-d9ae-4bfd-835f-d70bf26f90b6",
+  "title": "Remove critical OS findings from scoring runtime artifact",
+  "description": "The newly published scoring-only image scan reports critical and high findings in unnecessary operating-system packages pulled by git, Graphviz, and related libraries. Remove unused packages, use a stable supported base variant, rebuild, and verify the ECR scan rather than dismissing the findings.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "944c3bca-e07a-4a97-a090-a23c52380122",
+      "author": "derek.norrbom",
+      "text": "Removed git, Graphviz, libcurl, and libpq from the scoring-only image, removed Graphviz from the scoring extra, and pinned the image to python:3.11-slim-bookworm instead of the rolling slim variant. Validation: artifact pipeline tests 7 passed; LangGraph and Tactus runtime tests 64 passed; formatting and lint pass. Local container build could not run because the Docker daemon is unavailable, so the branch will be built and scanned in an isolated AWS artifact channel before this bug is closed.",
+      "created_at": "2026-07-29T19:34:11.115605Z"
+    },
+    {
+      "id": "e1f79c85-bc18-4f10-a75f-9d7dc3e7d8b5",
+      "author": "derek.norrbom",
+      "text": "Compatibility review: standardize the new minimal scoring runtime on Python 3.12. Plexus already supports >=3.11,<3.13 and Tactus supports >=3.10,<3.14. Python 3.12 extends the supported Lambda runway and keeps the runtime within declared package compatibility. This does not replace the operating-system vulnerability remediation; the isolated image must still build, pass runtime tests, and scan with zero critical/high findings before publication.",
+      "created_at": "2026-07-29T19:37:40.537310Z"
+    },
+    {
+      "id": "12518894-8740-4c62-a93f-4bcf4916a8bf",
+      "author": "derek.norrbom",
+      "text": "Isolated CodeBuild validation failed before publication because the scoring image no longer contains Git while `openai-cost-calculator` was still an unconditional Git-sourced dependency. Root fix: make the calculator optional, retain it in the legacy `all` extra, exclude it from the minimal `scoring` extra, and make LangGraph cost accounting fall back to LiteLLM when the optional package is unavailable. The minimal image now targets Python 3.12 Bookworm. Validation: `python -m pytest infrastructure/score_processor_artifacts/tests/unit/test_score_processor_artifact_pipeline_stack.py plexus/scores/test_lang_graph_cost_calculator.py plexus/LangChainUser_test.py tests/scores/test_tactus_score.py plexus/scores/test_tactus_score_runtime_controls.py -q` passed (72 tests).",
+      "created_at": "2026-07-29T19:40:17.909661Z"
+    },
+    {
+      "id": "ca57af98-6658-4287-a8ec-6049b6480801",
+      "author": "derek.norrbom",
+      "text": "The Python 3.12 Bookworm artifact built and published successfully at 250,639,449 compressed bytes, but ECR scanning still found 3 critical and 5 high findings, all attributed to Perl 5.36.0 in the Debian base. Next remediation: use the AWS Lambda Python 3.12 AL2023 minimal base for the scoring-only artifact and inherit its bundled runtime interface rather than installing `awslambdaric`. This is isolated from the legacy Dockerfile and follows AWS Lambda’s supported 3.12 container path.",
+      "created_at": "2026-07-29T19:43:43.703869Z"
+    },
+    {
+      "id": "69ebc74b-e1ea-47b3-bd07-288a46954802",
+      "author": "derek.norrbom",
+      "text": "Switched the scoring-only artifact to the digest-pinned AWS Lambda Python 3.12 AL2023 base and removed the redundant `awslambdaric` installation/ENTRYPOINT override. The artifact now inherits AWS Lambda’s maintained runtime interface while the legacy image is unchanged. Targeted artifact and LangGraph/Tactus validation remains green (72 tests).",
+      "created_at": "2026-07-29T19:44:25.307014Z"
+    },
+    {
+      "id": "72a905b6-c599-4168-bfb6-a6b859813cf2",
+      "author": "derek.norrbom",
+      "text": "Compatibility coverage will retain Python 3.11 for the existing production path and add Python 3.12 for the parallel runtime, rather than replacing the old CI lane. This keeps both declared runtime contracts continuously testable after GitHub Actions service/billing is restored.",
+      "created_at": "2026-07-29T19:46:26.662978Z"
+    },
+    {
+      "id": "ba1f7d34-155b-4240-bdac-274e3e2db9e7",
+      "author": "derek.norrbom",
+      "text": "AWS validation result for digest `sha256:e48e77feba8606245700b8ce724f513e717f3105a207ed573b089d4e3e1699d1`: CodeBuild succeeded and ECR scan completed with an empty severity-count map (zero critical, high, medium, low, or informational findings). Compressed size is 377,051,398 bytes. This is larger than the Debian artifact but removes all detected base-image vulnerabilities and is the selected production posture.",
+      "created_at": "2026-07-29T19:47:09.511555Z"
+    }
+  ],
+  "created_at": "2026-07-29T19:31:30.009738Z",
+  "updated_at": "2026-07-29T19:47:09.511555Z",
+  "closed_at": null,
+  "custom": {}
+}
