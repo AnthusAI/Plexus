@@ -1,0 +1,31 @@
+{
+  "id": "plx-6fd170bc-971b-4a7e-9ee1-4ac249073b26",
+  "title": "Resolve configured evaluation label aliases",
+  "description": "As an evaluation author, I want a configured human-label alias to resolve to the dataset column containing the label, so that accuracy results use the human decision rather than a fallback value.\n\nFeature: Configured label aliases\n\nScenario: A dataset is keyed by the stored score name and the configuration supplies a different label alias\nGiven a dataset row contains a human label in the stored score-name column\nAnd the score configuration declares a different label score name\nWhen the accuracy evaluation processes the row\nThen it records the populated human label and compares it with the prediction.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-cdc6abcc-2c79-41b1-ac7b-adb6b220a15f",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2da394ce-eb48-45a5-90c2-94ed875d4975",
+      "author": "ec2-user",
+      "text": "Investigating the generic label-column mismatch. Initial evidence shows the evaluated dataset can contain a populated stored-name column while the evaluator searches only the configured alias. Reproducing against the active command and adding a regression test before implementation.",
+      "created_at": "2026-07-29T18:56:06.884189876Z"
+    },
+    {
+      "id": "ebc25db5-b33f-4ddb-9c24-d5eb8fc4405d",
+      "author": "ec2-user",
+      "text": "Implemented a generic fix: accuracy sample construction preserves a stored score-name label when the configured alias column is missing or empty, and evaluation lookup falls back safely to that stored name. Added regression coverage for aliases and score implementations without preprocessing. Verified with the focused pytest suite and a live 50-sample accuracy run.",
+      "created_at": "2026-07-29T18:59:51.238746490Z"
+    }
+  ],
+  "created_at": "2026-07-29T18:56:01.413157128Z",
+  "updated_at": "2026-07-29T18:59:51.238746490Z",
+  "closed_at": null,
+  "custom": {}
+}

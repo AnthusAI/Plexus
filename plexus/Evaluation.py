@@ -251,6 +251,35 @@ def _sanitize_rca_generated_prose(text: str, *, max_sentences: int = 3, max_char
     return prose
 
 
+def _resolve_human_label(
+    *,
+    row: pd.Series,
+    label_score_name: str,
+    score_name: str,
+) -> Tuple[Optional[Any], bool]:
+    """Find a populated human label, preferring the configured alias.
+
+    Data sources often retain the stored score name as their column name after a
+    score is renamed.  ``label_score_name`` is an alias for that column, not a
+    reason to discard the stored-name column when the alias is unavailable.
+    """
+    candidate_names = []
+    for candidate_name in (label_score_name, score_name):
+        if candidate_name and candidate_name not in candidate_names:
+            candidate_names.append(candidate_name)
+
+    for candidate_name in candidate_names:
+        for column_name in (f"{candidate_name}_label", candidate_name):
+            if column_name not in row.index:
+                continue
+            value = row[column_name]
+            if value is None or pd.isna(value) or not str(value).strip():
+                continue
+            return value, True
+
+    return None, False
+
+
 class Evaluation:
     """
     Base class for evaluating Scorecard performance through accuracy testing and consistency checking.
@@ -2632,15 +2661,15 @@ Total cost:       ${expenses['total_cost']:.6f}
                             label_found = True
                             logging.info(f"Using override for form {form_id}, score {score_name}: {human_label}")
                         else:
-                            # Fall back to row data if no override exists
-                            label_column = label_score_name + '_label'
-                            if label_column in row.index:
-                                human_label = row[label_column]
-                                label_found = True
-                            elif label_score_name in row.index:
-                                human_label = row[label_score_name]
-                                label_found = True
-                            else:
+                            # Prefer the configured alias, then fall back to the
+                            # score's stored name.  Dataset builders can retain
+                            # that stored name after a score rename.
+                            human_label, label_found = _resolve_human_label(
+                                row=row,
+                                label_score_name=label_score_name,
+                                score_name=score_name,
+                            )
+                            if not label_found:
                                 # Check if we're allowing evaluations without labels
                                 if not getattr(self, 'allow_no_labels', False):
                                     logging.warning(f"Label column not found for score: {score_identifier}")
@@ -2661,7 +2690,10 @@ Total cost:       ${expenses['total_cost']:.6f}
                         else:
                             human_label = ''  # Empty string for no label
 
-                        human_explanation = columns.get(f"{label_score_name} comment", 'None')
+                        human_explanation = columns.get(
+                            f"{label_score_name} comment",
+                            columns.get(f"{score_name} comment", 'None'),
+                        )
 
                         score_result_value = ' '.join(str(score_result.value).lower().strip().split())
 
