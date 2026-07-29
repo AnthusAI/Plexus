@@ -16,10 +16,22 @@
       "author": "derek.norrbom",
       "text": "Removed git, Graphviz, libcurl, and libpq from the scoring-only image, removed Graphviz from the scoring extra, and pinned the image to python:3.11-slim-bookworm instead of the rolling slim variant. Validation: artifact pipeline tests 7 passed; LangGraph and Tactus runtime tests 64 passed; formatting and lint pass. Local container build could not run because the Docker daemon is unavailable, so the branch will be built and scanned in an isolated AWS artifact channel before this bug is closed.",
       "created_at": "2026-07-29T19:34:11.115605Z"
+    },
+    {
+      "id": "e1f79c85-bc18-4f10-a75f-9d7dc3e7d8b5",
+      "author": "derek.norrbom",
+      "text": "Compatibility review: standardize the new minimal scoring runtime on Python 3.12. Plexus already supports >=3.11,<3.13 and Tactus supports >=3.10,<3.14. Python 3.12 extends the supported Lambda runway and keeps the runtime within declared package compatibility. This does not replace the operating-system vulnerability remediation; the isolated image must still build, pass runtime tests, and scan with zero critical/high findings before publication.",
+      "created_at": "2026-07-29T19:37:40.537310Z"
+    },
+    {
+      "id": "12518894-8740-4c62-a93f-4bcf4916a8bf",
+      "author": "derek.norrbom",
+      "text": "Isolated CodeBuild validation failed before publication because the scoring image no longer contains Git while `openai-cost-calculator` was still an unconditional Git-sourced dependency. Root fix: make the calculator optional, retain it in the legacy `all` extra, exclude it from the minimal `scoring` extra, and make LangGraph cost accounting fall back to LiteLLM when the optional package is unavailable. The minimal image now targets Python 3.12 Bookworm. Validation: `python -m pytest infrastructure/score_processor_artifacts/tests/unit/test_score_processor_artifact_pipeline_stack.py plexus/scores/test_lang_graph_cost_calculator.py plexus/LangChainUser_test.py tests/scores/test_tactus_score.py plexus/scores/test_tactus_score_runtime_controls.py -q` passed (72 tests).",
+      "created_at": "2026-07-29T19:40:17.909661Z"
     }
   ],
   "created_at": "2026-07-29T19:31:30.009738Z",
-  "updated_at": "2026-07-29T19:34:11.115605Z",
+  "updated_at": "2026-07-29T19:40:17.909661Z",
   "closed_at": null,
   "custom": {}
 }

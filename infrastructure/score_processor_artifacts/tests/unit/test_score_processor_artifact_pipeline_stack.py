@@ -128,11 +128,18 @@ def test_scoring_runtime_avoids_unnecessary_system_packages():
     with (repository_root / "pyproject.toml").open("rb") as pyproject_file:
         pyproject = tomllib.load(pyproject_file)
 
-    assert scoring_dockerfile.startswith("FROM python:3.11-slim-bookworm\n")
+    assert scoring_dockerfile.startswith("FROM python:3.12-slim-bookworm\n")
     assert "apt-get" not in scoring_dockerfile
     assert " graphviz" not in scoring_dockerfile
     assert " git" not in scoring_dockerfile
     assert "graphviz" not in pyproject["tool"]["poetry"]["extras"]["scoring"]
+    assert (
+        "openai-cost-calculator" not in pyproject["tool"]["poetry"]["extras"]["scoring"]
+    )
+    assert pyproject["tool"]["poetry"]["dependencies"]["openai-cost-calculator"][
+        "optional"
+    ]
+    assert "openai-cost-calculator" in pyproject["tool"]["poetry"]["extras"]["all"]
 
 
 def test_build_writes_generic_plexus_metadata_parameters():
