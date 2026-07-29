@@ -88,6 +88,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ConsoleScoreChangeDiff } from "@/components/ui/console-score-change-diff"
+import { ConsoleScoreWorkflowSummary } from "@/components/ui/console-score-workflow-summary"
 
 const EvaluationToolOutput = React.lazy(() => import('./evaluation-tool-output'))
 const STANDARD_SESSION_CATEGORY = 'Optimize'
@@ -1853,29 +1854,35 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                     <ToolInput input={toolViewModel.input} />
                   )}
                   {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
-                    shouldRenderEvaluationToolOutput(toolViewModel) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
-                      <React.Suspense fallback={
-                        <div className="rounded-md bg-card p-3">
-                          <div className="h-4 w-40 animate-pulse rounded bg-muted mb-2" />
-                          <div className="h-3 w-full animate-pulse rounded bg-muted/80" />
-                        </div>
-                      }>
-                        <EvaluationToolOutput toolOutput={toolViewModel.output} />
-                      </React.Suspense>
-                    ) : (
-                      <ToolOutput
-                        errorText={toolViewModel.errorText}
-                        output={
-                          <div className="font-mono whitespace-pre-wrap break-words">
-                            {toolViewModel.output === undefined || toolViewModel.output === null
-                              ? 'No output'
-                              : typeof toolViewModel.output === 'string'
-                                ? toolViewModel.output
-                                : formatJsonWithNewlines(toolViewModel.output)}
-                          </div>
-                        }
+                    <div className="space-y-2">
+                      <ConsoleScoreWorkflowSummary
+                        toolName={toolViewModel.toolName}
+                        toolOutput={toolViewModel.output}
                       />
-                    )
+                      {shouldRenderEvaluationToolOutput(toolViewModel) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
+                        <React.Suspense fallback={
+                          <div className="rounded-md bg-card p-3">
+                            <div className="h-4 w-40 animate-pulse rounded bg-muted mb-2" />
+                            <div className="h-3 w-full animate-pulse rounded bg-muted/80" />
+                          </div>
+                        }>
+                          <EvaluationToolOutput toolOutput={toolViewModel.output} />
+                        </React.Suspense>
+                      ) : (
+                        <ToolOutput
+                          errorText={toolViewModel.errorText}
+                          output={
+                            <div className="font-mono whitespace-pre-wrap break-words">
+                              {toolViewModel.output === undefined || toolViewModel.output === null
+                                ? 'No output'
+                                : typeof toolViewModel.output === 'string'
+                                  ? toolViewModel.output
+                                  : formatJsonWithNewlines(toolViewModel.output)}
+                            </div>
+                          }
+                        />
+                      )}
+                    </div>
                   )}
                 </ToolContent>
               </Tool>
@@ -1923,6 +1930,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                 content={message.content}
                 enableMarkdown={getStreamingState(message.metadata) !== "streaming"}
               />
+              <ConsoleScoreWorkflowSummary metadata={message.metadata} />
               <ConsoleScoreChangeDiff metadata={message.metadata} />
               {costMetadata && costSummary && hasCostSummary && (
                 <details className="group inline-block w-64 max-w-full rounded-md bg-card/60 text-xs">
