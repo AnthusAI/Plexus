@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+import json
 
 import pytest
 import yaml
@@ -720,6 +721,68 @@ async def test_execute_tactus_hydrates_context_from_params_values(monkeypatch):
 
     assert result["success"] is True
     assert _FakeRuntime.last_context == {"brief": "hello", "dry_run": True}
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_injects_array_params_as_parseable_lua_and_preserves_values(monkeypatch):
+    """Structured scope selectors must survive the Plexus-to-Lua boundary."""
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class _RuntimeExecutesInjectedParams(_FakeRuntime):
+        async def execute(self, source, context, format="yaml"):
+            from lupa import LuaRuntime
+
+            assert format == "yaml"
+            parsed = yaml.safe_load(source)
+            lua = LuaRuntime(unpack_returned_tuples=True)
+            json_primitive = lua.table()
+            json_primitive["decode"] = lambda payload: lua.table_from(
+                json.loads(payload), recursive=True
+            )
+            lua.globals()["Json"] = json_primitive
+            result = lua.execute(parsed["procedure"])
+            scope_ids = result["scope_ids"]
+            return {
+                "success": True,
+                "scope_ids": [scope_ids[index] for index in range(1, len(scope_ids) + 1)],
+            }
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeExecutesInjectedParams)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+
+    scope_ids = ["opaque-one", "literal ]] and ]=] content", "opaque-three"]
+    result = await _execute_tactus(
+        procedure_id="p-array-params",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "params:\n"
+            "  scope_ids: {type: array, required: true}\n"
+            "code: |\n"
+            "  return { success = true, scope_ids = params.scope_ids }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={"scope_ids": scope_ids},
+    )
+
+    assert result["success"] is True
+    assert result["scope_ids"] == scope_ids
 
 
 @pytest.mark.asyncio

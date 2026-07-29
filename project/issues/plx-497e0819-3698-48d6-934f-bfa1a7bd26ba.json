@@ -1,0 +1,31 @@
+{
+  "id": "plx-497e0819-3698-48d6-934f-bfa1a7bd26ba",
+  "title": "Safely inject array procedure parameters",
+  "description": "As a procedure author, I want array-valued runtime parameters to reach Lua unchanged, so that exact scoped orchestration can execute safely.\n\nOut of scope: changing parameter semantics or adding a second execution path.\n\nFeature: Safe structured parameter injection\n\n  Scenario: Inject an array into a YAML-backed procedure\n    Given a Tactus procedure parameter contains a JSON-compatible array\n    When Plexus injects the runtime context into Lua\n    Then the Lua source parses successfully\n    And the procedure receives the complete array unchanged\n\n  Scenario: Preserve scalar parameter behavior\n    Given existing scalar procedure parameters\n    When Plexus injects the runtime context into Lua\n    Then their values remain unchanged",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bcb401a5-f6aa-46b8-89ca-e07804d265e4",
+      "author": "ryan.porter",
+      "text": "Added an outside-in runtime regression proving array-valued procedure parameters parse and round-trip unchanged, including Lua delimiter-like content. Replaced the ambiguous short long-string encoding with collision-safe JSON decoding. Focused regression passes.",
+      "created_at": "2026-07-29T18:51:38.305901Z"
+    },
+    {
+      "id": "69a8ab9e-ef51-429b-b4b1-0e2bcdbe58b7",
+      "author": "ryan.porter",
+      "text": "Sandbox retry exposed a second caller-side path: procedure --set retained JSON arrays as strings. Added one shared typed parser for persisted YAML values and runtime context, retaining existing scalar coercion. Array, nested-object, scalar, and malformed-input regressions pass.",
+      "created_at": "2026-07-29T19:14:36.171963Z"
+    }
+  ],
+  "created_at": "2026-07-29T18:46:57.625336Z",
+  "updated_at": "2026-07-29T19:14:36.171963Z",
+  "closed_at": null,
+  "custom": {}
+}

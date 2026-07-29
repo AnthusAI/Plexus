@@ -3,7 +3,7 @@
   "title": "Feedback opportunity discovery and prioritization",
   "description": "Purpose: Give operators complete, evidence-based portfolio discovery that identifies and ranks optimization opportunities without silently sampling or overstating incomplete evidence.\n\nExclusions:\n- Automatic score mutation or promotion.\n- Hidden qualitative weighting.\n- Client-specific prioritization rules or data.\n\nDependencies: Consumes generic feedback and coverage data. It may proceed independently of execution and candidate-generation work.\n\nDefinition of Done:\n- Complete portfolio enumeration reports explicit coverage.\n- Opportunity ranking exposes transparent disagreement volume, drift, evidence sufficiency, rubric clarity, and fixability signals.\n- Partial evidence is labeled incomplete.\n- Results provide actionable, compact recommendations suitable for choosing optimization targets.\n- Behavior-first specifications and focused tests pass.\n\nRunning log: Record sanitized decisions, attempts, outcomes, and next steps in this epic or its child issues.",
   "type": "epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,22 @@
       "author": "ryan.porter",
       "text": "Started the scoped-ranking increment under story plx-5359ea. The implementation will preserve exhaustive account enumeration, apply exact-ID and literal case-insensitive prefix selectors before bounded feedback analysis, retain opaque IDs, and fail closed on incomplete coverage. No alternate execution path or fuzzy selector is being added.",
       "created_at": "2026-07-28T00:40:45.895617Z"
+    },
+    {
+      "id": "fd5f71d1-9f79-4151-b7e8-f9d83064cfaa",
+      "author": "ryan.porter",
+      "text": "Started the living optimization reporting increment on the combined integration branch. Work is split into living report and workbook persistence, authoritative human actions and dashboard inbox, and end-to-end portfolio orchestration. The implementation will keep report artifacts single-path, preserve immutable evidence revisions, fail closed on report divergence or stale approvals, and retain existing chat HITL compatibility. No external delivery adapter or automatic score mutation is included.",
+      "created_at": "2026-07-29T16:48:05.480725Z"
+    },
+    {
+      "id": "9ad04cb7-50e8-4199-ba45-4d30e15eb8c8",
+      "author": "ryan.porter",
+      "text": "Final local validation on the post-fix snapshot is green. Python 3.11 and 3.12 each passed the 356-test focused suite, 13-test dispatch regression, lint, and the full 4,088-test suite; version, lock, and diff checks also passed. Dashboard typecheck, 682 coverage tests, Storybook build, and 703 serial Chromium tests passed. Sandbox acceptance completed the living report and the structured ChatMessage rejection path with atomic ownership and no optimizer or operational mutation. Working diff has zero Amplify/schema/resource/storage changes. Deployment remains ordered behind a release of the structured-HITL Tactus changes.",
+      "created_at": "2026-07-29T20:06:54.051965Z"
     }
   ],
   "created_at": "2026-07-27T20:52:48.354441Z",
-  "updated_at": "2026-07-28T00:40:45.895617Z",
+  "updated_at": "2026-07-29T20:06:54.051965Z",
   "closed_at": null,
   "custom": {}
 }

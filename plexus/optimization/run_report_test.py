@@ -1,0 +1,590 @@
+"""Outside-in tests for the durable optimization run report lifecycle."""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from io import BytesIO
+import inspect
+import json
+from types import SimpleNamespace
+from zipfile import ZipFile
+
+import pytest
+from openpyxl import load_workbook
+
+
+class _Task:
+    created: list["_Task"] = []
+
+    def __init__(self, identifier: str = "task-1", **values):
+        self.id = identifier
+        self.accountId = values.get("accountId", "account-1")
+        self.status = values.get("status", "RUNNING")
+        self.metadata = values.get("metadata", {})
+        self.attachedFiles = list(values.get("attachedFiles") or [])
+        self.updates: list[dict] = []
+
+    @classmethod
+    def create(cls, **values):
+        task = cls(identifier=f"task-{len(cls.created) + 1}", **values)
+        cls.created.append(task)
+        return task
+
+    def update(self, **values):
+        self.updates.append(values)
+        self.status = values.get("status", self.status)
+        self.metadata = values.get("metadata", self.metadata)
+        self.attachedFiles = list(values.get("attachedFiles", self.attachedFiles))
+        return self
+
+
+class _Report:
+    created: list["_Report"] = []
+
+    def __init__(self, identifier: str = "report-1", **values):
+        self.id = identifier
+        self.taskId = values["taskId"]
+        self.accountId = values["accountId"]
+        self.parameters = values.get("parameters", {})
+        self.output = values.get("output")
+        self.updates: list[dict] = []
+
+    @classmethod
+    def create(cls, **values):
+        report = cls(identifier=f"report-{len(cls.created) + 1}", **values)
+        cls.created.append(report)
+        return report
+
+    def update(self, **values):
+        self.updates.append(values)
+        self.parameters = values.get("parameters", self.parameters)
+        self.output = values.get("output", self.output)
+        return self
+
+
+class _Block:
+    created: list["_Block"] = []
+
+    def __init__(self, identifier: str, **values):
+        self.id = identifier
+        self.reportId = values["reportId"]
+        self.position = values["position"]
+        self.name = values["name"]
+        self.type = values["type"]
+        self.output = values.get("output")
+        self.attachedFiles = list(values.get("attachedFiles") or [])
+        self.updates: list[dict] = []
+
+    @classmethod
+    def create(cls, **values):
+        block = cls(f"block-{len(cls.created) + 1}", **values)
+        cls.created.append(block)
+        return block
+
+    def update(self, **values):
+        self.updates.append(values)
+        self.output = values.get("output", self.output)
+        self.attachedFiles = list(values.get("attachedFiles", self.attachedFiles))
+        return self
+
+
+class _TaskStage:
+    created: list["_TaskStage"] = []
+
+    def __init__(self, identifier: str, **values):
+        self.id = identifier
+        self.taskId = values["taskId"]
+        self.name = values["name"]
+        self.order = values["order"]
+        self.status = values["status"]
+
+    @classmethod
+    def create(cls, **values):
+        stage = cls(f"stage-{len(cls.created) + 1}", **values)
+        cls.created.append(stage)
+        return stage
+
+
+class _ArtifactStore:
+    def __init__(self):
+        self.uploads = []
+        self.downloads = []
+        self.content_by_key: dict[str, bytes] = {}
+
+    def upload_bytes(self, request, content, **_kwargs):
+        self.uploads.append((request, content))
+        object_key = f"{request.resource_type.lower()}s/{request.resource_id}/{request.filename}"
+        self.content_by_key[object_key] = bytes(content)
+        return {
+            "_s3_key": object_key,
+            "sha256": request.sha256,
+            "size_bytes": request.size_bytes,
+            "content_type": request.content_type,
+        }
+
+    def download_bytes(self, request):
+        self.downloads.append(request)
+        object_key = f"{request.resource_type.lower()}s/{request.resource_id}/{request.filename}"
+        return self.content_by_key[object_key]
+
+
+@pytest.fixture(autouse=True)
+def _reset_fakes():
+    _Task.created = []
+    _Report.created = []
+    _Block.created = []
+    _TaskStage.created = []
+
+
+def _safe_view():
+    return {
+        "overview": {"headline": "Daily optimization findings"},
+        "portfolio": [
+            {
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Priority Score",
+                "valid_feedback_count": 250,
+                "reviewed_disagreements": 70,
+                "disagreement_rate": 0.28,
+                "reviewed_error_opportunity": 70,
+                "readiness": "repair_required",
+                "next_action": "repair_guidelines",
+            }
+        ],
+        "priorities": [
+            {
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Priority Score",
+                "opportunity": 70,
+                "rationale": "=must remain literal text",
+                "next_action": "repair_guidelines",
+                "dashboard_url": "https://dashboard.example/reports/summary",
+            }
+        ],
+        "feedback_investment": [
+            {
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Priority Score",
+                "recommendation": "continue_broad_collection",
+                "rationale": "More reviewed examples are needed.",
+            }
+        ],
+        "questions_and_issues": [
+            {
+                "kind": "guideline",
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Priority Score",
+                "finding": "Guidelines need repair.",
+                "next_action": "repair_guidelines",
+            }
+        ],
+        "optimization_outcomes": [],
+        "definitions": {"Reviewed error opportunity": "Reviewed disagreements in the window."},
+    }
+
+
+def _service(monkeypatch, *, block_class=_Block):
+    from plexus.optimization import run_report
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", block_class)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    return run_report.OptimizationRunReportService(
+        client=SimpleNamespace(),
+        account_id="account-1",
+        run_key="daily-v1-2026-07-29",
+        report_configuration_id="config-1",
+        now=lambda: datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc),
+        task_lookup=lambda _: None,
+        report_lookup=lambda _: None,
+        block_lookup=lambda _: [],
+        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
+        artifact_uploader=lambda task_id, name, _: f"tasks/{task_id}/{name}",
+    )
+
+
+def test_run_key_is_a_deterministic_fingerprint_of_account_and_frozen_spec():
+    from plexus.optimization.run_report import optimization_run_key
+
+    left = optimization_run_key("account-1", {"window": {"start": "2026-04-30T00:00:00Z"}, "scope": ["b", "a"]})
+    right = optimization_run_key("account-1", {"scope": ["b", "a"], "window": {"start": "2026-04-30T00:00:00Z"}})
+    changed = optimization_run_key("account-1", {"scope": ["a"], "window": {"start": "2026-04-30T00:00:00Z"}})
+
+    assert left == right
+    assert left.startswith("optimization-run-")
+    assert changed != left
+
+
+def test_start_or_resume_uses_one_running_task_report_and_fixed_blocks(monkeypatch):
+    service = _service(monkeypatch)
+
+    first = service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+    second = service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+
+    assert first.task.id == second.task.id == "task-1"
+    assert first.report.id == second.report.id == "report-1"
+    assert len(_Task.created) == 1
+    assert len(_Report.created) == 1
+    assert [(block.position, block.name, block.type) for block in _Block.created] == [
+        (0, "Run Status", "OptimizationRunStatus"),
+        (1, "Decision Evidence", "OptimizationDecisionEvidence"),
+        (2, "Stakeholder Workbook", "OptimizationStakeholderWorkbook"),
+    ]
+    assert first.task.status == "RUNNING"
+    metadata = json.loads(first.task.metadata)
+    assert metadata["optimization_run_key"] == "daily-v1-2026-07-29"
+    assert metadata["attempt_id"]
+
+
+def test_start_creates_the_fixed_task_stages(monkeypatch):
+    service = _service(monkeypatch)
+
+    state = service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+
+    assert [(stage.order, stage.name, stage.status) for stage in _TaskStage.created] == [
+        (0, "preflight", "RUNNING"),
+        (1, "ranking", "PENDING"),
+        (2, "assessment", "PENDING"),
+        (3, "diagnosis", "PENDING"),
+        (4, "approval", "PENDING"),
+        (5, "optimization", "PENDING"),
+        (6, "review", "PENDING"),
+        (7, "finalization", "PENDING"),
+    ]
+    assert all(stage.taskId == state.task.id for stage in _TaskStage.created)
+
+
+def test_fixed_blocks_are_immediately_backed_by_compact_artifact_envelopes(monkeypatch):
+    service = _service(monkeypatch)
+
+    service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+
+    for block in _Block.created:
+        envelope = __import__("json").loads(block.output)
+        assert envelope["output_compacted"] is True
+        assert envelope["output_attachment"] in block.attachedFiles
+
+    workbook_block = next(block for block in _Block.created if block.name == "Stakeholder Workbook")
+    assert workbook_block.attachedFiles == ["tasks/task-1/optimization-workbook-r0000.xlsx"]
+
+
+def test_resume_rejects_a_different_frozen_scope_for_the_same_run_key(monkeypatch):
+    service = _service(monkeypatch)
+    service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+
+    with pytest.raises(ValueError, match="frozen run specification"):
+        service.start_or_resume({"window": {"start": "2026-05-01T00:00:00Z"}})
+
+
+def test_recovery_reuses_existing_task_report_and_fixed_blocks(monkeypatch):
+    first_service = _service(monkeypatch)
+    first = first_service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+    recovered = _service(monkeypatch)
+    recovered._task_lookup = lambda _: first.task
+    recovered._report_lookup = lambda _: first.report
+    recovered._block_lookup = lambda _: list(_Block.created)
+
+    resumed = recovered.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+
+    assert resumed.task is first.task
+    assert resumed.report is first.report
+    assert len(_Task.created) == 1
+    assert len(_Report.created) == 1
+    assert len(_Block.created) == 3
+
+
+def test_retry_after_failed_attempt_creates_a_linked_new_task_and_report(monkeypatch):
+    first_service = _service(monkeypatch)
+    first = first_service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+    first_service.fail("publication failed")
+
+    retry = _service(monkeypatch)
+    retry._task_lookup = lambda _: first.task
+    retry._report_lookup = lambda task: first.report if task.id == first.task.id else None
+    retried = retry.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+
+    assert retried.task.id == "task-2"
+    assert retried.report.id == "report-2"
+    assert first.task.status == "FAILED"
+    metadata = json.loads(retried.task.metadata)
+    assert metadata["previous_attempt_id"] == json.loads(first.task.metadata)["attempt_id"]
+    assert metadata["previous_task_id"] == first.task.id
+    assert metadata["previous_report_id"] == first.report.id
+
+
+def test_retry_after_blocked_attempt_preserves_the_terminal_attempt_and_links_a_successor(monkeypatch):
+    first_service = _service(monkeypatch)
+    first = first_service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+    first_service.finalize(status="blocked")
+    frozen_updates = list(first.task.updates)
+
+    retry = _service(monkeypatch)
+    retry._task_lookup = lambda _: first.task
+    retry._report_lookup = lambda task: first.report if task.id == first.task.id else None
+    retried = retry.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+
+    assert retried.task.id == "task-2"
+    assert first.task.updates == frozen_updates
+    assert json.loads(retried.task.metadata)["previous_task_id"] == first.task.id
+
+
+def test_publish_milestone_keeps_raw_evidence_restricted_and_points_to_latest_immutable_revision(monkeypatch):
+    uploaded: list[tuple[str, str]] = []
+    service = _service(monkeypatch)
+    service._artifact_uploader = lambda task_id, name, _: uploaded.append(("task", name)) or f"tasks/{task_id}/{name}"
+    state = service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+
+    revision = service.publish_milestone(
+        "assessment",
+        {"raw_transcript": "do not expose", "score_id": "opaque-id", "coverage": {"complete": True}},
+        stakeholder_view=_safe_view(),
+    )
+
+    assert revision.number == 1
+    assert revision.raw_evidence_path.startswith("tasks/task-1/")
+    assert revision.workbook_path.startswith("tasks/task-1/")
+    assert revision.manifest_path.startswith("tasks/task-1/")
+    assert ("task", "optimization-evidence-r0001.json") in uploaded
+    assert ("task", "optimization-workbook-r0001.xlsx") in uploaded
+    assert ("task", "optimization-revision-r0001.json") in uploaded
+    assert revision.raw_evidence_path in state.task.attachedFiles
+    assert state.report.parameters["optimization_run"]["latest_revision"]["number"] == 1
+    assert [item["number"] for item in state.report.parameters["optimization_run"]["revisions"]] == [1]
+    assert "raw_transcript" not in str(_Block.created[0].updates[-1])
+    assert "opaque-id" not in str(_Block.created[2].updates[-1])
+
+
+def test_multiple_milestones_preserve_full_revision_history(monkeypatch):
+    service = _service(monkeypatch)
+    state = service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+
+    service.publish_milestone("ranking", {"coverage": {"complete": True}}, stakeholder_view=_safe_view())
+    service.publish_milestone("assessment", {"coverage": {"complete": True}}, stakeholder_view=_safe_view())
+
+    history = state.report.parameters["optimization_run"]["revisions"]
+    assert [revision["number"] for revision in history] == [1, 2]
+    assert [revision["milestone"] for revision in history] == ["ranking", "assessment"]
+    assert all(revision["evidence_path"].startswith("tasks/task-1/") for revision in history)
+    assert len(state.blocks["workbook"].attachedFiles) == 3
+
+
+def test_default_artifact_path_uses_only_task_graphql_tickets_without_direct_s3(monkeypatch):
+    from plexus.optimization import run_report
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    store = _ArtifactStore()
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(),
+        account_id="account-1",
+        run_key="daily-v1-2026-07-29",
+        report_configuration_id="config-1",
+        now=lambda: datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc),
+        task_lookup=lambda _: None,
+        report_lookup=lambda _: None,
+        block_lookup=lambda _: [],
+        stage_lookup=lambda _: [],
+        artifact_store=store,
+        verify_uploaded_artifacts=True,
+    )
+
+    state = service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+    service.publish_milestone("assessment", {"coverage": {"complete": True}}, stakeholder_view=_safe_view())
+
+    requests = [request for request, _content in store.uploads]
+    assert all(request.resource_type == "TASK" for request in requests)
+    assert all(request.resource_id == state.task.id for request in requests)
+    assert all(request.artifact_type == "TASK_ATTACHMENT" for request in requests)
+    assert {request.filename for request in requests} >= {
+        "optimization-run-initial-status.json",
+        "optimization-run-initial-evidence.json",
+        "optimization-workbook-r0000.xlsx",
+        "optimization-evidence-r0001.json",
+        "optimization-workbook-r0001.xlsx",
+        "optimization-revision-r0001.json",
+    }
+    assert all(path.startswith(f"tasks/{state.task.id}/") for path in state.task.attachedFiles)
+    assert len(state.task.attachedFiles) == len(store.uploads)
+    assert all(
+        json.loads(block.output)["output_attachment"].startswith(f"tasks/{state.task.id}/")
+        for block in state.blocks.values()
+    )
+    assert len(store.downloads) == len(store.uploads)
+    initial_workbook_upload = next(
+        content for request, content in store.uploads
+        if request.filename == "optimization-workbook-r0000.xlsx"
+    )
+    assert initial_workbook_upload.startswith(b"PK")
+    source = inspect.getsource(run_report)
+    assert "plexus.reports.s3_utils" not in source
+    assert "upload_report_block_file" not in source
+    assert "upload_procedure_file" not in source
+    assert "REPORT_BLOCK_ATTACHMENT" not in source
+
+
+def test_artifact_checksum_mismatch_is_fatal_and_marks_the_attempt_failed(monkeypatch):
+    from plexus.optimization import run_report
+
+    class _CorruptingStore(_ArtifactStore):
+        def download_bytes(self, request):
+            return super().download_bytes(request) + b"corrupt"
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="daily-v1-2026-07-29",
+        report_configuration_id="config-1", task_lookup=lambda _: None,
+        report_lookup=lambda _: None, block_lookup=lambda _: [], stage_lookup=lambda _: [],
+        artifact_store=_CorruptingStore(), verify_uploaded_artifacts=True,
+    )
+
+    with pytest.raises(run_report.OptimizationRunPublicationError, match="initialize"):
+        service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+
+    assert _Task.created[0].status == "FAILED"
+
+
+def test_publish_failure_marks_task_failed_and_raises_without_silent_progress(monkeypatch):
+    class _FailingBlock(_Block):
+        def update(self, **values):
+            if self.name == "Decision Evidence" and "r0001" in str(values.get("output", "")):
+                raise RuntimeError("attachment envelope write failed")
+            return super().update(**values)
+
+    service = _service(monkeypatch, block_class=_FailingBlock)
+    state = service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+
+    from plexus.optimization.run_report import OptimizationRunPublicationError
+
+    with pytest.raises(OptimizationRunPublicationError, match="assessment"):
+        service.publish_milestone("assessment", {"coverage": {"complete": True}}, stakeholder_view=_safe_view())
+
+    assert state.task.status == "FAILED"
+    assert any(update.get("status") == "FAILED" for update in state.task.updates)
+
+
+def test_finalize_marks_the_single_task_complete_after_the_latest_revision(monkeypatch):
+    service = _service(monkeypatch)
+    state = service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+    service.publish_milestone("summary", {"coverage": {"complete": True}}, stakeholder_view=_safe_view())
+
+    completed = service.finalize()
+
+    assert completed is state
+    assert state.task.status == "COMPLETED"
+    assert "Status: completed" in state.report.output
+
+
+def test_finalize_records_an_honest_incomplete_terminal_state_without_reclassifying_it_as_a_failure(monkeypatch):
+    service = _service(monkeypatch)
+    state = service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+
+    service.finalize(status="incomplete")
+
+    assert state.task.status == "COMPLETED"
+    assert __import__("json").loads(state.task.metadata)["optimization_run_final_status"] == "incomplete"
+    assert "Status: incomplete" in state.report.output
+
+
+@pytest.mark.parametrize(
+    ("requested", "task_status"),
+    [
+        ("completed", "COMPLETED"),
+        ("complete_with_unresolved_actions", "COMPLETED"),
+        ("incomplete", "COMPLETED"),
+        ("blocked", "COMPLETED"),
+    ],
+)
+def test_finalize_supports_every_nonfailure_lifecycle_state(monkeypatch, requested, task_status):
+    service = _service(monkeypatch)
+    state = service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+
+    service.finalize(status=requested)
+
+    assert state.task.status == task_status
+    assert json.loads(state.task.metadata)["optimization_run_final_status"] == requested
+    assert f"Status: {requested}" in state.report.output
+
+
+def test_workbook_is_deterministic_macro_free_formula_safe_and_has_all_stakeholder_sheets():
+    from plexus.optimization.run_report import build_stakeholder_workbook
+
+    generated_at = datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc)
+    first = build_stakeholder_workbook(_safe_view(), revision_number=1, generated_at=generated_at)
+    second = build_stakeholder_workbook(_safe_view(), revision_number=1, generated_at=generated_at)
+
+    assert first.checksum == second.checksum
+    assert first.content == second.content
+    workbook = load_workbook(BytesIO(first.content), data_only=False)
+    assert workbook.sheetnames == [
+        "Overview",
+        "Portfolio",
+        "Priorities",
+        "Feedback Investment",
+        "Questions and Issues",
+        "Optimization Outcomes",
+        "Run Log",
+        "Definitions",
+    ]
+    assert first.row_counts["priorities"] == 1
+    assert first.row_counts == {
+        "portfolio": 1,
+        "priorities": 1,
+        "feedback_investment": 1,
+        "questions_and_issues": 1,
+        "optimization_outcomes": 0,
+        "run_log": 1,
+        "definitions": 1,
+    }
+    priority_headers = [cell.value for cell in workbook["Priorities"][1]]
+    rationale_cell = workbook["Priorities"].cell(2, priority_headers.index("Rationale") + 1)
+    assert rationale_cell.data_type != "f"
+    assert rationale_cell.value.startswith("'")
+    with ZipFile(BytesIO(first.content)) as archive:
+        names = archive.namelist()
+        assert not any(name.lower().endswith("vbaProject.bin".lower()) for name in names)
+        core_properties = archive.read("docProps/core.xml")
+        assert core_properties.count(b"2026-07-29T12:00:00Z") == 2
+        content = b"".join(archive.read(name) for name in names)
+        assert b"opaque-id" not in content
+        assert b"do not expose" not in content
+    assert all(sheet.sheet_state == "visible" for sheet in workbook.worksheets)
+    assert not workbook._external_links
+    assert all(cell.data_type != "f" for sheet in workbook.worksheets for row in sheet.iter_rows() for cell in row)
+    assert {table.name for sheet in workbook.worksheets for table in sheet.tables.values()} >= {
+        "PortfolioTable", "PrioritiesTable", "FeedbackInvestmentTable",
+        "QuestionsAndIssuesTable", "OptimizationOutcomesTable", "RunLogTable", "DefinitionsTable",
+    }
+    assert workbook["Portfolio"].freeze_panes == "A2"
+    assert workbook["Portfolio"].auto_filter.ref
+    assert workbook["Portfolio"].column_dimensions["A"].width > 10
+
+
+def test_workbook_overview_is_sized_and_wrapped_for_default_opening():
+    from plexus.optimization.run_report import build_stakeholder_workbook
+
+    artifact = build_stakeholder_workbook(
+        _safe_view(),
+        revision_number=1,
+        generated_at=datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc),
+    )
+    overview = load_workbook(BytesIO(artifact.content))["Overview"]
+
+    assert overview.column_dimensions["A"].width >= len("Optimization Run Overview") + 2
+    assert overview.column_dimensions["B"].width >= 40
+    assert all(cell.alignment.wrap_text for cell in overview["B"])
+
+
+def test_workbook_rejects_unsafe_view_keys_instead_of_copying_raw_evidence():
+    from plexus.optimization.run_report import build_stakeholder_workbook
+
+    unsafe = _safe_view()
+    unsafe["portfolio"][0]["score_id"] = "opaque-id"
+
+    with pytest.raises(ValueError, match="not allowed"):
+        build_stakeholder_workbook(unsafe, revision_number=1, generated_at=datetime(2026, 7, 29, tzinfo=timezone.utc))

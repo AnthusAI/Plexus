@@ -665,6 +665,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("optimization_run", "optimization", "run"),
     ("optimization_review", "optimization", "review"),
     ("optimization_summary", "optimization", "summary"),
+    ("optimization_portfolio_run", "optimization", "portfolio_run"),
     ("api_list", "api", "list"),
     ("model_frontier_plan", "model_frontier", "plan"),
     ("model_frontier_build_result_row", "model_frontier", "build_result_row"),
@@ -863,6 +864,9 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("optimization", "run"): _method_spec("_call_optimization", planning_allowed=False),
     ("optimization", "review"): _method_spec("_call_optimization", planning_allowed=True),
     ("optimization", "summary"): _method_spec("_call_optimization", planning_allowed=True),
+    # This starts/resumes the durable Report and may later launch approved
+    # optimizers, so it is intentionally unavailable in Console planning mode.
+    ("optimization", "portfolio_run"): _method_spec("_call_optimization", planning_allowed=False),
 }
 
 
@@ -8608,6 +8612,9 @@ class PlexusRuntimeModule:
         procedure_optimize: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         procedure_archive: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         optimization_handlers: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] | None = None,
+        optimization_portfolio_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        optimization_report_service_factory: Callable[[str, str, dict[str, Any]], Any] | None = None,
+        optimization_action_service_factory: Callable[[Any], Any] | None = None,
         optimization_persister: Callable[[dict[str, Any]], Any] | None = None,
         guidelines_validator: Callable[[str], dict[str, Any]] | None = None,
         terminal_class_resolver: Callable[[str], Any] | None = None,
@@ -8808,6 +8815,8 @@ class PlexusRuntimeModule:
             if optimization_persister is not None
             else _default_optimization_persist
         )
+        self._optimization_report_service_factory = optimization_report_service_factory
+        self._optimization_action_service_factory = optimization_action_service_factory
         self._guidelines_validator = guidelines_validator
         self._terminal_class_resolver = terminal_class_resolver
         self._review_evidence_loader = review_evidence_loader
@@ -8815,6 +8824,11 @@ class PlexusRuntimeModule:
             method: self._default_optimization_handler(method)
             for method in ("rank", "assess", "diagnose", "run", "review", "summary")
         }
+        self._optimization_handlers["portfolio_run"] = (
+            optimization_portfolio_runner
+            if optimization_portfolio_runner is not None
+            else self._default_optimization_portfolio_runner
+        )
         if optimization_handlers:
             self._optimization_handlers.update(optimization_handlers)
         self._stream_handler = stream_handler
@@ -10403,6 +10417,100 @@ class PlexusRuntimeModule:
 
         return invoke
 
+    def _default_optimization_portfolio_runner(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Run the one report-first portfolio coordinator through existing APIs.
+
+        The outer Tactus procedure supplies accumulated responses from its
+        structured ``Human.review`` checkpoints as ``approval_responses``.
+        Each response includes the exact request that was shown, so the
+        coordinator can reject stale evidence before dispatch. If no matching
+        response is present, the Task/Report stays running and the coordinator
+        returns the next pending review; it never creates a score version
+        merely to make progress.
+        """
+        from plexus.chat import ChatMessageActionService
+        from plexus.cli.shared.client_utils import create_client
+        from plexus.optimization.portfolio_run import (
+            OptimizationPortfolioRunner,
+            PortfolioRunDependencies,
+        )
+        from plexus.optimization.run_report import OptimizationRunReportService
+
+        account_id = str(args.get("account_id") or "").strip()
+        if not account_id:
+            raise ValueError("optimization.portfolio_run requires account_id")
+        client = None
+        if self._optimization_report_service_factory is None:
+            client = create_client()
+            if client is None:
+                raise RuntimeError("optimization.portfolio_run requires an authenticated dashboard client")
+            report_service_factory = lambda run_key, request: OptimizationRunReportService(
+                client=client,
+                account_id=account_id,
+                run_key=run_key,
+                report_configuration_id=request.get("report_configuration_id"),
+            )
+        else:
+            report_service_factory = lambda run_key, request: self._optimization_report_service_factory(
+                account_id, run_key, request
+            )
+
+        action_service = (
+            self._optimization_action_service_factory(client)
+            if self._optimization_action_service_factory is not None
+            else ChatMessageActionService(client)
+            if client is not None
+            else None
+        )
+        procedure_id = str(args.get("procedure_id") or self._trace_id or "").strip()
+        session_id = str(args.get("session_id") or "").strip() or None
+
+        def create_action(payload: dict[str, Any]) -> Mapping[str, Any]:
+            if action_service is None or not procedure_id:
+                raise RuntimeError(
+                    "optimization.portfolio_run requires ChatMessage action authority"
+                )
+            persisted = action_service.create_or_get(
+                payload,
+                procedure_id=procedure_id,
+                session_id=session_id,
+            )
+            message = persisted.get("action") if isinstance(persisted, Mapping) else None
+            message_id = message.get("id") if isinstance(message, Mapping) else None
+            resolution = (
+                action_service.resolve_first_valid_response(
+                    str(message_id),
+                    account_id=account_id,
+                    procedure_id=procedure_id,
+                )
+                if message_id
+                else None
+            )
+            return {**dict(persisted), "resolution": resolution}
+
+        def operation(name: str) -> Callable[[dict[str, Any]], Any]:
+            return lambda payload: self._optimization_handlers[name](
+                _merge_runtime_context_args(dict(payload), self._runtime_context)
+            )
+
+        runner = OptimizationPortfolioRunner(
+            PortfolioRunDependencies(
+                rank=operation("rank"),
+                assess=operation("assess"),
+                diagnose=operation("diagnose"),
+                summary=operation("summary"),
+                dispatch=operation("run"),
+                review=operation("review"),
+                report_service=report_service_factory,
+                # Persisted procedure resumes use the evidence-bound
+                # approval_responses map. An unbound response must never be
+                # accepted through this compatibility dependency.
+                human_review=lambda _request: {"decisions": []},
+                create_action=create_action,
+            )
+        )
+        return runner.run({**args, "wait_for_human": True})
+
     def _call_optimization(
         self, namespace: str, method: str, args: Any = None
     ) -> Any:
@@ -10415,7 +10523,7 @@ class PlexusRuntimeModule:
         try:
             parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
             result = self._optimization_handlers[method](parsed)
-            if parsed.get("persist") is True:
+            if parsed.get("persist") is True and method != "portfolio_run":
                 if self._optimization_persister is None:
                     raise RuntimeError(
                         "plexus.optimization persistence requires a configured "
@@ -11743,8 +11851,8 @@ async def _execute_tactus_tool(
 
 
 EXECUTE_TACTUS_DESCRIPTION = """\
-Execute a short Tactus (Lua) snippet inside the Plexus runtime. This is the
-single Plexus MCP tool; use it for every Plexus operation.
+Execute a short Tactus (Lua) snippet inside the Plexus runtime. Use it for
+Plexus work.
 
 Runtime ground rules:
 - `plexus` is a global. Do NOT write `local plexus = require("plexus")`.
@@ -11775,8 +11883,10 @@ Complete coverage contract:
   coverage, drift, rubric clarity, and fixability separately.
 
 Optimization: `plexus.optimization.rank/assess/diagnose/review/summary` plan;
-`plexus.optimization.run` needs `approved = true`, at most five exact targets,
-and never promotes a champion; `persist = true` has no inline output fallback.
+`plexus.optimization.run` needs `approved = true`, <=5 exact targets, and never promotes a champion.
+`persist = true` has no inline output fallback.
+`plexus.optimization.portfolio_run` owns one Report, returns
+`Human.review` approval, then dispatches individually approved exact targets.
 Rank scope: opaque `scorecard_ids` or literal case-insensitive
 `scorecard_name_prefixes`; empty arrays are invalid.
 `score-activity-cooldown-v1`: frozen UTC `as_of`; 168-hour inclusive cutoff on

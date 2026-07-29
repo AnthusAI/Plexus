@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4a89420a-7f37-43a2-b1e4-c60ee766b0a3",
+  "issue_id": "plx-497e0819-3698-48d6-934f-bfa1a7bd26ba",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T18:46:57.625Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Safely inject array procedure parameters",
+    "description": "As a procedure author, I want array-valued runtime parameters to reach Lua unchanged, so that exact scoped orchestration can execute safely.\n\nOut of scope: changing parameter semantics or adding a second execution path.\n\nFeature: Safe structured parameter injection\n\n  Scenario: Inject an array into a YAML-backed procedure\n    Given a Tactus procedure parameter contains a JSON-compatible array\n    When Plexus injects the runtime context into Lua\n    Then the Lua source parses successfully\n    And the procedure receives the complete array unchanged\n\n  Scenario: Preserve scalar parameter behavior\n    Given existing scalar procedure parameters\n    When Plexus injects the runtime context into Lua\n    Then their values remain unchanged",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

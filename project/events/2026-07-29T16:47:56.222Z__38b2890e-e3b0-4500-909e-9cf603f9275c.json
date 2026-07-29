@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "38b2890e-e3b0-4500-909e-9cf603f9275c",
+  "issue_id": "plx-5b4d82e3-7598-4232-85e6-91538dd24535",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T16:47:56.222Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Publish safe optimization workbook revisions",
+    "description": "As a stakeholder, I want a simple spreadsheet representation of optimization evidence, so that I can review and work with the findings safely.\n\nFeature: Optimization workbook revisions\n\nScenario: Publish a verified workbook\n  Given complete or explicitly incomplete decision evidence\n  When a report milestone is published\n  Then a macro-free workbook contains the defined stakeholder sheets\n  And its row counts reconcile with the evidence\n  And the report points to the newest immutable revision\n\nScenario: Protect restricted evidence\n  Given evidence contains opaque identifiers or sensitive source material\n  When the stakeholder workbook is generated\n  Then displayed cells contain only aggregates, findings, and dashboard links\n  And raw evidence remains in restricted artifact attachments\n  And spreadsheet formulas cannot be injected through source text",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

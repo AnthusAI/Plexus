@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "1448acae-223d-4341-ba4d-b4ff9ea6669a",
+  "issue_id": "plx-5a441445-9326-4c5b-959c-d9a2ef82d803",
+  "event_type": "field_updated",
+  "occurred_at": "2026-07-29T17:23:05.658Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "As an account operator, I want human decisions to be durable and race-safe, so that procedures act on one authorized response with current evidence.\n\nFeature: Authoritative human action requests\n\nScenario: Accept one account response\n  Given an open action with current preconditions\n  When two authenticated users from the same account respond concurrently\n  Then exactly one valid response is accepted\n  And the winning responder and events are recorded\n  And the other response is reported as already resolved\n\nScenario: Reject unsafe responses\n  Given an action is stale, expired, cancelled, or belongs to another account\n  When a user attempts to respond\n  Then the response is not accepted\n  And no dependent procedure or mutation resumes",
+        "to": "As an account operator, I want human decisions to be durable and race-safe using the existing procedure conversation records, so that a procedure resumes from one valid response without introducing another persistence system.\n\nFeature: Authoritative human actions on existing procedure messages\n\nScenario: Publish a structured action request\n  Given a procedure reaches a structured human boundary\n  When it records the request\n  Then it creates one existing PENDING_* ChatMessage with an exact action key, typed resource references, preconditions and fingerprint, expiry, response schema, UI schema, and report links\n  And the Procedure keeps using its existing waitingOnMessageId pointer\n  And no new model, table, function, queue, association, or custom GraphQL operation is required\n\nScenario: Accept the first valid response\n  Given a pending action message with current preconditions\n  When same-account child RESPONSE messages are examined\n  Then the first response that matches the exact parent, action identity, expiry, preconditions, and response schema is authoritative\n  And later responses cannot replace it\n\nScenario: Reject unsafe responses\n  Given a child response belongs to another account, is malformed, is expired, or no longer satisfies the request preconditions\n  When the procedure checks for a response\n  Then the response is ignored with explicit fail-closed evidence\n  And no dependent procedure or mutation resumes\n\nScenario: Preserve legacy HITL\n  Given a Human request without an action key\n  When the procedure waits or resumes\n  Then the existing ChatMessage control behavior remains unchanged."
+      }
+    }
+  }
+}

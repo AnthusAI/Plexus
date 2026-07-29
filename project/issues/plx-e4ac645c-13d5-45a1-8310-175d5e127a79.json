@@ -1,0 +1,31 @@
+{
+  "id": "plx-e4ac645c-13d5-45a1-8310-175d5e127a79",
+  "title": "Continue structured approval across every portfolio batch",
+  "description": "As a portfolio operator, I want every ready target batch to receive an independent structured review, so that portfolios larger than five targets neither skip decisions nor stop after the first batch.\n\nFeature: Multi-batch optimization approval continuation\n\nScenario: More than five targets require approval\n  Given a portfolio has more than five optimization-ready targets\n  When the procedure requests structured approval\n  Then it presents no more than five exact targets at a time\n  And after one batch is resolved it requests the next unresolved batch\n  And it dispatches nothing until every batch has a valid independent decision\n\nScenario: Procedure replay\n  Given one approval batch was resolved before a human wait checkpoint\n  When the procedure resumes for a later batch\n  Then the earlier response remains bound to its original evidence\n  And the earlier batch is not requested or dispatched twice.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b47afd94-49bb-4331-8bb7-b600d532295f",
+      "author": "ryan.porter",
+      "text": "Outside-in proof complete: the new six-target specification first showed both batches remaining pending after the first decision. The procedure now persists evidence-bound responses across checkpoints, requests only the next unresolved batch of at most five, and dispatches nothing until every batch is resolved. Focused regression is green.",
+      "created_at": "2026-07-29T19:54:57.523521Z"
+    },
+    {
+      "id": "e1c24c6c-f094-4b2d-b4e0-6644431df7b0",
+      "author": "ryan.porter",
+      "text": "Final post-fix validation passed on Python 3.11 and 3.12: 356 focused tests and 4,088 full-suite tests on each runtime, plus lint, dispatch regression, lock, version, and diff checks.",
+      "created_at": "2026-07-29T20:06:54.512610Z"
+    }
+  ],
+  "created_at": "2026-07-29T19:50:11.827027Z",
+  "updated_at": "2026-07-29T20:06:54.512610Z",
+  "closed_at": null,
+  "custom": {}
+}

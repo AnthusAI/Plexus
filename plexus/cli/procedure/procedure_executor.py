@@ -29,6 +29,15 @@ logger = logging.getLogger(__name__)
 CONSOLE_CHAT_BUILTIN_ID = "builtin:console/chat"
 
 
+def _lua_json_decode_literal(value: Any) -> str:
+    """Encode JSON-compatible values in a collision-safe Lua long string."""
+    payload = json.dumps(value)
+    equals = "="
+    while f"]{equals}]" in payload:
+        equals += "="
+    return f"Json.decode([{equals}[{payload}]{equals}])"
+
+
 class ProcedureExecutionCancelled(RuntimeError):
     """Raised when a procedure worker observes a dashboard cancellation request."""
 
@@ -1190,9 +1199,7 @@ async def _execute_tactus(
             if isinstance(value, str):
                 return _lua_string(value)
             try:
-                payload = json.dumps(value)
-                payload = payload.replace("]]", "] ]")
-                return f"Json.decode([[{payload}]])"
+                return _lua_json_decode_literal(value)
             except Exception:
                 return _lua_string(str(value))
 

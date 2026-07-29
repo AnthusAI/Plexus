@@ -1,0 +1,116 @@
+name: Optimization Portfolio Run
+version: 1.0.0
+class: Tactus
+procedure_type: Portfolio Optimization
+description: "Creates one living report, analyzes a frozen score portfolio, and waits for structured human decisions before any optimizer launch."
+
+params:
+  account_id:
+    type: string
+    required: true
+    description: "Opaque account identifier for the portfolio run."
+  run_key:
+    type: string
+    required: true
+    description: "Stable key for this frozen periodic run and its one Report."
+  max_cost_usd:
+    type: number
+    required: true
+    description: "Explicit maximum optimizer cost per approved batch."
+  max_samples:
+    type: number
+    required: true
+    description: "Explicit maximum samples per approved optimizer target."
+  max_iterations:
+    type: number
+    required: true
+    description: "Explicit maximum optimizer iterations per approved target."
+  max_concurrency:
+    type: number
+    required: true
+    description: "Explicit optimizer concurrency, from one through five."
+  scorecard_ids:
+    type: array
+    required: false
+    description: "Optional exact opaque scorecard IDs."
+  scorecard_name_prefixes:
+    type: array
+    required: false
+    description: "Optional literal case-insensitive scorecard-name prefixes."
+
+outputs:
+  status:
+    type: string
+    required: true
+  run_key:
+    type: string
+    required: true
+  result:
+    type: object
+    required: true
+
+stages:
+  - preflight
+  - analysis
+  - approval
+  - optimization
+  - review
+  - finalization
+
+code: |
+  Stage.set("preflight")
+  local pending = State.get("optimization_portfolio_pending_action")
+  local approval_responses = State.get("optimization_portfolio_approval_responses")
+  if approval_responses == nil then
+    approval_responses = {}
+  end
+
+  while true do
+    if pending ~= nil then
+      Stage.set("approval")
+      local response = Human.review({
+        message = pending.message,
+        action_key = pending.action_key,
+        resource_refs = pending.resource_refs,
+        preconditions = pending.preconditions,
+        expires_at = pending.expires_at,
+        response_schema = pending.response_schema,
+        ui_schema = pending.ui_schema
+      })
+      approval_responses[pending.action_key] = {
+        request = pending,
+        response = response
+      }
+      State.set("optimization_portfolio_approval_responses", approval_responses)
+      State.set("optimization_portfolio_pending_action", nil)
+      pending = nil
+    end
+
+    Stage.set("analysis")
+    local result = plexus.optimization.portfolio_run({
+      account_id = params.account_id,
+      run_key = params.run_key,
+      scorecard_ids = params.scorecard_ids,
+      scorecard_name_prefixes = params.scorecard_name_prefixes,
+      max_cost_usd = params.max_cost_usd,
+      max_samples = params.max_samples,
+      max_iterations = params.max_iterations,
+      max_concurrency = params.max_concurrency,
+      approval_responses = approval_responses
+    })
+
+    if result.status ~= "WAITING_FOR_APPROVAL" then
+      State.set("optimization_portfolio_pending_action", nil)
+      State.set("optimization_portfolio_approval_responses", nil)
+      Stage.set("finalization")
+      return {status = result.status, run_key = params.run_key, result = result}
+    end
+
+    pending = result.approval_requests[1]
+    if pending == nil then
+      State.set("optimization_portfolio_approval_responses", nil)
+      Stage.set("finalization")
+      return {status = "INCOMPLETE", run_key = params.run_key, result = result}
+    end
+    State.set("optimization_portfolio_pending_action", pending)
+  end

@@ -26,6 +26,28 @@ from rich.json import JSON
 from datetime import datetime, timedelta, timezone
 
 
+def _parse_set_parameter_value(raw_value: str) -> Any:
+    """Parse one ``--set`` value without reducing structured JSON to text."""
+    value = raw_value.strip()
+    lowered = value.lower()
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+    if value.startswith(("[", "{")):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    try:
+        return int(value)
+    except ValueError:
+        try:
+            return float(value)
+        except ValueError:
+            return value
+
+
 def _json_safe(obj: Any) -> Any:
     """Recursively convert non-serializable objects (e.g. Pydantic models) to plain dicts/lists."""
     _dict = __builtins__["dict"] if isinstance(__builtins__, dict) else dict  # type: ignore[index]
@@ -776,11 +798,12 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
                     k, _, v = param.partition('=')
                     k = k.strip().strip('"').strip("'")
                     v = v.strip().strip('"').strip("'")
-                    if k in ('scorecard', 'scorecard_id') and v:
-                        scorecard_identifier_for_create = v
-                    elif k in ('score', 'score_id') and v:
-                        score_identifier_for_create = v
-                    parsed_set_params[k] = v
+                    parsed_value = _parse_set_parameter_value(v)
+                    if k in ('scorecard', 'scorecard_id') and parsed_value:
+                        scorecard_identifier_for_create = str(parsed_value)
+                    elif k in ('score', 'score_id') and parsed_value:
+                        score_identifier_for_create = str(parsed_value)
+                    parsed_set_params[k] = parsed_value
 
         # Inject --set param values into YAML params so they are persisted in the
         # stored procedure code (the same way the dashboard does it at creation time).
@@ -848,20 +871,7 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
                 console.print(f"[red]Error: --set value must be key=value, got: {param}[/red]")
                 return
             key, value = param.split('=', 1)
-            # Try to parse numeric/boolean values
-            if value.lower() == 'true':
-                value = True
-            elif value.lower() == 'false':
-                value = False
-            else:
-                try:
-                    value = int(value)
-                except ValueError:
-                    try:
-                        value = float(value)
-                    except ValueError:
-                        pass  # Keep as string
-            param_context[key.strip()] = value
+            param_context[key.strip()] = _parse_set_parameter_value(value)
         options['context'] = param_context
     
     # Get account ID for task tracking

@@ -2589,7 +2589,7 @@ def test_optimization_namespace_advertises_all_decision_methods_and_helpers() ->
     module = execute.PlexusRuntimeModule(FastMCP("test-optimization-catalog"))
 
     assert module.api.list()["plexus.optimization"] == [
-        "assess", "diagnose", "rank", "review", "run", "summary"
+        "assess", "diagnose", "portfolio_run", "rank", "review", "run", "summary"
     ]
     helpers = {name for name, _, _ in execute.HELPER_BINDINGS}
     assert {
@@ -2599,7 +2599,28 @@ def test_optimization_namespace_advertises_all_decision_methods_and_helpers() ->
         "optimization_run",
         "optimization_review",
         "optimization_summary",
+        "optimization_portfolio_run",
     } <= helpers
+
+
+def test_optimization_portfolio_run_is_execution_only_and_delegates_to_the_single_reported_orchestrator() -> None:
+    calls: list[dict] = []
+
+    planning = execute.PlexusRuntimeModule(
+        FastMCP("test-portfolio-run-planning"),
+        runtime_context={"tool_access_mode": "planning", "account_id": "acct-opaque"},
+        optimization_portfolio_runner=lambda args: calls.append(args) or {"status": "WAITING_FOR_APPROVAL"},
+    )
+    with pytest.raises(execute.PlanningModeToolNotAllowed):
+        planning.optimization.portfolio_run({"run_key": "run-opaque"})
+
+    execution = execute.PlexusRuntimeModule(
+        FastMCP("test-portfolio-run-execution"),
+        runtime_context={"account_id": "acct-opaque"},
+        optimization_portfolio_runner=lambda args: calls.append(args) or {"status": "WAITING_FOR_APPROVAL"},
+    )
+    assert execution.optimization.portfolio_run({"run_key": "run-opaque"}) == {"status": "WAITING_FOR_APPROVAL"}
+    assert calls == [{"run_key": "run-opaque", "account_id": "acct-opaque"}]
 
 
 def test_optimization_read_methods_delegate_to_injected_handlers_in_planning_mode() -> None:
@@ -2722,6 +2743,296 @@ def _rank_inventory_card(card_id: str, score_id: str, champion_version: str) -> 
             }]},
         }]}}]},
     }
+
+
+def test_default_optimization_portfolio_run_composes_existing_operations_into_one_waiting_report_without_dispatching():
+    calls: list[tuple[str, dict]] = []
+
+    class ActionService:
+        def __init__(self):
+            self.created = []
+
+        def create_or_get(self, action, *, procedure_id, session_id=None):
+            self.created.append((action, procedure_id, session_id))
+            return {
+                "action": {"id": "chat-action-1", "responseStatus": "PENDING"},
+                "created": True,
+            }
+
+        def resolve_first_valid_response(self, *_args, **_kwargs):
+            return None
+
+    class ReportService:
+        def __init__(self):
+            self.started = []
+            self.milestones = []
+
+        def start_or_resume(self, spec):
+            self.started.append(spec)
+            return type("State", (), {"report": type("Report", (), {"id": "report-opaque"})()})()
+
+        def publish_milestone(self, milestone, evidence, *, stakeholder_view):
+            self.milestones.append((milestone, evidence, stakeholder_view))
+
+        def finalize(self, **_kwargs):
+            raise AssertionError("waiting run must not finalize")
+
+        def fail(self, message):
+            raise AssertionError(f"waiting run must not fail: {message}")
+
+    report = ReportService()
+    action_service = ActionService()
+    assessment = _ready_optimization_target(
+        "card-opaque", "score-opaque", "champion-1", "2026-01-01T00:00:00Z"
+    )["assessment"]
+
+    def handler(name, value):
+        def invoke(args):
+            calls.append((name, args))
+            return value(args) if callable(value) else value
+        return invoke
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-default-optimization-portfolio-run"),
+        trace_id="procedure-opaque",
+        runtime_context={"account_id": "account-opaque"},
+        optimization_report_service_factory=lambda account_id, run_key, _request: (
+            report if (account_id, run_key) == ("account-opaque", "report-run-opaque") else None
+        ),
+        optimization_action_service_factory=lambda _client: action_service,
+        optimization_handlers={
+            "rank": handler("rank", {
+                "coverage": {"complete": True, "failures": []},
+                "window": {"start": "2026-04-01T00:00:00Z", "end": "2026-07-01T00:00:00Z"},
+                "ranked": [{"scorecard_id": "card-opaque", "score_id": "score-opaque"}],
+            }),
+            "assess": handler("assess", assessment),
+            "diagnose": handler("diagnose", lambda args: {**args["assessment"], "states": {"optimization": "ready_to_optimize"}}),
+            "summary": handler("summary", {"coverage": {"complete": True}}),
+            "run": handler("run", lambda _args: (_ for _ in ()).throw(AssertionError("must wait for Human.review"))),
+            "review": handler("review", {}),
+        },
+    )
+
+    result = module.optimization.portfolio_run({
+        "run_key": "report-run-opaque",
+        "limits": {"max_cost_usd": 1.0, "max_samples": 10, "max_iterations": 1, "max_concurrency": 1},
+    })
+
+    assert result["status"] == "WAITING_FOR_APPROVAL"
+    assert result["approval_requests"][0]["action_key"] == "optimization-approval:report-run-opaque:1"
+    assert [name for name, _ in calls] == ["rank", "assess", "diagnose"]
+    assert all(args["persist"] is False for _, args in calls)
+    assert [milestone[0] for milestone in report.milestones] == ["started", "ranking_assessment", "diagnosis", "approval"]
+    assert all(row[1] == "procedure-opaque" for row in action_service.created)
+
+
+def test_default_portfolio_runtime_fails_closed_when_an_advisory_action_has_no_chat_message_authority():
+    failures = []
+    optimizer_calls = []
+
+    class ReportService:
+        def start_or_resume(self, _spec):
+            return type("State", (), {"report": type("Report", (), {"id": "report-opaque"})()})()
+
+        def publish_milestone(self, *_args, **_kwargs):
+            return None
+
+        def finalize(self, **_kwargs):
+            raise AssertionError("missing authority must not finalize successfully")
+
+        def fail(self, message):
+            failures.append(message)
+
+    assessment = _ready_optimization_target(
+        "card-opaque", "score-opaque", "champion-1", "2026-01-01T00:00:00Z"
+    )["assessment"]
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-missing-chat-message-authority"),
+        trace_id="procedure-opaque",
+        runtime_context={"account_id": "account-opaque"},
+        optimization_report_service_factory=lambda *_args: ReportService(),
+        optimization_handlers={
+            "rank": lambda _args: {
+                "coverage": {"complete": True},
+                "ranked": [{"scorecard_id": "card-opaque", "score_id": "score-opaque"}],
+            },
+            "assess": lambda _args: assessment,
+            "diagnose": lambda args: {
+                **args["assessment"],
+                "states": {"optimization": "stakeholder_clarification_required"},
+                "stakeholder_questions": ["Which generic policy applies?"],
+            },
+            "summary": lambda _args: {},
+            "run": lambda args: optimizer_calls.append(args),
+            "review": lambda _args: {},
+        },
+    )
+
+    result = module.optimization.portfolio_run({"run_key": "missing-authority"})
+
+    assert result["status"] == "FAILED"
+    assert result["error"] == "optimization.portfolio_run requires ChatMessage action authority"
+    assert optimizer_calls == []
+    assert failures == [
+        "Optimization portfolio run failed: "
+        "optimization.portfolio_run requires ChatMessage action authority"
+    ]
+
+
+def test_default_portfolio_runtime_builds_chat_message_authority_from_the_authenticated_client(monkeypatch):
+    client = object()
+    action_clients = []
+
+    class ReportService:
+        def __init__(self, **_kwargs):
+            pass
+
+        def start_or_resume(self, _spec):
+            return type("State", (), {"report": type("Report", (), {"id": "report-opaque"})()})()
+
+        def publish_milestone(self, *_args, **_kwargs):
+            return None
+
+        def finalize(self, **_kwargs):
+            return None
+
+        def fail(self, message):
+            raise AssertionError(message)
+
+    class ActionService:
+        def __init__(self, resolved_client):
+            action_clients.append(resolved_client)
+
+        def create_or_get(self, _action, *, procedure_id, session_id=None):
+            assert (procedure_id, session_id) == ("procedure-opaque", None)
+            return {
+                "action": {"id": "chat-action-1", "responseStatus": "PENDING"},
+                "created": True,
+            }
+
+        def resolve_first_valid_response(self, *_args, **_kwargs):
+            return None
+
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    monkeypatch.setattr("plexus.optimization.run_report.OptimizationRunReportService", ReportService)
+    monkeypatch.setattr("plexus.chat.ChatMessageActionService", ActionService)
+    assessment = _ready_optimization_target(
+        "card-opaque", "score-opaque", "champion-1", "2026-01-01T00:00:00Z"
+    )["assessment"]
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-default-chat-message-authority"),
+        trace_id="procedure-opaque",
+        runtime_context={"account_id": "account-opaque"},
+        optimization_handlers={
+            "rank": lambda _args: {
+                "coverage": {"complete": True},
+                "ranked": [{"scorecard_id": "card-opaque", "score_id": "score-opaque"}],
+            },
+            "assess": lambda _args: assessment,
+            "diagnose": lambda args: {
+                **args["assessment"],
+                "states": {"optimization": "stakeholder_clarification_required"},
+                "stakeholder_questions": ["Which generic policy applies?"],
+            },
+            "summary": lambda _args: {},
+            "run": lambda _args: (_ for _ in ()).throw(AssertionError("must not launch")),
+            "review": lambda _args: {},
+        },
+    )
+
+    result = module.optimization.portfolio_run({"run_key": "authenticated-authority"})
+
+    assert result["actions"][0]["message_id"] == "chat-action-1"
+    assert action_clients == [client]
+
+
+def test_default_portfolio_runtime_persists_and_resolves_nonblocking_findings_with_existing_chat_messages():
+    class ReportService:
+        def start_or_resume(self, _spec):
+            return type("State", (), {"report": type("Report", (), {"id": "report-opaque"})()})()
+
+        def publish_milestone(self, *_args, **_kwargs):
+            return None
+
+        def finalize(self, **_kwargs):
+            return None
+
+        def fail(self, message):
+            raise AssertionError(message)
+
+    class ActionService:
+        def __init__(self):
+            self.created = []
+            self.resolved = []
+
+        def create_or_get(self, action, *, procedure_id, session_id=None):
+            self.created.append((action, procedure_id, session_id))
+            return {
+                "action": {
+                    "id": "chat-action-1",
+                    "responseStatus": "PENDING" if len(self.created) == 1 else "COMPLETED",
+                    "responseOwner": None if len(self.created) == 1 else "chat-response-1",
+                },
+                "created": len(self.created) == 1,
+            }
+
+        def resolve_first_valid_response(self, message_id, *, account_id, procedure_id):
+            self.resolved.append((message_id, account_id, procedure_id))
+            if len(self.resolved) == 1:
+                return None
+            return {
+                "response_message_id": "chat-response-1",
+                "response": {"response": "Use the documented generic policy."},
+            }
+
+    action_service = ActionService()
+    mutation_calls = []
+    assessment = _ready_optimization_target(
+        "card-opaque", "score-opaque", "champion-1", "2026-01-01T00:00:00Z"
+    )["assessment"]
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-chat-message-actions"),
+        trace_id="procedure-opaque",
+        runtime_context={"account_id": "account-opaque"},
+        optimization_report_service_factory=lambda *_args: ReportService(),
+        optimization_action_service_factory=lambda _client: action_service,
+        score_update=lambda args: mutation_calls.append(("score_update", args)),
+        score_set_champion=lambda args: mutation_calls.append(("score_set_champion", args)),
+        procedure_optimize=lambda args: mutation_calls.append(("procedure_optimize", args)),
+        optimization_handlers={
+            "rank": lambda _args: {
+                "coverage": {"complete": True},
+                "ranked": [{"scorecard_id": "card-opaque", "score_id": "score-opaque"}],
+            },
+            "assess": lambda _args: assessment,
+            "diagnose": lambda args: {
+                **args["assessment"],
+                "states": {"optimization": "stakeholder_clarification_required"},
+                "stakeholder_questions": ["Which policy applies?"],
+            },
+            "summary": lambda _args: {"coverage": {"complete": True}},
+            "run": lambda _args: (_ for _ in ()).throw(AssertionError("must not launch")),
+            "review": lambda _args: {},
+        },
+    )
+
+    first = module.optimization.portfolio_run({"run_key": "report-run-opaque"})
+    replay = module.optimization.portfolio_run({"run_key": "report-run-opaque"})
+
+    assert first["actions"][0]["message_id"] == "chat-action-1"
+    assert first["actions"][0]["response_status"] == "PENDING"
+    assert replay["actions"][0]["message_id"] == "chat-action-1"
+    assert replay["actions"][0]["created"] is False
+    assert replay["actions"][0]["response_status"] == "COMPLETED"
+    assert replay["actions"][0]["response_message_id"] == "chat-response-1"
+    assert all(row[1:] == ("procedure-opaque", None) for row in action_service.created)
+    assert len(action_service.resolved) == len(action_service.created)
+    assert all(
+        row == ("chat-action-1", "account-opaque", "procedure-opaque")
+        for row in action_service.resolved
+    )
+    assert mutation_calls == []
 
 
 def test_default_optimization_run_dispatches_only_exact_approved_targets() -> None:
