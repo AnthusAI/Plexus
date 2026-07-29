@@ -1,0 +1,31 @@
+{
+  "id": "plx-e04e1d87-3662-4624-b759-4f5dd90a6f7c",
+  "title": "Harden reusable async scoring queue and log lifecycle",
+  "description": "Add executable infrastructure specifications, implement retry-safe visibility validation, explicit log retention, and retained queue lifecycle defaults in the reusable async score processing construct. Keep downstream deployment details outside Plexus.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "0556a639-3f7b-4f7f-8ccd-455e188ad2fa",
+      "author": "derek.norrbom",
+      "text": "Started implementation. Verified live consumers currently synthesize a 300-second queue visibility timeout for a 300-second Lambda timeout and rely on an implicit log group. Plan: add failing CDK specifications, enforce the six-times visibility invariant, define an explicit retained log group, retain construct-owned queues, and validate that no downstream identifiers enter Plexus.",
+      "created_at": "2026-07-29T19:00:41.625468Z"
+    },
+    {
+      "id": "559c3def-14f2-499d-840a-e7b8fd91de70",
+      "author": "derek.norrbom",
+      "text": "Implementation complete on the feature branch. Added the six-times visibility invariant, 1,800-second safe default, retained construct-owned queues, an explicit 30-day retained log group in a collision-free namespace, scoped log permissions, documentation, and executable CDK assertions. Validation: python -m pytest infrastructure/tests/unit infrastructure/score_processor_artifacts/tests/unit -q (15 passed); black --check on changed Python files; ruff check on changed Python files.",
+      "created_at": "2026-07-29T19:03:47.461609Z"
+    }
+  ],
+  "created_at": "2026-07-29T19:00:32.527795Z",
+  "updated_at": "2026-07-29T19:03:47.461609Z",
+  "closed_at": null,
+  "custom": {}
+}
