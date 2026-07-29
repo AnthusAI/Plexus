@@ -34,10 +34,11 @@ For the fixed recent window, collect:
 - final-label count for every reachable terminal class, including zero counts
 - 95% Wilson confidence interval for the disagreement rate
 
-For each of the fixed trend buckets, collect the same alignment metrics. A
-bucket used for the stability gate must contain enough in-bucket feedback on its
-own. Do not treat a rolling point extended with older feedback as an independent
-weekly observation.
+For each of the fixed trend buckets, collect the same alignment metrics. The
+`feedback-investment-v1` policy has no fixed weekly minimum: always expose the
+bucket counts and a low-volume warning, but do not turn that warning into a
+blocking gate. Do not treat a rolling point extended with older feedback as an
+independent weekly observation.
 
 Run the existing volume and alignment timeline reports over the same timestamp
 boundaries. Preserve the report parameters and raw compact metric output with
@@ -60,9 +61,10 @@ Apply these rules in order:
    the same conclusion.
 4. **Reduce to periodic and drift-triggered monitoring** when the upper bound is
    at or below the maximum acceptable disagreement rate and all stability gates
-   pass: the latest configured number of complete buckets meet the per-bucket
-   sample requirement, their disagreement-rate range is within the configured
-   limit, and their AC1 range is within its configured limit.
+   pass: the latest configured number of complete buckets are present, their
+   disagreement-rate range is within the configured limit, and their AC1 range
+   is within its configured limit. Report low-volume buckets as a warning, not
+   a blocker.
 5. **Continue broad collection** when the confidence interval crosses the
    acceptable-rate boundary or the recent buckets are unstable. More evidence
    is still capable of changing the decision.

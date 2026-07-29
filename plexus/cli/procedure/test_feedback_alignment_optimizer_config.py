@@ -22,6 +22,20 @@ OPTIMIZER_COHORT_GUIDE_PATH = (
     / "references"
     / "feedback-cohorts.md"
 )
+OPTIMIZATION_DECISION_GUIDE_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "skills"
+    / "score-optimizer"
+    / "references"
+    / "optimization-decision-toolchain.md"
+)
+FEEDBACK_INVESTMENT_GUIDE_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "skills"
+    / "score-optimizer"
+    / "references"
+    / "feedback-investment.md"
+)
 
 
 def _load_optimizer_config():
@@ -142,6 +156,30 @@ def test_optimizer_skill_preserves_complete_runs_and_one_cohort_selection_path()
     assert "single canonical" in cohort_guide
     assert "Do not recreate its selection logic in an ad hoc script" in cohort_guide
     assert "exact feedback-item set equality" in cohort_guide
+
+
+def test_optimizer_skill_routes_portfolio_decisions_through_one_shared_toolchain():
+    skill = " ".join(OPTIMIZER_SKILL_PATH.read_text(encoding="utf-8").split())
+    guide = " ".join(
+        OPTIMIZATION_DECISION_GUIDE_PATH.read_text(encoding="utf-8").split()
+    )
+
+    assert "plexus.optimization.*" in skill
+    for operation in ("rank", "assess", "diagnose", "run", "review", "summary"):
+        assert f"plexus.optimization.{operation}" in guide
+    assert "Do not replace these methods with a second ranking formula" in guide
+    assert "Never automatically invalidate feedback" in guide
+    assert "never automatically" in guide.lower() and "stop an evaluation" in guide
+    assert "score.set_champion" in guide
+
+
+def test_feedback_investment_policy_keeps_weekly_volume_non_blocking():
+    guide = " ".join(
+        FEEDBACK_INVESTMENT_GUIDE_PATH.read_text(encoding="utf-8").split()
+    )
+
+    assert "has no fixed weekly minimum" in guide
+    assert "low-volume buckets as a warning, not a blocker" in guide
 
 
 def test_optimizer_requires_balanced_regression_cohort_without_unbalanced_fallback():

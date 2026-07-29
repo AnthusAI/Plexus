@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 import json
 import os
 import subprocess
@@ -11,7 +12,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from fastmcp import FastMCP
+from fastmcp import Client, FastMCP
 
 from . import execute
 
@@ -265,8 +266,11 @@ def test_plexus_facade_delegates_score_info_call_to_direct_handler() -> None:
 
 
 def test_default_score_info_accepts_version_alias(monkeypatch) -> None:
+    queries: list[str] = []
+
     class FakeClient:
         def execute(self, query: str) -> dict[str, Any]:
+            queries.append(query)
             if "GetScorecardWithScores" in query:
                 return {
                     "getScorecard": {
@@ -288,6 +292,7 @@ def test_default_score_info_accepts_version_alias(monkeypatch) -> None:
                                                 "description": "Example",
                                                 "type": "STANDARD",
                                                 "championVersionId": "sv-champion",
+                                                "updatedAt": "2026-01-03T00:00:00Z",
                                                 "isDisabled": False,
                                             }
                                         ]
@@ -368,6 +373,10 @@ def test_default_score_info_accepts_version_alias(monkeypatch) -> None:
     assert result["previousVersionId"] == "sv-champion"
     assert result["previousVersionSource"] == "parent"
     assert result["code"] == "name: Candidate\n"
+    assert result["updatedAt"] == "2026-01-03T00:00:00Z"
+    discovery_query = next(query for query in queries if "GetScorecardWithScores" in query)
+    assert "championVersionId isDisabled updatedAt" in discovery_query
+    assert result["versions"][0]["id"] == "sv-candidate"
 
 
 def test_plexus_facade_uses_direct_scorecards_handler_without_mcp_loopback() -> None:
@@ -649,6 +658,51 @@ def test_default_scorecards_list_returns_metadata_for_account_wide_pages(monkeyp
     }
     assert len(queries) == 2
     assert 'nextToken: "page-2"' in queries[1]
+
+
+def test_default_scorecards_list_requests_only_newest_version_activity_for_rank_inventory(
+    monkeypatch,
+) -> None:
+    """Exhaustive rank inventory receives immutable score activity evidence."""
+    from plexus.cli.shared import client_utils
+
+    queries: list[str] = []
+    opaque_version_id = "version:opaque/with+punctuation_123"
+
+    class FakeClient:
+        def execute(self, query: str) -> dict[str, Any]:
+            queries.append(query)
+            return {
+                "listScorecards": {
+                    "items": [{
+                        "id": "card-1",
+                        "sections": {"items": [{"scores": {"items": [{
+                            "id": "score-1",
+                            "updatedAt": "2024-02-03T04:05:06Z",
+                            "versions": {"items": [{
+                                "id": opaque_version_id,
+                                "createdAt": "2024-02-02T03:04:05Z",
+                            }]},
+                        }]}}]},
+                    }],
+                    "nextToken": None,
+                }
+            }
+
+    monkeypatch.setattr(client_utils, "create_client", FakeClient)
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+
+    result = execute._default_scorecards_list({
+        "return_metadata": True,
+        "_include_scores": True,
+    })
+
+    assert result["items"][0]["sections"]["items"][0]["scores"]["items"][0]["versions"]["items"][0]["id"] == opaque_version_id
+    query = queries[0]
+    assert "id name championVersionId isDisabled updatedAt" in query
+    assert "championVersion { id scoreId createdAt }" in query
+    assert "versions(sortDirection: DESC, limit: 1)" in query
+    assert "items { id createdAt }" in query
 
 
 def test_default_scorecards_list_uses_identifier_resolution_for_single_record_lookup(monkeypatch) -> None:
@@ -1741,9 +1795,10 @@ async def test_execute_tactus_tool_schema_uses_tactus_parameter() -> None:
     mcp = FastMCP("test-execute-tactus")
     execute.register_tactus_tools(mcp)
 
-    tools = (await mcp.get_tools()).values()
+    async with Client(mcp) as client:
+        tools = await client.list_tools()
     tool = next(tool for tool in tools if tool.name == "execute_tactus")
-    schema = tool.parameters
+    schema = tool.inputSchema
 
     assert "tactus" in schema["properties"]
     assert "lua" not in schema["properties"]
@@ -1756,7 +1811,8 @@ async def test_execute_tactus_tool_description_contains_curated_examples() -> No
     mcp = FastMCP("test-execute-tactus")
     execute.register_tactus_tools(mcp)
 
-    tools = (await mcp.get_tools()).values()
+    async with Client(mcp) as client:
+        tools = await client.list_tools()
     tool = next(tool for tool in tools if tool.name == "execute_tactus")
     description = tool.description or ""
 
@@ -1824,6 +1880,7 @@ def test_execute_tactus_description_teaches_complete_coverage_composition() -> N
     assert "coverage" in description
     assert "Never return the unaggregated alignment batch payload" in description
     assert "ranked_from_count" in description
+    assert "reviewed_error_opportunity" in description
     assert "evaluation-feedback.batch-operations-cookbook" in description
     assert (
         "for _, scorecard_result in ipairs(analysis.scorecards or {})"
@@ -1831,6 +1888,41 @@ def test_execute_tactus_description_teaches_complete_coverage_composition() -> N
     )
     assert len(description) < 8_500
     assert "result = analysis" not in description
+
+
+def test_execute_tactus_description_documents_optimization_approval_boundary() -> None:
+    description = execute.EXECUTE_TACTUS_DESCRIPTION
+
+    assert "plexus.optimization.rank" in description
+    assert "plexus.optimization.run" in description
+    assert "approved = true" in description
+    assert "never promotes a champion" in description
+    assert "no inline output fallback" in description
+    assert "total_items * disagreement_rate" in description
+    assert "evaluation-feedback.batch-operations-cookbook" in description
+
+
+def test_execute_tactus_description_documents_scoped_optimization_ranking() -> None:
+    description = execute.EXECUTE_TACTUS_DESCRIPTION
+
+    assert "scorecard_ids" in description
+    assert "scorecard_name_prefixes" in description
+    assert "opaque" in description
+    assert "literal case-insensitive" in description
+    assert "empty arrays are invalid" in description
+
+
+def test_execute_tactus_description_documents_fixed_optimization_cooldown() -> None:
+    description = execute.EXECUTE_TACTUS_DESCRIPTION
+
+    assert "score-activity-cooldown-v1" in description
+    assert "168-hour inclusive cutoff" in description
+    assert "score.updatedAt" in description
+    assert "newest score-version `createdAt`" in description
+    assert "recent_score_activity" in description
+    assert "wait_for_cooldown" in description
+    assert "rechecks live activity before dispatch" in description
+    assert "unresolved_champion_reference" in description
 
 
 def test_execute_tactus_description_teaches_progressive_disclosure() -> None:
@@ -2064,9 +2156,12 @@ async def test_execute_tactus_tool_returns_structured_contract(monkeypatch) -> N
 
     monkeypatch.setattr(execute, "_run_tactus_sync", fake_run_tactus_sync)
 
-    result = await execute._execute_tactus_tool("return { ok = true }", mcp)
+    async with Client(mcp) as client:
+        result = await client.call_tool(
+            "execute_tactus", {"tactus": "return { ok = true }"}
+        )
 
-    structured = result
+    structured = result.structured_content
     assert structured["ok"] is True
     assert structured["value"] == {"ok": True, "source": "return { ok = true }"}
     assert structured["error"] is None
@@ -2488,6 +2583,780 @@ def test_plexus_api_list_advertises_known_namespaces() -> None:
     assert catalog["plexus.skills"] == ["get", "list"]
     assert catalog["plexus.guidelines"] == ["validate"]
     assert facade.api_calls == ["plexus.api.list"]
+
+
+def test_optimization_namespace_advertises_all_decision_methods_and_helpers() -> None:
+    module = execute.PlexusRuntimeModule(FastMCP("test-optimization-catalog"))
+
+    assert module.api.list()["plexus.optimization"] == [
+        "assess", "diagnose", "rank", "review", "run", "summary"
+    ]
+    helpers = {name for name, _, _ in execute.HELPER_BINDINGS}
+    assert {
+        "optimization_rank",
+        "optimization_assess",
+        "optimization_diagnose",
+        "optimization_run",
+        "optimization_review",
+        "optimization_summary",
+    } <= helpers
+
+
+def test_optimization_read_methods_delegate_to_injected_handlers_in_planning_mode() -> None:
+    calls: list[tuple[str, dict]] = []
+
+    def handler(method: str):
+        def invoke(args: dict) -> dict:
+            calls.append((method, args))
+            return {"packet_version": "optimization-decision-v1", "method": method}
+        return invoke
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-optimization-planning"),
+        runtime_context={"tool_access_mode": "planning", "account_id": "acct-opaque"},
+        optimization_handlers={
+            method: handler(method)
+            for method in ("rank", "assess", "diagnose", "review", "summary")
+        },
+    )
+
+    for method in ("rank", "assess", "diagnose", "review", "summary"):
+        assert getattr(module.optimization, method)({"score_id": "score-opaque"})["method"] == method
+
+    assert [method for method, _ in calls] == ["rank", "assess", "diagnose", "review", "summary"]
+    assert all(args["account_id"] == "acct-opaque" for _, args in calls)
+    assert module.api_calls == [f"plexus.optimization.{method}" for method, _ in calls]
+
+
+def test_optimization_run_is_execution_only_and_never_promotes() -> None:
+    dispatched: list[dict] = []
+    promoted = False
+
+    def fake_run(args: dict) -> dict:
+        dispatched.append(args)
+        return {"packet_version": "optimization-decision-v1", "dispatches": []}
+
+    planning = execute.PlexusRuntimeModule(
+        FastMCP("test-optimization-run-planning"),
+        runtime_context={"tool_access_mode": "planning"},
+        optimization_handlers={"run": fake_run},
+    )
+    with pytest.raises(execute.PlanningModeToolNotAllowed):
+        planning.optimization.run({"approved": True, "targets": []})
+    assert dispatched == []
+    assert promoted is False
+
+    execution = execute.PlexusRuntimeModule(
+        FastMCP("test-optimization-run-execution"),
+        optimization_handlers={"run": fake_run},
+    )
+    assert execution.optimization.run({"approved": True, "targets": []})["packet_version"] == "optimization-decision-v1"
+    assert dispatched == [{"approved": True, "targets": []}]
+
+
+def _ready_optimization_target(
+    scorecard_id: str, score_id: str, champion_version: str, feedback_watermark: str
+) -> dict:
+    """Build an actual ready assessment packet for public-run provenance tests."""
+    from plexus.optimization.decision import assess_investment
+
+    assessment = assess_investment({
+        "scorecard_id": scorecard_id, "score_id": score_id,
+        "complete": True, "champion_version": champion_version,
+        "feedback_watermark": feedback_watermark,
+        "terminal_classes_resolved": True, "guideline_state": "consistent",
+        "valid_feedback_count": 250, "reviewed_disagreements": 200,
+        "reachable_classes": ["Yes", "No"],
+        "final_label_counts": {"Yes": 125, "No": 125},
+        "weekly_disagreement_rates": [0.8] * 4,
+        "weekly_ac1_values": [0.7] * 4,
+        "weekly_bucket_counts": [20] * 4,
+        "score_activity": {
+            "policy_version": "score-activity-cooldown-v1",
+            "as_of": "2026-07-28T00:00:00Z",
+            "cutoff": "2026-07-21T00:00:00Z",
+            "complete": True,
+            "recent": False,
+            "score_updated_at": "2024-01-02T00:00:00Z",
+            "activity_timestamp": "2024-01-02T00:00:00Z",
+            "newest_version_id": "old-version",
+            "newest_version_created_at": "2024-01-01T00:00:00Z",
+            "activity_source": "score_record",
+            "eligibility_timestamp": "2024-01-09T00:00:00Z",
+            "failure": None,
+        },
+    })
+    assert assessment["readiness_state"] == "ready_to_optimize"
+    return {
+        "scorecard_id": scorecard_id, "score_id": score_id,
+        "assessment": assessment,
+        "assessment_fingerprint": assessment["evidence_fingerprint"],
+        "champion_version": champion_version,
+        "feedback_watermark": feedback_watermark,
+    }
+
+
+def _old_live_score_info(champion_version: str) -> dict:
+    return {
+        "championVersionId": champion_version,
+        "updatedAt": "2024-01-02T00:00:00Z",
+        "versions": [{
+            "id": "old-version",
+            "createdAt": "2024-01-01T00:00:00Z",
+        }],
+    }
+
+
+def _rank_inventory_card(card_id: str, score_id: str, champion_version: str) -> dict:
+    return {
+        "id": card_id,
+        "name": card_id,
+        "sections": {"items": [{"scores": {"items": [{
+            "id": score_id,
+            "name": score_id,
+            "championVersionId": champion_version,
+            "updatedAt": "2024-01-02T00:00:00Z",
+            "versions": {"items": [{
+                "id": "old-version",
+                "createdAt": "2024-01-01T00:00:00Z",
+            }]},
+        }]}}]},
+    }
+
+
+def test_default_optimization_run_dispatches_only_exact_approved_targets() -> None:
+    optimizer_calls: list[dict] = []
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-default-optimization-run"),
+        score_info=lambda _args: _old_live_score_info("v-1"),
+        feedback_latest_update=lambda _args: {"latest_feedback_updated_at": "2026-01-01T00:00:00Z"},
+        procedure_optimize=lambda args: optimizer_calls.append(args) or {"procedure_id": "proc-1"},
+    )
+
+    rejected = module.optimization.run({"approved": False, "targets": [{"scorecard_id": "sc-1", "score_id": "s-1"}]})
+    assert rejected["accepted_targets"] == []
+    assert optimizer_calls == []
+
+    result = module.optimization.run({
+        "approved": True,
+        "targets": [_ready_optimization_target(
+            "sc-1", "s-1", "v-1", "2026-01-01T00:00:00Z"
+        )],
+        "max_iterations": 2, "max_samples": 20, "max_cost_usd": 1.0, "max_concurrency": 1,
+    })
+
+    assert result["rejected"] == []
+    assert result["dispatches"][0]["target"] == {"scorecard_id": "sc-1", "score_id": "s-1"}
+    assert result["dispatches"][0]["status"] == "dispatched"
+    assert result["dispatch_coverage"]["complete"] is True
+    assert optimizer_calls == [{
+        "scorecard": "sc-1", "score": "s-1", "max_iterations": 2,
+        "max_samples": 20, "max_cost_usd": 1.0,
+    }]
+
+
+def test_default_optimization_run_rejects_recent_score_activity_before_launch() -> None:
+    optimizer_calls: list[dict] = []
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-optimization-run-recent-score-activity"),
+        score_info=lambda _args: {
+            "championVersionId": "v-1",
+            "updatedAt": "2026-07-27T12:00:00Z",
+            "versions": [{"id": "new-version", "createdAt": "2026-07-27T12:00:00Z"}],
+        },
+        feedback_latest_update=lambda _args: {
+            "latest_feedback_updated_at": "2026-01-01T00:00:00Z",
+        },
+        procedure_optimize=lambda args: optimizer_calls.append(args) or {"procedure_id": "proc-1"},
+    )
+
+    result = module.optimization.run({
+        "approved": True,
+        "targets": [_ready_optimization_target(
+            "sc-1", "s-1", "v-1", "2026-01-01T00:00:00Z"
+        )],
+        "max_iterations": 2, "max_samples": 20, "max_cost_usd": 1.0,
+        "max_concurrency": 1,
+    })
+
+    assert optimizer_calls == []
+    assert result["accepted_targets"] == []
+    assert result["dispatches"] == []
+    assert result["rejected"][0]["reason"] == "recent_score_activity"
+
+
+def test_default_optimization_run_reports_each_dispatch_failure_without_losing_success() -> None:
+    calls: list[str] = []
+    targets = [
+        _ready_optimization_target("card", score_id, "champion", "watermark")
+        for score_id in ("good", "broken")
+    ]
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-run-dispatch-coverage"),
+        score_info=lambda _args: _old_live_score_info("champion"),
+        feedback_latest_update=lambda _args: {"latest_feedback_updated_at": "watermark"},
+        procedure_optimize=lambda args: (
+            calls.append(args["score"])
+            or ((_ for _ in ()).throw(RuntimeError("launch failed")) if args["score"] == "broken" else {"procedure_id": "procedure-good"})
+        ),
+    )
+
+    result = module.optimization.run({
+        "approved": True, "targets": targets, "max_cost_usd": 2.0,
+        "max_samples": 40, "max_iterations": 2, "max_concurrency": 2,
+        "current_fingerprints": {f"card:{target['score_id']}": target["assessment_fingerprint"] for target in targets},
+    })
+
+    assert calls == ["good", "broken"]
+    assert [row["status"] for row in result["dispatches"]] == ["dispatched", "failed"]
+    assert result["dispatch_coverage"] == {
+        "target_count": 2,
+        "dispatched_count": 1,
+        "failed_count": 1,
+        "complete": False,
+    }
+
+
+def test_default_optimization_rank_paginates_with_one_retry_and_one_frozen_alignment_read() -> None:
+    page_calls: list[str | None] = []
+    alignment_calls: list[dict] = []
+    first_page_attempts = 0
+
+    def list_cards(args: dict) -> dict:
+        nonlocal first_page_attempts
+        token = args.get("next_token")
+        page_calls.append(token)
+        if token is None:
+            first_page_attempts += 1
+            if first_page_attempts == 1:
+                raise RuntimeError("transient page failure")
+            return {"items": [_rank_inventory_card("sc-1", "s-1", "v-1")], "nextToken": "page-2"}
+        return {"items": [_rank_inventory_card("sc-2", "s-2", "v-2")], "nextToken": None}
+
+    def alignment(args: dict) -> dict:
+        alignment_calls.append(args)
+        return {
+                "coverage": {
+                    "complete": True,
+                    "target_count": 2,
+                    "completed_count": 2,
+                    "failed_count": 0,
+                },
+            "scorecards": [
+                {"scorecard_id": "sc-1", "scorecard_name": "One", "scores": [
+                    {"score_id": "s-1", "score_name": "A", "champion_version": "v-1", "total_items": 10, "disagreements": 4}
+                ]},
+                {"scorecard_id": "sc-2", "scorecard_name": "Two", "scores": [
+                    {"score_id": "s-2", "score_name": "B", "champion_version": "v-2", "total_items": 20, "disagreements": 2}
+                ]},
+            ],
+        }
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-default-optimization-rank"),
+        scorecards_lister=list_cards,
+        feedback_aligner=lambda _args: {},
+    )
+    module._feedback_aligner_batch = alignment
+
+    result = module.optimization.rank({"days": 90})
+
+    assert page_calls == [None, None, "page-2"]
+    assert alignment_calls[0]["scorecards"] == ["sc-1", "sc-2"]
+    assert alignment_calls[0]["days"] == 90
+    assert alignment_calls[0]["window_start"].endswith("T00:00:00Z")
+    assert alignment_calls[0]["window_end"].endswith("T00:00:00Z")
+    assert alignment_calls[0]["account_id"] is None
+    assert result["exact"] is True
+    assert [row["score_id"] for row in result["ranked"]] == ["s-1", "s-2"]
+
+
+def test_optimization_persist_uses_one_exact_packet_handler(monkeypatch) -> None:
+    packet = {"version": "optimization-decision-packet-v1", "value": "compact"}
+    default_persisted: list[dict] = []
+    monkeypatch.setattr(
+        execute,
+        "_default_optimization_persist",
+        default_persisted.append,
+    )
+    default_module = execute.PlexusRuntimeModule(
+        FastMCP("test-optimization-persistence-default"),
+        optimization_handlers={"summary": lambda _args: packet},
+    )
+    assert default_module.optimization.summary({"persist": True}) is packet
+    assert default_persisted == [packet]
+
+    persisted: list[dict] = []
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-optimization-persistence-configured"),
+        optimization_handlers={"summary": lambda _args: packet},
+        optimization_persister=persisted.append,
+    )
+    assert module.optimization.summary({"persist": True}) is packet
+    assert persisted == [packet]
+
+
+def test_default_optimization_rank_uses_frozen_complete_window_and_inventory_metadata() -> None:
+    alignment_calls: list[dict] = []
+
+    def list_cards(_args: dict) -> dict:
+        return {
+            "items": [{
+                "id": "sc-1",
+                "name": "One",
+                "sections": {"items": [{"scores": {"items": [
+                        {**_rank_inventory_card("unused", "s-live", "v-1")["sections"]["items"][0]["scores"]["items"][0], "name": "Live", "isDisabled": False},
+                        {"id": "s-off", "name": "Off", "championVersionId": "v-2", "isDisabled": True},
+                ]}}]},
+            }],
+            "nextToken": None,
+        }
+
+    def alignment(args: dict) -> dict:
+        alignment_calls.append(args)
+        return {"coverage": {
+            "complete": True,
+            "target_count": 1,
+            "completed_count": 1,
+            "failed_count": 0,
+        }, "scorecards": [{
+            "scorecard_id": "sc-1", "scorecard_name": "One", "scores": [
+                {"score_id": "s-live", "score_name": "Live", "total_items": 4, "disagreements": 2,
+                 "class_distribution": [{"label": "Yes", "count": 3}], "predicted_class_distribution": [{"label": "Yes", "count": 4}]},
+                {"score_id": "s-off", "score_name": "Off", "total_items": 4, "disagreements": 4},
+            ],
+        }]}
+
+    module = execute.PlexusRuntimeModule(FastMCP("test-frozen-rank"), scorecards_lister=list_cards)
+    module._feedback_aligner_batch = alignment
+    result = module.optimization.rank({})
+
+    assert alignment_calls[0]["days"] == 90
+    assert alignment_calls[0]["window_start"].endswith("T00:00:00Z")
+    assert alignment_calls[0]["window_end"].endswith("T00:00:00Z")
+    frozen_as_of = datetime.fromisoformat(
+        result["coverage"]["activity"]["as_of"].replace("Z", "+00:00")
+    )
+    frozen_window_end = datetime.fromisoformat(
+        result["window"]["end"].replace("Z", "+00:00")
+    )
+    assert frozen_window_end == frozen_as_of.replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    assert result["ranked"][0]["score_id"] == "s-live"
+    assert result["ranked"][0]["valid_feedback_count"] == 4
+    assert result["ranked"][0]["class_distribution"] == [{"label": "Yes", "count": 3}]
+    assert result["unranked"][0]["score_id"] == "s-off"
+    assert result["unranked"][0]["unranked_reason"] == "disabled"
+
+
+def test_optimization_rank_never_labels_mismatched_analysis_coverage_exact() -> None:
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-rank-mismatched-analysis-coverage"),
+        scorecards_lister=lambda _args: {
+            "items": [{"id": "sc-1"}, {"id": "sc-2"}], "nextToken": None,
+        },
+    )
+    module._feedback_aligner_batch = lambda _args: {
+        "coverage": {
+            "complete": True,
+            "target_count": 1,
+            "completed_count": 1,
+            "failed_count": 0,
+        },
+        "scorecards": [{"scorecard_id": "sc-1", "scores": []}],
+    }
+
+    result = module.optimization.rank({})
+
+    assert result["exact"] is False
+    assert result["coverage"]["complete"] is False
+    assert "does not match discovered scope" in str(result["coverage"]["failures"])
+
+
+def test_default_optimization_run_rechecks_champion_and_feedback_watermark_before_dispatch() -> None:
+    optimizer_calls: list[dict] = []
+    score_calls: list[dict] = []
+    feedback_calls: list[dict] = []
+
+    def score_info(args: dict) -> dict:
+        score_calls.append(args)
+        return _old_live_score_info("v-current")
+
+    def feedback_update(args: dict) -> dict:
+        feedback_calls.append(args)
+        return {"latest_feedback_updated_at": "2026-07-01T00:00:00Z"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-fresh-run"),
+        score_info=score_info,
+        feedback_latest_update=feedback_update,
+        procedure_optimize=lambda args: optimizer_calls.append(args) or {"procedure_id": "p-1"},
+    )
+    target = _ready_optimization_target(
+        "sc-1", "s-1", "v-assessed", "2026-06-01T00:00:00Z"
+    )
+
+    result = module.optimization.run({"approved": True, "targets": [target], "max_iterations": 2, "max_samples": 20, "max_cost_usd": 1.0, "max_concurrency": 1})
+
+    assert result["accepted_targets"] == []
+    assert result["dispatches"] == []
+    assert "stale_assessment" in {row["reason"] for row in result["rejected"]}
+    assert score_calls == [{"scorecard_identifier": "sc-1", "score_identifier": "s-1"}]
+    assert feedback_calls == [{"scorecard_name": "sc-1", "score_name": "s-1", "days": 90}]
+    assert optimizer_calls == []
+
+
+def test_default_optimization_assess_composes_score_guidelines_classes_and_rank_evidence() -> None:
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-runtime-assess"),
+        score_info=lambda _args: {
+            "championVersionId": "v-1", "code": "classifier", "guidelines": "# Guidelines",
+        },
+        guidelines_validator=lambda _text: {"is_valid": True},
+        terminal_class_resolver=lambda _code: {"classes": ["Yes", "No"]},
+    )
+    result = module.optimization.assess({
+        "scorecard_id": "sc-1", "score_id": "s-1",
+        "rank_evidence": {
+            "coverage": {"complete": True}, "valid_feedback_count": 250,
+            "scope": {"scorecard_id": "sc-1", "score_id": "s-1"},
+            "window": {
+                "start": "2026-04-01T00:00:00Z",
+                "end": "2026-06-30T00:00:00Z",
+                "timezone": "UTC",
+                "complete_days": 90,
+            },
+            "reviewed_disagreements": 100,
+            "class_distribution": [{"label": "Yes", "count": 200}],
+            "weekly_disagreement_rates": [0.4, 0.4, 0.4, 0.4],
+            "weekly_ac1_values": [0.7, 0.7, 0.7, 0.7],
+            "weekly_bucket_counts": [1, 1, 1, 1],
+                "feedback_watermark": "2026-07-01T00:00:00Z",
+                "score_activity": {
+                    "policy_version": "score-activity-cooldown-v1",
+                    "as_of": "2026-07-28T00:00:00Z",
+                    "cutoff": "2026-07-21T00:00:00Z",
+                    "score_updated_at": "2024-01-02T00:00:00Z",
+                    "newest_version_id": "old-version",
+                    "newest_version_created_at": "2024-01-01T00:00:00Z",
+                    "activity_timestamp": "2024-01-02T00:00:00Z",
+                    "activity_source": "score_record",
+                    "eligibility_timestamp": "2024-01-09T00:00:00Z",
+                    "recent": False,
+                    "complete": True,
+                },
+        },
+    })
+
+    assert result["scope"] == {"scorecard_id": "sc-1", "score_id": "s-1"}
+    assert result["champion_version"] == "v-1"
+    assert result["class_counts"] == {"Yes": 200, "No": 0}
+    assert result["readiness_state"] == "insufficient_evidence"
+    assert result["feedback_watermark"] == "2026-07-01T00:00:00Z"
+
+
+def test_optimization_assess_exact_ids_compose_canonical_frozen_rank_evidence() -> None:
+    alignment_calls: list[dict] = []
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-runtime-assess-id-only"),
+            scorecards_lister=lambda _args: {
+                "items": [_rank_inventory_card("sc-1", "s-1", "v-1")],
+                "nextToken": None,
+            },
+        score_info=lambda _args: {
+            "championVersionId": "v-1", "code": "classifier", "guidelines": "# Guidelines",
+        },
+        guidelines_validator=lambda _text: {"is_valid": True},
+        terminal_class_resolver=lambda _code: {"classes": ["Yes", "No"]},
+    )
+    module._feedback_aligner_batch = lambda args: alignment_calls.append(args) or {
+        "coverage": {
+            "complete": True, "target_count": 1, "completed_count": 1,
+            "failed_count": 0,
+        },
+        "scorecards": [{
+            "scorecard_id": "sc-1",
+            "scores": [{
+                "score_id": "s-1", "champion_version": "v-1",
+                "total_items": 250, "disagreements": 100,
+                "class_distribution": [{"label": "Yes", "count": 200}],
+                "weekly_disagreement_rates": [0.4] * 4,
+                "weekly_ac1_values": [0.7] * 4,
+                "weekly_bucket_counts": [1] * 4,
+            }],
+        }],
+    }
+
+    result = module.optimization.assess({"scorecard_id": "sc-1", "score_id": "s-1"})
+
+    assert alignment_calls[0]["scorecards"] == ["sc-1"]
+    assert alignment_calls[0]["window_start"].endswith("T00:00:00Z")
+    assert result["coverage"]["complete"] is True
+    assert result["readiness_state"] == "insufficient_evidence"
+
+
+def test_default_optimization_diagnose_marks_dependency_failure_incomplete_without_mutating() -> None:
+    calls: list[str] = []
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-runtime-diagnose"),
+        score_info=lambda _args: _old_live_score_info("v-1"),
+        score_contradictions=lambda _args: (_ for _ in ()).throw(RuntimeError("semantic service unavailable")),
+        rubric_memory_recent_entries=lambda _args: calls.append("recent") or {"entries": []},
+        rubric_memory_evidence_pack=lambda _args: calls.append("pack") or {"evidence": []},
+        rubric_memory_sme_question_gate=lambda _args: calls.append("sme") or {"questions": []},
+    )
+
+    result = module.optimization.diagnose({"scorecard_id": "sc-1", "score_id": "s-1"})
+
+    assert result["coverage"]["complete"] is False
+    assert result["states"]["readiness"] == "incomplete"
+    assert "semantic service unavailable" in str(result["coverage"]["failures"])
+    assert calls == ["recent", "pack", "sme"]
+
+
+def test_default_optimization_diagnose_preserves_ready_assessment_when_semantics_are_clear() -> None:
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-runtime-diagnose-ready"),
+        score_info=lambda _args: {"championVersionId": "v-1"},
+        score_contradictions=lambda _args: {"status": "consistent"},
+        rubric_memory_recent_entries=lambda _args: {"entries": []},
+        rubric_memory_evidence_pack=lambda _args: {"evidence": []},
+        rubric_memory_sme_question_gate=lambda _args: {"questions": []},
+    )
+
+    result = module.optimization.diagnose({
+        "scorecard_id": "sc-1",
+        "score_id": "s-1",
+        "assessment": {"readiness_state": "ready_to_optimize"},
+    })
+
+    assert result["readiness_state"] == "ready_to_optimize"
+    assert result["states"]["readiness"] == "ready_to_optimize"
+
+
+def test_optimization_diagnose_threads_rubric_evidence_and_version_into_sme_gate() -> None:
+    gate_calls: list[dict] = []
+    rubric_context = {
+        "markdown_context": "citation-backed context",
+        "citation_index": [{"id": "citation-1"}],
+        "machine_context": {"source": "memory"},
+        "diagnostics": [],
+    }
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-diagnose-sme-inputs"),
+        score_info=lambda _args: {"championVersionId": "v-1"},
+        score_contradictions=lambda _args: {"status": "consistent"},
+        rubric_memory_recent_entries=lambda _args: {"markdown_context": "recent"},
+        rubric_memory_evidence_pack=lambda _args: rubric_context,
+        rubric_memory_sme_question_gate=lambda args: gate_calls.append(args) or {"questions": []},
+    )
+
+    result = module.optimization.diagnose({
+        "scorecard_id": "sc-1",
+        "score_id": "s-1",
+        "assessment": {"readiness_state": "ready_to_optimize"},
+        "candidate_agenda_markdown": "### Question\nWhat policy applies?",
+    })
+
+    assert result["readiness_state"] == "ready_to_optimize"
+    assert gate_calls[0]["score_version_id"] == "v-1"
+    assert gate_calls[0]["rubric_memory_context"] is rubric_context
+    assert gate_calls[0]["candidate_agenda_markdown"].startswith("### Question")
+    assert "citation-backed context" in gate_calls[0]["optimizer_context"]
+
+
+def test_optimization_diagnose_surfaces_only_true_open_sme_questions() -> None:
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-diagnose-open-sme-question"),
+        score_info=lambda _args: {"championVersionId": "v-1"},
+        score_contradictions=lambda _args: {"status": "consistent"},
+        rubric_memory_recent_entries=lambda _args: {},
+        rubric_memory_evidence_pack=lambda _args: {},
+        rubric_memory_sme_question_gate=lambda _args: {
+            "final_items": [
+                {
+                    "answer_status": "true_open_question",
+                    "original_text": "Which policy should apply?",
+                    "final_text": "Which policy should apply?",
+                },
+                {
+                    "answer_status": "answered_by_evidence",
+                    "original_text": "Already answered",
+                    "final_text": "Already answered",
+                },
+            ],
+            "suppressed_items": [{
+                "answer_status": "true_open_question",
+                "original_text": "Suppressed question",
+            }],
+        },
+    )
+
+    result = module.optimization.diagnose({
+        "scorecard_id": "sc-1", "score_id": "s-1",
+        "assessment": {"readiness_state": "ready_to_optimize"},
+    })
+
+    assert result["stakeholder_questions"] == ["Which policy should apply?"]
+    assert result["readiness_state"] == "stakeholder_clarification_required"
+
+
+def test_default_optimization_run_requires_explicit_resource_limits() -> None:
+    dispatched: list[dict] = []
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-run-limits"),
+        procedure_optimize=lambda args: dispatched.append(args) or {},
+    )
+
+    result = module.optimization.run({"approved": True, "targets": []})
+
+    assert result["accepted_targets"] == []
+    assert dispatched == []
+    assert result["blockers"] == ["invalid_run_limits"]
+
+
+def test_optimization_run_accepts_actual_assessment_packet_fingerprint_when_live_evidence_is_unchanged() -> None:
+    dispatched: list[dict] = []
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-assessment-fingerprint-freshness"),
+        score_info=lambda _args: _old_live_score_info("v-1"),
+        feedback_latest_update=lambda _args: {"latest_feedback_updated_at": "2026-07-01T00:00:00Z"},
+        procedure_optimize=lambda args: dispatched.append(args) or {"procedure_id": "proc-1"},
+    )
+    target = _ready_optimization_target(
+        "sc-1", "s-1", "v-1", "2026-07-01T00:00:00Z"
+    )
+    result = module.optimization.run({
+        "approved": True, "targets": [target], "max_cost_usd": 1.0,
+        "max_samples": 20, "max_iterations": 2, "max_concurrency": 1,
+    })
+
+    assert result["accepted_targets"] == [target]
+    assert len(dispatched) == 1
+
+    changed = {**target, "champion_version": "v-old"}
+    rejected = module.optimization.run({
+        "approved": True, "targets": [changed], "max_cost_usd": 1.0,
+        "max_samples": 20, "max_iterations": 2, "max_concurrency": 1,
+    })
+    assert rejected["accepted_targets"] == []
+    assert rejected["rejected"][0]["reason"] == "assessment_freshness_mismatch"
+
+
+def test_alignment_batch_preserves_honest_complete_monday_week_metrics_from_valid_pairs() -> None:
+    from datetime import datetime, timedelta, timezone
+
+    end = datetime(2026, 7, 27, tzinfo=timezone.utc)
+    items = []
+    for offset in range(12):
+        items.append({
+            "scorecardId": "sc-1", "scoreId": "s-1", "initialAnswerValue": "Yes",
+            "finalAnswerValue": "Yes", "isInvalid": False,
+            "editedAt": (end - timedelta(days=7 * (offset + 1))).isoformat().replace("+00:00", "Z"),
+        })
+    items.extend([
+        {"scorecardId": "sc-1", "scoreId": "s-1", "initialAnswerValue": "Yes", "finalAnswerValue": None, "isInvalid": False, "editedAt": "2026-07-20T00:00:00Z"},
+        {"scorecardId": "sc-1", "scoreId": "s-1", "initialAnswerValue": "Yes", "finalAnswerValue": "No", "isInvalid": True, "editedAt": "2026-07-20T00:00:00Z"},
+    ])
+    result = execute._default_feedback_alignment_batch(
+        {"scorecard": "sc-1", "days": 90, "window_end": "2026-07-27T00:00:00Z"},
+        _prefetched_feedback_items=items,
+        _prefetched_account_id="acct-1",
+        _prefetched_scorecard_data={"id": "sc-1", "name": "One", "sections": {"items": [{"scores": {"items": [{"id": "s-1", "name": "One"}]}}]}},
+    )
+    score = result["scores"][0]
+
+    assert score["total_items"] == 12
+    assert score["weekly_bucket_counts"] == [1] * 12
+    assert score["weekly_disagreement_rates"] == [0.0] * 12
+    assert len(score["weekly_ac1_values"]) == 12
+
+
+def test_optimization_review_loads_indexed_procedure_evidence_conservatively() -> None:
+    evaluation_calls: list[str] = []
+    def evaluation(evaluation_id: str, baseline_id: str) -> dict:
+        return {
+            "id": evaluation_id, "status": "COMPLETED", "score_version_id": "v-1",
+            "baseline_evaluation_id": baseline_id, "total_items": 20, "processed_items": 20,
+            "confusion_matrix": {"matrix": {"Yes": {"Yes": 9, "No": 1}}},
+            "dataset_class_distribution": [{"label": "Yes", "count": 10}, {"label": "No", "count": 10}],
+            "predicted_class_distribution": [{"label": "Yes", "count": 11}, {"label": "No", "count": 9}],
+            "root_cause": {"misclassification_analysis": {}},
+        }
+    evaluations = {
+        "recent": evaluation("recent", "recent-baseline"),
+        "historical": evaluation("historical", "historical-baseline"),
+    }
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-procedure-review"),
+        review_evidence_loader=lambda procedure_id: {
+            "procedure_id": procedure_id, "summary": {"effective_status": "COMPLETED"},
+            "baseline": {
+                "original_feedback_evaluation_id": "recent-baseline",
+                "original_accuracy_evaluation_id": "historical-baseline",
+                "feedback_alignment": 0.6, "accuracy_alignment": 0.7,
+            },
+            "best": {
+                "winning_version_id": "v-1", "best_feedback_evaluation_id": "recent",
+                "best_accuracy_evaluation_id": "historical", "feedback_alignment": 0.8,
+                "accuracy_alignment": 0.7,
+            },
+            "review_artifacts": {"artifacts_complete": True, "rca_complete": True},
+        },
+        evaluation_info=lambda args: evaluation_calls.append(args["evaluation_id"]) or evaluations[args["evaluation_id"]],
+    )
+    result = module.optimization.review({"procedure_id": "proc-1"})
+
+    assert evaluation_calls == ["recent", "historical"]
+    assert result["post_run_state"] == "promotion_ready"
+
+
+def test_optimization_review_does_not_treat_winning_id_as_safety_proof() -> None:
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-procedure-review-unknown-safety"),
+        review_evidence_loader=lambda procedure_id: {
+            "procedure_id": procedure_id, "summary": {"effective_status": "COMPLETED"},
+            "best": {"winning_version_id": "v-1", "best_feedback_evaluation_id": "recent", "best_accuracy_evaluation_id": "historical"},
+        },
+        evaluation_info=lambda _args: {"status": "COMPLETED", "score_version_id": "v-1"},
+    )
+
+    result = module.optimization.review({"procedure_id": "proc-1"})
+
+    assert result["post_run_state"] != "promotion_ready"
+    assert result["promotion_ready"] is False
+
+
+def test_optimization_review_missing_indexed_manifest_never_promotes() -> None:
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-procedure-review-missing"),
+        review_evidence_loader=lambda _procedure_id: (_ for _ in ()).throw(RuntimeError("not indexed")),
+    )
+    result = module.optimization.review({"procedure_id": "proc-1"})
+
+    assert result["post_run_state"] == "failed_or_incomplete"
+
+
+def test_optimization_review_ignores_caller_supplied_safety_booleans() -> None:
+    module = execute.PlexusRuntimeModule(FastMCP("test-review-requires-indexed-evidence"))
+
+    result = module.optimization.review({
+        "evidence": {
+            "terminal": True,
+            "matched_recent_evaluation": True,
+            "historical_regression_evidence": True,
+            "class_specific_metrics": True,
+            "prediction_collapse": False,
+            "rca_complete": True,
+            "artifacts_complete": True,
+            "measurable_safe_improvement": True,
+        },
+    })
+
+    assert result["post_run_state"] == "failed_or_incomplete"
+    assert result["promotion_ready"] is False
 
 
 def test_plexus_api_list_stays_complete_in_planning_mode() -> None:
@@ -7902,6 +8771,40 @@ def test_feedback_alignment_batch_accepts_bounded_scorecard_list(monkeypatch) ->
         "Two",
         "Three",
     ]
+
+
+def test_feedback_alignment_batch_preserves_opaque_list_identifier(monkeypatch) -> None:
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    opaque_id = "  opaque_UUID:with/slashes+punctuation  "
+    resolved: list[str] = []
+
+    class FakeClient:
+        def execute(self, query, _variables=None):
+            if "ListFeedbackItemsByEditedTime" in query:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [], "nextToken": None,
+                    }
+                }
+            return {
+                "getScorecard": {
+                    "id": opaque_id, "name": "Opaque", "sections": {"items": []},
+                }
+            }
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: resolved.append(identifier) or identifier,
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+
+    result = execute._default_feedback_alignment_batch({"scorecards": [opaque_id]})
+
+    assert resolved == [opaque_id]
+    assert result["scorecards"][0]["scorecard_id"] == opaque_id
 
 
 def test_feedback_alignment_batch_selects_bounded_portfolio_in_one_call(monkeypatch) -> None:

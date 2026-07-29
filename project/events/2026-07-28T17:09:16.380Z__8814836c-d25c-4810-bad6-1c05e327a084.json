@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8814836c-d25c-4810-bad6-1c05e327a084",
+  "issue_id": "plx-5d652837-dfed-47b9-8f02-5b58ff37f4e8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T17:09:16.380Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Defer recently modified scores from optimization",
+    "description": "As an optimization operator, I want recently modified scores excluded from automatic optimization selection, so that the system does not repeatedly spend effort on work that is already active.\n\nIn scope: deterministic ranking cooldown, evidence and fingerprints, assessment state, launch-time recheck, documentation, and tests.\n\nOut of scope: production optimization runs, automatic champion promotion, and feedback mutations.\n\nFeature: Seven-day score activity cooldown\n\nScenario: A recently created version is not ranked\nGiven a score has complete ranking evidence\nAnd its newest version was created within the rolling seven-day UTC window\nWhen optimization opportunities are ranked\nThen the score is retained as unranked with recent activity evidence\nAnd it is not returned as an optimization candidate\n\nScenario: A recent score update starts the cooldown\nGiven the newest score version is older than seven days\nAnd the score record was updated within seven days\nWhen optimization opportunities are ranked\nThen the score is excluded for recent activity\n\nScenario: Missing recency evidence fails closed\nGiven an otherwise eligible score lacks valid score activity evidence\nWhen optimization opportunities are ranked\nThen the score is not ranked\nAnd portfolio coverage is incomplete\n\nScenario: Launch rechecks activity\nGiven a score was previously approved for optimization\nAnd new score activity occurs before dispatch\nWhen the approved optimizer batch is launched\nThen that target is rejected for recent activity\nAnd no optimizer procedure is dispatched for it",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}
