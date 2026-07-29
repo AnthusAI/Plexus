@@ -582,6 +582,59 @@ describe("ConversationViewer session-routing states", () => {
     expect(screen.getByTestId("diff-editor-yaml")).toHaveAttribute("data-modified", "name: new\n")
   })
 
+  it("does not claim validation is missing when another message contains evaluation evidence", () => {
+    render(
+      <ConversationViewer
+        sessions={sessions}
+        messages={[
+          ...messages,
+          {
+            id: "msg-assistant-diff-with-validation",
+            sessionId: "session-1",
+            accountId: "acct-1",
+            procedureId: "builtin:console/chat",
+            role: "ASSISTANT",
+            messageType: "MESSAGE",
+            humanInteraction: "CHAT_ASSISTANT",
+            content: "Updated this score based on your request.",
+            createdAt: "2026-03-27T00:00:02.000Z",
+            metadata: {
+              score_change_audit: {
+                kind: "score_edit",
+                version_id: "version-2",
+                parent_version_id: "version-1",
+              },
+            },
+          },
+          {
+            id: "msg-evaluation-after-diff",
+            sessionId: "session-1",
+            accountId: "acct-1",
+            procedureId: "builtin:console/chat",
+            role: "ASSISTANT",
+            messageType: "TOOL_CALL",
+            humanInteraction: "INTERNAL",
+            toolName: "execute_tactus",
+            toolParameters: JSON.stringify({ tactus: "return plexus.evaluation.info({ evaluation_id = 'eval-1' })" }),
+            toolResponse: JSON.stringify({
+              ok: true,
+              api_calls: ["plexus.evaluation.info"],
+              value: { evaluation_id: "eval-1", status: "completed" },
+            }),
+            content: "execute_tactus(...)",
+            createdAt: "2026-03-27T00:00:03.000Z",
+          },
+        ]}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    expect(screen.getByText("Score version changed")).toBeInTheDocument()
+    expect(screen.getByText("Evaluation available")).toBeInTheDocument()
+    expect(screen.queryByText("No validation run found in this chat yet.")).not.toBeInTheDocument()
+  })
+
   it("keeps sidebar header fixed height and renders two-row main session header", () => {
     render(
       <ConversationViewer

@@ -2168,6 +2168,50 @@ describe("ConversationViewer streaming updates", () => {
     expect(screen.queryByText("Running")).not.toBeInTheDocument()
   })
 
+  it("renders failed evaluation workflow without calling it queued", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-exec-tactus-eval-failed",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "TOOL_CALL",
+          humanInteraction: "INTERNAL",
+          toolName: "execute_tactus",
+          toolParameters: JSON.stringify({ tactus: "return plexus.evaluation.info({ evaluation_id = 'eval-failed-1' })" }),
+          toolResponse: JSON.stringify({
+            ok: false,
+            api_calls: ["plexus.evaluation.info"],
+            value: {
+              status: "failed",
+              task_id: "task-failed-1",
+              evaluation_id: "eval-failed-1",
+            },
+          }),
+          content: "execute_tactus(...)",
+          createdAt: "2026-03-27T00:00:03.750Z",
+          sequenceNumber: 37,
+        },
+      ],
+      nextToken: null,
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("Evaluation failed")).toBeInTheDocument()
+    })
+    expect(screen.queryByText("Evaluation queued")).not.toBeInTheDocument()
+    expect(screen.getByText("Inspect the failed task or tool output before retrying.")).toBeInTheDocument()
+  })
+
   it("renders execute_tactus evaluation output when value includes evaluationId without api_calls", async () => {
     mockChatMessageList.mockResolvedValue({
       data: [

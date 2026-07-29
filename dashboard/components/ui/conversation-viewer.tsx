@@ -88,7 +88,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ConsoleScoreChangeDiff } from "@/components/ui/console-score-change-diff"
-import { ConsoleScoreWorkflowSummary } from "@/components/ui/console-score-workflow-summary"
+import {
+  ConsoleScoreWorkflowSummary,
+  hasConsoleEvaluationEvidence,
+} from "@/components/ui/console-score-workflow-summary"
 
 const EvaluationToolOutput = React.lazy(() => import('./evaluation-tool-output'))
 const STANDARD_SESSION_CATEGORY = 'Optimize'
@@ -1699,6 +1702,7 @@ const formatUsd = (value: unknown): string => `$${(toFiniteNumber(value) ?? 0).t
 // Props passed into each virtualized row
 interface MessageRowProps {
   row: MessageConversationRow
+  hasValidationInChat: boolean
   enableHitlActions: boolean
   responseParentIds: Set<string>
   submittedMessageIds: Set<string>
@@ -1713,6 +1717,7 @@ interface MessageRowProps {
 
 const MemoizedMessageRow = React.memo(function MessageRow({
   row,
+  hasValidationInChat,
   enableHitlActions,
   responseParentIds,
   submittedMessageIds,
@@ -1858,6 +1863,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                       <ConsoleScoreWorkflowSummary
                         toolName={toolViewModel.toolName}
                         toolOutput={toolViewModel.output}
+                        hasValidationInChat={hasValidationInChat}
                       />
                       {shouldRenderEvaluationToolOutput(toolViewModel) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
                         <React.Suspense fallback={
@@ -1930,7 +1936,10 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                 content={message.content}
                 enableMarkdown={getStreamingState(message.metadata) !== "streaming"}
               />
-              <ConsoleScoreWorkflowSummary metadata={message.metadata} />
+              <ConsoleScoreWorkflowSummary
+                metadata={message.metadata}
+                hasValidationInChat={hasValidationInChat}
+              />
               <ConsoleScoreChangeDiff metadata={message.metadata} />
               {costMetadata && costSummary && hasCostSummary && (
                 <details className="group inline-block w-64 max-w-full rounded-md bg-card/60 text-xs">
@@ -3529,6 +3538,13 @@ function ConversationViewer({
     }
     return compareChatMessages(a, b)
   })
+  const hasValidationInChat = sortedMessages.some((message) => {
+    const toolViewModel = mapMessageToToolViewModel(message)
+    return Boolean(toolViewModel && hasConsoleEvaluationEvidence({
+      toolName: toolViewModel.toolName,
+      toolOutput: toolViewModel.output,
+    }))
+  })
   const messageAttributions = React.useMemo(
     () => sortedMessages.map((message) => resolveMessageAttribution(message)),
     [sortedMessages],
@@ -5024,6 +5040,7 @@ function ConversationViewer({
                     <div className="px-3 py-2">
                       <MemoizedMessageRow
                         row={row}
+                        hasValidationInChat={hasValidationInChat}
                         enableHitlActions={enableHitlActions}
                         responseParentIds={responseParentIds}
                         submittedMessageIds={submittedMessageIds}

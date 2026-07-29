@@ -42,6 +42,7 @@ type ConsoleScoreWorkflowSummaryProps = {
   metadata?: unknown
   toolOutput?: unknown
   toolName?: string | null
+  hasValidationInChat?: boolean
 }
 
 const coerceRecord = (value: unknown): Record<string, unknown> | null => {
@@ -324,7 +325,11 @@ const buildEvaluationStep = (
   const missingEvaluationRecord = taskId && !evaluationId && evaluationRecordCreated === false
   return {
     key: `evaluation:${evaluationId || taskId || JSON.stringify(record).slice(0, 80)}`,
-    title: status === "completed" ? "Evaluation available" : "Evaluation queued",
+    title: status === "completed"
+      ? "Evaluation available"
+      : status === "failed"
+        ? "Evaluation failed"
+        : "Evaluation queued",
     description: missingEvaluationRecord
       ? "Task queued; evaluation record not created yet."
       : `${evaluationType ? `${evaluationType} evaluation` : "Evaluation"} ${statusLabel(status).toLowerCase()}${scoreVersionId ? ` for version ${shortenId(scoreVersionId)}` : ""}.`,
@@ -406,6 +411,7 @@ const buildWorkflowSteps = ({
   metadata,
   toolOutput,
   toolName,
+  hasValidationInChat = false,
 }: ConsoleScoreWorkflowSummaryProps): WorkflowStep[] => {
   const steps: WorkflowStep[] = []
   const scoreStep = buildScoreChangeStep(parseScoreChangeAudit(metadata))
@@ -429,7 +435,7 @@ const buildWorkflowSteps = ({
   }
 
   const hasScoreChange = Boolean(scoreStep)
-  const hasValidation = steps.some((step) => step.key.startsWith("evaluation:"))
+  const hasValidation = hasValidationInChat || steps.some((step) => step.key.startsWith("evaluation:"))
   if (hasScoreChange && !hasValidation) {
     steps.push({
       key: "validation:missing",
@@ -453,6 +459,13 @@ const buildWorkflowSteps = ({
 
   return dedupeSteps(steps)
 }
+
+export const hasConsoleEvaluationEvidence = ({
+  toolOutput,
+  toolName,
+}: Pick<ConsoleScoreWorkflowSummaryProps, "toolOutput" | "toolName">): boolean => (
+  outputRecords(toolOutput).some((record) => Boolean(buildEvaluationStep(record, toolName)))
+)
 
 const nextActionText = (steps: WorkflowStep[], terminal: WorkflowStep): string => {
   if (steps.some((step) => step.key === "validation:missing")) {
