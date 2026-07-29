@@ -57,10 +57,14 @@ jobs:
         PY
 
   python-tests:
-    name: Python Tests (3.11)
+    name: Python Tests (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: [version-sync]
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
     defaults:
       run:
         shell: bash -el {0}
@@ -81,10 +85,10 @@ jobs:
         echo "Disk space after cleanup:"
         df -h
 
-    - name: Set up Conda with Python 3.11
+    - name: Set up Conda with Python ${{ matrix.python-version }}
       uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3
       with:
-        python-version: '3.11'
+        python-version: ${{ matrix.python-version }}
         miniforge-version: latest
         activate-environment: plexus-ci
         auto-activate-base: false

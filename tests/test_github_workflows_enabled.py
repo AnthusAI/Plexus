@@ -14,9 +14,9 @@ def test_supported_github_actions_workflows_are_enabled():
 
     for filename in expected:
         workflow_path = workflows / filename
-        assert workflow_path.is_file(), (
-            f"GitHub Actions workflow is disabled: {filename}"
-        )
+        assert (
+            workflow_path.is_file()
+        ), f"GitHub Actions workflow is disabled: {filename}"
         assert yaml.safe_load(workflow_path.read_text()) is not None
         assert not workflow_path.with_name(f"{filename}.bak").exists()
 
@@ -28,7 +28,7 @@ def test_ruleset_sync_stays_disabled_without_supported_admin_authentication():
     assert workflows.joinpath("ruleset-sync.yml.bak").is_file()
 
 
-def test_python_ci_targets_only_the_production_runtime():
+def test_python_ci_covers_legacy_and_parallel_production_runtimes():
     workflow_path = (
         Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci.yaml"
     )
@@ -39,6 +39,6 @@ def test_python_ci_targets_only_the_production_runtime():
         if step.get("name", "").startswith("Set up Conda")
     )
 
-    assert python_job["name"] == "Python Tests (3.11)"
-    assert "strategy" not in python_job
-    assert setup_step["with"]["python-version"] == "3.11"
+    assert python_job["name"] == "Python Tests (${{ matrix.python-version }})"
+    assert python_job["strategy"]["matrix"]["python-version"] == ["3.11", "3.12"]
+    assert setup_step["with"]["python-version"] == "${{ matrix.python-version }}"
