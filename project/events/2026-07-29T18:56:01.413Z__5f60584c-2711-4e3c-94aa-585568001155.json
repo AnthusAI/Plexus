@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5f60584c-2711-4e3c-94aa-585568001155",
+  "issue_id": "plx-6fd170bc-971b-4a7e-9ee1-4ac249073b26",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T18:56:01.413Z",
+  "actor_id": "ec2-user",
+  "payload": {
+    "assignee": null,
+    "description": "As an evaluation author, I want a configured human-label alias to resolve to the dataset column containing the label, so that accuracy results use the human decision rather than a fallback value.\n\nFeature: Configured label aliases\n\nScenario: A dataset is keyed by the stored score name and the configuration supplies a different label alias\nGiven a dataset row contains a human label in the stored score-name column\nAnd the score configuration declares a different label score name\nWhen the accuracy evaluation processes the row\nThen it records the populated human label and compares it with the prediction.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-cdc6abcc-2c79-41b1-ac7b-adb6b220a15f",
+    "priority": 1,
+    "status": "open",
+    "title": "Resolve configured evaluation label aliases"
+  }
+}
