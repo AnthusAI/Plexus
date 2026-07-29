@@ -2973,7 +2973,7 @@ def _default_evaluation_info(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _default_optimization_persist(packet: dict[str, Any]) -> Any:
-    """Persist one exact decision packet through the canonical Report/S3 path."""
+    """Persist one exact decision packet through artifact persistence."""
     from plexus.cli.shared.client_utils import create_client
     from plexus.optimization.persistence import persist_decision_packet
 
@@ -10418,7 +10418,8 @@ class PlexusRuntimeModule:
             if parsed.get("persist") is True:
                 if self._optimization_persister is None:
                     raise RuntimeError(
-                        "plexus.optimization persistence requires a configured Report/S3 handler"
+                        "plexus.optimization persistence requires a configured "
+                        "artifact persistence handler"
                     )
                 # The persistence path receives precisely the caller-visible
                 # packet.  Its return is intentionally ignored: no inline

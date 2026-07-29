@@ -31,7 +31,7 @@ def persist_decision_packet(
     persist: bool = False,
     report_name: str = DECISION_PACKET_REPORT_NAME,
 ) -> Optional[PersistedDecisionPacket]:
-    """Optionally persist an unchanged decision packet through Report blocks.
+    """Optionally persist an unchanged decision packet through artifact persistence.
 
     With ``persist=False`` this function deliberately performs no imports of
     report services and no external writes.  With ``persist=True`` every

@@ -2897,6 +2897,21 @@ def test_optimization_persist_uses_one_exact_packet_handler(monkeypatch) -> None
     assert persisted == [packet]
 
 
+def test_optimization_persistence_error_uses_canonical_artifact_language() -> None:
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-optimization-persistence-language"),
+        optimization_handlers={"summary": lambda _args: {"ok": True}},
+    )
+    module._optimization_persister = None
+
+    with pytest.raises(RuntimeError) as exc_info:
+        module.optimization.summary({"persist": True})
+
+    message = str(exc_info.value)
+    assert "artifact persistence" in message
+    assert "Report/S3" not in message
+
+
 def test_default_optimization_rank_uses_frozen_complete_window_and_inventory_metadata() -> None:
     alignment_calls: list[dict] = []
 

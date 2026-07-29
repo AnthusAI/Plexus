@@ -46,7 +46,7 @@ def _add_operation(name: str) -> Callable[[Callable[..., None]], click.Command]:
             "--persist/--no-persist",
             default=False,
             show_default=True,
-            help="Persist the returned packet through ReportBlock S3 attachments.",
+            help="Persist the returned packet through artifact persistence.",
         )(command)
         return command
 
