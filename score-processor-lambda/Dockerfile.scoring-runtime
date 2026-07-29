@@ -1,4 +1,4 @@
-FROM python:3.12-slim-bookworm
+FROM public.ecr.aws/lambda/python:3.12@sha256:dd3aa76c1cc435545f2c9031a86d85d60c9cda25df37cd75b6ee2609f100044b
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -16,12 +16,10 @@ COPY plexus /workspace/plexus
 COPY MCP /workspace/MCP
 
 RUN python -m pip install --upgrade pip && \
-    python -m pip install --no-cache-dir -e "/workspace[scoring]" && \
-    python -m pip install --no-cache-dir awslambdaric
+    python -m pip install --no-cache-dir -e "/workspace[scoring]"
 
 RUN python -c "import nltk; nltk.download('punkt', download_dir='/usr/local/share/nltk_data'); nltk.download('punkt_tab', download_dir='/usr/local/share/nltk_data')"
 
 COPY score-processor-lambda/handler.py ./handler.py
 
-ENTRYPOINT [ "/usr/local/bin/python", "-m", "awslambdaric" ]
 CMD ["handler.lambda_handler"]

@@ -28,10 +28,22 @@
       "author": "derek.norrbom",
       "text": "Isolated CodeBuild validation failed before publication because the scoring image no longer contains Git while `openai-cost-calculator` was still an unconditional Git-sourced dependency. Root fix: make the calculator optional, retain it in the legacy `all` extra, exclude it from the minimal `scoring` extra, and make LangGraph cost accounting fall back to LiteLLM when the optional package is unavailable. The minimal image now targets Python 3.12 Bookworm. Validation: `python -m pytest infrastructure/score_processor_artifacts/tests/unit/test_score_processor_artifact_pipeline_stack.py plexus/scores/test_lang_graph_cost_calculator.py plexus/LangChainUser_test.py tests/scores/test_tactus_score.py plexus/scores/test_tactus_score_runtime_controls.py -q` passed (72 tests).",
       "created_at": "2026-07-29T19:40:17.909661Z"
+    },
+    {
+      "id": "ca57af98-6658-4287-a8ec-6049b6480801",
+      "author": "derek.norrbom",
+      "text": "The Python 3.12 Bookworm artifact built and published successfully at 250,639,449 compressed bytes, but ECR scanning still found 3 critical and 5 high findings, all attributed to Perl 5.36.0 in the Debian base. Next remediation: use the AWS Lambda Python 3.12 AL2023 minimal base for the scoring-only artifact and inherit its bundled runtime interface rather than installing `awslambdaric`. This is isolated from the legacy Dockerfile and follows AWS Lambda’s supported 3.12 container path.",
+      "created_at": "2026-07-29T19:43:43.703869Z"
+    },
+    {
+      "id": "69ebc74b-e1ea-47b3-bd07-288a46954802",
+      "author": "derek.norrbom",
+      "text": "Switched the scoring-only artifact to the digest-pinned AWS Lambda Python 3.12 AL2023 base and removed the redundant `awslambdaric` installation/ENTRYPOINT override. The artifact now inherits AWS Lambda’s maintained runtime interface while the legacy image is unchanged. Targeted artifact and LangGraph/Tactus validation remains green (72 tests).",
+      "created_at": "2026-07-29T19:44:25.307014Z"
     }
   ],
   "created_at": "2026-07-29T19:31:30.009738Z",
-  "updated_at": "2026-07-29T19:40:17.909661Z",
+  "updated_at": "2026-07-29T19:44:25.307014Z",
   "closed_at": null,
   "custom": {}
 }

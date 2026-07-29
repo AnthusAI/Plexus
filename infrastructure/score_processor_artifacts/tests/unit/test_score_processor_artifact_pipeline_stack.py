@@ -128,8 +128,12 @@ def test_scoring_runtime_avoids_unnecessary_system_packages():
     with (repository_root / "pyproject.toml").open("rb") as pyproject_file:
         pyproject = tomllib.load(pyproject_file)
 
-    assert scoring_dockerfile.startswith("FROM python:3.12-slim-bookworm\n")
+    assert scoring_dockerfile.startswith(
+        "FROM public.ecr.aws/lambda/python:3.12@sha256:"
+    )
     assert "apt-get" not in scoring_dockerfile
+    assert "pip install --no-cache-dir awslambdaric" not in scoring_dockerfile
+    assert "ENTRYPOINT" not in scoring_dockerfile
     assert " graphviz" not in scoring_dockerfile
     assert " git" not in scoring_dockerfile
     assert "graphviz" not in pyproject["tool"]["poetry"]["extras"]["scoring"]
