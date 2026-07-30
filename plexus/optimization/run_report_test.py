@@ -291,6 +291,8 @@ def test_milestone_cover_projects_safe_progress_and_preserves_identity_on_finali
         "current_activity": "Checking deterministic readiness across the ranked portfolio.",
         "next_checkpoint": "Semantic diagnosis begins after assessment is durable.",
         "coverage_status": "incomplete",
+        "inventory_coverage_status": "incomplete",
+        "analysis_coverage_status": "pending",
         "ranking_window": "2026-05-01 through 2026-07-29 UTC",
         "scorecards_inspected": 56,
         "scorecards_in_scope": 4,
@@ -315,7 +317,8 @@ def test_milestone_cover_projects_safe_progress_and_preserves_identity_on_finali
     assert "Current phase:" not in cover
     assert "Checking deterministic readiness" in cover
     assert "Semantic diagnosis begins" in cover
-    assert "Coverage: Incomplete" in cover
+    assert "Portfolio inventory coverage: Incomplete" in cover
+    assert "Semantic analysis: Pending" in cover
     assert "4 scorecards in scope" in cover
     assert "56 account scorecards inspected to resolve scope" in cover
     assert "110 evidence-ranked scores" in cover

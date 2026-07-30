@@ -449,7 +449,8 @@ def test_semantic_diagnosis_limit_runs_the_highest_priority_subset_and_reports_d
         if milestone == "diagnosis"
     )
     assert diagnosis_view["overview"]["diagnosis_coverage"] == (
-        "2 of 2 scheduled diagnoses complete; 0 failed; 8 deferred by the safety cap"
+        "2 of 2 scheduled diagnoses returned; 0 incomplete results; "
+        "0 execution failures; 8 deferred by the safety cap"
     )
     assert diagnosis_view["overview"]["diagnosis_scheduled_count"] == 2
     assert diagnosis_view["overview"]["diagnosis_deferred_count"] == 8
@@ -890,6 +891,8 @@ def test_stakeholder_overview_explains_current_work_and_next_durable_checkpoint(
         "diagnosis_coverage": {"selected_count": 0, "completed_count": 0, "failed_count": 0},
     }, milestone="started")
     assert started["overview"]["coverage_status"] == "pending"
+    assert started["overview"]["inventory_coverage_status"] == "pending"
+    assert started["overview"]["analysis_coverage_status"] == "pending"
     assert "Enumerating every scorecard" in started["overview"]["current_activity"]
     assert "ranked portfolio" in started["overview"]["next_checkpoint"]
 
@@ -920,6 +923,75 @@ def test_stakeholder_overview_explains_current_work_and_next_durable_checkpoint(
     assert ranked["overview"]["cooldown_excluded_count"] == 3
     assert ranked["overview"]["assessment_progress"] == "0 of 1 eligible candidates assessed"
     assert "deterministic readiness" in ranked["overview"]["current_activity"]
+
+
+def test_stakeholder_overview_separates_complete_inventory_from_incomplete_diagnosis_results():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+    from plexus.optimization.run_report import _validate_view
+
+    base_state = {
+        "rank": {
+            "coverage": {"complete": True},
+            "ranked": [{
+                "scorecard_id": "card",
+                "score_id": "score",
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Priority Score",
+                "valid_feedback_count": 240,
+                "reviewed_disagreements": 48,
+                "disagreement_rate": 0.2,
+                "reviewed_error_opportunity": 48,
+            }],
+        },
+        "assessments": [{
+            "scope": {"scorecard_id": "card", "score_id": "score"},
+            "coverage": {"complete": True},
+            "states": {"optimization": "ready_to_optimize"},
+        }],
+        "reviews": [],
+        "approval_requests": [],
+        "diagnosis_coverage": {
+            "selected_count": 1,
+            "scheduled_count": 1,
+            "completed_count": 1,
+            "failed_count": 0,
+            "deferred_by_cap_count": 0,
+        },
+    }
+    incomplete = _stakeholder_view({
+        **base_state,
+        "diagnoses": [{
+            "scope": {"scorecard_id": "card", "score_id": "score"},
+            "states": {"optimization": "incomplete", "readiness": "incomplete"},
+            "outcome": "incomplete",
+            "failures": ["Required evidence could not be read."],
+        }],
+        "terminal_status": "INCOMPLETE",
+    }, milestone="finalization")
+
+    overview = incomplete["overview"]
+    assert overview["coverage_status"] == "complete"
+    assert overview["inventory_coverage_status"] == "complete"
+    assert overview["analysis_coverage_status"] == "incomplete"
+    assert overview["diagnosis_incomplete_count"] == 1
+    assert overview["diagnosis_coverage"] == (
+        "1 of 1 scheduled diagnoses returned; 1 incomplete result; "
+        "0 execution failures; 0 deferred by the safety cap"
+    )
+    _validate_view(incomplete)
+
+    complete = _stakeholder_view({
+        **base_state,
+        "diagnoses": [{
+            "scope": {"scorecard_id": "card", "score_id": "score"},
+            "coverage": {"complete": True},
+            "states": {"optimization": "ready_to_optimize"},
+            "outcome": "ready_to_optimize",
+        }],
+    }, milestone="diagnosis")
+    assert complete["overview"]["inventory_coverage_status"] == "complete"
+    assert complete["overview"]["analysis_coverage_status"] == "complete"
+    assert complete["overview"]["diagnosis_incomplete_count"] == 0
 
 
 def test_stakeholder_overview_explains_ranking_and_semantic_diagnosis_cutoffs():
@@ -976,7 +1048,8 @@ def test_stakeholder_overview_explains_ranking_and_semantic_diagnosis_cutoffs():
     assert overview["diagnosis_skipped_count"] == 1
     assert overview["diagnosis_max_count"] == 5
     assert overview["diagnosis_coverage"] == (
-        "0 of 5 scheduled diagnoses complete; 0 failed; 6 deferred by the safety cap"
+        "0 of 5 scheduled diagnoses returned; 0 incomplete results; "
+        "0 execution failures; 6 deferred by the safety cap"
     )
     assert view["priorities"][0]["rank"] == 1
     assert view["priorities"][0]["disagreement_rate"] == 0.15

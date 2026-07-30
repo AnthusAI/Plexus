@@ -134,7 +134,8 @@ _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
 }
 _OVERVIEW_KEYS = {
     "headline", "lifecycle_status", "current_activity", "next_checkpoint",
-    "coverage_status", "ranking_window", "scorecards_inspected",
+    "coverage_status", "inventory_coverage_status", "analysis_coverage_status",
+    "ranking_window", "scorecards_inspected",
     "scorecards_in_scope", "evidence_ranked_score_count",
     "ranked_score_count", "unranked_score_count", "cooldown_excluded_count",
     "assessment_progress", "diagnosis_coverage", "pending_approval_count", "notes",
@@ -143,7 +144,7 @@ _OVERVIEW_KEYS = {
     "ranked_below_priority_cutoff", "diagnosis_selection_policy",
     "diagnosis_top_priority_count", "diagnosis_monitoring_candidate_count",
     "diagnosis_selected_count", "diagnosis_scheduled_count", "diagnosis_deferred_count",
-    "diagnosis_skipped_count", "diagnosis_max_count",
+    "diagnosis_skipped_count", "diagnosis_incomplete_count", "diagnosis_max_count",
 }
 _ROW_METADATA_KEYS = {
     "scorecard_ref", "rank", "evidence_rank", "candidate_rank", "policy_disposition",
@@ -1567,6 +1568,8 @@ class OptimizationRunReportService:
         milestone = safe(revision.get("milestone")) if isinstance(revision, Mapping) else ""
         normalized_status = safe(status) or "running"
         coverage = safe(overview.get("coverage_status")) or "pending"
+        inventory_coverage = safe(overview.get("inventory_coverage_status")) or coverage
+        analysis_coverage = safe(overview.get("analysis_coverage_status")) or coverage
         inspected = overview.get("scorecards_inspected", 0)
         in_scope = overview.get("scorecards_in_scope", 0)
         ranked = overview.get("ranked_score_count", 0)
@@ -1604,7 +1607,8 @@ class OptimizationRunReportService:
             "",
             "## Coverage and progress",
             "",
-            f"Coverage: {coverage.title()}",
+            f"Portfolio inventory coverage: {inventory_coverage.title()}",
+            f"Semantic analysis: {analysis_coverage.title()}",
             (
                 f"Portfolio: {in_scope} scorecards in scope; {inspected} account "
                 f"scorecards inspected to resolve scope; {evidence_ranked} evidence-ranked "
@@ -1630,10 +1634,16 @@ class OptimizationRunReportService:
             if value:
                 lines.append(f"{label}: {value}")
         notes = safe(overview.get("notes"))
-        if notes or coverage.lower() == "incomplete":
+        if (
+            notes
+            or inventory_coverage.lower() == "incomplete"
+            or analysis_coverage.lower() == "incomplete"
+        ):
             lines.extend(["", "## Limitations", ""])
-            if coverage.lower() == "incomplete":
-                lines.append("Coverage is incomplete, so findings and priorities are partial rather than exact.")
+            if inventory_coverage.lower() == "incomplete":
+                lines.append("Portfolio inventory coverage is incomplete, so rankings are partial rather than exact.")
+            if analysis_coverage.lower() == "incomplete":
+                lines.append("Semantic analysis is incomplete, so some findings still require review or another run.")
             if notes:
                 lines.append(notes)
         lines.extend([

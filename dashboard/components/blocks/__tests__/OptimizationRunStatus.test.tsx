@@ -340,4 +340,53 @@ describe('OptimizationRunStatus', () => {
       '/lab/reports/report-1?revision=2&artifact=score_brief%3Adef456',
     )
   })
+
+  it('distinguishes complete inventory coverage from incomplete semantic analysis', async () => {
+    mockReadTaskArtifact.mockReset().mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({
+      overview: {
+        lifecycle_status: 'incomplete',
+        coverage_status: 'complete',
+        inventory_coverage_status: 'complete',
+        analysis_coverage_status: 'incomplete',
+        diagnosis_incomplete_count: 2,
+        diagnosis_deferred_count: 8,
+        diagnosis_coverage: '2 of 2 scheduled diagnoses returned; 2 incomplete results; 0 execution failures; 8 deferred by the safety cap',
+        next_checkpoint: 'Review incomplete semantic findings.',
+      },
+      score_count: 0,
+      scorecard_count: 0,
+      primary_decision_mix: {},
+      secondary_issue_counts: {},
+      opportunity_distribution: [],
+      top_priorities: [],
+      scorecards: [],
+    }))))
+
+    render(
+      <OptimizationRunStatus
+        id="block-1"
+        type="OptimizationRunStatus"
+        name="Run Status"
+        position={0}
+        config={{}}
+        output={{
+          output_compacted: true,
+          preview: {
+            type: 'optimization_run_status',
+            status: 'published',
+            summary: {
+              revision: 3,
+              milestone: 'finalization',
+              presentation: presentationDescriptor,
+            },
+          },
+        }}
+      />,
+    )
+
+    expect(await screen.findByText('Incomplete · Inventory complete · Analysis incomplete')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Why this run is incomplete' })).toBeInTheDocument()
+    expect(screen.getByText(/2 diagnosis results were incomplete/)).toBeInTheDocument()
+    expect(screen.getByText(/8 selected diagnoses were deferred by the safety cap/)).toBeInTheDocument()
+  })
 })

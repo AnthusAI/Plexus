@@ -27,6 +27,8 @@ import type { BlockComponent, ReportBlockProps } from './ReportBlock'
 type PresentationOverview = {
   lifecycle_status?: string
   coverage_status?: string
+  inventory_coverage_status?: string
+  analysis_coverage_status?: string
   scorecards_inspected?: number
   scorecards_in_scope?: number
   evidence_ranked_score_count?: number
@@ -49,6 +51,7 @@ type PresentationOverview = {
   diagnosis_scheduled_count?: number
   diagnosis_deferred_count?: number
   diagnosis_skipped_count?: number
+  diagnosis_incomplete_count?: number
   diagnosis_max_count?: number
   pending_approval_count?: number
   current_activity?: string
@@ -591,6 +594,16 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
     .filter(([, count]) => count > 0)
     .sort((left, right) => right[1] - left[1])
   const decisionTotal = decisions.reduce((total, [, count]) => total + count, 0)
+  const lifecycleStatus = overview.lifecycle_status || 'running'
+  const inventoryCoverageStatus = overview.inventory_coverage_status || overview.coverage_status || 'pending'
+  const analysisCoverageStatus = overview.analysis_coverage_status || (
+    ['incomplete', 'failed'].includes(lifecycleStatus.toLowerCase())
+      ? 'incomplete'
+      : overview.coverage_status || 'pending'
+  )
+  const incompleteDiagnosisCount = Math.max(0, Number(overview.diagnosis_incomplete_count || 0))
+  const deferredDiagnosisCount = Math.max(0, Number(overview.diagnosis_deferred_count || 0))
+  const runHasIncompleteCoverage = inventoryCoverageStatus === 'incomplete' || analysisCoverageStatus === 'incomplete'
   const maximumPriorityOpportunity = Math.max(
     0,
     ...presentation.top_priorities.map(priority => finiteNonNegative(priority.opportunity)),
@@ -605,7 +618,9 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
       <section className="rounded-lg bg-card p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-sm text-muted-foreground">{label(overview.lifecycle_status || 'running')} · {label(overview.coverage_status || 'pending')} coverage</p>
+            <p className="text-sm text-muted-foreground">
+              {label(lifecycleStatus)} · Inventory {label(inventoryCoverageStatus).toLowerCase()} · Analysis {label(analysisCoverageStatus).toLowerCase()}
+            </p>
             <h2 className="mt-1 text-2xl font-semibold">Optimization portfolio overview</h2>
             {overview.current_activity && <p className="mt-2 max-w-3xl text-muted-foreground">{overview.current_activity}</p>}
           </div>
@@ -640,10 +655,27 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
         </div>
       </section>
 
-      {overview.coverage_status === 'incomplete' && (
+      {runHasIncompleteCoverage && (
         <section className="rounded-lg bg-amber-500/10 p-5">
           <h3 className="font-semibold">Why this run is incomplete</h3>
-          <p className="mt-1 text-sm">{overview.notes || 'The available evidence was not complete enough for exact conclusions.'}</p>
+          <div className="mt-1 space-y-1 text-sm">
+            <p>
+              {inventoryCoverageStatus === 'incomplete'
+                ? 'Portfolio inventory coverage is incomplete, so the ranking is partial.'
+                : 'Portfolio inventory coverage is complete.'}
+            </p>
+            {analysisCoverageStatus === 'incomplete' && (
+              <p>
+                {incompleteDiagnosisCount > 0
+                  ? `${incompleteDiagnosisCount} diagnosis ${incompleteDiagnosisCount === 1 ? 'result was' : 'results were'} incomplete.`
+                  : 'Semantic analysis did not complete.'}
+                {deferredDiagnosisCount > 0
+                  ? ` ${deferredDiagnosisCount} selected ${deferredDiagnosisCount === 1 ? 'diagnosis was' : 'diagnoses were'} deferred by the safety cap.`
+                  : ''}
+              </p>
+            )}
+            {overview.notes && <p className="text-muted-foreground">{overview.notes}</p>}
+          </div>
           {overview.next_checkpoint && <p className="mt-2 text-sm"><span className="font-medium">Next:</span> {overview.next_checkpoint}</p>}
         </section>
       )}

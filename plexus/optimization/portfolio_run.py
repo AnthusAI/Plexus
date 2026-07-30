@@ -1042,6 +1042,23 @@ def _stakeholder_coverage(*packets: Mapping[str, Any]) -> str:
     return "incomplete"
 
 
+def _diagnosis_result_incomplete(packet: Mapping[str, Any]) -> bool:
+    if not isinstance(packet, Mapping):
+        return False
+    coverage = packet.get("coverage")
+    if isinstance(coverage, Mapping) and coverage.get("complete") is False:
+        return True
+    states = packet.get("states") if isinstance(packet.get("states"), Mapping) else {}
+    values = {
+        str(packet.get("outcome") or "").strip().lower(),
+        str(packet.get("status") or "").strip().lower(),
+        str(states.get("optimization") or "").strip().lower(),
+        str(states.get("readiness") or "").strip().lower(),
+        str(states.get("post_run") or "").strip().lower(),
+    }
+    return bool(values & {"incomplete", "failed", "failed_or_incomplete"})
+
+
 def _stakeholder_trend(*packets: Mapping[str, Any]) -> str:
     for packet in packets:
         stability = packet.get("weekly_stability") if isinstance(packet, Mapping) else None
@@ -1353,6 +1370,10 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
     diagnosis_deferred = int(diagnosis_coverage.get("deferred_by_cap_count") or 0)
     diagnosis_completed = int(diagnosis_coverage.get("completed_count") or 0)
     diagnosis_failed = int(diagnosis_coverage.get("failed_count") or 0)
+    diagnosis_incomplete = sum(
+        1 for diagnosis in diagnoses.values()
+        if _diagnosis_result_incomplete(diagnosis)
+    )
     diagnosis_skipped = int(diagnosis_coverage.get("skipped_count") or 0)
     raw_diagnosis_max = diagnosis_coverage.get("max_semantic_diagnoses")
     diagnosis_max = int(
@@ -1364,16 +1385,32 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
     diagnosis_monitoring = int(diagnosis_coverage.get("monitoring_candidate_count") or 0)
     priority_displayed = min(MAX_PRIORITY_DIAGNOSES, evidence_ranked_count)
     priority_cutoff_row = evidence_rows[priority_displayed - 1] if priority_displayed else {}
-    coverage_status = (
+    inventory_coverage_status = (
         "pending" if not rank else "complete" if _coverage_complete(rank) else "incomplete"
     )
+    if not rank or milestone in {"started", "ranking"}:
+        analysis_coverage_status = "pending"
+    elif diagnosis_completed < diagnosis_scheduled:
+        analysis_coverage_status = "pending"
+    elif (
+        diagnosis_failed > 0
+        or diagnosis_incomplete > 0
+        or diagnosis_deferred > 0
+        or diagnosis_completed < diagnosis_selected
+    ):
+        analysis_coverage_status = "incomplete"
+    else:
+        analysis_coverage_status = "complete"
+    incomplete_label = "result" if diagnosis_incomplete == 1 else "results"
     return {
         "overview": {
             "headline": "Optimization portfolio run",
             "lifecycle_status": terminal_status or "running",
             "current_activity": current_activity,
             "next_checkpoint": next_checkpoint,
-            "coverage_status": coverage_status,
+            "coverage_status": inventory_coverage_status,
+            "inventory_coverage_status": inventory_coverage_status,
+            "analysis_coverage_status": analysis_coverage_status,
             "ranking_window": str(rank.get("window") or "pending"),
             "scorecards_inspected": scope_coverage.get("total_scorecards_inspected", coverage.get("scorecards_discovered", 0)),
             "scorecards_in_scope": scope_coverage.get("matched_scorecard_count", 0),
@@ -1383,9 +1420,12 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             "cooldown_excluded_count": rank.get("recent_activity_excluded_count", activity_coverage.get("recent_activity_excluded_count", 0)),
             "assessment_progress": f"{assessed_count} of {ranked_count} eligible candidates assessed",
             "diagnosis_coverage": (
-                f"{diagnosis_completed} of {diagnosis_scheduled} scheduled diagnoses complete; "
-                f"{diagnosis_failed} failed; {diagnosis_deferred} deferred by the safety cap"
+                f"{diagnosis_completed} of {diagnosis_scheduled} scheduled diagnoses returned; "
+                f"{diagnosis_incomplete} incomplete {incomplete_label}; "
+                f"{diagnosis_failed} execution failures; "
+                f"{diagnosis_deferred} deferred by the safety cap"
             ),
+            "diagnosis_incomplete_count": diagnosis_incomplete,
             "ranking_cutoff": "none",
             "ranking_policy": "Evidence rank is calculated before policy gates. Cooldown, structural blockers, and incomplete evidence remain visible without changing that rank.",
             "priority_display_limit": MAX_PRIORITY_DIAGNOSES,
