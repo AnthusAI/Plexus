@@ -18,6 +18,16 @@ jest.mock('@/lib/report-artifacts', () => {
   return { ...actual, readTaskArtifact: (...args: unknown[]) => mockReadTaskArtifact(...args) }
 })
 
+jest.mock('@/components/OptimizationOpportunityDistribution', () => ({
+  __esModule: true,
+  default: ({ rows }: { rows: Array<{ disposition: string }> }) => (
+    <div>
+      <span>Opportunity distribution</span>
+      <span>Cooling down ({rows.filter(row => row.disposition === 'cooldown').length})</span>
+    </div>
+  ),
+}))
+
 const presentationDescriptor = {
   logical_id: 'stakeholder_presentation',
   kind: 'stakeholder_presentation',
@@ -72,7 +82,9 @@ describe('OptimizationRunStatus', () => {
           coverage_status: 'complete',
           scorecards_inspected: 4,
           scorecards_in_scope: 1,
+          evidence_ranked_score_count: 4,
           ranked_score_count: 3,
+          cooldown_excluded_count: 1,
           assessment_progress: '3 of 3 ranked scores complete',
           diagnosis_coverage: '1 of 1 selected diagnoses complete; 0 failed',
           ranking_cutoff: 'none',
@@ -94,6 +106,24 @@ describe('OptimizationRunStatus', () => {
         scorecard_count: 1,
         primary_decision_mix: { optimize: 2, stakeholder_clarification: 1 },
         secondary_issue_counts: { 'stakeholder question': 2 },
+        opportunity_distribution: [{
+          evidence_rank: 1,
+          scorecard_name: 'Example Portfolio',
+          score_name: 'Recently changed score',
+          opportunity: 60,
+          review_disposition: 'cooldown',
+          policy_disposition: 'cooldown',
+          policy_reason: 'recent_score_activity',
+          eligibility_timestamp: '2026-08-05T00:00:00Z',
+        }, {
+          evidence_rank: 2,
+          scorecard_name: 'Example Portfolio',
+          score_name: 'Priority Score',
+          opportunity: 42,
+          review_disposition: 'selected_for_review',
+          policy_disposition: 'eligible',
+          policy_reason: 'meets_rank_policy',
+        }],
         top_priorities: [{
           scorecard_name: 'Example Portfolio',
           score_name: 'Priority Score',
@@ -172,13 +202,18 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getByText('Scorecards inspected')).toBeInTheDocument()
     expect(screen.queryByText('Account inventory inspected')).not.toBeInTheDocument()
     expect(screen.getByText('Scorecards in scope')).toBeInTheDocument()
+    expect(screen.getByText('Evidence-ranked scores')).toBeInTheDocument()
+    expect(screen.getByText('Eligible candidates')).toBeInTheDocument()
+    expect(screen.getByText('Cooldown deferrals')).toBeInTheDocument()
+    expect(screen.getByText('Opportunity distribution')).toBeInTheDocument()
+    expect(screen.getByText('Cooling down (1)')).toBeInTheDocument()
     expect(screen.getByLabelText('Primary decision mix: 3 scores')).toBeInTheDocument()
     expect(screen.getByText('Optimize: 2')).toBeInTheDocument()
     expect(screen.getByText('Stakeholder clarification: 1')).toBeInTheDocument()
     expect(screen.getByText('Priority Score')).toBeInTheDocument()
-    expect(screen.getByText('No ranking cutoff')).toBeInTheDocument()
-    expect(screen.getByText(/Top 10 are highlighted/)).toBeInTheDocument()
-    expect(screen.getByText(/1 selected for semantic diagnosis/)).toBeInTheDocument()
+    expect(screen.getByText('Evidence rank before policy gates')).toBeInTheDocument()
+    expect(screen.getByText(/Top 10 evidence ranks are highlighted/)).toBeInTheDocument()
+    expect(screen.getByText(/1 selected for deeper review/)).toBeInTheDocument()
     expect(screen.getByText(/120 valid feedback/)).toBeInTheDocument()
     expect(screen.getByText('Reviewed errors show a safe opportunity.')).toBeInTheDocument()
     expect(mockReadTaskArtifact).toHaveBeenCalledTimes(1)

@@ -11,6 +11,10 @@ import {
   Loader2,
 } from 'lucide-react'
 
+import OptimizationOpportunityDistribution, {
+  type OptimizationOpportunityDisposition,
+  type OptimizationOpportunityRow,
+} from '@/components/OptimizationOpportunityDistribution'
 import { issueTaskArtifactReadTicket } from '@/lib/artifact-ticket-client'
 import {
   buildReportArtifactHref,
@@ -25,6 +29,7 @@ type PresentationOverview = {
   coverage_status?: string
   scorecards_inspected?: number
   scorecards_in_scope?: number
+  evidence_ranked_score_count?: number
   ranked_score_count?: number
   unranked_score_count?: number
   cooldown_excluded_count?: number
@@ -51,6 +56,8 @@ type PresentationOverview = {
 
 type PriorityRow = {
   rank?: number
+  evidence_rank?: number
+  candidate_rank?: number | null
   scorecard_name?: string
   score_name?: string
   opportunity?: number
@@ -60,6 +67,11 @@ type PriorityRow = {
   collection_state?: string
   rationale?: string
   next_action?: string
+  policy_disposition?: string
+  policy_reason?: string
+  review_disposition?: string
+  eligibility_timestamp?: string | null
+  dashboard_url?: string | null
 }
 
 type ScorecardCard = {
@@ -77,18 +89,26 @@ type StakeholderPresentation = {
   scorecard_count: number
   primary_decision_mix: Record<string, number>
   secondary_issue_counts: Record<string, number>
+  opportunity_distribution: OptimizationOpportunityRow[]
   top_priorities: PriorityRow[]
   scorecards: ScorecardCard[]
 }
 
 type ScoreDetail = {
   score_name?: string
+  evidence_rank?: number
+  candidate_rank?: number | null
   valid_feedback_count?: number
   reviewed_disagreements?: number
   disagreement_rate?: number
   readiness?: string
   rationale?: string
   next_action?: string
+  policy_disposition?: string
+  policy_reason?: string
+  review_disposition?: string
+  eligibility_timestamp?: string | null
+  dashboard_url?: string | null
   artifacts?: ArtifactDescriptor[]
 }
 
@@ -136,6 +156,16 @@ function record(value: unknown): Record<string, any> | null {
 function label(value: string): string {
   const text = value.replaceAll('_', ' ')
   return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+function opportunityDisposition(value: unknown): OptimizationOpportunityDisposition {
+  switch (value) {
+    case 'selected_for_review': return 'selected_for_review'
+    case 'cooldown': return 'cooldown'
+    case 'blocked': return 'blocked'
+    case 'incomplete': return 'incomplete'
+    default: return 'eligible'
+  }
 }
 
 function reportIdFromLocation(): string | null {
@@ -251,6 +281,31 @@ function parsePresentation(value: unknown): StakeholderPresentation {
       artifacts: artifacts as ArtifactDescriptor[],
     }
   })
+  const opportunityDistribution = (Array.isArray(data.opportunity_distribution)
+    ? data.opportunity_distribution
+    : []).map((value: unknown) => {
+      const row = record(value)
+      if (!row) throw new Error('Stakeholder presentation contains a malformed opportunity row.')
+      const evidenceRank = Number(row.evidence_rank)
+      const opportunity = Number(row.opportunity)
+      if (!Number.isFinite(evidenceRank) || !Number.isFinite(opportunity)) {
+        throw new Error('Stakeholder presentation contains an invalid opportunity rank or value.')
+      }
+      return {
+        evidence_rank: evidenceRank,
+        opportunity,
+        disposition: opportunityDisposition(row.review_disposition || row.policy_disposition),
+        scorecard_name: String(row.scorecard_name || 'Unlabeled scorecard'),
+        score_name: String(row.score_name || 'Unlabeled score'),
+        reason: row.policy_reason && row.policy_reason !== 'meets_rank_policy'
+          ? label(String(row.policy_reason))
+          : null,
+        eligibility_timestamp: row.eligibility_timestamp
+          ? String(row.eligibility_timestamp)
+          : null,
+        dashboard_url: row.dashboard_url ? String(row.dashboard_url) : null,
+      }
+    })
 
   return {
     overview: data.overview as PresentationOverview,
@@ -258,6 +313,7 @@ function parsePresentation(value: unknown): StakeholderPresentation {
     scorecard_count: data.scorecard_count,
     primary_decision_mix: data.primary_decision_mix,
     secondary_issue_counts: data.secondary_issue_counts,
+    opportunity_distribution: opportunityDistribution,
     top_priorities: data.top_priorities,
     scorecards,
   }
@@ -387,6 +443,11 @@ function ScorecardSection({ scorecard, reportId }: { scorecard: ScorecardCard; r
                     {score.valid_feedback_count ?? 0} valid feedback · {score.reviewed_disagreements ?? 0} reviewed disagreements
                   </p>
                   <p><span className="text-muted-foreground">Next action:</span> {label(score.next_action || 'review')}</p>
+                  {score.dashboard_url && (
+                    <Link href={score.dashboard_url} className="inline-flex text-primary hover:underline">
+                      Open score in dashboard
+                    </Link>
+                  )}
                   {scoreQuestions.length > 0 && (
                     <div className="rounded-md bg-amber-500/10 p-3">
                       <div className="font-medium">Questions and issues</div>
@@ -492,13 +553,14 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
           </div>
         </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {[
             ['Scorecards inspected', overview.scorecards_inspected ?? presentation.scorecard_count],
             ['Scorecards in scope', overview.scorecards_in_scope ?? presentation.scorecard_count],
             ['Scores in portfolio', presentation.score_count],
-            ['Ranked opportunities', overview.ranked_score_count ?? 0],
-            ['Cooldown exclusions', overview.cooldown_excluded_count ?? 0],
+            ['Evidence-ranked scores', overview.evidence_ranked_score_count ?? presentation.score_count],
+            ['Eligible candidates', overview.ranked_score_count ?? 0],
+            ['Cooldown deferrals', overview.cooldown_excluded_count ?? 0],
           ].map(([metric, value]) => (
             <div key={String(metric)} className="rounded-md bg-muted/40 p-3">
               <div className="text-2xl font-semibold">{value}</div>
@@ -530,27 +592,29 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
         <p className="text-sm text-muted-foreground">The ranking and the deeper semantic review use related but different boundaries.</p>
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
           <div className="rounded-md bg-muted/30 p-4">
-            <div className="font-medium">No ranking cutoff</div>
+            <div className="font-medium">Evidence rank before policy gates</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              All {overview.ranked_score_count ?? presentation.score_count} eligible scores are ranked by reviewed disagreements over the frozen feedback window.
+              All {overview.evidence_ranked_score_count ?? presentation.score_count} scores retain their original reviewed-disagreement rank. Policy gates change disposition, not rank.
             </p>
           </div>
           <div className="rounded-md bg-muted/30 p-4">
-            <div className="font-medium">Top {overview.priority_display_limit ?? 10} are highlighted</div>
+            <div className="font-medium">Top {overview.priority_display_limit ?? 10} evidence ranks are highlighted</div>
             <p className="mt-1 text-sm text-muted-foreground">
               {Number(overview.ranked_below_priority_cutoff || 0) > 0
-                ? `The highlighted list ends at rank ${overview.priority_cutoff_rank ?? overview.priority_displayed_count ?? 0}, at ${overview.priority_cutoff_opportunity ?? 0} reviewed disagreements. ${overview.ranked_below_priority_cutoff} ranked scores remain below this display cutoff.`
-                : `All ${overview.priority_displayed_count ?? presentation.top_priorities.length} ranked scores fit in the highlighted list.`}
+                ? `The highlighted list ends at evidence rank ${overview.priority_cutoff_rank ?? overview.priority_displayed_count ?? 0}, at ${overview.priority_cutoff_opportunity ?? 0} reviewed disagreements. ${overview.ranked_below_priority_cutoff} evidence-ranked scores remain below this display cutoff.`
+                : `All ${overview.priority_displayed_count ?? presentation.top_priorities.length} evidence-ranked scores fit in the highlighted list.`}
             </p>
           </div>
           <div className="rounded-md bg-muted/30 p-4">
-            <div className="font-medium">{overview.diagnosis_selected_count ?? 0} selected for semantic diagnosis</div>
+            <div className="font-medium">{overview.diagnosis_selected_count ?? 0} selected for deeper review</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              The top {overview.diagnosis_top_priority_count ?? 0} ranked opportunities plus {overview.diagnosis_monitoring_candidate_count ?? 0} monitoring candidates are selected, with overlap counted once. {overview.diagnosis_skipped_count ?? 0} ranked scores were not semantically diagnosed. Safety cap: {overview.diagnosis_max_count ?? 25}.
+              The top {overview.diagnosis_top_priority_count ?? 0} eligible candidates plus {overview.diagnosis_monitoring_candidate_count ?? 0} monitoring candidates are selected, with overlap counted once. {overview.diagnosis_skipped_count ?? 0} eligible candidates were not semantically diagnosed. Safety cap: {overview.diagnosis_max_count ?? 25}.
             </p>
           </div>
         </div>
       </section>
+
+      <OptimizationOpportunityDistribution rows={presentation.opportunity_distribution} />
 
       <section className="rounded-lg bg-card p-6">
         <h3 className="text-lg font-semibold">Primary decision mix</h3>
@@ -587,7 +651,7 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
 
       <section className="rounded-lg bg-card p-6">
         <h3 className="text-lg font-semibold">Top priorities</h3>
-        <p className="text-sm text-muted-foreground">Ranked by the number of reviewed disagreements, with policy and readiness context for human review.</p>
+        <p className="text-sm text-muted-foreground">Shown in original evidence order. Cooldown and other policy gates remain visible and do not renumber the list.</p>
         <div className="mt-3 space-y-2">
           {presentation.top_priorities.map((priority, index) => (
             <div key={`${priority.scorecard_name}-${priority.score_name}-${index}`} className="rounded-md bg-muted/30 p-4 text-sm">
@@ -598,6 +662,11 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
                     <div><span className="font-medium">{priority.score_name || 'Unlabeled score'}</span><span className="text-muted-foreground"> · {priority.scorecard_name || 'Unlabeled scorecard'}</span></div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       {priority.evidence_count ?? 0} valid feedback · {typeof priority.disagreement_rate === 'number' ? `${(priority.disagreement_rate * 100).toFixed(1)}% disagreement` : 'disagreement rate unavailable'} · {label(priority.readiness || 'inconclusive')}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {label(priority.review_disposition || priority.policy_disposition || 'eligible')}
+                      {priority.policy_reason && priority.policy_reason !== 'meets_rank_policy' ? ` · ${label(priority.policy_reason)}` : ''}
+                      {priority.candidate_rank ? ` · eligible candidate #${priority.candidate_rank}` : ''}
                     </div>
                   </div>
                 </div>

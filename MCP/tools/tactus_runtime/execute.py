@@ -11934,6 +11934,8 @@ Rank scope: opaque `scorecard_ids` or literal case-insensitive
 `scorecard_name_prefixes`; empty arrays are invalid.
 `score-activity-cooldown-v1`: frozen UTC `as_of`; 168-hour inclusive cutoff on
 the later of `score.updatedAt` or newest score-version `createdAt`;
+rows retain pre-policy `evidence_rank`; eligible rows get `candidate_rank`;
+deferred rows keep their policy disposition and reason;
 `recent_score_activity`; missing evidence is incomplete; assessment returns
 `cooldown_active`/`wait_for_cooldown`; run rechecks live activity before dispatch.
 An unresolved scalar champion ID is structurally unranked as
@@ -11945,10 +11947,8 @@ canonical `namespace_method` forms, including `docs_list/docs_get`,
 `skills_list/skills_get`, handle operations, and one helper per advertised API.
 - Fall back to `plexus.<namespace>.<method>{...}` for anything else.
 
-The complete account-wide research program is documented outside this
-always-present schema. Load
-`evaluation-feedback.batch-operations-cookbook` for the full metadata
-pagination, retry, bounded batch, compact aggregation, and coverage example.
+Load `evaluation-feedback.batch-operations-cookbook` for the
+account-wide pagination and aggregation example.
 
 Examples:
 

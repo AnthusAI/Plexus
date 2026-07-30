@@ -544,6 +544,34 @@ def _ranked_rows(rank: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [dict(row) for row in rows if isinstance(row, Mapping)]
 
 
+def _evidence_rows(rank: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Return the pre-policy evidence order without changing execution eligibility."""
+    ranked = _ranked_rows(rank)
+    deferred = [
+        dict(row)
+        for row in rank.get("unranked") or []
+        if isinstance(row, Mapping) and isinstance(row.get("evidence_rank"), int)
+    ]
+    rows = ranked + deferred
+    indexed = list(enumerate(rows))
+    indexed.sort(key=lambda item: (
+        int(item[1].get("evidence_rank"))
+        if isinstance(item[1].get("evidence_rank"), int)
+        else 10**9 + item[0]
+    ))
+    return [row for _index, row in indexed]
+
+
+def _policy_next_action(reason: str) -> str:
+    return {
+        "recent_score_activity": "wait_for_cooldown",
+        "disabled": "review_score_status",
+        "missing_champion": "assign_champion",
+        "unresolved_champion_reference": "repair_champion_reference",
+        "incomplete_score_activity": "repair_activity_evidence",
+    }.get(reason, "review_policy_blocker")
+
+
 def _pending_diagnosis_coverage(request: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "policy_version": DIAGNOSIS_SCOPE_POLICY_VERSION,
@@ -1032,7 +1060,7 @@ def _milestone_narrative(milestone: str) -> tuple[str, str]:
             "A ranked portfolio will be published after exhaustive coverage is verified.",
         ),
         "ranking": (
-            "Applying deterministic readiness and feedback-investment checks to every ranked score.",
+            "Applying deterministic readiness and feedback-investment checks to every eligible candidate.",
             "Assessment results and the bounded semantic-diagnosis scope will be published next.",
         ),
         "assessment": (
@@ -1099,12 +1127,33 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
     feedback: list[dict[str, Any]] = []
     questions: list[dict[str, Any]] = []
     ranked_rows = _ranked_rows(rank)
-    for rank_position, row in enumerate(ranked_rows, start=1):
+    evidence_rows = _evidence_rows(rank)
+    selected_for_review, _selection_coverage = _diagnosis_selection(
+        ranked_rows,
+        [assessments.get(_target_key(row), {}) for row in ranked_rows],
+        max_semantic_diagnoses=int(
+            (state.get("diagnosis_coverage") or {}).get(
+                "max_semantic_diagnoses", DEFAULT_MAX_SEMANTIC_DIAGNOSES
+            )
+        ),
+    )
+    selected_for_review_keys = {
+        _target_key(row) for row, _assessment in selected_for_review
+    } - {None}
+    for fallback_rank, row in enumerate(evidence_rows, start=1):
+        rank_position = (
+            int(row.get("evidence_rank"))
+            if isinstance(row.get("evidence_rank"), int)
+            else fallback_rank
+        )
         key = _target_key(row)
         assessment = assessments.get(key, {})
         diagnosis = diagnoses.get(key, {})
+        policy_disposition = str(row.get("policy_disposition") or "eligible")
+        policy_reason = str(row.get("policy_reason") or "meets_rank_policy")
+        eligible_for_optimization = row.get("eligible_for_optimization") is not False
         awaiting_semantic_diagnosis = (
-            _is_ready(assessment)
+            eligible_for_optimization and _is_ready(assessment)
             and key not in diagnoses
             and milestone not in {"started", "ranking", "assessment"}
         )
@@ -1122,6 +1171,18 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
         promotion = states.get("promotion_readiness") or review.get("post_run_state") or "not_evaluated"
         rationale = diagnosis.get("rationale") or assessment.get("rationale") or "Evidence-based priority."
         coverage_status = _stakeholder_coverage(diagnosis, assessment, rank)
+        if not eligible_for_optimization:
+            next_action = _policy_next_action(policy_reason)
+            if policy_disposition == "cooldown":
+                readiness = "cooldown_active"
+                rationale = "Recent score work defers another optimization attempt, but the evidence priority remains visible for monitoring."
+            elif policy_disposition == "incomplete":
+                readiness = "incomplete"
+                coverage_status = "incomplete"
+                rationale = "Policy evidence is incomplete, so this score cannot be selected safely."
+            else:
+                readiness = "repair_required"
+                rationale = "A structural policy gate prevents optimization until the documented issue is repaired."
         if awaiting_semantic_diagnosis:
             readiness = "incomplete"
             next_action = "await_semantic_diagnosis"
@@ -1132,6 +1193,8 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
         evidence_count = row.get("valid_feedback_count")
         base = {
             "rank": rank_position,
+            "evidence_rank": rank_position,
+            "candidate_rank": row.get("candidate_rank"),
             "scorecard_name": row.get("scorecard_name") or assessment.get("scorecard_name") or "Unlabeled scorecard",
             "score_name": row.get("score_name") or assessment.get("score_name") or "Unlabeled score",
             "scorecard_ref": sha256(key[0].encode("utf-8")).hexdigest()[:16] if key else None,
@@ -1142,6 +1205,20 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             "reviewed_disagreements": row.get("reviewed_disagreements"),
             "disagreement_rate": row.get("disagreement_rate"),
             "reviewed_error_opportunity": row.get("reviewed_error_opportunity"),
+            "policy_disposition": policy_disposition,
+            "policy_reason": policy_reason,
+            "review_disposition": (
+                "selected_for_review"
+                if key in selected_for_review_keys
+                else policy_disposition
+                if not eligible_for_optimization
+                else "eligible_below_selection"
+            ),
+            "eligibility_timestamp": (
+                (row.get("score_activity") or {}).get("eligible_at")
+                if isinstance(row.get("score_activity"), Mapping)
+                else None
+            ),
             "coverage_status": coverage_status,
             "trend": trend,
             "collection_state": collection,
@@ -1157,6 +1234,20 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             **base, "evidence_count": evidence_count,
             "opportunity": row.get("reviewed_error_opportunity"),
             "disagreement_rate": row.get("disagreement_rate"),
+            "policy_disposition": policy_disposition,
+            "policy_reason": policy_reason,
+            "review_disposition": (
+                "selected_for_review"
+                if key in selected_for_review_keys
+                else policy_disposition
+                if not eligible_for_optimization
+                else "eligible_below_selection"
+            ),
+            "eligibility_timestamp": (
+                (row.get("score_activity") or {}).get("eligible_at")
+                if isinstance(row.get("score_activity"), Mapping)
+                else None
+            ),
             "state": readiness,
             "coverage_status": coverage_status, "trend": trend,
             "collection_state": collection, "readiness": readiness,
@@ -1241,6 +1332,7 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
     else:
         current_activity, next_checkpoint = _milestone_narrative(milestone)
     ranked_count = len(ranked_rows)
+    evidence_ranked_count = len(evidence_rows)
     assessed_count = len(assessments)
     diagnosis_selected = int(diagnosis_coverage.get("selected_count") or 0)
     diagnosis_completed = int(diagnosis_coverage.get("completed_count") or 0)
@@ -1254,8 +1346,8 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
     )
     diagnosis_top_priority = int(diagnosis_coverage.get("top_priority_count") or 0)
     diagnosis_monitoring = int(diagnosis_coverage.get("monitoring_candidate_count") or 0)
-    priority_displayed = min(MAX_PRIORITY_DIAGNOSES, ranked_count)
-    priority_cutoff_row = ranked_rows[priority_displayed - 1] if priority_displayed else {}
+    priority_displayed = min(MAX_PRIORITY_DIAGNOSES, evidence_ranked_count)
+    priority_cutoff_row = evidence_rows[priority_displayed - 1] if priority_displayed else {}
     coverage_status = (
         "pending" if not rank else "complete" if _coverage_complete(rank) else "incomplete"
     )
@@ -1269,19 +1361,20 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             "ranking_window": str(rank.get("window") or "pending"),
             "scorecards_inspected": scope_coverage.get("total_scorecards_inspected", coverage.get("scorecards_discovered", 0)),
             "scorecards_in_scope": scope_coverage.get("matched_scorecard_count", 0),
+            "evidence_ranked_score_count": evidence_ranked_count,
             "ranked_score_count": ranked_count,
             "unranked_score_count": len(rank.get("unranked") or []),
             "cooldown_excluded_count": rank.get("recent_activity_excluded_count", activity_coverage.get("recent_activity_excluded_count", 0)),
-            "assessment_progress": f"{assessed_count} of {ranked_count} ranked scores complete",
+            "assessment_progress": f"{assessed_count} of {ranked_count} eligible candidates assessed",
             "diagnosis_coverage": f"{diagnosis_completed} of {diagnosis_selected} selected diagnoses complete; {diagnosis_failed} failed",
             "ranking_cutoff": "none",
-            "ranking_policy": "All eligible scores are ranked by reviewed disagreements; no ranking cutoff is applied.",
+            "ranking_policy": "Evidence rank is calculated before policy gates. Cooldown, structural blockers, and incomplete evidence remain visible without changing that rank.",
             "priority_display_limit": MAX_PRIORITY_DIAGNOSES,
             "priority_displayed_count": priority_displayed,
             "priority_cutoff_rank": priority_displayed,
             "priority_cutoff_opportunity": priority_cutoff_row.get("reviewed_error_opportunity"),
-            "ranked_below_priority_cutoff": max(ranked_count - priority_displayed, 0),
-            "diagnosis_selection_policy": "The highest-ranked opportunities plus every monitoring candidate receive semantic diagnosis, subject to the safety cap.",
+            "ranked_below_priority_cutoff": max(evidence_ranked_count - priority_displayed, 0),
+            "diagnosis_selection_policy": "The highest-ranked eligible candidates plus every monitoring candidate receive semantic diagnosis, subject to the safety cap.",
             "diagnosis_top_priority_count": diagnosis_top_priority,
             "diagnosis_monitoring_candidate_count": diagnosis_monitoring,
             "diagnosis_selected_count": diagnosis_selected,

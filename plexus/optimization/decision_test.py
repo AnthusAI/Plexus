@@ -325,6 +325,39 @@ def test_rank_aggregates_and_excludes_recent_score_activity():
     assert ranked["recent_activity_excluded_count"] == 1
     assert ranked["unranked"][0]["score_id"] == "recent"
     assert ranked["unranked"][0]["unranked_reason"] == "recent_score_activity"
+    assert ranked["unranked"][0]["evidence_rank"] == 1
+    assert ranked["unranked"][0]["policy_disposition"] == "cooldown"
+    assert ranked["unranked"][0]["eligible_for_optimization"] is False
+    assert ranked["ranked"][0]["evidence_rank"] == 2
+    assert ranked["ranked"][0]["candidate_rank"] == 1
+    assert ranked["ranked"][0]["policy_disposition"] == "eligible"
+    assert ranked["total_evidence_ranked"] == 2
+
+
+def test_rank_preserves_evidence_order_for_structurally_blocked_scores():
+    result = rank_portfolio(
+        [
+            {
+                "scorecard_id": "card", "score_id": "blocked", "scorecard_name": "Example",
+                "score_name": "Blocked", "champion_version": None,
+                "valid_feedback_count": 100, "disagreement_count": 90,
+            },
+            {
+                "scorecard_id": "card", "score_id": "eligible", "scorecard_name": "Example",
+                "score_name": "Eligible", "champion_version": "champion",
+                "valid_feedback_count": 100, "disagreement_count": 20,
+                "score_activity": _old_score_activity(),
+            },
+        ],
+        coverage={"complete": True, "activity": _activity_coverage()},
+    )
+
+    assert result["unranked"][0]["score_id"] == "blocked"
+    assert result["unranked"][0]["evidence_rank"] == 1
+    assert result["unranked"][0]["policy_disposition"] == "blocked"
+    assert result["unranked"][0]["policy_reason"] == "missing_champion"
+    assert result["ranked"][0]["score_id"] == "eligible"
+    assert result["ranked"][0]["evidence_rank"] == 2
 
 
 @pytest.mark.parametrize(

@@ -871,7 +871,7 @@ def test_stakeholder_overview_explains_current_work_and_next_durable_checkpoint(
     assert ranked["overview"]["ranked_score_count"] == 1
     assert ranked["overview"]["unranked_score_count"] == 2
     assert ranked["overview"]["cooldown_excluded_count"] == 3
-    assert ranked["overview"]["assessment_progress"] == "0 of 1 ranked scores complete"
+    assert ranked["overview"]["assessment_progress"] == "0 of 1 eligible candidates assessed"
     assert "deterministic readiness" in ranked["overview"]["current_activity"]
 
 
@@ -942,3 +942,66 @@ def test_stakeholder_overview_explains_ranking_and_semantic_diagnosis_cutoffs():
         },
     }, milestone="assessment")
     assert zero_cap_view["overview"]["diagnosis_max_count"] == 0
+
+
+def test_stakeholder_view_preserves_pre_policy_rank_and_visible_cooldown_disposition():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    view = _stakeholder_view({
+        "rank": {
+            "coverage": {
+                "complete": True,
+                "activity": {"recent_activity_excluded_count": 1},
+            },
+            "ranked": [{
+                "scorecard_id": "card",
+                "score_id": "eligible",
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Eligible Score",
+                "valid_feedback_count": 100,
+                "reviewed_disagreements": 20,
+                "disagreement_rate": 0.2,
+                "reviewed_error_opportunity": 20,
+                "evidence_rank": 2,
+                "candidate_rank": 1,
+                "policy_disposition": "eligible",
+                "policy_reason": "meets_rank_policy",
+                "eligible_for_optimization": True,
+            }],
+            "unranked": [{
+                "scorecard_id": "card",
+                "score_id": "cooldown",
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Recently Changed Score",
+                "valid_feedback_count": 100,
+                "reviewed_disagreements": 80,
+                "disagreement_rate": 0.8,
+                "reviewed_error_opportunity": 80,
+                "evidence_rank": 1,
+                "policy_disposition": "cooldown",
+                "policy_reason": "recent_score_activity",
+                "eligible_for_optimization": False,
+                "score_activity": {"eligible_at": "2026-08-05T00:00:00Z"},
+                "unranked_reason": "recent_score_activity",
+            }],
+        },
+        "assessments": [],
+        "diagnoses": [],
+        "reviews": [],
+        "approval_requests": [],
+        "diagnosis_coverage": {"selected_count": 0, "max_semantic_diagnoses": 10},
+    }, milestone="ranking")
+
+    assert [row["score_name"] for row in view["priorities"]] == [
+        "Recently Changed Score",
+        "Eligible Score",
+    ]
+    cooldown = view["priorities"][0]
+    assert cooldown["rank"] == 1
+    assert cooldown["candidate_rank"] is None
+    assert cooldown["policy_disposition"] == "cooldown"
+    assert cooldown["policy_reason"] == "recent_score_activity"
+    assert cooldown["next_action"] == "wait_for_cooldown"
+    assert cooldown["eligibility_timestamp"] == "2026-08-05T00:00:00Z"
+    assert view["overview"]["evidence_ranked_score_count"] == 2
+    assert view["overview"]["ranked_score_count"] == 1

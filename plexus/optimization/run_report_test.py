@@ -293,6 +293,7 @@ def test_milestone_cover_projects_safe_progress_and_preserves_identity_on_finali
         "ranking_window": "2026-05-01 through 2026-07-29 UTC",
         "scorecards_inspected": 56,
         "scorecards_in_scope": 4,
+        "evidence_ranked_score_count": 110,
         "ranked_score_count": 18,
         "unranked_score_count": 92,
         "cooldown_excluded_count": 7,
@@ -316,8 +317,9 @@ def test_milestone_cover_projects_safe_progress_and_preserves_identity_on_finali
     assert "Coverage: Incomplete" in cover
     assert "4 scorecards in scope" in cover
     assert "56 account scorecards inspected to resolve scope" in cover
-    assert "18 ranked scores" in cover
-    assert "7 cooldown exclusions" in cover
+    assert "110 evidence-ranked scores" in cover
+    assert "18 eligible candidates" in cover
+    assert "7 cooldown deferrals" in cover
     assert "12 of 18 ranked scores complete" in cover
     assert "Coverage is incomplete" in cover
     assert "opaque-score" not in cover
@@ -553,6 +555,31 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     assert len(presentation["scorecards"]) == 2
     assert presentation["scorecards"][0]["score_count"] == 1
     assert presentation["top_priorities"][0]["opportunity"] == 70
+    assert presentation["opportunity_distribution"] == [{
+        "evidence_rank": None,
+        "candidate_rank": None,
+        "scorecard_name": "Example Portfolio",
+        "score_name": "=Formula-like score",
+        "opportunity": 70,
+        "review_disposition": "eligible_below_selection",
+        "policy_disposition": "eligible",
+        "policy_reason": "meets_rank_policy",
+        "eligibility_timestamp": None,
+        "next_action": "repair_guidelines",
+        "dashboard_url": None,
+    }, {
+        "evidence_rank": None,
+        "candidate_rank": None,
+        "scorecard_name": "Example Portfolio",
+        "score_name": "Second Score",
+        "opportunity": 70,
+        "review_disposition": "eligible_below_selection",
+        "policy_disposition": "eligible",
+        "policy_reason": "meets_rank_policy",
+        "eligibility_timestamp": None,
+        "next_action": "repair_guidelines",
+        "dashboard_url": None,
+    }]
     assert presentation_artifact["object_key"] in state.task.attachedFiles
     status_envelope = json.loads(state.blocks["status"].output)
     assert status_envelope["preview"]["type"] == "optimization_run_status"

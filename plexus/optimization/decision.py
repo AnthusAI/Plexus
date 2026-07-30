@@ -574,6 +574,7 @@ def rank_portfolio(scores: Sequence[Mapping[str, Any]], *, coverage: Mapping[str
     complete = bool(coverage.get("complete", coverage.get("coverage_complete", False)))
     ranked: list[dict[str, Any]] = []
     unranked: list[dict[str, Any]] = []
+    evidence_rows: list[dict[str, Any]] = []
     activity_failures: list[dict[str, Any]] = []
     recent_activity_excluded_count = 0
     for source in scores:
@@ -595,12 +596,21 @@ def rank_portfolio(scores: Sequence[Mapping[str, Any]], *, coverage: Mapping[str
         }
         if not enabled:
             row["unranked_reason"] = "disabled"
+            row["policy_disposition"] = "blocked"
+            row["policy_reason"] = "disabled"
+            row["eligible_for_optimization"] = False
             unranked.append(row)
         elif not champion:
             row["unranked_reason"] = "missing_champion"
+            row["policy_disposition"] = "blocked"
+            row["policy_reason"] = "missing_champion"
+            row["eligible_for_optimization"] = False
             unranked.append(row)
         elif score.get("champion_relationship_valid") is False:
             row["unranked_reason"] = "unresolved_champion_reference"
+            row["policy_disposition"] = "blocked"
+            row["policy_reason"] = "unresolved_champion_reference"
+            row["eligible_for_optimization"] = False
             unranked.append(row)
         else:
             supplied_activity = score.get("score_activity")
@@ -642,6 +652,9 @@ def rank_portfolio(scores: Sequence[Mapping[str, Any]], *, coverage: Mapping[str
             row["score_activity"] = activity
             if activity.get("complete") is not True:
                 row["unranked_reason"] = "incomplete_score_activity"
+                row["policy_disposition"] = "incomplete"
+                row["policy_reason"] = "incomplete_score_activity"
+                row["eligible_for_optimization"] = False
                 unranked.append(row)
                 activity_failures.append(
                     {
@@ -654,19 +667,34 @@ def rank_portfolio(scores: Sequence[Mapping[str, Any]], *, coverage: Mapping[str
                 )
             elif activity.get("recent") is True:
                 row["unranked_reason"] = "recent_score_activity"
+                row["policy_disposition"] = "cooldown"
+                row["policy_reason"] = "recent_score_activity"
+                row["eligible_for_optimization"] = False
                 unranked.append(row)
                 recent_activity_excluded_count += 1
             else:
+                row["policy_disposition"] = "eligible"
+                row["policy_reason"] = "meets_rank_policy"
+                row["eligible_for_optimization"] = True
                 ranked.append(row)
-    ranked.sort(
-        key=lambda row: (
+        evidence_rows.append(row)
+
+    def evidence_sort_key(row: Mapping[str, Any]) -> tuple[Any, ...]:
+        return (
             -float(row["reviewed_error_opportunity"]),
             -int(row["valid_feedback_count"]),
             str(row.get("scorecard_name") or ""),
             str(row.get("score_name") or ""),
             str(row.get("score_id") or ""),
         )
-    )
+
+    evidence_rows.sort(key=evidence_sort_key)
+    for evidence_rank, row in enumerate(evidence_rows, start=1):
+        row["evidence_rank"] = evidence_rank
+
+    ranked.sort(key=evidence_sort_key)
+    for candidate_rank, row in enumerate(ranked, start=1):
+        row["candidate_rank"] = candidate_rank
     unranked.sort(key=lambda row: (str(row["unranked_reason"]), str(row.get("score_id") or "")))
     coverage_failures = list(
         coverage.get("failures") or coverage.get("coverage_failures") or []
@@ -689,6 +717,7 @@ def rank_portfolio(scores: Sequence[Mapping[str, Any]], *, coverage: Mapping[str
         "coverage_failures": coverage_failures,
         "exact": complete,
         "total_population": len(scores),
+        "total_evidence_ranked": len(evidence_rows),
         "total_ranked": len(ranked),
         "recent_activity_excluded_count": recent_activity_excluded_count,
         "activity_policy": dict(coverage["activity"]),

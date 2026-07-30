@@ -80,11 +80,14 @@ _FINAL_STATES = {
 
 _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
     "portfolio": (
-        ("Rank", "rank"), ("Scorecard", "scorecard_name"), ("Score", "score_name"),
+        ("Evidence Rank", "evidence_rank"), ("Eligible Candidate Rank", "candidate_rank"),
+        ("Scorecard", "scorecard_name"), ("Score", "score_name"),
         ("Valid Feedback", "valid_feedback_count"),
         ("Reviewed Disagreements", "reviewed_disagreements"),
         ("Disagreement Rate", "disagreement_rate"),
         ("Reviewed Error Opportunity", "reviewed_error_opportunity"),
+        ("Policy Disposition", "policy_disposition"), ("Policy Reason", "policy_reason"),
+        ("Review Disposition", "review_disposition"), ("Eligible After", "eligibility_timestamp"),
         ("Coverage", "coverage_status"), ("Recent Trend", "trend"),
         ("Collection State", "collection_state"), ("Guideline State", "guideline_state"),
         ("Feedback/Rubric State", "feedback_rubric_state"), ("Readiness", "readiness"),
@@ -92,9 +95,12 @@ _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("Next Action", "next_action"), ("Dashboard Link", "dashboard_url"),
     ),
     "priorities": (
-        ("Rank", "rank"), ("Scorecard", "scorecard_name"), ("Score", "score_name"),
+        ("Evidence Rank", "evidence_rank"), ("Eligible Candidate Rank", "candidate_rank"),
+        ("Scorecard", "scorecard_name"), ("Score", "score_name"),
         ("Evidence Count", "evidence_count"), ("Opportunity", "opportunity"),
         ("Disagreement Rate", "disagreement_rate"),
+        ("Policy Disposition", "policy_disposition"), ("Policy Reason", "policy_reason"),
+        ("Review Disposition", "review_disposition"), ("Eligible After", "eligibility_timestamp"),
         ("State", "state"), ("Coverage", "coverage_status"), ("Recent Trend", "trend"),
         ("Collection State", "collection_state"), ("Readiness", "readiness"),
         ("Promotion Readiness", "promotion_readiness"), ("Rationale", "rationale"),
@@ -129,7 +135,7 @@ _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
 _OVERVIEW_KEYS = {
     "headline", "lifecycle_status", "current_activity", "next_checkpoint",
     "coverage_status", "ranking_window", "scorecards_inspected",
-    "scorecards_in_scope",
+    "scorecards_in_scope", "evidence_ranked_score_count",
     "ranked_score_count", "unranked_score_count", "cooldown_excluded_count",
     "assessment_progress", "diagnosis_coverage", "pending_approval_count", "notes",
     "ranking_cutoff", "ranking_policy", "priority_display_limit",
@@ -138,7 +144,10 @@ _OVERVIEW_KEYS = {
     "diagnosis_top_priority_count", "diagnosis_monitoring_candidate_count",
     "diagnosis_selected_count", "diagnosis_skipped_count", "diagnosis_max_count",
 }
-_ROW_METADATA_KEYS = {"scorecard_ref"}
+_ROW_METADATA_KEYS = {
+    "scorecard_ref", "rank", "evidence_rank", "candidate_rank", "policy_disposition",
+    "policy_reason", "review_disposition", "eligibility_timestamp",
+}
 
 
 class OptimizationRunPublicationError(RuntimeError):
@@ -818,12 +827,29 @@ def build_stakeholder_presentation(
         if isinstance(row.get("opportunity"), (int, float)) else 0.0,
         reverse=True,
     )[:priority_display_limit]
+    opportunity_distribution = sorted(
+        ({
+            "evidence_rank": row.get("evidence_rank", row.get("rank")),
+            "candidate_rank": row.get("candidate_rank"),
+            "scorecard_name": row.get("scorecard_name"),
+            "score_name": row.get("score_name"),
+            "opportunity": row.get("reviewed_error_opportunity"),
+            "review_disposition": row.get("review_disposition", "eligible_below_selection"),
+            "policy_disposition": row.get("policy_disposition", "eligible"),
+            "policy_reason": row.get("policy_reason", "meets_rank_policy"),
+            "eligibility_timestamp": row.get("eligibility_timestamp"),
+            "next_action": row.get("next_action"),
+            "dashboard_url": row.get("dashboard_url"),
+        } for row in rows),
+        key=lambda row: int(row.get("evidence_rank") or 10**9),
+    )
     return {
         "overview": overview,
         "score_count": len(rows),
         "scorecard_count": len(scorecards),
         "primary_decision_mix": primary_decision_mix,
         "secondary_issue_counts": secondary_issue_counts,
+        "opportunity_distribution": opportunity_distribution,
         "top_priorities": [dict(row) for row in priorities],
         "scorecards": scorecards,
     }
@@ -1536,6 +1562,7 @@ class OptimizationRunReportService:
         in_scope = overview.get("scorecards_in_scope", 0)
         ranked = overview.get("ranked_score_count", 0)
         unranked = overview.get("unranked_score_count", 0)
+        evidence_ranked = overview.get("evidence_ranked_score_count", ranked + unranked)
         cooldown = overview.get("cooldown_excluded_count", 0)
         lines = [
             f"# {identity.display_title}",
@@ -1571,8 +1598,9 @@ class OptimizationRunReportService:
             f"Coverage: {coverage.title()}",
             (
                 f"Portfolio: {in_scope} scorecards in scope; {inspected} account "
-                f"scorecards inspected to resolve scope; {ranked} ranked scores; "
-                f"{unranked} unranked scores; {cooldown} cooldown exclusions."
+                f"scorecards inspected to resolve scope; {evidence_ranked} evidence-ranked "
+                f"scores; {ranked} eligible candidates; {unranked} policy-deferred or "
+                f"structurally blocked scores, including {cooldown} cooldown deferrals."
             ),
         ])
         if isinstance(live_progress, Mapping):

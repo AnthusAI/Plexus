@@ -2775,6 +2775,9 @@ def test_default_optimization_portfolio_run_composes_existing_operations_into_on
         def publish_milestone(self, milestone, evidence, *, stakeholder_view):
             self.milestones.append((milestone, evidence, stakeholder_view))
 
+        def publish_progress(self, **_kwargs):
+            return None
+
         def finalize(self, **_kwargs):
             raise AssertionError("waiting run must not finalize")
 
@@ -2845,6 +2848,9 @@ def test_default_portfolio_runtime_fails_closed_when_an_advisory_action_has_no_c
         def publish_milestone(self, *_args, **_kwargs):
             return None
 
+        def publish_progress(self, **_kwargs):
+            return None
+
         def finalize(self, **_kwargs):
             raise AssertionError("missing authority must not finalize successfully")
 
@@ -2899,6 +2905,9 @@ def test_default_portfolio_runtime_builds_chat_message_authority_from_the_authen
             return type("State", (), {"report": type("Report", (), {"id": "report-opaque"})()})()
 
         def publish_milestone(self, *_args, **_kwargs):
+            return None
+
+        def publish_progress(self, **_kwargs):
             return None
 
         def finalize(self, **_kwargs):
@@ -2964,6 +2973,9 @@ def test_default_portfolio_runtime_persists_and_resolves_nonblocking_findings_wi
             return type("State", (), {"report": type("Report", (), {"id": "report-opaque"})()})()
 
         def publish_milestone(self, *_args, **_kwargs):
+            return None
+
+        def publish_progress(self, **_kwargs):
             return None
 
         def finalize(self, **_kwargs):
@@ -3287,8 +3299,13 @@ def test_default_optimization_rank_uses_frozen_complete_window_and_inventory_met
     assert result["ranked"][0]["score_id"] == "s-live"
     assert result["ranked"][0]["valid_feedback_count"] == 4
     assert result["ranked"][0]["class_distribution"] == [{"label": "Yes", "count": 3}]
+    assert result["ranked"][0]["evidence_rank"] == 2
+    assert result["ranked"][0]["candidate_rank"] == 1
+    assert result["ranked"][0]["policy_disposition"] == "eligible"
     assert result["unranked"][0]["score_id"] == "s-off"
     assert result["unranked"][0]["unranked_reason"] == "disabled"
+    assert result["unranked"][0]["evidence_rank"] == 1
+    assert result["unranked"][0]["policy_disposition"] == "blocked"
 
 
 def test_optimization_rank_never_labels_mismatched_analysis_coverage_exact() -> None:
