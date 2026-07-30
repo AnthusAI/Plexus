@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ceb5794b-306d-472b-9543-f8116e00ec5c",
+  "issue_id": "plx-588086f5-74de-4ca4-a1d1-ddd3c2433039",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T19:31:30.009Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "As a platform operator, I want the scoring-only container to contain only required runtime packages and pass image vulnerability gates, so that promoted artifacts do not expose avoidable operating-system attack surface.\n\nFeature: Minimal secure scoring runtime image\n\nScenario: Build the scoring-only runtime\nGiven scoring dependencies are available as Python wheels or copied source\nWhen the scoring runtime container is built\nThen it does not install source-control, visualization, or native client packages that scoring does not execute\nAnd the published image contains no critical or high scan findings before promotion",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+    "priority": 0,
+    "status": "open",
+    "title": "Published scoring runtime excludes unnecessary vulnerable system packages"
+  }
+}

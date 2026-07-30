@@ -10,6 +10,7 @@ from plexus.dashboard.api.client import (
     PlexusDashboardClient,
 )
 from plexus.dashboard.api.models.task import Task
+from plexus.cli.shared.client_utils import create_client
 import threading
 import traceback
 
@@ -187,14 +188,7 @@ class TaskProgressTracker:
             try:
                 # Use provided client if available, otherwise create one
                 if not self._client:
-                    api_url = os.environ.get('PLEXUS_API_URL')
-                    api_key = os.environ.get('PLEXUS_API_KEY')
-                    if api_url and api_key:
-                        self._client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
-                    else:
-                        # Don't raise, but log clearly - we might operate without API
-                        logging.error("API URL/Key not configured for internal client creation during task fetch.")
-                        self._client = None # Ensure client is None if config missing
+                    self._client = create_client()
                 
                 if self._client: # Only attempt fetch if client is available
                     logging.debug(f"Attempting to fetch Task by ID: {task_id}")
@@ -934,13 +928,8 @@ class TaskProgressTracker:
         if self._client:
             return self._client
         
-        api_url = os.environ.get('PLEXUS_API_URL')
-        api_key = os.environ.get('PLEXUS_API_KEY')
-        if api_url and api_key:
-            self._client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
-            return self._client
-        else:
-            raise ValueError("Cannot perform API operation: API URL/Key not configured and no client provided.")
+        self._client = create_client()
+        return self._client
 
     def _sync_api_stages(self):
         """Creates or finds API TaskStage records corresponding to local stage configs."""

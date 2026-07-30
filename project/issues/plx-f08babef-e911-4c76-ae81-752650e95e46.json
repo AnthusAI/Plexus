@@ -1,0 +1,43 @@
+{
+  "id": "plx-f08babef-e911-4c76-ae81-752650e95e46",
+  "title": "Declare and verify optimizer winning version output",
+  "description": "Add an outside-in executable contract for the persisted optimizer result, declare the existing winning_version_id return field in the procedure output schema, and validate the Kubernetes demo consumes it without fallback or synthetic reconstruction.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7e6a5814-d577-4e36-88b9-09f42b188193",
+      "author": "ryan.porter",
+      "text": "Live strict run 20260728T185647Z-pr513a3 exposed the failing contract. One optimizer dispatch completed with target_reached and indexed winning version bcc209e6-c052-4995-a84a-52b2ee75a1d2. Feedback AC1 improved from 0.580313 to 1.0 and regression AC1 from 0.525121 to 0.960016 at a persisted optimizer cost of $0.04480207. The persisted task result retained both metric deltas but omitted winning_version_id, so guarded promotion failed. The Lua return already sets winning_version_id; the procedure outputs declaration omits it and the runtime filters undeclared output fields. No optimizer retry was attempted.",
+      "created_at": "2026-07-28T19:18:45.832719Z"
+    },
+    {
+      "id": "501931b8-a8ec-4cd8-bc72-de9bf3be6bc9",
+      "author": "ryan.porter",
+      "text": "Outside-in specification failed with KeyError because winning_version_id was absent from the optimizer outputs declaration even though the Lua return and indexed summary contained it. Added only the missing optional string output declaration. Focused optimizer result, procedure configuration, and demo harness validation is green: 114 tests; Ruff and diff checks pass. The failed live run is retained and will not be resumed or retried because its task artifact was created under the incomplete schema.",
+      "created_at": "2026-07-28T19:19:40.127936Z"
+    },
+    {
+      "id": "bd934715-ac1c-4f4d-a491-4c2c7f8d890d",
+      "author": "ryan.porter",
+      "text": "Fresh strict Kubernetes run A passed from immutable integration commit 65ff7d0d03457b8fc3ade9ff15959cee51c8a842. Run ID: 20260728T192000Z-pr513a4. Baseline: accuracy 0.76, feedback AC1 0.546142, regression AC1 0.504006; both cohorts completed exactly 100 items with zero errors. The optimizer returned winning version 0ab800a8-fb55-41aa-91ee-54a4c0c7fdb6, improved feedback AC1 by 0.453858 and regression AC1 by 0.415994, passed guarded promotion, and final 100-item evaluation reproduced AC1 0.980002. Optimizer cost ledger: $0.04671406. All seven phases passed, including restart persistence and identical Helm upgrade. Sanitized evidence: /tmp/plexus-k8s-demo/20260728T192000Z-pr513a4.",
+      "created_at": "2026-07-28T19:53:27.203810Z"
+    },
+    {
+      "id": "f08e92b0-5f85-47a4-8539-b588154995e5",
+      "author": "ryan.porter",
+      "text": "Validation complete on the local integration branch. Strict run A returned and promoted its winner with final AC1 0.980002. Strict run B returned its winner, was intentionally interrupted after artifact completion, then resumed through the GraphQL ticket path with dispatch count exactly one and final AC1 0.96. Read-only retained verification passed after subsequent runs and the final proxy rollout. Keep this task in progress until commits land.",
+      "created_at": "2026-07-28T20:22:12.092073Z"
+    }
+  ],
+  "created_at": "2026-07-28T19:18:38.252392Z",
+  "updated_at": "2026-07-28T20:22:12.092073Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3a4a8f9d-65ac-45bc-80ab-139951be32b3",
+  "issue_id": "plx-c472ed3d-3dd8-4c54-a9ae-f8cab7955bda",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T19:21:22.041Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Use application authentication in evaluation and resource CLI clients",
+    "description": "## Problem\n\nAfter a successful application login, several local CLI command modules still construct the dashboard client through the legacy API-key-only constructor. Identity commands succeed, but resource discovery and evaluation setup fail before making GraphQL requests when no API key is present.\n\n## Expected behavior\n\nGiven a user has an active Cognito application session\nAnd no AWS or API-key credentials are available\nWhen the user invokes scorecard discovery or starts an evaluation\nThen the command uses the centralized explicit-auth client factory\nAnd GraphQL requests use Cognito authorization\nAnd no API-key, IAM, AWS-profile, or direct-storage fallback occurs.\n\n## Acceptance\n\n- Behavior-first tests reproduce the stale constructor path.\n- Evaluation and resource CLI entrypoints delegate to the centralized client factory.\n- Existing command-level test doubles remain supported without runtime monkeypatching of Tactus.\n- Cognito sandbox discovery and representative evaluation setup succeed without AWS or API-key credentials.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": []
+  }
+}

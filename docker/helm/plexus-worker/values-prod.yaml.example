@@ -61,6 +61,8 @@ plexus:
   createSecrets: true
   api:
     url: "https://your-prod-api.appsync-api.us-west-2.amazonaws.com/graphql"
+    # Use "iam" when the worker service account role is authorized for AppSync.
+    authMode: api_key
     # Set via Octopus variables:
     # key: "#{Plexus.Prod.ApiKey}"
 

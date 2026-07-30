@@ -1,0 +1,31 @@
+{
+  "id": "plx-d1f74c18-d48c-4458-8ce0-140aa6e82975",
+  "title": "Stabilize restored CI on the production Python runtime",
+  "description": "Restored GitHub Actions exposed deterministic failures in the production Python job and re-enabled a ruleset synchronization workflow whose administrative token is unavailable. The Python matrix also spends Actions minutes on a non-production runtime.\n\nExpected behavior:\n- Pull-request Python validation runs once on the production Python 3.11 runtime.\n- The local Helm chart test provisions its repository metadata in an isolated test environment.\n- Evaluation item lookup tests patch the supported explicit score resolver.\n- Ruleset synchronization remains disabled until supported administrative authentication is available.\n- Core CI, documentation, and release workflows remain enabled.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-5e52c459-fd59-4313-9a6a-211e99cdd156",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2dbc9670-e320-4391-95db-0dda1241dd0c",
+      "author": "ryan.porter",
+      "text": "Live GitHub Actions evidence: both Python 3.11 and 3.12 jobs failed with the same three tests. The Helm test relied on developer-global repository configuration, two evaluation tests patched a dynamic package attribute that the explicit resolver intentionally rejects, and the Ruleset Sync job received an empty administrative token. Decision: keep core Actions enabled, validate only production Python 3.11, make the Helm test isolated, patch the supported resolver in tests, and defer ruleset authentication.",
+      "created_at": "2026-07-28T20:40:03.412559Z"
+    },
+    {
+      "id": "733a5d81-035b-4b4e-957f-b015e90257af",
+      "author": "ryan.porter",
+      "text": "Implemented the CI stabilization. The production job now runs only Python 3.11; the Helm test provisions Bitnami metadata in isolated temporary configuration; evaluation tests patch the explicit score resolver; and Ruleset Sync is disabled until supported administrative authentication exists. Validation: red-first workflow contract failed in the two expected places, focused suite passes 9 of 9, Poetry lock validation and diff check pass, and a fresh isolated Python 3.11 environment completed the full CI command with 3,916 passed, 41 skipped, 3 expected failures, and no failures.",
+      "created_at": "2026-07-28T20:53:27.372086Z"
+    }
+  ],
+  "created_at": "2026-07-28T20:39:46.877608Z",
+  "updated_at": "2026-07-28T20:53:27.372086Z",
+  "closed_at": null,
+  "custom": {}
+}

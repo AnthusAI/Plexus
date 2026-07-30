@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5f222e51-a150-4e7c-804b-4fd91b7ea35f",
+  "issue_id": "plx-1f09dc1c-b994-4e8e-a8ae-eb85479c995a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T18:12:17.662Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Require explicit GraphQL auth mode for unattended worker deployments",
+    "description": "## Problem\n\nThe centralized dashboard client defaults non-AWS interactive processes to Cognito. Existing Kubernetes workers and procedure-recovery jobs provide an application API key but do not declare an authentication mode, so unattended commands would attempt an unavailable interactive login.\n\n## Expected behavior\n\nGiven an unattended worker deployment\nWhen it starts a dashboard client\nThen its manifest supplies an explicit supported authentication mode\nAnd current API-key deployments continue to operate\nAnd role-enabled deployments can select IAM without an automatic credential fallback.\n\n## Acceptance\n\n- Rendered worker and recovery-job manifests contain PLEXUS_GRAPHQL_AUTH_MODE.\n- The chart defaults existing deployments to explicit api_key mode.\n- iam is an allowed explicit value for role-enabled deployments.\n- Invalid values fail chart validation.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": []
+  }
+}

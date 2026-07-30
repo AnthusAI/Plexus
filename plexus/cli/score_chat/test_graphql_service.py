@@ -33,7 +33,7 @@ class TestGraphQLChatService:
              patch('plexus.cli.score_chat.graphql_service.PlexusDashboardClient', return_value=mock_client), \
              patch('plexus.cli.shared.client_utils.create_client', return_value=mock_client), \
              patch('plexus.cli.shared.file_editor.FileEditor'), \
-             patch('plexus.cli.shared.plexus_tool.PlexusTool'), \
+             patch('plexus.cli.score_chat.service.PlexusTool'), \
              patch('langchain_anthropic.ChatAnthropic'), \
              patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key'}):
             service = GraphQLChatService(
@@ -71,7 +71,7 @@ class TestGraphQLChatService:
              patch('plexus.cli.score_chat.graphql_service.PlexusDashboardClient', return_value=mock_client), \
              patch('plexus.cli.shared.client_utils.create_client', return_value=mock_client), \
              patch('plexus.cli.shared.file_editor.FileEditor'), \
-             patch('plexus.cli.shared.plexus_tool.PlexusTool'), \
+             patch('plexus.cli.score_chat.service.PlexusTool'), \
              patch('langchain_anthropic.ChatAnthropic'), \
              patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key'}):
             service = GraphQLChatService(experiment_id=experiment_id)
@@ -113,7 +113,7 @@ class TestGraphQLChatService:
              patch('plexus.cli.score_chat.graphql_service.PlexusDashboardClient', return_value=mock_client), \
              patch('plexus.cli.shared.client_utils.create_client', return_value=mock_client), \
              patch('plexus.cli.shared.file_editor.FileEditor'), \
-             patch('plexus.cli.shared.plexus_tool.PlexusTool'), \
+             patch('plexus.cli.score_chat.service.PlexusTool'), \
              patch('langchain_anthropic.ChatAnthropic'), \
              patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key'}):
             service = GraphQLChatService(session_id="session-123", experiment_id=experiment_id)
@@ -311,7 +311,7 @@ class TestFileEditorIntegration:
              patch('plexus.cli.score_chat.graphql_service.PlexusDashboardClient'), \
              patch('plexus.cli.shared.client_utils.create_client'), \
              patch('plexus.cli.shared.file_editor.FileEditor'), \
-             patch('plexus.cli.shared.plexus_tool.PlexusTool'), \
+             patch('plexus.cli.score_chat.service.PlexusTool'), \
              patch('langchain_anthropic.ChatAnthropic'), \
              patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key'}):
             service = GraphQLChatService()
@@ -328,7 +328,7 @@ class TestFileEditorIntegration:
              patch('plexus.cli.score_chat.graphql_service.PlexusDashboardClient'), \
              patch('plexus.cli.shared.client_utils.create_client'), \
              patch('plexus.cli.shared.file_editor.FileEditor'), \
-             patch('plexus.cli.shared.plexus_tool.PlexusTool'), \
+             patch('plexus.cli.score_chat.service.PlexusTool'), \
              patch('langchain_anthropic.ChatAnthropic'), \
              patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key'}):
             service = GraphQLChatService(scorecard="test", score="test")

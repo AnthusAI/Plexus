@@ -3,21 +3,16 @@ from __future__ import annotations
 import json
 import logging
 import os
+import hashlib
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-import boto3
-
 from plexus.cli.shared import get_score_guidelines_path
-from plexus.cli.shared.task_output_storage import (
-    resolve_task_output_attachment_bucket_name,
-    upload_task_attachment_bytes,
-)
-from plexus.config.loader import ConfigLoader
 from plexus.dashboard.api.models.task import Task
+from plexus.storage.graphql_artifact_store import ArtifactTransferRequest, GraphQLArtifactStore
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +23,6 @@ OPTIMIZER_MANIFEST_SUFFIX = "optimizer/manifest.json"
 OPTIMIZER_EVENTS_SUFFIX = "optimizer/events.jsonl"
 OPTIMIZER_RUNTIME_LOG_SUFFIX = "optimizer/runtime.log"
 PROCEDURE_TASK_TARGETS = ("procedure/", "procedure/run/")
-REPORT_BLOCK_BUCKET_ENV = "AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME"
-REPORT_BLOCK_BUCKET_CONFIG_KEY = "aws.storage.report_block_details_bucket"
 
 
 @dataclass
@@ -72,42 +65,6 @@ def _parse_json_list(value: Any) -> List[Any]:
 
 def _to_json_safe(value: Any) -> Any:
     return json.loads(json.dumps(value, default=str))
-
-
-def _resolve_report_block_bucket_name() -> Optional[str]:
-    env_bucket = os.getenv(REPORT_BLOCK_BUCKET_ENV)
-    if isinstance(env_bucket, str) and env_bucket.strip():
-        return env_bucket.strip()
-
-    loader = ConfigLoader()
-    loader.load_config()
-    configured_bucket = loader.get_config_value(REPORT_BLOCK_BUCKET_CONFIG_KEY)
-    if isinstance(configured_bucket, str) and configured_bucket.strip():
-        return configured_bucket.strip()
-
-    return None
-
-
-def _download_json_from_s3(*, bucket_name: str, key: str) -> Dict[str, Any]:
-    s3 = boto3.client("s3")
-    response = s3.get_object(Bucket=bucket_name, Key=key)
-    raw = response["Body"].read().decode("utf-8")
-    parsed = json.loads(raw)
-    if not isinstance(parsed, dict):
-        raise RuntimeError(f"S3 object {key} did not contain a JSON object.")
-    return parsed
-
-
-def _download_text_from_s3(*, bucket_name: str, key: str) -> str:
-    s3 = boto3.client("s3")
-    response = s3.get_object(Bucket=bucket_name, Key=key)
-    return response["Body"].read().decode("utf-8")
-
-
-def _download_json_from_s3_key(*, bucket_name: str, key: str) -> Dict[str, Any]:
-    if not key:
-        raise RuntimeError("S3 key is required.")
-    return _download_json_from_s3(bucket_name=bucket_name, key=key)
 
 
 def _looks_like_optimizer_state(state: Any) -> bool:
@@ -398,9 +355,42 @@ def _render_optimizer_runtime_log(manifest: Dict[str, Any]) -> str:
 
 
 class OptimizerResultsService:
-    def __init__(self, client):
+    def __init__(self, client, *, artifact_store: Optional[GraphQLArtifactStore] = None):
         self.client = client
+        self.artifact_store = artifact_store or GraphQLArtifactStore(client)
         self._task_cache: Dict[str, Optional[Task]] = {}
+
+    @staticmethod
+    def _integrity_metadata(pointer: Dict[str, Any], artifact_name: str) -> Dict[str, Any]:
+        metadata = _parse_json_dict((pointer.get("artifact_metadata") or {}).get(artifact_name))
+        if not metadata:
+            raise RuntimeError(
+                f"Optimizer {artifact_name} artifact lacks integrity metadata and cannot be read through the authorized artifact store. "
+                "Re-index the optimizer run to create a GraphQL-authorized artifact pointer."
+            )
+        return metadata
+
+    def _download_artifact(self, *, task_id: str, artifact_name: str, pointer: Dict[str, Any]) -> bytes:
+        metadata = self._integrity_metadata(pointer, artifact_name)
+        key = metadata.get("_s3_key") or pointer.get(artifact_name)
+        size_bytes = metadata.get("size_bytes")
+        sha256 = metadata.get("sha256")
+        content_type = metadata.get("content_type")
+        if not isinstance(key, str) or not isinstance(size_bytes, int) or not isinstance(sha256, str) or not isinstance(content_type, str):
+            raise RuntimeError(f"Optimizer {artifact_name} artifact integrity metadata is invalid.")
+        filename = key.removeprefix(f"tasks/{task_id}/")
+        return self.artifact_store.download_bytes(ArtifactTransferRequest(
+            operation="READ", resource_type="TASK", resource_id=task_id,
+            artifact_type="TASK_ATTACHMENT", filename=filename, content_type=content_type,
+            size_bytes=size_bytes, sha256=sha256,
+        ))
+
+    def _upload_task_artifact(self, *, task_id: str, filename: str, content: bytes, content_type: str) -> Dict[str, Any]:
+        return self.artifact_store.upload_bytes(ArtifactTransferRequest(
+            operation="WRITE", resource_type="TASK", resource_id=task_id,
+            artifact_type="TASK_ATTACHMENT", filename=filename, content_type=content_type,
+            size_bytes=len(content), sha256=hashlib.sha256(content).hexdigest(),
+        ), content)
 
     def _load_procedure_record(self, procedure_id: str) -> Dict[str, Any]:
         query = """
@@ -540,12 +530,22 @@ class OptimizerResultsService:
         metadata = _parse_json_dict(procedure.get("metadata"))
         state_ref = metadata.get("dashboard_state") or metadata.get("state") or {}
         if isinstance(state_ref, dict) and "_s3_key" in state_ref:
-            bucket_name = _resolve_report_block_bucket_name()
-            if not bucket_name:
+            size_bytes = state_ref.get("size_bytes")
+            sha256 = state_ref.get("sha256")
+            content_type = state_ref.get("content_type")
+            if not isinstance(size_bytes, int) or not isinstance(sha256, str) or not isinstance(content_type, str):
                 raise RuntimeError(
-                    f"{REPORT_BLOCK_BUCKET_CONFIG_KEY} is required to load optimizer state artifacts."
+                    "Procedure dashboard state lacks integrity metadata and cannot be read through the authorized artifact store."
                 )
-            return _download_json_from_s3_key(bucket_name=bucket_name, key=str(state_ref["_s3_key"]))
+            raw = self.artifact_store.download_bytes(ArtifactTransferRequest(
+                operation="READ", resource_type="PROCEDURE", resource_id=str(procedure["id"]),
+                artifact_type="PROCEDURE_DASHBOARD_STATE", filename="dashboard_state.json",
+                content_type=content_type, size_bytes=size_bytes, sha256=sha256,
+            ))
+            parsed = json.loads(raw.decode("utf-8"))
+            if not isinstance(parsed, dict):
+                raise RuntimeError("Procedure dashboard state did not contain a JSON object.")
+            return parsed
         if isinstance(state_ref, dict):
             return state_ref
         return {}
@@ -742,30 +742,17 @@ class OptimizerResultsService:
         if not task:
             raise RuntimeError(f"Could not find a Task for procedure {procedure_id}.")
 
-        bucket_name = resolve_task_output_attachment_bucket_name()
-        if not bucket_name:
-            raise RuntimeError("aws.storage.task_attachments_bucket is required for optimizer artifacts.")
-
         manifest = self.build_manifest(procedure=procedure, task=task, state=state)
         artifact_keys = self._artifact_keys_for_task(task.id)
-        upload_task_attachment_bytes(
-            bucket_name=bucket_name,
-            key=artifact_keys["manifest"],
-            body=json.dumps(manifest, indent=2, ensure_ascii=False, default=str).encode("utf-8"),
-            content_type="application/json",
-        )
-        upload_task_attachment_bytes(
-            bucket_name=bucket_name,
-            key=artifact_keys["events"],
-            body=_render_optimizer_events_jsonl(manifest).encode("utf-8"),
-            content_type="application/x-ndjson",
-        )
-        upload_task_attachment_bytes(
-            bucket_name=bucket_name,
-            key=artifact_keys["runtime_log"],
-            body=_render_optimizer_runtime_log(manifest).encode("utf-8"),
-            content_type="text/plain",
-        )
+        artifact_metadata = {
+            "manifest": self._upload_task_artifact(task_id=task.id, filename=OPTIMIZER_MANIFEST_SUFFIX,
+                content=json.dumps(manifest, indent=2, ensure_ascii=False, default=str).encode("utf-8"), content_type="application/json"),
+            "events": self._upload_task_artifact(task_id=task.id, filename=OPTIMIZER_EVENTS_SUFFIX,
+                content=_render_optimizer_events_jsonl(manifest).encode("utf-8"), content_type="application/x-ndjson"),
+            "runtime_log": self._upload_task_artifact(task_id=task.id, filename=OPTIMIZER_RUNTIME_LOG_SUFFIX,
+                content=_render_optimizer_runtime_log(manifest).encode("utf-8"), content_type="text/plain"),
+        }
+        artifact_keys = {name: metadata["_s3_key"] for name, metadata in artifact_metadata.items()}
 
         attached_files = list(task.attachedFiles or [])
         changed = False
@@ -783,6 +770,7 @@ class OptimizerResultsService:
             "manifest": artifact_keys["manifest"],
             "events": artifact_keys["events"],
             "runtime_log": artifact_keys["runtime_log"],
+            "artifact_metadata": artifact_metadata,
         }
         metadata[OPTIMIZER_ARTIFACTS_METADATA_KEY] = pointer
 
@@ -825,10 +813,14 @@ class OptimizerResultsService:
         manifest_key = artifact_pointer.get("manifest")
         if not manifest_key:
             return None
-        bucket_name = resolve_task_output_attachment_bucket_name()
-        if not bucket_name:
-            raise RuntimeError("aws.storage.task_attachments_bucket is required to load optimizer manifests.")
-        return _download_json_from_s3_key(bucket_name=bucket_name, key=str(manifest_key))
+        task_id = artifact_pointer.get("task_id")
+        if not isinstance(task_id, str) or not task_id:
+            raise RuntimeError("Optimizer artifact pointer is missing task_id.")
+        raw = self._download_artifact(task_id=task_id, artifact_name="manifest", pointer=artifact_pointer)
+        parsed = json.loads(raw.decode("utf-8"))
+        if not isinstance(parsed, dict):
+            raise RuntimeError("Optimizer manifest did not contain a JSON object.")
+        return parsed
 
     def list_optimizer_runs_for_score(self, score_id: str, *, limit: int = 25) -> List[OptimizerRunRecord]:
         records: List[OptimizerRunRecord] = []
@@ -1340,17 +1332,15 @@ class OptimizerResultsService:
                 "rca_complete": rca_complete,
             },
         }
-        bucket_name = resolve_task_output_attachment_bucket_name()
-        if (include_runtime_log or include_events) and not bucket_name:
-            raise RuntimeError("aws.storage.task_attachments_bucket is required to load optimizer artifacts.")
+        task_id = artifact_pointer.get("task_id")
+        if (include_runtime_log or include_events) and (not isinstance(task_id, str) or not task_id):
+            raise RuntimeError("Optimizer artifact pointer is missing task_id.")
         if include_runtime_log:
-            runtime_key = artifact_pointer.get("runtime_log")
-            runtime_text = _download_text_from_s3(bucket_name=bucket_name, key=runtime_key) if runtime_key else ""
+            runtime_text = self._download_artifact(task_id=task_id, artifact_name="runtime_log", pointer=artifact_pointer).decode("utf-8") if artifact_pointer.get("runtime_log") else ""
             runtime_lines = runtime_text.splitlines()
             payload["runtime_log_excerpt"] = "\n".join(runtime_lines[-log_lines:])
         if include_events:
-            events_key = artifact_pointer.get("events")
-            events_text = _download_text_from_s3(bucket_name=bucket_name, key=events_key) if events_key else ""
+            events_text = self._download_artifact(task_id=task_id, artifact_name="events", pointer=artifact_pointer).decode("utf-8") if artifact_pointer.get("events") else ""
             payload["events_excerpt"] = "\n".join(events_text.splitlines()[-log_lines:])
         return payload
 

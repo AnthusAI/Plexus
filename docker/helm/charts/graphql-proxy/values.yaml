@@ -144,6 +144,23 @@ config:
   # Constructed from global values, but can be overridden
   databaseUrl: ""  # e.g., postgresql://user:pass@host:5432/dbname
 
+# Application-authorized local artifact transfer signing. Signing credentials
+# are always sourced from an existing Kubernetes Secret.
+artifactStore:
+  enabled: false
+  endpoint: ""
+  region: us-east-1
+  accountId: ""
+  existingSecret: ""
+  accessKeySecretKey: access-key-id
+  secretKeySecretKey: secret-access-key
+  ticketTtlSeconds: 300
+  buckets:
+    datasets: ""
+    reportBlockDetails: ""
+    taskAttachments: ""
+    scoreResultAttachments: ""
+
 # Secret management
 createSecrets: true
 existingSecret: ""  # Name of existing secret to use instead

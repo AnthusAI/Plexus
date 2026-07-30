@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2da592e2-7029-453d-b700-dea915e2794e",
+  "issue_id": "plx-708aebee-441e-4a92-928b-6c9abd5bcdda",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T20:15:35.649Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Declare Console worker runtime dependencies through a dedicated package extra",
+    "description": "The Console worker image currently installs some direct runtime dependencies in a separate Dockerfile layer and obtains another transitively. This makes dependency ownership and version resolution less explicit.\n\nExpected behavior:\n- The Plexus package exposes a narrow Console worker extra containing only the optional dependencies required by that runtime beyond the scoring extra.\n- The Console worker installs the scoring and Console extras together.\n- Broad infrastructure-only dependencies are not added to the latency-sensitive image.\n- The image build verifies its direct runtime imports.\n\nAcceptance scenario:\nGiven a clean Console worker image build\nWhen Plexus is installed with the scoring and Console extras\nThen Celery, FastMCP, and IAM request signing imports are available without separate unpinned installs\nAnd unrelated infrastructure services are not requested by the Console extra.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-0f79ddc4-5ad8-408b-a1cc-fbe32f7f20aa",
+    "labels": []
+  }
+}

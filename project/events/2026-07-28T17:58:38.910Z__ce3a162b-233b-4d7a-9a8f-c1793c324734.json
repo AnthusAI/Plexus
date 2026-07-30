@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ce3a162b-233b-4d7a-9a8f-c1793c324734",
+  "issue_id": "plx-4be24d35-6d74-40dc-8741-8bf5206e3d5e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T17:58:38.910Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Integrate PR 513 with the Kubernetes demo suite",
+    "description": "Validate PR 513 from an isolated integration branch against the committed Docker Desktop Kubernetes demo. Preserve the initial unmodified failure, implement only the specified local GraphQL ticket, verified TLS, explicit authentication, and resume-path compatibility, then prove two fresh strict runs plus retained verification. Use public data only and record sanitized evidence.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "labels": []
+  }
+}

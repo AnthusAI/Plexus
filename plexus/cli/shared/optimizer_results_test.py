@@ -1,5 +1,8 @@
+import hashlib
 import json
 from types import SimpleNamespace
+
+import boto3
 
 from plexus.cli.shared.optimizer_results import (
     OPTIMIZER_ARTIFACTS_METADATA_KEY,
@@ -32,6 +35,25 @@ class _FakeTask:
         for key, value in kwargs.items():
             setattr(self, key, value)
         return self
+
+
+class _FakeArtifactStore:
+    def __init__(self):
+        self.uploads = []
+        self.downloads = []
+
+    def upload_bytes(self, request, content):
+        self.uploads.append((request, content))
+        return {
+            "_s3_key": f"tasks/{request.resource_id}/{request.filename}",
+            "sha256": request.sha256,
+            "size_bytes": request.size_bytes,
+            "content_type": request.content_type,
+        }
+
+    def download_bytes(self, request):
+        self.downloads.append(request)
+        raise AssertionError("test must configure a downloaded artifact")
 
 
 def _sample_state():
@@ -227,29 +249,21 @@ def test_build_manifest_uses_final_report_evidence_for_handoff_metrics_and_parti
     assert compact_handoff["terminal_state"] == "PARTIAL_FAILURE"
 
 
-def test_index_optimizer_run_persists_manifest_and_pointer(monkeypatch):
+def test_index_optimizer_run_persists_manifest_and_pointer_without_direct_s3(monkeypatch):
     client = _FakeClient()
-    service = OptimizerResultsService(client)
+    store = _FakeArtifactStore()
+    service = OptimizerResultsService(client, artifact_store=store)
     task = _FakeTask()
-    uploads = []
+    monkeypatch.setattr(boto3, "client", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("S3 must not be used")))
 
     monkeypatch.setattr(service, "_load_procedure_record", lambda _procedure_id: _sample_procedure())
     monkeypatch.setattr(service, "_load_optimizer_state", lambda _procedure: _sample_state())
     monkeypatch.setattr(service, "_find_task_for_procedure", lambda **_kwargs: task)
-    monkeypatch.setattr(
-        "plexus.cli.shared.optimizer_results.resolve_task_output_attachment_bucket_name",
-        lambda: "task-attachments-test",
-    )
-    monkeypatch.setattr(
-        "plexus.cli.shared.optimizer_results.upload_task_attachment_bytes",
-        lambda **kwargs: uploads.append(kwargs) or kwargs["key"],
-    )
-
     result = service.index_optimizer_run("proc-123")
 
     assert result["task_id"] == "task-123"
-    assert len(uploads) == 3
-    upload_keys = {item["key"] for item in uploads}
+    assert len(store.uploads) == 3
+    upload_keys = {f"tasks/{request.resource_id}/{request.filename}" for request, _content in store.uploads}
     assert "tasks/task-123/optimizer/manifest.json" in upload_keys
     assert "tasks/task-123/optimizer/events.jsonl" in upload_keys
     assert "tasks/task-123/optimizer/runtime.log" in upload_keys
@@ -264,6 +278,38 @@ def test_index_optimizer_run_persists_manifest_and_pointer(monkeypatch):
     pointer = saved_metadata[OPTIMIZER_ARTIFACTS_METADATA_KEY]
     assert pointer["task_id"] == "task-123"
     assert pointer["manifest"] == "tasks/task-123/optimizer/manifest.json"
+    assert pointer["artifact_metadata"]["manifest"]["sha256"]
+
+
+def test_load_indexed_manifest_uses_authorized_artifact_store_without_s3(monkeypatch):
+    client = _FakeClient()
+    store = _FakeArtifactStore()
+    manifest = {"schema_version": 1, "procedure": {"id": "proc-123"}}
+    manifest_bytes = json.dumps(manifest).encode("utf-8")
+
+    def _download(request):
+        store.downloads.append(request)
+        return manifest_bytes
+
+    store.download_bytes = _download
+    service = OptimizerResultsService(client, artifact_store=store)
+    monkeypatch.setattr(boto3, "client", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("S3 must not be used")))
+    pointer = {
+        "task_id": "task-123",
+        "manifest": "tasks/task-123/optimizer/manifest.json",
+        "artifact_metadata": {
+            "manifest": {
+                "_s3_key": "tasks/task-123/optimizer/manifest.json",
+                "sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+                "size_bytes": len(manifest_bytes),
+                "content_type": "application/json",
+            }
+        },
+    }
+
+    assert service.load_indexed_manifest_for_procedure(_sample_procedure({OPTIMIZER_ARTIFACTS_METADATA_KEY: pointer})) == manifest
+    assert store.downloads[0].resource_type == "TASK"
+    assert store.downloads[0].filename == "optimizer/manifest.json"
 
 
 def test_list_optimizer_candidates_for_score_aggregates_best_visible_metrics(monkeypatch):

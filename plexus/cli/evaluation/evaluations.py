@@ -433,8 +433,10 @@ def format_confusion_matrix_summary(final_metrics):
     return "\n".join(summary_lines)
 
 def create_client() -> PlexusDashboardClient:
-    """Create a client and log its configuration"""
-    client = PlexusDashboardClient()
+    """Create a client through the centralized explicit-auth factory."""
+    from plexus.cli.shared.client_utils import create_client as create_authenticated_client
+
+    client = create_authenticated_client()
     logging.debug(f"Using API URL: {client.api_url}")
     return client
 
@@ -1609,7 +1611,7 @@ def _fetch_accuracy_evaluation_summary_for_json(evaluation_id: Optional[str]) ->
         return {}
 
     try:
-        client = PlexusDashboardClient()
+        client = create_client()
         evaluation = DashboardEvaluation.get_by_id(evaluation_id, client=client)
     except Exception:
         return {}
@@ -1699,7 +1701,7 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
     
     try:
         # Create client directly without context manager
-        client = PlexusDashboardClient()
+        client = create_client()
         
         # 1. Resolve the scorecard ID
         scorecard_id = direct_memoized_resolve_scorecard_identifier(client, scorecard_identifier)
@@ -1850,7 +1852,7 @@ def load_scorecard_from_yaml_files(scorecard_identifier: str, score_names=None, 
     
     try:
         # First resolve the scorecard identifier to get the actual scorecard name
-        client = PlexusDashboardClient()
+        client = create_client()
         
         # 1. Resolve the scorecard ID
         scorecard_id = direct_memoized_resolve_scorecard_identifier(client, scorecard_identifier)
@@ -2290,7 +2292,7 @@ def accuracy(
         return
 
     if all_score_associated_datasets and not dataset_id:
-        coordinator_client = PlexusDashboardClient()
+        coordinator_client = create_client()
         primary_score_id = resolve_primary_score_id_for_accuracy(
             client=coordinator_client,
             scorecard_identifier=str(scorecard),
@@ -2467,7 +2469,7 @@ def accuracy(
         
         try:
             # Create or get Task record for progress tracking
-            client = PlexusDashboardClient()  # Create client at the top level
+            client = create_client()  # Create client at the top level
             account = None  # Initialize account at the top level
             
             # Get the account ID from PLEXUS_ACCOUNT_KEY environment variable
@@ -2753,7 +2755,7 @@ def accuracy(
                             break
                     
                     if primary_score_id:
-                        client = PlexusDashboardClient()
+                        client = create_client()
                         latest_version_id = get_latest_score_version(client, primary_score_id)
                         if latest_version_id:
                             resolved_version = latest_version_id
@@ -3533,7 +3535,15 @@ def get_data_driven_samples(
             logging.error("No dataframe available after data loading")
         
         logging.info("Processing data...")
-        score_instance.process_data()
+        process_data = getattr(score_instance, 'process_data', None)
+        if callable(process_data):
+            process_data()
+        else:
+            logging.info(
+                "Score '%s' does not implement optional dataset preprocessing; "
+                "evaluating its loaded dataframe directly",
+                score_name,
+            )
         
         # Basic dataset info after processing
         if hasattr(score_instance, 'dataframe') and score_instance.dataframe is not None:
@@ -3625,12 +3635,17 @@ def get_data_driven_samples(
             samples = [sample for sample in samples if sample['content_id'] in content_ids_as_integers]
             logging.info(f"Number of samples after filtering by specified content IDs: {len(samples)}")
 
+        stored_score_name = score_name
         score_name_column_name = score_name
         if score_config.get('label_score_name'):
             score_name = score_config['label_score_name']
             score_name_column_name = score_name
         if score_config.get('label_field'):
             score_name_column_name = f"{score_name} {score_config['label_field']}"
+
+        stored_score_name_column_name = stored_score_name
+        if score_config.get('label_field'):
+            stored_score_name_column_name = f"{stored_score_name} {score_config['label_field']}"
 
         processed_samples = []
         for sample in samples:
@@ -3645,9 +3660,16 @@ def get_data_driven_samples(
             
             # Create the sample dictionary with metadata included
             # Keep IDs column at top level for identifier extraction
+            label_value = ''
+            for candidate_column in (score_name_column_name, stored_score_name_column_name):
+                candidate_value = sample.get(candidate_column)
+                if candidate_value is not None and not pd.isna(candidate_value) and str(candidate_value).strip():
+                    label_value = candidate_value
+                    break
+
             processed_sample = {
                 'text': sample.get('text', ''),
-                f'{score_name_column_name}_label': sample.get(score_name_column_name, ''),
+                f'{score_name_column_name}_label': label_value,
                 'content_id': sample.get('content_id', ''),
                 'IDs': sample.get('IDs', ''),  # Keep IDs at top level
                 'columns': {

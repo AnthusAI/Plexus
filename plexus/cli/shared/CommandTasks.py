@@ -14,8 +14,6 @@ import os
 import time
 import random
 import subprocess
-import boto3
-from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 from .universal_code import (
     generate_universal_code_yaml, 
@@ -26,8 +24,9 @@ from .universal_code import (
 from .command_output import CommandOutputManager, set_output_manager
 from .task_output_storage import (
     persist_task_output_artifact,
-    resolve_task_output_attachment_bucket_name,
+    upload_task_attachment_bytes,
 )
+from .client_utils import create_client
 
 # Load environment variables from .env file
 load_dotenv()
@@ -54,37 +53,6 @@ def _restore_env_value(name: str, previous_value: Optional[str]) -> None:
         os.environ[name] = previous_value
 
 
-def upload_file_to_s3(bucket_name: str, key: str, content: str, content_type: str = 'text/plain') -> bool:
-    """
-    Upload a file to S3.
-    
-    Args:
-        bucket_name: S3 bucket name
-        key: S3 object key
-        content: File content as string
-        content_type: MIME type of the content
-        
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    try:
-        s3_client = boto3.client('s3')
-        s3_client.put_object(
-            Bucket=bucket_name,
-            Key=key,
-            Body=content.encode('utf-8'),
-            ContentType=content_type
-        )
-        logging.info(f"Successfully uploaded file to s3://{bucket_name}/{key}")
-        return True
-    except ClientError as e:
-        logging.error(f"Failed to upload file to S3: {e}")
-        return False
-    except Exception as e:
-        logging.error(f"Unexpected error uploading to S3: {e}")
-        return False
-
-
 def register_tasks(app):
     """Register Celery tasks with the application."""
     
@@ -95,18 +63,31 @@ def register_tasks(app):
     )
     def execute_command(self: Task, command_string: str, target: str = "default/command", task_id: Optional[str] = None) -> dict:
         """Execute a Plexus command and return its result."""
+        client = None
+
+        def upload_task_attachment(filename: str, content: str, content_type: str = "text/plain") -> Optional[str]:
+            if not task_id or client is None:
+                return None
+            try:
+                metadata = upload_task_attachment_bytes(
+                    task_id=task_id,
+                    filename=filename,
+                    body=content.encode("utf-8"),
+                    content_type=content_type,
+                    client=client,
+                )
+                return metadata.get("_s3_key")
+            except Exception as exc:
+                logging.error("Failed to upload task attachment %s: %s", filename, exc)
+                return None
+
         try:
             # IMMEDIATELY claim the task if we have a task_id
             if task_id:
                 logging.info(f"Celery assigned task {task_id} to worker - attempting immediate claim")
-                api_url = os.environ.get('PLEXUS_API_URL')
-                api_key = os.environ.get('PLEXUS_API_KEY')
-                
-                if api_url and api_key:
+                try:
                     from plexus.dashboard.api.models.task import Task
-                    from plexus.dashboard.api.client import PlexusDashboardClient
-                    
-                    client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+                    client = create_client()
                     worker_id = f"{socket.gethostname()}-{os.getpid()}"
                     
                     try:
@@ -142,22 +123,17 @@ def register_tasks(app):
                         logging.info(f"Started processing task {task_id}")
                     except Exception as e:
                         logging.error(f"Failed to claim task {task_id}: {str(e)}")
+                except Exception as e:
+                    logging.error(f"Could not create a dashboard client to claim task {task_id}: {str(e)}")
             
             logging.info(f"Received command: '{command_string}' with target: '{target}' and task_id: '{task_id}'")
             
             # Initialize task tracking
             task = None
-            api_url = os.environ.get('PLEXUS_API_URL')
-            api_key = os.environ.get('PLEXUS_API_KEY')
-
-            if not api_url or not api_key:
-                logging.warning("PLEXUS_API_URL or PLEXUS_API_KEY not set, cannot track task")
-            else:
+            try:
                 # Import API client classes at the top level
                 from plexus.dashboard.api.models.task import Task
-                from plexus.dashboard.api.client import PlexusDashboardClient
-                
-                client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+                client = client or create_client()
                 
                 # Now proceed with task processing
                 if task_id:
@@ -189,6 +165,8 @@ def register_tasks(app):
                         logging.info(f"Created API Task record with ID: {task.id}")
                     except Exception as e:
                         logging.error(f"Failed to create task record: {str(e)}")
+            except Exception as e:
+                logging.warning("Could not create dashboard client for task tracking: %s", e)
             
             # Only check target matching if a matcher is configured
             matcher = getattr(app.conf, "task_target_matcher", None)
@@ -415,10 +393,8 @@ def register_tasks(app):
                         
                         # Universal Code will be generated after file uploads
                         
-                        # Upload command-generated output files and logs to S3
-                        bucket_name = resolve_task_output_attachment_bucket_name()
-                        logging.info(f"Resolved task attachments bucket: {bucket_name}")
-                        if bucket_name and task_id:
+                        # Upload command-generated output files through task-authorized tickets.
+                        if task_id:
                             # Upload any output files created by the command
                             if output_manager:
                                 created_files = output_manager.get_created_files()
@@ -438,10 +414,10 @@ def register_tasks(app):
                                             elif filename.endswith('.csv'):
                                                 content_type = 'text/csv'
                                             
-                                            s3_key = f"tasks/{task_id}/{filename}"
-                                            if upload_file_to_s3(bucket_name, s3_key, file_content, content_type):
-                                                attached_files.append(s3_key)
-                                                logging.info(f"Uploaded command output file: {s3_key}")
+                                            attachment_key = upload_task_attachment(filename, file_content, content_type)
+                                            if attachment_key:
+                                                attached_files.append(attachment_key)
+                                                logging.info(f"Uploaded command output file: {attachment_key}")
                                         except Exception as e:
                                             logging.error(f"Failed to upload output file {filename}: {e}")
                                     else:
@@ -449,20 +425,17 @@ def register_tasks(app):
                             
                             # Upload stdout as separate file if we have content
                             if stdout_content.strip():
-                                stdout_key = f"tasks/{task_id}/stdout.txt"
-                                if upload_file_to_s3(bucket_name, stdout_key, stdout_content, 'text/plain'):
-                                    attached_files.append(stdout_key)
-                                    logging.info(f"Uploaded stdout: {stdout_key}")
+                                attachment_key = upload_task_attachment("stdout.txt", stdout_content, "text/plain")
+                                if attachment_key:
+                                    attached_files.append(attachment_key)
+                                    logging.info(f"Uploaded stdout: {attachment_key}")
                             
                             # Upload stderr as separate file if we have content
                             if stderr_content.strip():
-                                stderr_key = f"tasks/{task_id}/stderr.txt"
-                                if upload_file_to_s3(bucket_name, stderr_key, stderr_content, 'text/plain'):
-                                    attached_files.append(stderr_key)
-                                    logging.info(f"Uploaded stderr: {stderr_key}")
-                        else:
-                            if not bucket_name:
-                                logging.warning("Task attachments bucket could not be resolved, skipping file uploads")
+                                attachment_key = upload_task_attachment("stderr.txt", stderr_content, "text/plain")
+                                if attachment_key:
+                                    attached_files.append(attachment_key)
+                                    logging.info(f"Uploaded stderr: {attachment_key}")
                         
                         # NOW generate Universal Code YAML using available clean data
                         try:
@@ -535,22 +508,24 @@ task_info:
                                 'stderr': stderr_content,
                             }
                             
-                            if universal_code_yaml:
-                                compact_output, attached_files, _attachment_key = persist_task_output_artifact(
-                                    task_id=task.id,
-                                    output_payload=universal_code_yaml,
-                                    format_type='yaml',
-                                    existing_attached_files=getattr(task, 'attachedFiles', None) or attached_files,
-                                    status='completed',
-                                )
-                                update_data['output'] = compact_output
+                            if not universal_code_yaml:
+                                raise RuntimeError("Required task output could not be generated.")
+                            compact_output, attached_files, _attachment_key = persist_task_output_artifact(
+                                task_id=task.id,
+                                output_payload=universal_code_yaml,
+                                format_type='yaml',
+                                existing_attached_files=getattr(task, 'attachedFiles', None) or attached_files,
+                                status='completed',
+                                client=client,
+                            )
+                            update_data['output'] = compact_output
                             
                             if attached_files:
                                 update_data['attachedFiles'] = attached_files
                             
                             task.update(**update_data)
                         except Exception as e:
-                            logging.error(f"Failed to store command output in task: {str(e)}")
+                            raise RuntimeError("Required task output artifact could not be persisted.") from e
                         
                         task.complete_processing()
                     else:
@@ -589,20 +564,19 @@ task_info:
                         except Exception as e:
                             logging.error(f"Failed to generate error Universal Code: {e}")
                         
-                        # Upload error files
-                        bucket_name = resolve_task_output_attachment_bucket_name()
-                        if bucket_name and task_id:
+                        # Upload error files through task-authorized tickets.
+                        if task_id:
                             # Upload stdout as separate file if we have content
                             if stdout_content.strip():
-                                stdout_key = f"tasks/{task_id}/stdout.txt"
-                                if upload_file_to_s3(bucket_name, stdout_key, stdout_content, 'text/plain'):
-                                    attached_files.append(stdout_key)
+                                attachment_key = upload_task_attachment("stdout.txt", stdout_content, "text/plain")
+                                if attachment_key:
+                                    attached_files.append(attachment_key)
                             
                             # Upload stderr as separate file if we have content
                             if stderr_content.strip():
-                                stderr_key = f"tasks/{task_id}/stderr.txt"
-                                if upload_file_to_s3(bucket_name, stderr_key, stderr_content, 'text/plain'):
-                                    attached_files.append(stderr_key)
+                                attachment_key = upload_task_attachment("stderr.txt", stderr_content, "text/plain")
+                                if attachment_key:
+                                    attached_files.append(attachment_key)
                         
                         # Store the command output and error info in the task before failing
                         try:
@@ -714,26 +688,25 @@ task_info:
                         except Exception as yaml_error:
                             logging.error(f"Failed to generate exception Universal Code: {yaml_error}")
                         
-                        # Upload exception files
-                        bucket_name = resolve_task_output_attachment_bucket_name()
-                        if bucket_name and 'task_id' in locals() and task_id:
+                        # Upload exception files through task-authorized tickets.
+                        if 'task_id' in locals() and task_id:
                             # Upload exception details
                             exception_content = f"EXCEPTION: {str(e)}\nTRACEBACK: {str(sys.exc_info())}"
-                            exception_key = f"tasks/{task_id}/exception.txt"
-                            if upload_file_to_s3(bucket_name, exception_key, exception_content, 'text/plain'):
-                                attached_files.append(exception_key)
+                            attachment_key = upload_task_attachment("exception.txt", exception_content, "text/plain")
+                            if attachment_key:
+                                attached_files.append(attachment_key)
                             
                             # Upload stdout as separate file if we have content
                             if stdout_content.strip():
-                                stdout_key = f"tasks/{task_id}/stdout.txt"
-                                if upload_file_to_s3(bucket_name, stdout_key, stdout_content, 'text/plain'):
-                                    attached_files.append(stdout_key)
+                                attachment_key = upload_task_attachment("stdout.txt", stdout_content, "text/plain")
+                                if attachment_key:
+                                    attached_files.append(attachment_key)
                             
                             # Upload stderr as separate file if we have content
                             if stderr_content.strip():
-                                stderr_key = f"tasks/{task_id}/stderr.txt"
-                                if upload_file_to_s3(bucket_name, stderr_key, stderr_content, 'text/plain'):
-                                    attached_files.append(stderr_key)
+                                attachment_key = upload_task_attachment("stderr.txt", stderr_content, "text/plain")
+                                if attachment_key:
+                                    attached_files.append(attachment_key)
                     
                     update_data = {
                         'status': 'FAILED',

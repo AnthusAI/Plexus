@@ -260,11 +260,11 @@ class TestTaskProgressTrackerInitialization:
         assert tracker.api_task == mock_task
         assert tracker.total_items == 50
     
-    @patch('plexus.cli.shared.task_progress_tracker.PlexusDashboardClient')
-    def test_initialization_with_task_id(self, mock_client_class):
+    @patch('plexus.cli.shared.task_progress_tracker.create_client')
+    def test_initialization_with_task_id(self, mock_create_client):
         """Test initialization with task_id and prevent_new_task=True."""
         mock_client = Mock()
-        mock_client_class.return_value = mock_client
+        mock_create_client.return_value = mock_client
         
         mock_task = Mock(spec=Task)
         mock_task.id = "test-task-456"

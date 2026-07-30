@@ -60,6 +60,62 @@ def test_data_driven_samples_fails_when_score_has_no_data_configuration(monkeypa
         )
 
 
+def test_data_driven_samples_supports_scores_without_preprocessing(monkeypatch):
+    """Accuracy evaluation can use a loaded dataframe without ScoreData.process_data."""
+    score = SimpleNamespace(
+        dataframe=pd.DataFrame(
+            [{"text": "sample text", "Stored Score": "No", "content_id": "content-1"}]
+        ),
+        load_data=MagicMock(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.evaluation.evaluations.Score.load",
+        lambda **_kwargs: score,
+    )
+
+    samples = get_data_driven_samples(
+        scorecard_instance=SimpleNamespace(),
+        scorecard_name="fixture-scorecard",
+        score_name="Stored Score",
+        score_config={"class": "LangGraphScore", "data": {}},
+        fresh=False,
+        reload=False,
+        content_ids_to_sample_set=set(),
+    )
+
+    assert samples[0]["Stored Score_label"] == "No"
+
+
+def test_data_driven_samples_copies_stored_label_into_configured_alias(monkeypatch):
+    """A renamed label alias must retain the source dataframe's human label."""
+    score = SimpleNamespace(
+        dataframe=pd.DataFrame(
+            [{"text": "sample text", "Stored Score": "No", "content_id": "content-1"}]
+        ),
+        load_data=MagicMock(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.evaluation.evaluations.Score.load",
+        lambda **_kwargs: score,
+    )
+
+    samples = get_data_driven_samples(
+        scorecard_instance=SimpleNamespace(),
+        scorecard_name="fixture-scorecard",
+        score_name="Stored Score",
+        score_config={
+            "class": "LangGraphScore",
+            "data": {},
+            "label_score_name": "Renamed Human Label",
+        },
+        fresh=False,
+        reload=False,
+        content_ids_to_sample_set=set(),
+    )
+
+    assert samples[0]["Renamed Human Label_label"] == "No"
+
+
 def test_list_associated_datasets_for_score_orders_newest_first():
     client = MagicMock()
     client.execute.return_value = {
@@ -725,7 +781,7 @@ def test_fetch_accuracy_evaluation_summary_for_json_extracts_persisted_fields():
         ),
     )
 
-    with patch("plexus.cli.evaluation.evaluations.PlexusDashboardClient", return_value=client), patch(
+    with patch("plexus.cli.evaluation.evaluations.create_client", return_value=client), patch(
         "plexus.cli.evaluation.evaluations.DashboardEvaluation.get_by_id",
         return_value=evaluation,
     ):
@@ -749,7 +805,7 @@ def test_fetch_accuracy_evaluation_summary_for_json_extracts_persisted_fields():
 
 
 def test_fetch_accuracy_evaluation_summary_for_json_returns_empty_on_lookup_error():
-    with patch("plexus.cli.evaluation.evaluations.PlexusDashboardClient"), patch(
+    with patch("plexus.cli.evaluation.evaluations.create_client"), patch(
         "plexus.cli.evaluation.evaluations.DashboardEvaluation.get_by_id",
         side_effect=RuntimeError("lookup failed"),
     ):

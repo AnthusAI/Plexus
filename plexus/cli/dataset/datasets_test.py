@@ -54,7 +54,7 @@ def test_load_command_success(mock_resolve, runner):
         mock_resolve.return_value = mock_data_source
         
         # Mock all the external dependencies
-        with patch('plexus.cli.dataset.datasets.PlexusDashboardClient') as mock_client_class:
+        with patch('plexus.cli.dataset.datasets.create_client') as mock_client_class:
             mock_client = MagicMock()
             mock_client_class.return_value = mock_client
             
@@ -121,7 +121,7 @@ def test_load_command_builtin_reference_cache_class_resolution(mock_resolve, run
         mock_data_source.scorecardId = 'scorecard-123'
         mock_resolve.return_value = mock_data_source
 
-        with patch('plexus.cli.dataset.datasets.PlexusDashboardClient') as mock_client_class:
+        with patch('plexus.cli.dataset.datasets.create_client') as mock_client_class:
             mock_client = MagicMock()
             mock_client_class.return_value = mock_client
             mock_client.execute = MagicMock(side_effect=[
@@ -177,7 +177,7 @@ def test_load_command_applies_item_pipeline_to_text(mock_resolve, runner):
 
         mock_resolve.return_value = mock_data_source
 
-        with patch('plexus.cli.dataset.datasets.PlexusDashboardClient') as mock_client_class:
+        with patch('plexus.cli.dataset.datasets.create_client') as mock_client_class:
             mock_client = MagicMock()
             mock_client_class.return_value = mock_client
             mock_client.execute = MagicMock(side_effect=[

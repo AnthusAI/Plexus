@@ -123,17 +123,42 @@ def test_client_does_not_fall_back_to_api_key_when_cognito_session_is_unavailabl
 def test_client_keeps_explicit_iam_workload_auth(mock_transport, monkeypatch):
     monkeypatch.setenv('PLEXUS_API_URL', 'https://example.appsync-api.us-east-1.amazonaws.com/graphql')
     monkeypatch.setenv('PLEXUS_GRAPHQL_AUTH_MODE', 'iam')
-    frozen = Mock(access_key='access', secret_key='secret', token='session')
-    session = Mock(get_credentials=Mock(return_value=Mock(get_frozen_credentials=Mock(return_value=frozen))))
+    monkeypatch.setenv('PLEXUS_API_KEY', 'legacy-key')
+    credentials = Mock()
+    session = Mock(get_credentials=Mock(return_value=credentials))
+    boto_session = Mock(return_value=session)
     aws_auth = Mock()
-    monkeypatch.setitem(sys.modules, 'boto3', SimpleNamespace(Session=Mock(return_value=session)))
+    monkeypatch.setitem(sys.modules, 'boto3', SimpleNamespace(Session=boto_session))
     monkeypatch.setitem(sys.modules, 'requests_aws4auth', SimpleNamespace(AWS4Auth=aws_auth))
 
     PlexusDashboardClient()
 
-    aws_auth.assert_called_once_with('access', 'secret', 'us-east-1', 'appsync', session_token='session')
+    boto_session.assert_called_once_with()
+    aws_auth.assert_called_once_with(
+        refreshable_credentials=credentials,
+        region='us-east-1',
+        service='appsync',
+    )
+    credentials.get_frozen_credentials.assert_not_called()
     assert mock_transport.call_args.kwargs['auth'] is aws_auth.return_value
     assert 'x-api-key' not in mock_transport.call_args.kwargs['headers']
+
+
+def test_client_iam_workload_auth_fails_closed_without_role_credentials(mock_transport, monkeypatch):
+    monkeypatch.setenv('PLEXUS_API_URL', 'https://example.appsync-api.us-east-1.amazonaws.com/graphql')
+    monkeypatch.setenv('PLEXUS_GRAPHQL_AUTH_MODE', 'iam')
+    monkeypatch.setenv('PLEXUS_API_KEY', 'legacy-key')
+    boto_session = Mock(return_value=Mock(get_credentials=Mock(return_value=None)))
+    aws_auth = Mock()
+    monkeypatch.setitem(sys.modules, 'boto3', SimpleNamespace(Session=boto_session))
+    monkeypatch.setitem(sys.modules, 'requests_aws4auth', SimpleNamespace(AWS4Auth=aws_auth))
+
+    with pytest.raises(ValueError, match='AWS credentials not available'):
+        PlexusDashboardClient()
+
+    boto_session.assert_called_once_with()
+    aws_auth.assert_not_called()
+    mock_transport.assert_not_called()
 
 def test_execute_handles_query_error(mock_env, mock_gql_client):
     """Test that execute handles GraphQL query errors"""

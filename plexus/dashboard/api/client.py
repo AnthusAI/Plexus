@@ -276,19 +276,20 @@ class _BaseAPIClient:
                     "IAM GraphQL auth mode requires boto3 and requests_aws4auth to be installed"
                 ) from exc
 
-            session = boto3.Session(profile_name=os.getenv("AWS_PROFILE"))
+            # Retain botocore's refreshable provider instead of freezing the
+            # current role credentials. AWS4Auth resolves fresh credentials
+            # for each request, which keeps long-lived Lambda and ECS workers
+            # valid after their temporary task credentials rotate.
+            session = boto3.Session()
             credentials = session.get_credentials()
             if credentials is None:
                 raise ValueError("AWS credentials not available for IAM GraphQL auth mode")
             if not self.api_region:
                 raise ValueError("Missing API region for IAM GraphQL auth mode")
-            frozen = credentials.get_frozen_credentials()
             auth = AWS4Auth(
-                frozen.access_key,
-                frozen.secret_key,
-                self.api_region,
-                "appsync",
-                session_token=frozen.token,
+                refreshable_credentials=credentials,
+                region=self.api_region,
+                service="appsync",
             )
         elif self.auth_mode == "cognito":
             try:
