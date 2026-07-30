@@ -127,6 +127,7 @@ _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
 _OVERVIEW_KEYS = {
     "headline", "lifecycle_status", "current_activity", "next_checkpoint",
     "coverage_status", "ranking_window", "scorecards_inspected",
+    "scorecards_in_scope",
     "ranked_score_count", "unranked_score_count", "cooldown_excluded_count",
     "assessment_progress", "diagnosis_coverage", "pending_approval_count", "notes",
 }
@@ -1283,6 +1284,7 @@ class OptimizationRunReportService:
         normalized_status = safe(status) or "running"
         coverage = safe(overview.get("coverage_status")) or "pending"
         inspected = overview.get("scorecards_inspected", 0)
+        in_scope = overview.get("scorecards_in_scope", 0)
         ranked = overview.get("ranked_score_count", 0)
         unranked = overview.get("unranked_score_count", 0)
         cooldown = overview.get("cooldown_excluded_count", 0)
@@ -1316,8 +1318,9 @@ class OptimizationRunReportService:
             "",
             f"Coverage: {coverage.title()}",
             (
-                f"Portfolio: {inspected} scorecards inspected; {ranked} ranked; "
-                f"{unranked} unranked; {cooldown} cooldown exclusions."
+                f"Portfolio: {in_scope} scorecards in scope; {inspected} account "
+                f"scorecards inspected to resolve scope; {ranked} ranked scores; "
+                f"{unranked} unranked scores; {cooldown} cooldown exclusions."
             ),
         ])
         for label, key in (

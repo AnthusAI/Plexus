@@ -60,6 +60,7 @@ describe('OptimizationRunStatus', () => {
           lifecycle_status: 'running',
           coverage_status: 'complete',
           scorecards_inspected: 4,
+          scorecards_in_scope: 1,
           ranked_score_count: 3,
           assessment_progress: '3 of 3 ranked scores complete',
           diagnosis_coverage: '1 of 1 selected diagnoses complete; 0 failed',
@@ -125,6 +126,8 @@ describe('OptimizationRunStatus', () => {
     )
 
     expect(await screen.findByText('3 of 3 ranked scores complete')).toBeInTheDocument()
+    expect(screen.getByText('Account inventory inspected')).toBeInTheDocument()
+    expect(screen.getByText('Scorecards in scope')).toBeInTheDocument()
     expect(screen.getByLabelText('Primary decision mix: 3 scores')).toBeInTheDocument()
     expect(screen.getByText('Optimize: 2')).toBeInTheDocument()
     expect(screen.getByText('Stakeholder clarification: 1')).toBeInTheDocument()

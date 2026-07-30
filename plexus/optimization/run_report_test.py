@@ -288,6 +288,7 @@ def test_milestone_cover_projects_safe_progress_and_preserves_identity_on_finali
         "coverage_status": "incomplete",
         "ranking_window": "2026-05-01 through 2026-07-29 UTC",
         "scorecards_inspected": 56,
+        "scorecards_in_scope": 4,
         "ranked_score_count": 18,
         "unranked_score_count": 92,
         "cooldown_excluded_count": 7,
@@ -309,8 +310,9 @@ def test_milestone_cover_projects_safe_progress_and_preserves_identity_on_finali
     assert "Checking deterministic readiness" in cover
     assert "Semantic diagnosis begins" in cover
     assert "Coverage: Incomplete" in cover
-    assert "56 scorecards inspected" in cover
-    assert "18 ranked" in cover
+    assert "4 scorecards in scope" in cover
+    assert "56 account scorecards inspected to resolve scope" in cover
+    assert "18 ranked scores" in cover
     assert "7 cooldown exclusions" in cover
     assert "12 of 18 ranked scores complete" in cover
     assert "Coverage is incomplete" in cover

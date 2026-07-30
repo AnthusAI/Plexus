@@ -24,6 +24,7 @@ type PresentationOverview = {
   lifecycle_status?: string
   coverage_status?: string
   scorecards_inspected?: number
+  scorecards_in_scope?: number
   ranked_score_count?: number
   unranked_score_count?: number
   cooldown_excluded_count?: number
@@ -347,9 +348,10 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
           </div>
         </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {[
-            ['Scorecards inspected', overview.scorecards_inspected ?? presentation.scorecard_count],
+            ['Account inventory inspected', overview.scorecards_inspected ?? presentation.scorecard_count],
+            ['Scorecards in scope', overview.scorecards_in_scope ?? presentation.scorecard_count],
             ['Scores in portfolio', presentation.score_count],
             ['Ranked opportunities', overview.ranked_score_count ?? 0],
             ['Cooldown exclusions', overview.cooldown_excluded_count ?? 0],

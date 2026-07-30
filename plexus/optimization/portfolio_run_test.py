@@ -778,7 +778,10 @@ def test_stakeholder_overview_explains_current_work_and_next_durable_checkpoint(
         "rank": {
             "coverage": {
                 "complete": True,
-                "scope": {"total_scorecards_inspected": 12},
+                "scope": {
+                    "total_scorecards_inspected": 12,
+                    "matched_scorecard_count": 1,
+                },
                 "activity": {"recent_activity_excluded_count": 3},
             },
             "ranked": [{"scorecard_id": "card", "score_id": "score"}],
@@ -792,6 +795,7 @@ def test_stakeholder_overview_explains_current_work_and_next_durable_checkpoint(
         "diagnosis_coverage": {"selected_count": 1, "completed_count": 0, "failed_count": 0},
     }, milestone="ranking")
     assert ranked["overview"]["scorecards_inspected"] == 12
+    assert ranked["overview"]["scorecards_in_scope"] == 1
     assert ranked["overview"]["ranked_score_count"] == 1
     assert ranked["overview"]["unranked_score_count"] == 2
     assert ranked["overview"]["cooldown_excluded_count"] == 3
