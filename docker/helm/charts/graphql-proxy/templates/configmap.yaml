@@ -15,3 +15,12 @@ data:
   PLEXUS_PROXY_CACHE_STALE_SECONDS: {{ .Values.config.cacheStaleSeconds | quote }}
   PLEXUS_SCORING_JOB_CLAIM_LEASE_SECONDS: {{ .Values.config.scoringJobClaimLeaseSeconds | quote }}
   PLEXUS_PROXY_ENABLE_DEBUG: {{ .Values.config.enableDebug | quote }}
+  PLEXUS_ARTIFACT_TICKETS_ENABLED: {{ .Values.artifactStore.enabled | quote }}
+  PLEXUS_ARTIFACT_STORE_ENDPOINT: {{ .Values.artifactStore.endpoint | quote }}
+  PLEXUS_ARTIFACT_STORE_REGION: {{ .Values.artifactStore.region | quote }}
+  PLEXUS_ARTIFACT_ACCOUNT_ID: {{ .Values.artifactStore.accountId | quote }}
+  PLEXUS_ARTIFACT_TICKET_TTL_SECONDS: {{ .Values.artifactStore.ticketTtlSeconds | quote }}
+  PLEXUS_ARTIFACT_BUCKET_DATASETS: {{ .Values.artifactStore.buckets.datasets | quote }}
+  PLEXUS_ARTIFACT_BUCKET_REPORT_BLOCK_DETAILS: {{ .Values.artifactStore.buckets.reportBlockDetails | quote }}
+  PLEXUS_ARTIFACT_BUCKET_TASK_ATTACHMENTS: {{ .Values.artifactStore.buckets.taskAttachments | quote }}
+  PLEXUS_ARTIFACT_BUCKET_SCORE_RESULT_ATTACHMENTS: {{ .Values.artifactStore.buckets.scoreResultAttachments | quote }}

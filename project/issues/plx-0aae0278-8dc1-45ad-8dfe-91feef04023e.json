@@ -1,0 +1,37 @@
+{
+  "id": "plx-0aae0278-8dc1-45ad-8dfe-91feef04023e",
+  "title": "Preserve human-wait state in direct procedure execution",
+  "description": "## Problem\n\nA directly executed Tactus procedure can persist its checkpoint and enter a human-approval boundary, but the outer task runner subsequently records the procedure as failed while retaining a pending message ID. This makes a resumable pause appear terminal and blocks supported credential-free resume validation.\n\n## Expected behavior\n\nGiven a local procedure reaches a human-interaction boundary\nWhen the runtime returns control after persisting the pending request\nThen the procedure and task remain in a resumable waiting state\nAnd no failure status is written\nAnd all persisted artifacts remain available through the application-authorized storage path.\n\n## Acceptance\n\n- An executable behavior test reproduces the incorrect terminal failure first.\n- The direct runner preserves the waiting state without treating it as success or failure.\n- Resume consumes the response and completes from persisted checkpoints.\n- No authentication or storage fallback is introduced.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d0e9a5ef-602c-4a10-a6e9-ff48967fa354",
+      "author": "ryan.porter",
+      "text": "Kickoff: live Cognito sandbox acceptance on combined validation SHA 391189e09 persisted code, state, dashboard state, Lua state, and checkpoints through signed artifact tickets with AWS credentials and API keys absent. The inner runtime created a pending approval and stored waitingOnMessageId, but the outer runner wrote FAILED. Reproducing this in a focused behavior test before the minimal fix.",
+      "created_at": "2026-07-28T18:47:34.756212Z"
+    },
+    {
+      "id": "4d53d295-c894-4f07-ad0b-f30fc0432e9b",
+      "author": "ryan.porter",
+      "text": "Milestone: the behavior-first test is green. Direct execution now recognizes persisted WAITING_FOR_HUMAN state, preserves the pending message identifier, and does not fail Task stages.",
+      "created_at": "2026-07-28T19:11:13.678285Z"
+    },
+    {
+      "id": "0c6df184-8932-4bce-801e-cd97cc1c92bb",
+      "author": "ryan.porter",
+      "text": "Commit 30c3c4f49. Publication handoff: fix is pushed to draft PR #513 at head d6f60e219. The final combined PR #513 + PR #495 candidate passed 470 cross-PR tests, 4,026 Python tests on both 3.11 and 3.12, dashboard typecheck and 680 unit tests, Storybook build, and 700 Chromium tests. Cognito and IAM-role sandbox canaries passed without direct S3 or stored AWS credentials. Keep this bug in progress until the fix lands in develop.",
+      "created_at": "2026-07-28T19:38:08.360230Z"
+    }
+  ],
+  "created_at": "2026-07-28T18:47:30.047683Z",
+  "updated_at": "2026-07-28T19:38:08.360230Z",
+  "closed_at": null,
+  "custom": {}
+}

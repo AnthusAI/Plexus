@@ -33,6 +33,7 @@ def resume_procedure(client, procedure_id: str) -> Dict[str, Any]:
                 status
                 waitingOnMessageId
                 code
+                accountId
             }
         }
     """
@@ -101,15 +102,23 @@ def resume_procedure(client, procedure_id: str) -> Dict[str, Any]:
     # Found a response - re-run the procedure
     logger.info(f"Resuming procedure {procedure_id} with response...")
 
-    from plexus.cli.procedure.service import ProcedureService
-    service = ProcedureService(client)
-
     try:
-        # Run procedure (will replay checkpoints and continue from HITL point)
+        # Replay through the same local task-tracked path as the initial run so
+        # the Procedure, Task, stages, and compact output artifact are finalized
+        # consistently after the human boundary.
         import asyncio
-        run_result = asyncio.run(service.run_procedure(
-            procedure_id=procedure_id
-        ))
+        from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
+
+        account_id = procedure.get("accountId")
+        if not account_id:
+            account_id = client._resolve_account_id()
+        run_result = asyncio.run(
+            run_procedure_with_task_tracking(
+                procedure_id=procedure_id,
+                client=client,
+                account_id=account_id,
+            )
+        )
 
         # run_result is a dict, not an object
         if run_result.get('success'):

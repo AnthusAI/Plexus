@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9da85f1d-f0c8-4ffa-983a-1ebe969a151f",
+  "issue_id": "plx-01d0a593-b3b4-4252-b3c8-0f36479f5633",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T17:57:47.425Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Run credential-free artifact persistence in local Kubernetes",
+    "description": "As a Plexus platform engineer, I want the local Kubernetes stack to execute credential-free procedure and optimizer artifact persistence, so that the repeatable public demo validates the same supported artifact boundary as hosted deployments.\n\nFeature: Local Kubernetes artifact transfer compatibility\n\nScenario: Procedure and optimizer artifacts use authorized transfer tickets\nGiven Plexus is deployed in Docker Desktop Kubernetes with the trusted local control plane and persistent local object storage\nWhen the public demo runs procedure persistence, optimizer output, interruption recovery, and retained verification\nThen each migrated artifact is authorized through the existing GraphQL transfer-ticket operation\nAnd bytes are transferred over verified HTTPS\nAnd no direct-S3, insecure transport, authentication, or storage fallback is used for migrated consumers\nAnd evaluation consumers not migrated by PR 513 remain explicitly identified as out of scope",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "labels": []
+  }
+}

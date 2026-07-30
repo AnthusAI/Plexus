@@ -46,6 +46,12 @@ localObjectStore:
     secretKey: plexus-local-secret
   service:
     port: 9000
+  tls:
+    enabled: false
+    existingSecret: ""
+    publicCertSecretKey: public.crt
+    privateKeySecretKey: private.key
+    caCertSecretKey: ca.crt
   persistence:
     enabled: true
     size: 2Gi
@@ -146,6 +152,21 @@ graphql-proxy:
     cacheStaleSeconds: 86400
     scoringJobClaimLeaseSeconds: 120
     enableDebug: false
+
+  artifactStore:
+    enabled: false
+    endpoint: ""
+    region: us-east-1
+    accountId: ""
+    existingSecret: ""
+    accessKeySecretKey: access-key-id
+    secretKeySecretKey: secret-access-key
+    ticketTtlSeconds: 300
+    buckets:
+      datasets: ""
+      reportBlockDetails: ""
+      taskAttachments: ""
+      scoreResultAttachments: ""
 
   # Secret management
   createSecrets: true

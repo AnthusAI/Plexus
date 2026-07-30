@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b08c1376-b5f6-4198-871f-a713465636d0",
+  "issue_id": "plx-0aae0278-8dc1-45ad-8dfe-91feef04023e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T18:47:30.047Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Preserve human-wait state in direct procedure execution",
+    "description": "## Problem\n\nA directly executed Tactus procedure can persist its checkpoint and enter a human-approval boundary, but the outer task runner subsequently records the procedure as failed while retaining a pending message ID. This makes a resumable pause appear terminal and blocks supported credential-free resume validation.\n\n## Expected behavior\n\nGiven a local procedure reaches a human-interaction boundary\nWhen the runtime returns control after persisting the pending request\nThen the procedure and task remain in a resumable waiting state\nAnd no failure status is written\nAnd all persisted artifacts remain available through the application-authorized storage path.\n\n## Acceptance\n\n- An executable behavior test reproduces the incorrect terminal failure first.\n- The direct runner preserves the waiting state without treating it as success or failure.\n- Resume consumes the response and completes from persisted checkpoints.\n- No authentication or storage fallback is introduced.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": []
+  }
+}

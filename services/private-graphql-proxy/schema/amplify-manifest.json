@@ -116,7 +116,7 @@
       "authenticated"
     ]
   },
-  "contractVersion": "11e5f01a8b0fcb54",
+  "contractVersion": "5238f987e56be54c",
   "customOperations": {
     "createArtifactTransferTickets": {
       "arguments": {
@@ -8404,7 +8404,7 @@
       "sha256": "133affcbfc77be390e64a0274cc83c2017c45d2f7267569d3b5cd549cd8adc02"
     },
     "dashboard/amplify/data/resource.ts": {
-      "sha256": "ca1c66c25dae84f3a34ba28dd6b65048ce1060c7bb8a886c4db9ee802807ad90"
+      "sha256": "10fd745f01bbbe8286f7601c01ef9e828127c45d918fbb98a50bd3779a75f2b4"
     },
     "dashboard/amplify/storage/resource.ts": {
       "sha256": "93c7b826a94e0105c875538f07e7fd07c56d572989475fe335726cd1b2d28ca3"

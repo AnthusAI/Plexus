@@ -43,4 +43,12 @@ describe('artifact transfer ticket schema and infrastructure contract', () => {
     }
     expect(backend).toContain("tableEnvironmentName: 'EVALUATION_TABLE_NAME'");
   });
+
+  it('configures runtime environment through the supported Amplify function resource', () => {
+    expect(backend).toContain('backend.createArtifactTransferTicketsHandler.addEnvironment(');
+    expect(backend).not.toContain('createArtifactTransferTicketsFunction.addEnvironment(');
+    expect(dataResource).toMatch(
+      /createArtifactTransferTicketsHandler = defineFunction\(\{[\s\S]*?resourceGroupName: ['"]data['"]/,
+    );
+  });
 });

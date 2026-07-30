@@ -25,9 +25,10 @@ def scorecard():
 # Helper functions for resolving identifiers
 
 def create_client() -> PlexusDashboardClient:
-    """Create a client and log its configuration"""
-    client = PlexusDashboardClient()
-    return client
+    """Create a client through the centralized explicit-auth factory."""
+    from plexus.cli.shared.client_utils import create_client as create_authenticated_client
+
+    return create_authenticated_client()
 
 def generate_key(name: str) -> str:
     """Generate a key from a name by converting to lowercase and replacing spaces with hyphens."""

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "317ae070-64ae-4115-92fb-50511739f872",
+  "issue_id": "plx-34972300-88bf-4c7a-9f48-da732ef1c3cd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T18:54:53.106Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Create branch task before persisting optimizer artifacts",
+    "description": "## Problem\n\nOptimizer branch preparation creates the destination Procedure and immediately clones optimizer state. Application-authorized state persistence also indexes optimizer decision artifacts against the destination Task, but that Task does not yet exist, so the branch fails closed after leaving a partial Procedure.\n\n## Expected behavior\n\nGiven an optimizer procedure has persisted decision state\nWhen an operator prepares a branch from a completed cycle\nThen the destination Procedure and its Task exist before optimizer state is cloned\nAnd the cloned state plus decision artifacts are persisted through authorized transfer tickets\nAnd no partial branch is reported as ready.\n\n## Acceptance\n\n- An executable behavior test first reproduces the missing-Task ordering failure.\n- Branch preparation creates or reuses the destination Task before cloning state.\n- Optimizer manifest, event, and runtime-log attachments index successfully.\n- The source procedure remains unchanged and no fallback is introduced.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": []
+  }
+}

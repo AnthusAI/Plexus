@@ -1,0 +1,103 @@
+{
+  "id": "plx-4be24d35-6d74-40dc-8741-8bf5206e3d5e",
+  "title": "Integrate PR 513 with the Kubernetes demo suite",
+  "description": "Validate PR 513 from an isolated integration branch against the committed Docker Desktop Kubernetes demo. Preserve the initial unmodified failure, implement only the specified local GraphQL ticket, verified TLS, explicit authentication, and resume-path compatibility, then prove two fresh strict runs plus retained verification. Use public data only and record sanitized evidence.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5b1fdbb9-662c-4437-9a61-ec8ef9bf3157",
+      "author": "ryan.porter",
+      "text": "Kickoff: isolated worktree /Users/ryan.porter/Projects/Plexus-pr513-k8s-integration on codex/pr-513-k8s-integration. Frozen inputs: develop a002fcbca06782af1f6d7d4e0ffdf664294a58da; PR 513 b301bc50d7d2005552e4406b18c7e7f140138178. The prior demo task ID is absent from this branch, so no project files were copied from the primary checkout.",
+      "created_at": "2026-07-28T17:58:47.010765Z"
+    },
+    {
+      "id": "80177f50-9316-4727-80f8-25735085e036",
+      "author": "ryan.porter",
+      "text": "Unmodified strict run 20260728T180024Z-pr513raw preserved the first failing specification. Infrastructure passed, then seed failed before any model call or optimizer retry: the worker CLI import graph for dataset curation reached ExpandContractionsProcessor and raised ModuleNotFoundError for contractions. Affected layer: worker runtime packaging. No workaround was applied; external evidence is retained under /tmp/plexus-k8s-demo/20260728T180024Z-pr513raw.",
+      "created_at": "2026-07-28T18:04:34.725882Z"
+    },
+    {
+      "id": "db929451-cd5a-44ea-93bd-364bc77b7bde",
+      "author": "ryan.porter",
+      "text": "Outside-in compatibility results: the unchanged PR branch first failed during run-scoped dataset curation because the lean worker extra omitted direct CLI import dependencies. Added an executable dependency contract and the minimal declared runtime set. Implemented local GraphQL artifact transfer tickets with resource/account/key/size/checksum validation, HTTPS-only signed URLs, explicit API-key auth, reusable MinIO TLS/CA wiring, integrity-bearing task output envelopes, GraphQL-ticket resume, and a one-shot post-optimizer interruption hook. Focused evidence is green: 73 product/demo/chart tests and 63 private-proxy tests. Live immutable-image deployment and strict runs remain pending.",
+      "created_at": "2026-07-28T18:22:02.121814Z"
+    },
+    {
+      "id": "d99483d2-cb18-4ff8-bee8-6da4d24592cd",
+      "author": "ryan.porter",
+      "text": "Fresh live run 20260728T182500Z-pr513a passed TLS ticket smoke, infrastructure, seeding, predictions, paired 100-item evaluations, and reporting. Baseline was intentionally imperfect (accuracy 0.77; feedback AC1 0.563111; regression AC1 0.504006). Optimization did not dispatch: the unchanged demo command failed closed because PR 513 exposes --evaluation-stall-timeout-minutes instead of the harness's --evaluation-timeout-minutes. No optimizer retry was attempted. Next: specify the supported CLI flag, repair only this command seam, and start a fresh strict run ID.",
+      "created_at": "2026-07-28T18:39:46.551147Z"
+    },
+    {
+      "id": "2b2606e0-0e24-4198-a275-4c133632fab6",
+      "author": "ryan.porter",
+      "text": "Fresh strict run 20260728T184100Z-pr513a2 again passed HTTPS ticket smoke, infrastructure, idempotent seeding, predictions, both 100-item evaluations, and reports. Deterministic baseline: accuracy 0.77; feedback AC1 0.563111; regression AC1 0.504006. Optimization failed before dispatch because the resumed feedback evaluation lacked required frozen-window provenance: feedback_start_at, feedback_end_at, days, and requested_max_items. No optimizer retry was attempted. External sanitized evidence remains under /tmp/plexus-k8s-demo/20260728T184100Z-pr513a2. Next: add an outside-in specification for demo-created evaluation provenance, repair only that integration seam, then use a fresh run ID.",
+      "created_at": "2026-07-28T18:54:37.227052Z"
+    },
+    {
+      "id": "e342f629-ccd3-4cbb-851e-90df50d5e7c4",
+      "author": "ryan.porter",
+      "text": "Outside-in provenance repair: the new demo specification first failed because no frozen-window evaluation command existed. The minimal repair derives explicit UTC feedback_start_at and feedback_end_at bounds from the retained run seed anchor and uses them when creating the 100-item feedback baseline; days=7 and max_items=100 remain recorded for optimizer provenance. Focused checks are green: 49 demo/product/chart tests and 64 private-proxy tests, plus Ruff. A fresh strict run is next; the failed A2 optimizer will not be retried.",
+      "created_at": "2026-07-28T18:56:30.677065Z"
+    },
+    {
+      "id": "735dee72-1423-4e25-a360-7f631f894cea",
+      "author": "ryan.porter",
+      "text": "Post-restart GraphQL download of run B task artifact 82d73cf1-5c11-4e66-b964-904b2f3446a6 succeeded with target_reached and winning version bd779f2f-87a0-42f6-b389-a04cefe8ad03, proving artifact persistence after worker/proxy restarts. The ticket request returned HTTP 200, but the intended artifact_transfer_tickets INFO line was absent from kubectl logs because the service used the root logger while the container emits Uvicorn application logs. Next: specify sanitized log visibility and route the existing message through the application logger; do not add payload logging.",
+      "created_at": "2026-07-28T20:15:25.677425Z"
+    },
+    {
+      "id": "9903c89a-fb4a-4871-ad95-7dcd27b83238",
+      "author": "ryan.porter",
+      "text": "Sanitized proxy-correlation specification first failed because no application logger existed. Routed the existing correlation-only message through uvicorn.error and added a specification that prohibits resource IDs, filenames, checksums, URLs, and other artifact details. Private-proxy suite is green: 65 passed, 6 intentionally deselected; Ruff and diff checks pass. Next: deploy this committed proxy image and repeat the post-restart GraphQL artifact download to prove the correlation line appears in kubectl logs.",
+      "created_at": "2026-07-28T20:16:22.343021Z"
+    },
+    {
+      "id": "4bc91f0b-5b6d-49e0-90ee-1e1f824c6d17",
+      "author": "ryan.porter",
+      "text": "Final compatibility evidence: fresh strict run A 20260728T192000Z-pr513a4 passed all seven phases and was verified read-only after run B and again after the final proxy rollout. Fresh run B 20260728T195400Z-pr513b stopped only at the deterministic post-optimizer hook, then resume consumed completed task artifact 82d73cf1-5c11-4e66-b964-904b2f3446a6 through GraphQL, retained optimizer_dispatch_count=1, promoted winner bd779f2f-87a0-42f6-b389-a04cefe8ad03, reproduced final AC1 0.96, and passed recovery. Run B baseline: accuracy 0.77, feedback AC1 0.563111, regression AC1 0.525121; deltas +0.416891 and +0.414885; optimizer cost $0.06120887. Post-restart and post-final-rollout ticket download returned the same winner. Final proxy logs contain correlation-only TASK ticket lines and omit artifact details. Final deployment: commit f6f1985af715bbac1259bfb4cf8ffd0bcacbfd21, Helm revision 49, worker/proxy Ready. Focused checks: 146 product/demo/chart/optimizer tests and 65 proxy tests passed; 6 proxy environment tests intentionally deselected; Ruff passed. Requested prior Kanbus ID plx-a18496 is absent from this branch index, so no project files were copied; evidence is recorded on the active integration records. Artifacts remain under /tmp/plexus-k8s-demo and the release remains running.",
+      "created_at": "2026-07-28T20:22:11.813862Z"
+    },
+    {
+      "id": "8834ac40-df09-4d67-a146-f27980933dd1",
+      "author": "ryan.porter",
+      "text": "Final rollout exposed a repeated procedure-recovery CronJob failure that the main deployment readiness assertions did not cover. A captured diagnostic Job failed before recovery logic because its Plexus client attempted Cognito: the CronJob omitted explicit PLEXUS_GRAPHQL_AUTH_MODE=api_key even though the main worker deployment had it. Every scheduled job reached BackoffLimitExceeded. Next: add a rendered-chart specification for explicit CronJob auth, wire the same Secret-backed settings into the recovery pod, redeploy, and require a successful diagnostic recovery Job.",
+      "created_at": "2026-07-28T20:26:46.797914Z"
+    },
+    {
+      "id": "60c4295a-ba1e-498c-a4b6-022d4aa6522d",
+      "author": "ryan.porter",
+      "text": "Recovery CronJob specification first failed because PLEXUS_GRAPHQL_AUTH_MODE was absent. Added the same required explicit api_key value used by the worker deployment while retaining the existing shared Secret-backed PLEXUS_API_KEY. No authentication fallback was added. Rendered chart and demo harness checks are green: 19 passed; Ruff and diff checks pass. Next: deploy committed snapshot and require a terminally successful recovery Job plus no new BackoffLimitExceeded event.",
+      "created_at": "2026-07-28T20:28:06.296079Z"
+    },
+    {
+      "id": "e2196ee1-e380-44cd-a037-fb9fb8574c27",
+      "author": "ryan.porter",
+      "text": "Recovery authentication repair passed live on committed snapshot d3a48e41f593bc5dced38cb543132d59dadc6773. Helm rendered and deployed PLEXUS_GRAPHQL_AUTH_MODE=api_key on the procedure-recovery CronJob. Manual proof Job completed with exit 0 and checked three completed local procedures; the next controller-scheduled Job plexus-plexus-worker-procedure-recovery-29754510 also succeeded. Final focused validation after this fix: 146 product/demo/chart/optimizer tests and 65 proxy tests passed, with 6 intentional proxy environment deselections; Ruff passed. The final local release remains running. Keep work in progress until the local commits land.",
+      "created_at": "2026-07-28T20:31:17.205768Z"
+    },
+    {
+      "id": "c82b5f14-32e2-4f06-bd94-4d6bdb1e3bbc",
+      "author": "ryan.porter",
+      "text": "During rebase onto current PR 513 head, the upstream branch already introduced the canonical plexus.api.authMode model. The older local graphqlAuthMode field would have emitted a second PLEXUS_GRAPHQL_AUTH_MODE=api_key and overridden explicit IAM rendering. Removed that obsolete duplicate path, retained upstream API-key/CronJob wiring, and kept the regression assertion that recovery uses the same Secret-backed key. Rebased focused validation is green: 148 product/demo/chart/optimizer tests and 65 proxy tests, with 6 intentional proxy environment deselections; Ruff and diff checks pass.",
+      "created_at": "2026-07-28T20:41:52.205593Z"
+    },
+    {
+      "id": "109d5829-398f-411e-8291-2f27efcd211b",
+      "author": "ryan.porter",
+      "text": "PR #513 conflict-resolution decision: current develop deliberately keeps the production scoring extra minimal, while the local Kubernetes worker still requires the broader legacy CLI import set proven by the strict demo. Preserve both contracts by retaining develop's slim scoring extra, declaring the broader dependencies in a dedicated worker extra, installing that extra only in the Kubernetes worker image, and retaining the complete-install union including the optional cost calculator. Validate the dependency contract and both runtime lanes before merging.",
+      "created_at": "2026-07-30T21:55:19.807183Z"
+    }
+  ],
+  "created_at": "2026-07-28T17:58:38.910670Z",
+  "updated_at": "2026-07-30T21:55:19.807183Z",
+  "closed_at": null,
+  "custom": {}
+}

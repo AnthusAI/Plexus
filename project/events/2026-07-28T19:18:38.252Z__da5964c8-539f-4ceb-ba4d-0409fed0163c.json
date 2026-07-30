@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "da5964c8-539f-4ceb-ba4d-0409fed0163c",
+  "issue_id": "plx-f08babef-e911-4c76-ae81-752650e95e46",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T19:18:38.252Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Declare and verify optimizer winning version output",
+    "description": "Add an outside-in executable contract for the persisted optimizer result, declare the existing winning_version_id return field in the procedure output schema, and validate the Kubernetes demo consumes it without fallback or synthetic reconstruction.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "labels": []
+  }
+}

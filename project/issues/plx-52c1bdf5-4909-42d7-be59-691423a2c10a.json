@@ -3,7 +3,7 @@
   "title": "Migrate procedure and Tactus persistence to GraphQLArtifactStore",
   "description": "Purpose: Remove default AWS credential requirements from local procedure persistence.\n\nOwned scope:\n- Tactus procedure state, Lua state, checkpoints, dashboard projection, procedure code, and resume paths.\n- Use the existing supported Plexus Tactus storage adapter interface without monkeypatching Tactus.\n\nAcceptance:\n- Procedure start, checkpoint, stop, and resume work through GraphQLArtifactStore.\n- Existing object keys and dashboard readers remain compatible.\n- Core-path tests make boto3.client for S3 raise and still pass.\n- Missing or invalid transfers fail clearly without storage fallback.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -27,9 +27,40 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "bc44df81-7bb6-4d6d-8a5d-61b9091392ab",
+      "author": "ryan.porter",
+      "text": "Kickoff: canonical agent /root/graphql_artifact_store is implementing this procedure-persistence lane in /Users/ryan.porter/Projects/Plexus-aws-login-free-procedure on codex/aws-login-free-procedure from base 06d9af09a8bf5ed3cb25535fdeb06c0a14a1e3e2. Owned scope: supported Plexus Tactus storage adapter, ProcedureService state/checkpoint/code/dashboard projection persistence, and start/stop/resume paths plus their specifications. Dependency boundary: consumes landed Cognito dashboard-client support and GraphQLArtifactStore/ticket contract; does not alter Tactus internals, dashboard auth, ticket backend, or Wave 2 evaluation/optimizer consumers.",
+      "created_at": "2026-07-28T13:23:42.800857Z"
+    },
+    {
+      "id": "869e4894-0424-4142-8710-7ddea2522d1c",
+      "author": "ryan.porter",
+      "text": "BDD red milestone: the new artifact-store behavior specifications initially failed because ArtifactUpload and ProcedureArtifactStorageError did not exist. The expected behavior was one authorized batch for procedure lifecycle persistence and a clear failure for unverifiable legacy metadata.",
+      "created_at": "2026-07-28T13:34:59.599419Z"
+    },
+    {
+      "id": "bdc8b3c8-289a-4690-b2ed-d36953c76f57",
+      "author": "ryan.porter",
+      "text": "Ownership decision: optimizer result indexing remains in PlexusStorageAdapter after procedure artifact persistence, with persist_metadata_pointer=False and fail-closed behavior. The optimizer artifact implementation and regression coverage remain owned by the auth lane; this lane preserves the established integration point.",
+      "created_at": "2026-07-28T13:34:59.816481Z"
+    },
+    {
+      "id": "a2b02243-4918-45e8-ba9e-1e7000247ae5",
+      "author": "ryan.porter",
+      "text": "BDD green milestone: focused procedure/artifact validation passed: poetry run pytest plexus/cli/procedure/test_continuation_service.py plexus/cli/procedure/test_tactus_storage_graphql_artifacts.py plexus/cli/procedure/test_storage_metadata_preservation.py plexus/cli/procedure/test_service_yaml_loader.py plexus/storage/test_graphql_artifact_store.py -q (22 passed). Additional reset/executor compatibility validation passed (7 passed, 29 intentionally skipped). Full procedure collection is environment-blocked by missing optional langchain and statemachine modules, not migration failures.",
+      "created_at": "2026-07-28T13:35:00.034005Z"
+    },
+    {
+      "id": "54cd775c-68fd-4d1b-a9a7-d70a519bb4be",
+      "author": "ryan.porter",
+      "text": "Handoff: implementation is committed as 5f277e24b and published in draft PR #507 against develop. Scope includes GraphQL-authorized procedure lifecycle and code artifact persistence, continuation and branch coverage, and compatibility/integrity guarantees. Do not close or merge this task/PR in this lane.",
+      "created_at": "2026-07-28T13:36:08.322418Z"
+    }
+  ],
   "created_at": "2026-07-28T12:52:38.022449Z",
-  "updated_at": "2026-07-28T12:52:38.022449Z",
+  "updated_at": "2026-07-28T13:36:08.322418Z",
   "closed_at": null,
   "custom": {
     "source": "shared",

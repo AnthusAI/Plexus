@@ -62,10 +62,34 @@
       "author": "ryan.porter",
       "text": "Live Amplify validation succeeded end-to-end on commit 8a598edf. Job 4 completed BUILD, DEPLOY, and VERIFY successfully after backend TypeScript compilation, CloudFormation creation, and Console provisioned-concurrency initialization. PR 514 is ready for review; keep the issue open until the fix lands.",
       "created_at": "2026-07-28T19:15:25.052719Z"
+    },
+    {
+      "id": "b48d74fa-0b85-45d3-914b-ee668b93cc86",
+      "author": "ryan.porter",
+      "text": "Integration kickoff: combine PRs #507, #508, and #509 on isolated branch codex/integrate-artifact-ticket-migrations from current develop. Keep the urgent production Amplify compile repair separate. Retarget the three migration PRs away from develop, preserve their histories, resolve cross-lane conflicts only on the integration branch, then run the task's complete local and sandbox acceptance gates before opening one integration-to-develop PR.",
+      "created_at": "2026-07-28T19:41:34.654300Z"
+    },
+    {
+      "id": "576571d4-7356-49bc-8984-990d28c16da2",
+      "author": "ryan.porter",
+      "text": "Combined branch d3d60ede passed focused migration coverage (144 Python tests), ticket/schema contracts (19 tests), dashboard typecheck plus explicit Amplify backend typecheck, dashboard unit coverage (91 suites / 669 tests), and the dispatch regression net (13 tests). Full Python 3.12 found auth-migration test harness drift plus two pre-existing input-source test failures reproducible on develop a002fcbc. Repaired only test injection/expectations: patch the imported score-chat dependency, treat missing runtime auth as an execution failure rather than a Click parse failure, and inject the fake score through the explicit resolver seam. Focused rerun: 19 passed. No production auth fallback or runtime behavior changed.",
+      "created_at": "2026-07-28T19:41:34.960427Z"
+    },
+    {
+      "id": "5d616587-9a7e-42bb-9169-bfa1f0a8ef69",
+      "author": "ryan.porter",
+      "text": "Combined sandbox acceptance found that persisted procedure state survives credential-free reload, but Tactus checkpoint entries using concrete types such as explicit_checkpoint are omitted because the migration serializer accepts only the literal type checkpoint. Fix must preserve all execution-log checkpoint types and replay metadata, then rerun live checkpoint reload and focused CI before the integration PR.",
+      "created_at": "2026-07-28T19:41:35.268067Z"
+    },
+    {
+      "id": "43901eeb-af73-4424-af35-54f0eceb9c9f",
+      "author": "ryan.porter",
+      "text": "Checkpoint repair is committed and published as 390e4eed. Sandbox acceptance with AWS credential/profile variables and API key removed passed: Cognito identity and AppSync reads; verified procedure artifact PUT/GET; state reload; concrete Tactus checkpoint type and payload preservation; same-run checkpoint replay without executing the body; and three optimizer artifacts indexed and read back. Direct boto3 S3 creation was forced to fail. Corrected full CI passed on Python 3.11 and 3.12 with 3,928 passed per runtime; focused migration suite passed 23 tests; lint, compilation, diff check, and Kanbus validation passed. Dashboard, Storybook, Amplify, dispatch, and schema suites remain green from combined-head validation. The separate evaluation-consumer lane is still required before stored-dataset accuracy and complete feedback-evidence gates can pass; its additive ticket foundation is already in develop.",
+      "created_at": "2026-07-28T19:41:35.557354Z"
     }
   ],
   "created_at": "2026-07-28T12:52:39.017652Z",
-  "updated_at": "2026-07-28T19:15:25.052719Z",
+  "updated_at": "2026-07-28T19:41:35.557354Z",
   "closed_at": null,
   "custom": {
     "source": "shared",

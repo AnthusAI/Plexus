@@ -2,27 +2,29 @@
 Plexus Storage Adapter for Tactus.
 
 Implements the Tactus StorageBackend protocol using Plexus GraphQL API.
-The DynamoDB Procedure record is an index card: it holds S3 keys and replay_index.
-All procedure data (state, lua_state, checkpoints) lives in S3 attachments.
+The Procedure record is an index card: it holds legacy-compatible object keys
+and replay_index. All procedure data (state, lua_state, checkpoints) lives in
+application-authorized GraphQL artifact attachments.
 """
 
 import logging
 import json
-import os
+import hashlib
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
-
-import boto3
-from botocore.exceptions import ClientError
 
 from tactus.protocols.models import ProcedureMetadata, CheckpointEntry
 from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id
 from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+from plexus.storage.graphql_artifact_store import (
+    ArtifactIntegrityError,
+    ArtifactTransferRequest,
+    ArtifactUpload,
+    GraphQLArtifactStore,
+    GraphQLArtifactStoreError,
+)
 
 logger = logging.getLogger(__name__)
-
-_S3_BUCKET = os.environ.get("AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME", "reportblockdetails-production")
-
 
 def _lua_to_serializable(value: Any) -> Any:
     """
@@ -188,6 +190,174 @@ def _looks_like_optimizer_state(state: Any) -> bool:
     )
 
 
+class ProcedureArtifactStorageError(RuntimeError):
+    """Procedure persistence could not load or store a verified artifact."""
+
+
+_PERSISTED_ARTIFACTS = {
+    "state": ("state.json", "PROCEDURE_ATTACHMENT"),
+    "lua_state": ("lua_state.json", "PROCEDURE_ATTACHMENT"),
+    "checkpoints": ("checkpoints.json", "PROCEDURE_ATTACHMENT"),
+    "dashboard_state": ("dashboard_state.json", "PROCEDURE_DASHBOARD_STATE"),
+}
+
+
+def _artifact_key(procedure_id: str, filename: str, artifact_type: str) -> str:
+    prefix = "reportblocks/procedures" if artifact_type == "PROCEDURE_DASHBOARD_STATE" else "procedures"
+    return f"{prefix}/{procedure_id}/{filename}"
+
+
+def _json_bytes(payload: Any) -> bytes:
+    return json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
+
+
+def _serialize_execution_log(entries: List[CheckpointEntry]) -> List[Dict[str, Any]]:
+    """Preserve Tactus' position-based checkpoint records without narrowing their types."""
+    serialized = []
+    for entry in entries:
+        source_location = entry.source_location
+        if source_location is not None and hasattr(source_location, "model_dump"):
+            source_location = source_location.model_dump(mode="json")
+        serialized.append({
+            "position": entry.position,
+            "type": entry.type,
+            "result": _lua_to_serializable(entry.result),
+            "timestamp": entry.timestamp.isoformat(),
+            "duration_ms": entry.duration_ms,
+            "input_hash": entry.input_hash,
+            "run_id": entry.run_id,
+            "source_location": _lua_to_serializable(source_location),
+            "captured_vars": _lua_to_serializable(entry.captured_vars),
+        })
+    return serialized
+
+
+def _deserialize_execution_log(payload: Any) -> List[CheckpointEntry]:
+    """Load current ordered logs and the legacy named-checkpoint object format."""
+    if isinstance(payload, list):
+        entries = []
+        for raw_entry in payload:
+            if not isinstance(raw_entry, dict):
+                raise ProcedureArtifactStorageError("checkpoint artifact contains a malformed entry")
+            try:
+                entry_data = dict(raw_entry)
+                entry_data["timestamp"] = datetime.fromisoformat(entry_data["timestamp"])
+                entries.append(CheckpointEntry(**entry_data))
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ProcedureArtifactStorageError("checkpoint artifact is malformed") from exc
+        return entries
+
+    if not isinstance(payload, dict):
+        raise ProcedureArtifactStorageError("checkpoints artifact must contain an array or object")
+
+    entries = []
+    for position, (name, checkpoint_data) in enumerate(payload.items()):
+        try:
+            entries.append(CheckpointEntry(
+                position=position,
+                type="checkpoint",
+                result={"name": name, "data": checkpoint_data.get("result")},
+                timestamp=datetime.fromisoformat(checkpoint_data["completed_at"]),
+                run_id=checkpoint_data.get("run_id"),
+            ))
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise ProcedureArtifactStorageError("checkpoint artifact is malformed") from exc
+    return entries
+
+
+def _pointer_read_request(
+    procedure_id: str,
+    pointer: Any,
+    *,
+    filename: str,
+    artifact_type: str,
+) -> ArtifactTransferRequest:
+    """Build a verified read request or reject an unverifiable legacy pointer."""
+    if not isinstance(pointer, dict) or not pointer.get("_s3_key"):
+        raise ProcedureArtifactStorageError(f"{filename} is not an artifact metadata pointer")
+    expected_key = _artifact_key(procedure_id, filename, artifact_type)
+    if pointer["_s3_key"] != expected_key:
+        raise ProcedureArtifactStorageError(
+            f"{filename} pointer does not match the supported procedure artifact key"
+        )
+    sha256 = pointer.get("sha256") or pointer.get("checksum")
+    size_bytes = pointer.get("size_bytes", pointer.get("size"))
+    content_type = pointer.get("content_type") or pointer.get("contentType") or "application/json"
+    if not isinstance(sha256, str) or not isinstance(size_bytes, int):
+        raise ProcedureArtifactStorageError(
+            f"{filename} legacy metadata lacks required integrity checksum or size"
+        )
+    try:
+        return ArtifactTransferRequest(
+            operation="READ",
+            resource_type="PROCEDURE",
+            resource_id=procedure_id,
+            artifact_type=artifact_type,
+            filename=filename,
+            content_type=content_type,
+            size_bytes=size_bytes,
+            sha256=sha256,
+        )
+    except ValueError as exc:
+        raise ProcedureArtifactStorageError(f"{filename} metadata has invalid integrity fields") from exc
+
+
+def upload_procedure_attachment(
+    client,
+    procedure_id: str,
+    filename: str,
+    content: str | bytes,
+    *,
+    content_type: str,
+    existing_metadata: Optional[Dict[str, Any]] = None,
+    artifact_store=None,
+) -> Dict[str, Any]:
+    """Store procedure code or an attachment through an authorized ticket."""
+    payload = content.encode("utf-8") if isinstance(content, str) else content
+    if not isinstance(payload, bytes):
+        raise TypeError("procedure attachment content must be bytes or text")
+    request = ArtifactTransferRequest(
+        operation="WRITE",
+        resource_type="PROCEDURE",
+        resource_id=procedure_id,
+        artifact_type="PROCEDURE_ATTACHMENT",
+        filename=filename,
+        content_type=content_type,
+        size_bytes=len(payload),
+        sha256=hashlib.sha256(payload).hexdigest(),
+    )
+    try:
+        return (artifact_store or GraphQLArtifactStore(client)).upload_batch(
+            [ArtifactUpload(request, payload, existing_metadata)]
+        )[0]
+    except GraphQLArtifactStoreError as exc:
+        raise ProcedureArtifactStorageError(f"Unable to store {filename}") from exc
+
+
+def download_procedure_attachment(
+    client,
+    procedure_id: str,
+    filename: str,
+    pointer: Any,
+    *,
+    content_type: str = "text/plain",
+    artifact_store=None,
+) -> bytes:
+    """Load an integrity-verified procedure attachment through GraphQL tickets."""
+    request = _pointer_read_request(
+        procedure_id,
+        pointer,
+        filename=filename,
+        artifact_type="PROCEDURE_ATTACHMENT",
+    )
+    if request.content_type != content_type:
+        raise ProcedureArtifactStorageError(f"{filename} has an unexpected content type")
+    try:
+        return (artifact_store or GraphQLArtifactStore(client)).download_batch([request])[0]
+    except GraphQLArtifactStoreError as exc:
+        raise ProcedureArtifactStorageError(f"Unable to load verified {filename}") from exc
+
+
 class PlexusStorageAdapter:
     """
     Implements Tactus StorageBackend protocol using Plexus GraphQL.
@@ -196,7 +366,7 @@ class PlexusStorageAdapter:
     Procedure.metadata JSON field via GraphQL mutations.
     """
 
-    def __init__(self, client, procedure_id: str):
+    def __init__(self, client, procedure_id: str, *, artifact_store=None):
         """
         Initialize Plexus storage adapter.
 
@@ -207,6 +377,7 @@ class PlexusStorageAdapter:
         self.client = client
         self.procedure_id = procedure_id
         self._is_builtin = is_builtin_procedure_id(procedure_id)
+        self.artifact_store = artifact_store or GraphQLArtifactStore(client)
         self._metadata_cache: Optional[ProcedureMetadata] = None
         logger.info(f"PlexusStorageAdapter initialized for procedure {procedure_id}")
 
@@ -238,15 +409,7 @@ class PlexusStorageAdapter:
         return raw_metadata
 
     def load_procedure_metadata(self, procedure_id: str) -> ProcedureMetadata:
-        """
-        Load procedure metadata from Plexus via GraphQL.
-
-        Args:
-            procedure_id: Procedure ID to load
-
-        Returns:
-            ProcedureMetadata with checkpoints, state, and lua_state
-        """
+        """Load verified procedure state and checkpoints through artifact tickets."""
         if procedure_id != self.procedure_id:
             logger.warning(f"Requested procedure_id {procedure_id} doesn't match initialized {self.procedure_id}")
             procedure_id = self.procedure_id
@@ -262,7 +425,6 @@ class PlexusStorageAdapter:
             logger.debug("Using in-memory metadata for built-in procedure %s", procedure_id)
             return metadata
 
-        # Query GraphQL for procedure metadata
         query = """
         query GetProcedure($id: ID!) {
             getProcedure(id: $id) {
@@ -274,80 +436,69 @@ class PlexusStorageAdapter:
         }
         """
 
-        try:
-            response = self.client.execute(query, {'id': procedure_id})
-            procedure_data = response.get('getProcedure')
-
-            if not procedure_data:
-                logger.warning(f"Procedure {procedure_id} not found, creating new metadata")
-                metadata = ProcedureMetadata(procedure_id=procedure_id)
-                self._metadata_cache = metadata
-                return metadata
-
-            # Parse metadata JSON field
-            raw_metadata = procedure_data.get('metadata') or {}
-            if isinstance(raw_metadata, str):
-                try:
-                    raw_metadata = json.loads(raw_metadata)
-                except Exception:
-                    logger.warning("Procedure metadata was not valid JSON; defaulting to empty object")
-                    raw_metadata = {}
-
-            def _load_s3_field(raw_value: Any, field_name: str, default: Any) -> Any:
-                """Return field value, downloading from S3 if it's an offloaded pointer."""
-                if isinstance(raw_value, dict) and '_s3_key' in raw_value:
-                    try:
-                        s3 = boto3.client('s3')
-                        obj = s3.get_object(Bucket=_S3_BUCKET, Key=raw_value['_s3_key'])
-                        loaded = json.loads(obj['Body'].read().decode('utf-8'))
-                        logger.info("Loaded %s from S3: %s/%s", field_name, _S3_BUCKET, raw_value['_s3_key'])
-                        return loaded
-                    except (ClientError, json.JSONDecodeError) as s3_err:
-                        logger.error("Failed to load %s from S3: %s — using default", field_name, s3_err)
-                        return default
-                return raw_value if raw_value is not None else default
-
-            # All procedure data lives in S3 attachments; the DynamoDB record holds S3 keys.
-            raw_checkpoints = raw_metadata.get('checkpoints', {})
-            checkpoints_dict = _load_s3_field(raw_checkpoints, 'checkpoints', {})
-
-            # Convert checkpoint data to execution_log
-            execution_log = []
-            position = 0
-            for name, ckpt_data in checkpoints_dict.items():
-                execution_log.append(CheckpointEntry(
-                    position=position,
-                    type='checkpoint',
-                    result={'name': name, 'data': ckpt_data.get('result')},
-                    timestamp=datetime.fromisoformat(ckpt_data.get('completed_at')),
-                    run_id=ckpt_data.get('run_id'),  # None for old checkpoints — won't match new run_id
-                ))
-                position += 1
-
-            state_data = _load_s3_field(raw_metadata.get('state', {}), 'state', {})
-            lua_state_data = _load_s3_field(raw_metadata.get('lua_state', {}), 'lua_state', {})
-
-            # Create metadata object
-            metadata = ProcedureMetadata(
-                procedure_id=procedure_id,
-                execution_log=execution_log,
-                replay_index=raw_metadata.get('replay_index', 0),  # Default to 0 if not set
-                state=state_data,
-                lua_state=lua_state_data,
-                status=procedure_data.get('status') or 'RUNNING',
-                waiting_on_message_id=procedure_data.get('waitingOnMessageId')
-            )
-
-            self._metadata_cache = metadata
-            logger.debug(f"Loaded metadata for {procedure_id}: {len(execution_log)} checkpoints, {len(metadata.state)} state keys")
-            return metadata
-
-        except Exception as e:
-            logger.error(f"Error loading procedure metadata: {e}", exc_info=True)
-            # Return empty metadata on error
+        response = self.client.execute(query, {'id': procedure_id})
+        procedure_data = response.get('getProcedure')
+        if not procedure_data:
             metadata = ProcedureMetadata(procedure_id=procedure_id)
             self._metadata_cache = metadata
             return metadata
+
+        raw_metadata = procedure_data.get('metadata') or {}
+        if isinstance(raw_metadata, str):
+            try:
+                raw_metadata = json.loads(raw_metadata)
+            except json.JSONDecodeError as exc:
+                raise ProcedureArtifactStorageError("Procedure metadata is not valid JSON") from exc
+        if not isinstance(raw_metadata, dict):
+            raise ProcedureArtifactStorageError("Procedure metadata must be an object")
+
+        artifact_fields = ("state", "lua_state", "checkpoints")
+        requests = []
+        request_fields = []
+        for field_name in artifact_fields:
+            pointer = raw_metadata.get(field_name)
+            if pointer in (None, {}):
+                continue
+            filename, artifact_type = _PERSISTED_ARTIFACTS[field_name]
+            requests.append(
+                _pointer_read_request(
+                    procedure_id,
+                    pointer,
+                    filename=filename,
+                    artifact_type=artifact_type,
+                )
+            )
+            request_fields.append(field_name)
+
+        loaded_fields: Dict[str, Any] = {"state": {}, "lua_state": {}, "checkpoints": {}}
+        if requests:
+            try:
+                contents = self.artifact_store.download_batch(requests)
+            except (GraphQLArtifactStoreError, ArtifactIntegrityError) as exc:
+                raise ProcedureArtifactStorageError("Unable to load verified procedure artifacts") from exc
+            for field_name, content in zip(request_fields, contents):
+                try:
+                    loaded_fields[field_name] = json.loads(content.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise ProcedureArtifactStorageError(
+                        f"{field_name} artifact is not valid JSON"
+                    ) from exc
+
+        execution_log = _deserialize_execution_log(loaded_fields["checkpoints"])
+
+        if not isinstance(loaded_fields["state"], dict) or not isinstance(loaded_fields["lua_state"], dict):
+            raise ProcedureArtifactStorageError("procedure state artifacts must contain objects")
+        metadata = ProcedureMetadata(
+            procedure_id=procedure_id,
+            execution_log=execution_log,
+            replay_index=raw_metadata.get('replay_index', 0),
+            state=loaded_fields["state"],
+            lua_state=loaded_fields["lua_state"],
+            status=procedure_data.get('status') or 'RUNNING',
+            waiting_on_message_id=procedure_data.get('waitingOnMessageId'),
+        )
+        self._metadata_cache = metadata
+        return metadata
 
     def save_procedure_metadata(self, procedure_id: str, metadata: ProcedureMetadata) -> None:
         """
@@ -357,31 +508,9 @@ class PlexusStorageAdapter:
             procedure_id: Procedure ID (for API compatibility)
             metadata: ProcedureMetadata to save
         """
-        # Convert execution_log to serializable format (store as checkpoints for backward compat)
-        checkpoints_dict = {}
-        for checkpoint in metadata.execution_log:
-            if checkpoint.type == 'checkpoint' and isinstance(checkpoint.result, dict):
-                name = checkpoint.result.get('name', f'checkpoint_{checkpoint.position}')
-                entry: dict = {
-                    'name': name,
-                    'result': checkpoint.result.get('data'),
-                    'completed_at': checkpoint.timestamp.isoformat(),
-                }
-                if checkpoint.run_id is not None:
-                    entry['run_id'] = checkpoint.run_id
-                checkpoints_dict[name] = entry
+        checkpoints = _serialize_execution_log(metadata.execution_log)
 
-        # Build metadata JSON. Preserve any unrelated top-level keys already on
-        # the Procedure record (for example runtime/last_failure telemetry).
-        metadata_json = self._fetch_raw_procedure_metadata(metadata.procedure_id)
-        metadata_json.update({
-            'checkpoints': checkpoints_dict,
-            'state': metadata.state,
-            'lua_state': metadata.lua_state,
-            'replay_index': metadata.replay_index
-        })
-
-        # Update via GraphQL mutation
+        # Update the Procedure index only after all attachment writes succeed.
         mutation = """
         mutation UpdateProcedureMetadata($id: ID!, $metadata: AWSJSON!) {
             updateProcedure(input: {
@@ -411,92 +540,67 @@ class PlexusStorageAdapter:
         }
         """
 
-        try:
-            if self._is_builtin:
-                self._metadata_cache = metadata
-                logger.debug("Saved in-memory metadata for built-in procedure %s", metadata.procedure_id)
-                return
-
-            # Procedure data lives in S3. DynamoDB holds only S3 pointers and replay_index.
-            s3 = boto3.client('s3')
-            pid = metadata.procedure_id
-
-            def _store_attachment(field_name: str, payload: Any, s3_path: str) -> None:
-                payload_json = json.dumps(payload)
-                try:
-                    s3.put_object(
-                        Bucket=_S3_BUCKET,
-                        Key=s3_path,
-                        Body=payload_json.encode('utf-8'),
-                        ContentType='application/json',
-                    )
-                    logger.debug(
-                        "Stored %d bytes of %s to S3: %s/%s",
-                        len(payload_json), field_name, _S3_BUCKET, s3_path,
-                    )
-                except ClientError as s3_err:
-                    logger.error("Failed to store %s to S3: %s", field_name, s3_err)
-                    raise
-
-            _store_attachment('state', metadata.state, f"procedures/{pid}/state.json")
-            metadata_json['state'] = {'_s3_key': f"procedures/{pid}/state.json"}
-
-            # Write dashboard projection under reportblocks/ prefix — the
-            # Cognito authenticated role has read access to reportblocks/*
-            # but NOT procedures/* (IAM policy not deployed for that path).
-            dashboard_state = _build_dashboard_state(metadata.state or {})
-            _store_attachment(
-                'dashboard_state', dashboard_state,
-                f"reportblocks/procedures/{pid}/dashboard_state.json",
-            )
-            metadata_json['dashboard_state'] = {
-                '_s3_key': f"reportblocks/procedures/{pid}/dashboard_state.json"
-            }
-
-            _store_attachment('lua_state', metadata.lua_state, f"procedures/{pid}/lua_state.json")
-            metadata_json['lua_state'] = {'_s3_key': f"procedures/{pid}/lua_state.json"}
-
-            _store_attachment('checkpoints', checkpoints_dict, f"procedures/{pid}/checkpoints.json")
-            metadata_json['checkpoints'] = {'_s3_key': f"procedures/{pid}/checkpoints.json"}
-
-            if _looks_like_optimizer_state(metadata.state):
-                try:
-                    from plexus.cli.shared.optimizer_results import (
-                        OPTIMIZER_ARTIFACTS_METADATA_KEY,
-                        OptimizerResultsService,
-                    )
-
-                    optimizer_service = OptimizerResultsService(self.client)
-                    optimizer_index = optimizer_service.index_optimizer_run(
-                        metadata.procedure_id,
-                        state_override=metadata.state,
-                        existing_metadata=metadata_json,
-                        persist_metadata_pointer=False,
-                    )
-                    metadata_json[OPTIMIZER_ARTIFACTS_METADATA_KEY] = optimizer_index["pointer"]
-                except RuntimeError as _ors_err:
-                    # Optimizer artifact storage may be unavailable (e.g. missing S3 bucket config).
-                    # Degrade gracefully — metadata still saves without the artifact pointer.
-                    logger.warning("Optimizer artifact indexing skipped: %s", _ors_err)
-
-            serialized = json.dumps(metadata_json)
-
-            self.client.execute(
-                mutation,
-                {
-                    'id': metadata.procedure_id,
-                    'metadata': serialized
-                },
-                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
-            )
-
-            # Update cache
+        if self._is_builtin:
             self._metadata_cache = metadata
-            logger.debug(f"Saved metadata for {metadata.procedure_id}")
+            logger.debug("Saved in-memory metadata for built-in procedure %s", metadata.procedure_id)
+            return
 
-        except Exception as e:
-            logger.error(f"Error saving procedure metadata: {e}", exc_info=True)
-            raise
+        metadata_json = self._fetch_raw_procedure_metadata(metadata.procedure_id)
+        payloads = {
+            "state": metadata.state,
+            "dashboard_state": _build_dashboard_state(metadata.state or {}),
+            "lua_state": metadata.lua_state,
+            "checkpoints": checkpoints,
+        }
+        uploads = []
+        upload_fields = []
+        for field_name, payload in payloads.items():
+            filename, artifact_type = _PERSISTED_ARTIFACTS[field_name]
+            content = _json_bytes(payload)
+            uploads.append(
+                ArtifactUpload(
+                    ArtifactTransferRequest(
+                        operation="WRITE",
+                        resource_type="PROCEDURE",
+                        resource_id=metadata.procedure_id,
+                        artifact_type=artifact_type,
+                        filename=filename,
+                        content_type="application/json",
+                        size_bytes=len(content),
+                        sha256=hashlib.sha256(content).hexdigest(),
+                    ),
+                    content,
+                    metadata_json.get(field_name),
+                )
+            )
+            upload_fields.append(field_name)
+        try:
+            pointers = self.artifact_store.upload_batch(uploads)
+        except GraphQLArtifactStoreError as exc:
+            raise ProcedureArtifactStorageError("Unable to store procedure artifacts") from exc
+        metadata_json.update(dict(zip(upload_fields, pointers)))
+        metadata_json['replay_index'] = metadata.replay_index
+        if _looks_like_optimizer_state(metadata.state):
+            # The optimizer-results lane owns its GraphQL artifact implementation.
+            # Keep the established indexing integration and fail closed if it fails.
+            from plexus.cli.shared.optimizer_results import (
+                OPTIMIZER_ARTIFACTS_METADATA_KEY,
+                OptimizerResultsService,
+            )
+
+            optimizer_index = OptimizerResultsService(self.client).index_optimizer_run(
+                metadata.procedure_id,
+                state_override=metadata.state,
+                existing_metadata=metadata_json,
+                persist_metadata_pointer=False,
+            )
+            metadata_json[OPTIMIZER_ARTIFACTS_METADATA_KEY] = optimizer_index["pointer"]
+        self.client.execute(
+            mutation,
+            {'id': metadata.procedure_id, 'metadata': json.dumps(metadata_json)},
+            retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+        )
+        self._metadata_cache = metadata
 
     def update_procedure_status(
         self,

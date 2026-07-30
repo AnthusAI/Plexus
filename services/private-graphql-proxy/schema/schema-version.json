@@ -1,10 +1,10 @@
 {
-  "contractVersion": "11e5f01a8b0fcb54",
-  "generatedAt": "2026-07-28T13:31:06.090Z",
+  "contractVersion": "5238f987e56be54c",
+  "generatedAt": "2026-07-28T13:48:05.430Z",
   "generatorVersion": "1.1.0",
   "hashes": {
     "graphql": "bcecc9a8d34f36724f3cc63fe5ace1ab883422b1b769923e4604bce9f2cf38e5",
-    "manifest": "17495a30ebd58d6977f72c133ecea5efae34b12ee72a9b349df75d3a59f2dc61"
+    "manifest": "ed1d827148c99c1b4960159b02a63b663abf1ad3f70d02e23b29452237ad0b8f"
   },
   "packageVersions": {
     "@aws-amplify/backend": "1.22.0",
@@ -17,7 +17,7 @@
       "sha256": "133affcbfc77be390e64a0274cc83c2017c45d2f7267569d3b5cd549cd8adc02"
     },
     "dashboard/amplify/data/resource.ts": {
-      "sha256": "ca1c66c25dae84f3a34ba28dd6b65048ce1060c7bb8a886c4db9ee802807ad90"
+      "sha256": "10fd745f01bbbe8286f7601c01ef9e828127c45d918fbb98a50bd3779a75f2b4"
     },
     "dashboard/amplify/storage/resource.ts": {
       "sha256": "93c7b826a94e0105c875538f07e7fd07c56d572989475fe335726cd1b2d28ca3"

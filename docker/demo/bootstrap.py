@@ -4,7 +4,6 @@ import base64
 import json
 import os
 import shutil
-import subprocess
 import sys
 import tarfile
 import tempfile
@@ -17,13 +16,16 @@ from docker.demo.harness import (
     ACCOUNT_ID,
     NAMESPACE,
     OBJECT_STORE_DEPLOYMENT,
+    OBJECT_STORE_TLS_SECRET,
     OPENAI_SECRET,
+    PROXY_API_KEY,
     PROXY_SERVICE,
     RELEASE,
     CommandRunner,
     DemoFailure,
     DemoHarness,
     GraphQLClient,
+    extract_last_json,
 )
 
 
@@ -64,6 +66,7 @@ class SnapshotDeployer:
             )
             self._install_envoy()
             self._ensure_llm_secret()
+            self._ensure_object_store_tls_secret()
 
             chart = source / "docker/helm/plexus-stack"
             values = self.output_dir / "values-local.yaml"
@@ -100,12 +103,14 @@ class SnapshotDeployer:
                     timeout=320,
                 )
             self._ensure_local_control_plane(source)
+            artifact_ticket_smoke = self._artifact_ticket_smoke()
             return {
                 "git_head": head,
                 "image_tag": tag,
                 "envoy_gateway": ENVOY_VERSION,
                 "chart_package": str(chart_package.resolve()),
                 "values_file": str(values.resolve()),
+                "artifact_ticket_smoke": artifact_ticket_smoke,
             }
         finally:
             shutil.rmtree(snapshot_root)
@@ -200,6 +205,76 @@ class SnapshotDeployer:
             input_text=json.dumps(secret),
         )
 
+    def _ensure_object_store_tls_secret(self) -> None:
+        existing = self.runner.run(
+            (
+                "kubectl",
+                "get",
+                "secret",
+                OBJECT_STORE_TLS_SECRET,
+                "-n",
+                NAMESPACE,
+                "-o",
+                'go-template={{if and (index .data "public.crt") (index .data "private.key") (index .data "ca.crt")}}present{{end}}',
+            ),
+            check=False,
+        )
+        if existing.returncode == 0:
+            if existing.stdout.strip() != "present":
+                raise DemoFailure(
+                    f"existing {OBJECT_STORE_TLS_SECRET} Secret lacks a certificate, key, or CA"
+                )
+            return
+
+        certificate_dir = Path(tempfile.mkdtemp(prefix="plexus-k8s-minio-tls-"))
+        try:
+            ca_key = certificate_dir / "ca.key"
+            ca_cert = certificate_dir / "ca.crt"
+            server_key = certificate_dir / "private.key"
+            server_csr = certificate_dir / "server.csr"
+            server_cert = certificate_dir / "public.crt"
+            extensions = certificate_dir / "server.ext"
+            extensions.write_text(
+                "subjectAltName=DNS:plexus-local-object-store,"
+                "DNS:plexus-local-object-store.plexus-local.svc,"
+                "DNS:plexus-local-object-store.plexus-local.svc.cluster.local\n"
+                "extendedKeyUsage=serverAuth\n",
+                encoding="utf-8",
+            )
+            self.runner.run(("openssl", "genrsa", "-out", str(ca_key), "2048"))
+            self.runner.run(
+                (
+                    "openssl", "req", "-x509", "-new", "-sha256", "-days", "3650",
+                    "-key", str(ca_key), "-subj", "/CN=Plexus local object-store CA",
+                    "-out", str(ca_cert),
+                )
+            )
+            self.runner.run(
+                (
+                    "openssl", "req", "-newkey", "rsa:2048", "-nodes",
+                    "-keyout", str(server_key), "-subj", "/CN=plexus-local-object-store",
+                    "-out", str(server_csr),
+                )
+            )
+            self.runner.run(
+                (
+                    "openssl", "x509", "-req", "-sha256", "-days", "825",
+                    "-in", str(server_csr), "-CA", str(ca_cert), "-CAkey", str(ca_key),
+                    "-CAcreateserial", "-extfile", str(extensions), "-out", str(server_cert),
+                )
+            )
+            self.runner.run(
+                (
+                    "kubectl", "create", "secret", "generic", OBJECT_STORE_TLS_SECRET,
+                    "-n", NAMESPACE,
+                    f"--from-file=public.crt={server_cert}",
+                    f"--from-file=private.key={server_key}",
+                    f"--from-file=ca.crt={ca_cert}",
+                )
+            )
+        finally:
+            shutil.rmtree(certificate_dir)
+
     def _ensure_local_control_plane(self, source: Path) -> None:
         # A tiny temporary harness is used only for its safe port-forward context.
         from docker.demo.core import DemoManifest, generated_run_id
@@ -207,19 +282,53 @@ class SnapshotDeployer:
         manifest = DemoManifest.new(generated_run_id(), "guardrail", 1.0, 1)
         harness = DemoHarness(manifest, self.output_dir)
         with harness.port_forward(NAMESPACE, f"svc/{PROXY_SERVICE}", 8000) as base_url:
-            client = GraphQLClient(f"{base_url}/graphql")
+            client = GraphQLClient(f"{base_url}/graphql", PROXY_API_KEY)
             existing = client.execute(
                 "query LocalAccount($id: ID!) { getAccount(id: $id) { id } }", {"id": ACCOUNT_ID}
             ).get("getAccount")
             if existing:
                 return
             env = os.environ.copy()
-            env.update({"PLEXUS_API_URL": f"{base_url}/graphql", "PLEXUS_API_KEY": ""})
+            env.update({
+                "PLEXUS_API_URL": f"{base_url}/graphql",
+                "PLEXUS_API_KEY": PROXY_API_KEY,
+                "PLEXUS_GRAPHQL_AUTH_MODE": "api_key",
+            })
             self.runner.run(
                 (sys.executable, str(source / "services/private-graphql-proxy/scripts/seed_local_demo.py")),
                 timeout=600,
                 env=env,
             )
+
+    def _artifact_ticket_smoke(self) -> dict[str, Any]:
+        code = (
+            "import hashlib,json;"
+            "from plexus.dashboard.api.client import PlexusDashboardClient;"
+            "from plexus.storage.graphql_artifact_store import ArtifactTicketError,ArtifactTransferRequest,GraphQLArtifactStore;"
+            "body=b'plexus-k8s-artifact-smoke';"
+            "digest=hashlib.sha256(body).hexdigest();"
+            "client=PlexusDashboardClient();store=GraphQLArtifactStore(client);"
+            "write=ArtifactTransferRequest(operation='WRITE',resource_type='TASK',resource_id='local-demo-task',artifact_type='TASK_ATTACHMENT',filename='integration-smoke.bin',content_type='application/octet-stream',size_bytes=len(body),sha256=digest);"
+            "metadata=store.upload_bytes(write,body);"
+            "read=ArtifactTransferRequest(operation='READ',resource_type='TASK',resource_id='local-demo-task',artifact_type='TASK_ATTACHMENT',filename='integration-smoke.bin',content_type='application/octet-stream',size_bytes=len(body),sha256=digest);"
+            "downloaded=store.download_bytes(read);"
+            "missing=ArtifactTransferRequest(operation='READ',resource_type='TASK',resource_id='missing-task',artifact_type='TASK_ATTACHMENT',filename='integration-smoke.bin',content_type='application/octet-stream',size_bytes=len(body),sha256=digest);"
+            "rejected=False;"
+            "\ntry: store.request_tickets([missing])\nexcept ArtifactTicketError: rejected=True\n"
+            "print(json.dumps({'canonical_key':metadata.get('_s3_key')=='tasks/local-demo-task/integration-smoke.bin','checksum_verified':downloaded==body,'missing_resource_rejected':rejected}))"
+        )
+        result = self.runner.run(
+            (
+                "kubectl", "exec", "-n", NAMESPACE,
+                "deployment/plexus-plexus-worker", "--", "python", "-c", code,
+            ),
+            timeout=300,
+        )
+        payload = extract_last_json(result.stdout)
+        required = ("canonical_key", "checksum_verified", "missing_resource_rejected")
+        if not all(payload.get(key) is True for key in required):
+            raise DemoFailure("in-cluster GraphQL artifact ticket smoke assertions failed")
+        return {key: True for key in required}
 
 
 def write_effective_local_values(

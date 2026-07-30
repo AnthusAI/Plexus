@@ -51,6 +51,7 @@ Edit your values file and replace placeholders:
 plexus:
   api:
     url: "https://your-actual-api-url"
+    authMode: api_key
     key: "your-actual-api-key"
   account:
     key: "your-account-key"
@@ -88,6 +89,11 @@ For non-local environments, set `global.environment` to the target environment
 and use an immutable worker image tag such as a git SHA or digest-derived tag.
 The chart rejects `latest` and `local` tags when `global.environment` is not
 `local`, `development`, `dev`, or `test`.
+
+Set `plexus.api.authMode` explicitly to `api_key` for current secret-backed
+deployments or `iam` for a service account with an authorized AWS role. IAM
+mode does not inject `PLEXUS_API_KEY` into worker or recovery-job containers.
+Any other authentication mode is rejected during chart rendering.
 
 ## Envoy Gateway Scoring API
 
