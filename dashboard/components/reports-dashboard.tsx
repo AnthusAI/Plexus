@@ -34,6 +34,7 @@ import {
   buildLinkedProcedureSummary,
   linkedProcedureSubtitle,
 } from '@/components/reports/linked-procedure-summary'
+import { useLivingReportRefresh } from '@/hooks/use-living-report-refresh'
 
 // Define types based on Amplify schema
 type Report = Schema['Report']['type'] & {
@@ -588,6 +589,59 @@ export default function ReportsDashboard({
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [reportsFilter, setReportsFilter] = useState('');
+  const selectedReportRefreshSequence = useRef(0)
+
+  const refreshSelectedReport = useCallback(async (reportId: string) => {
+    const requestSequence = ++selectedReportRefreshSequence.current
+    try {
+      const response = await getClient().graphql<GetReportResponse>({
+        query: GET_REPORT_WITH_BLOCKS,
+        variables: { id: reportId },
+      })
+      const fullReport = 'data' in response ? response.data?.getReport : null
+      if (!fullReport || requestSequence !== selectedReportRefreshSequence.current) return
+
+      const transformedReport = transformReportData(fullReport as Report)
+      const transformedBlocks = (fullReport.reportBlocks?.items || []).map((block: RawReportBlock) => {
+        let outputData
+        try {
+          outputData = typeof block.output === 'string'
+            ? parseOutputString(block.output)
+            : block.output
+        } catch (err) {
+          console.error('Error parsing block output:', err)
+          outputData = block.output || {}
+        }
+        return {
+          id: block.id,
+          type: block.type || outputData.class || 'unknown',
+          config: outputData,
+          output: outputData,
+          log: block.log || undefined,
+          name: block.name || undefined,
+          position: block.position,
+          attachedFiles: block.attachedFiles || undefined,
+        }
+      })
+
+      if (transformedReport) {
+        setReports(previous => previous.some(report => report.id === transformedReport.id)
+          ? previous.map(report => report.id === transformedReport.id ? transformedReport : report)
+          : [transformedReport, ...previous])
+      }
+      setSelectedReportBlocks([...transformedBlocks])
+    } catch (err) {
+      console.error('Error refreshing selected Report:', err)
+    }
+  }, [])
+
+  const selectedReportTask = reports.find(report => report.id === selectedReportId)?.task
+  useLivingReportRefresh({
+    reportId: selectedReportId,
+    taskId: selectedReportTask?.id,
+    taskStatus: selectedReportTask?.status,
+    refresh: refreshSelectedReport,
+  })
   
   // Ref map to track report elements for scroll-to-view functionality
   const reportRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
@@ -721,11 +775,12 @@ export default function ReportsDashboard({
   // Fetch Report Blocks when selectedReportId changes
   useEffect(() => {
     if (selectedReportId) {
-      fetchReportBlocks(selectedReportId);
+      void refreshSelectedReport(selectedReportId)
     } else {
+      selectedReportRefreshSequence.current += 1
       setSelectedReportBlocks(null);
     }
-  }, [selectedReportId]);
+  }, [refreshSelectedReport, selectedReportId]);
 
   // Set up subscriptions for real-time updates
   useEffect(() => {
@@ -789,6 +844,10 @@ export default function ReportsDashboard({
           if (data?.onUpdateReport) {
             const updatedReport = data.onUpdateReport;
             if (updatedReport.accountId !== accountId) return;
+            if (updatedReport.id === selectedReportId) {
+              void refreshSelectedReport(updatedReport.id)
+              return
+            }
             // Cast to any to avoid type issues with transformReportData
             const transformedReport = transformReportData(updatedReport as any);
             if (transformedReport) {
@@ -824,53 +883,7 @@ export default function ReportsDashboard({
         }
       });
     };
-  }, [accountId]);
-
-  // Make fetchReportBlocks more robust by handling parsed JSON if needed
-  const fetchReportBlocks = async (reportId: string) => {
-    try {
-      // Keep this log to show when blocks are being fetched
-      const response = await getClient().graphql<GetReportResponse>({
-        query: GET_REPORT_WITH_BLOCKS,
-        variables: { id: reportId }
-      });
-
-      if ('data' in response && response.data?.getReport?.reportBlocks?.items) {
-        // Transform the blocks to match the expected structure
-        const transformedBlocks = response.data.getReport.reportBlocks.items.map((block: RawReportBlock) => {
-          // Handle case where output is already parsed or is a string
-          let outputData;
-          try {
-            outputData = typeof block.output === 'string' ? parseOutputString(block.output) : block.output;
-          } catch (err) {
-            console.error('Error parsing block output:', err);
-            outputData = block.output || {};
-          }
-          
-          return {
-            id: block.id,
-            type: block.type || outputData.class || 'unknown', // Use API type first, then output.class as fallback
-            config: outputData, // Use output as config
-            output: outputData,
-            log: block.log || undefined,
-            name: block.name || undefined,
-            position: block.position,
-            attachedFiles: block.attachedFiles || undefined
-          };
-        });
-        
-        // Important log to verify block count
-        
-        // Force a state update by creating a new array
-        setSelectedReportBlocks([...transformedBlocks]);
-      } else {
-        setSelectedReportBlocks([]);
-      }
-    } catch (err: any) {
-      console.error('Error fetching report blocks:', err);
-      setSelectedReportBlocks([]);
-    }
-  };
+  }, [accountId, refreshSelectedReport, selectedReportId]);
 
   // Subscribe to report block updates for the selected report
   useEffect(() => {
@@ -887,7 +900,7 @@ export default function ReportsDashboard({
           // Important log to verify subscription is receiving events
           if (data?.onCreateReportBlock && data.onCreateReportBlock.reportId === selectedReportId) {
             // When a new block is created for the selected report, refresh blocks
-            fetchReportBlocks(selectedReportId);
+            void refreshSelectedReport(selectedReportId)
           }
         },
         error: (error: Error) => {
@@ -910,7 +923,7 @@ export default function ReportsDashboard({
             // Key log to verify subscription events
             
             // When a block is updated for the selected report, refresh blocks
-            fetchReportBlocks(selectedReportId);
+            void refreshSelectedReport(selectedReportId)
           }
         },
         error: (error: Error) => {
@@ -933,7 +946,7 @@ export default function ReportsDashboard({
         }
       });
     };
-  }, [selectedReportId]);
+  }, [refreshSelectedReport, selectedReportId]);
 
 
   // Infinite scroll effect using Intersection Observer
