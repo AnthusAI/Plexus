@@ -943,7 +943,7 @@ class OptimizationRunReportService:
                 config_id = self.report_configuration_id or _get_programmatic_config_id(self.account_id, self.client)
                 parameters = {
                     "_display_title": operator_identity.display_title,
-                    "_display_subtitle": operator_identity.display_scope,
+                    "_display_subtitle": self._display_subtitle(operator_identity),
                     "optimization_run": {
                     "run_key": self.run_key,
                     "attempt_id": attempt_id,
@@ -1413,7 +1413,7 @@ class OptimizationRunReportService:
         run["lifecycle_version"] = LIFECYCLE_VERSION
         run["operator_identity"] = state.operator_identity.as_dict()
         parameters["_display_title"] = state.operator_identity.display_title
-        parameters["_display_subtitle"] = state.operator_identity.display_scope
+        parameters["_display_subtitle"] = self._display_subtitle(state.operator_identity)
         parameters["optimization_run"] = run
         state.report.update(
             parameters=parameters,
@@ -1448,9 +1448,6 @@ class OptimizationRunReportService:
         overview = revision.get("overview") if isinstance(revision, Mapping) else {}
         overview = overview if isinstance(overview, Mapping) else {}
         milestone = safe(revision.get("milestone")) if isinstance(revision, Mapping) else ""
-        stage_name = (
-            _MILESTONE_STAGE.get(milestone, "preflight").replace("_", " ").title()
-        )
         normalized_status = safe(status) or "running"
         coverage = safe(overview.get("coverage_status")) or "pending"
         inspected = overview.get("scorecards_inspected", 0)
@@ -1461,9 +1458,10 @@ class OptimizationRunReportService:
         lines = [
             f"# {identity.display_title}",
             "",
-            f"Scope: {identity.display_scope}",
-            f"Status: {normalized_status}",
-            f"Current phase: {stage_name}",
+            (
+                "This living report follows the linked procedure from portfolio "
+                "analysis through human decisions and final outcomes."
+            ),
         ]
         if revision:
             lines.extend([
@@ -1475,6 +1473,8 @@ class OptimizationRunReportService:
             "```block",
             "class: OptimizationRunStatus",
             "```",
+            "",
+            f"Status: {normalized_status}",
         ])
         current_activity = safe(overview.get("current_activity"))
         next_checkpoint = safe(overview.get("next_checkpoint"))
@@ -1515,6 +1515,16 @@ class OptimizationRunReportService:
         if error:
             lines.extend(["", f"Publication error: {safe(error)}"])
         return "\n".join(lines)
+
+    @staticmethod
+    def _display_subtitle(identity: OptimizationOperatorIdentity) -> str:
+        if identity.kind == "account_wide_portfolio":
+            return "Periodic analysis across all scorecards"
+        if identity.kind == "scorecard_scoped_portfolio":
+            return "Focused scorecard portfolio analysis"
+        if identity.kind == "single_score":
+            return "Focused analysis and optimization of one score"
+        return "Living optimization analysis"
 
     def _find_task(self, run_key: str) -> Any:
         # This is intentionally bounded client-side discovery until a dedicated

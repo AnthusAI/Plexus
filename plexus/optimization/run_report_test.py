@@ -264,15 +264,17 @@ def test_start_is_self_identifying_in_the_task_report_list_and_cover(monkeypatch
     assert state.task.description == "Account-wide optimization portfolio — All scorecards"
     assert state.report.name == "Account-wide optimization portfolio"
     assert state.report.parameters["_display_title"] == "Account-wide optimization portfolio"
-    assert state.report.parameters["_display_subtitle"] == "All scorecards"
+    assert state.report.parameters["_display_subtitle"] == "Periodic analysis across all scorecards"
     assert state.report.parameters["optimization_run"]["operator_identity"] == {
         "kind": "account_wide_portfolio",
         "display_title": "Account-wide optimization portfolio",
         "display_scope": "All scorecards",
     }
     assert state.report.output.startswith("# Account-wide optimization portfolio")
-    assert "Scope: All scorecards" in state.report.output
-    assert "Current phase: Preflight" in state.report.output
+    assert "This living report follows the linked procedure" in state.report.output
+    assert "Scope:" not in state.report.output
+    assert "Current phase:" not in state.report.output
+    assert "Status: running" in state.report.output
     assert "```block\nclass: OptimizationRunStatus\n```" in state.report.output
 
 
@@ -306,7 +308,7 @@ def test_milestone_cover_projects_safe_progress_and_preserves_identity_on_finali
 
     cover = state.report.output
     assert cover.startswith("# Account-wide optimization portfolio")
-    assert "Current phase: Diagnosis" in cover
+    assert "Current phase:" not in cover
     assert "Checking deterministic readiness" in cover
     assert "Semantic diagnosis begins" in cover
     assert "Coverage: Incomplete" in cover

@@ -22,6 +22,15 @@ jest.mock('react-markdown', () => {
   }
 })
 
+jest.mock('@/components/ProcedureTask', () => ({
+  __esModule: true,
+  default: ({ procedure }: any) => (
+    <div data-testid="linked-procedure-task-summary">
+      {procedure.displayTitle} — {procedure.task?.status}
+    </div>
+  ),
+}))
+
 import ReportTask from '@/components/ReportTask'
 
 Object.assign(global, { TextDecoder })
@@ -117,5 +126,55 @@ describe('ReportTask optimization status integration', () => {
 
     expect(await screen.findByText('Optimization portfolio overview')).toBeInTheDocument()
     expect(screen.getByText('Preparing the frozen portfolio.')).toBeInTheDocument()
+  })
+
+  it('embeds the standard linked Procedure Task summary ahead of report findings', async () => {
+    const linkedProcedure = {
+      id: 'procedure-1',
+      title: 'Scorecard-scoped optimization portfolio',
+      displayTitle: 'Scorecard-scoped optimization portfolio',
+      displayScope: 'Focused scorecard portfolio',
+      procedureType: 'Portfolio Optimization',
+      featured: false,
+      createdAt: '2026-07-30T00:00:00.000Z',
+      updatedAt: '2026-07-30T00:01:00.000Z',
+      task: {
+        id: 'task-1',
+        type: 'Portfolio Optimization',
+        status: 'RUNNING',
+        target: 'procedure/procedure-1',
+        command: 'procedure run',
+        stages: { items: [] },
+      },
+    }
+
+    render(
+      <ReportTask
+        variant="detail"
+        linkedProcedure={linkedProcedure as any}
+        task={{
+          id: 'report-1',
+          type: 'Report',
+          name: '',
+          description: '',
+          scorecard: '',
+          score: '',
+          time: '2026-07-30T00:00:00.000Z',
+          status: 'RUNNING',
+          data: {
+            id: 'report-1',
+            title: 'Scorecard-scoped optimization portfolio',
+            configName: 'Scorecard-scoped optimization portfolio',
+            output: '# Findings',
+            reportBlocks: [],
+          },
+        } as any}
+      />,
+    )
+
+    expect(screen.getByTestId('linked-procedure-task-summary')).toHaveTextContent(
+      'Scorecard-scoped optimization portfolio — RUNNING',
+    )
+    expect(screen.getByText('# Findings')).toBeInTheDocument()
   })
 })

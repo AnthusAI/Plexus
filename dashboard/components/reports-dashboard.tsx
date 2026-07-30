@@ -30,6 +30,10 @@ import ReportTask, { ReportTaskData } from "@/components/ReportTask" // Import R
 import { RunReportButton } from '@/components/task-dispatch' // Import direct button
 import ReportConfigurationSelector from "@/components/ReportConfigurationSelector"
 import { parseOutputString } from '@/lib/utils'
+import {
+  buildLinkedProcedureSummary,
+  linkedProcedureSubtitle,
+} from '@/components/reports/linked-procedure-summary'
 
 // Define types based on Amplify schema
 type Report = Schema['Report']['type'] & {
@@ -1151,11 +1155,22 @@ export default function ReportsDashboard({
 
     // Ensure we have a valid display name for the report
     const displayName = report.name || 'Report';
-    const displaySubtitle = report.subtitle || report.reportConfiguration?.description;
+    const linkedProcedure = buildLinkedProcedureSummary({
+      reportId: report.id,
+      reportName: displayName,
+      reportCreatedAt: report.createdAt || '',
+      reportUpdatedAt: report.updatedAt,
+      reportCreatedByUserId: report.createdByUserId,
+      task: report.task as any,
+    });
+    const displaySubtitle = linkedProcedure
+      ? linkedProcedureSubtitle(linkedProcedure)
+      : report.subtitle || report.reportConfiguration?.description;
 
     return (
       <ReportTask
         variant="detail"
+        linkedProcedure={linkedProcedure}
         task={{
           id: report.id,
           type: 'Report',
@@ -1367,7 +1382,17 @@ export default function ReportsDashboard({
                           
                           // Ensure we have a valid display name for the report - USE FORCED STRING TYPE
                           const displayName = String(report.name || 'Report');
-                          const displaySubtitle = report.subtitle ? String(report.subtitle) : '';
+                          const linkedProcedure = buildLinkedProcedureSummary({
+                            reportId: report.id,
+                            reportName: displayName,
+                            reportCreatedAt: report.createdAt || '',
+                            reportUpdatedAt: report.updatedAt,
+                            reportCreatedByUserId: report.createdByUserId,
+                            task: report.task as any,
+                          });
+                          const displaySubtitle = linkedProcedure
+                            ? linkedProcedureSubtitle(linkedProcedure)
+                            : report.subtitle ? String(report.subtitle) : '';
                                           
                           // The ReportTask component uses configName as the primary display name
                           // We need to pass the report name both as title and as configName to ensure it displays correctly

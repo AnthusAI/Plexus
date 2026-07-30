@@ -10,6 +10,7 @@ import { getClient } from '@/utils/amplify-client'
 import BlockDetails from './reports/BlockDetails'
 import { parseOutputString } from '@/lib/utils'
 import { TaskAuthorIndicator } from '@/components/ui/task-author-indicator'
+import ProcedureTask, { type ProcedureTaskData } from '@/components/ProcedureTask'
 
 // Define the data structure for report tasks
 export interface ReportTaskData {
@@ -60,6 +61,7 @@ export interface ReportTaskData {
 // Props for the ReportTask component
 export interface ReportTaskProps extends BaseTaskProps<ReportTaskData> {
   isSelected?: boolean;
+  linkedProcedure?: ProcedureTaskData | null;
 }
 
 // Add interface for report blocks
@@ -109,7 +111,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   isFullWidth,
   onToggleFullWidth,
   onClose,
-  isSelected
+  isSelected,
+  linkedProcedure,
 }) => {
   // Helper to transform raw blocks into ReportBlock format
   const transformBlocks = useCallback((rawBlocks: Array<{ id?: string; type?: string; name?: string; position: number; output?: any; log?: string; config?: any; attachedFiles?: any[]; dataSet?: any }>): ReportBlock[] => {
@@ -660,6 +663,11 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       renderContent={(props) => (
         <TaskContent {...props} hideTaskStatus={true}>
           <div className={variant === 'detail' ? 'px-3 pb-3 flex flex-col h-full' : ''}>
+            {variant === 'detail' && linkedProcedure && (
+              <div className="mb-3 flex-none" data-testid="linked-procedure-task">
+                <ProcedureTask variant="grid" procedure={linkedProcedure} />
+              </div>
+            )}
             {variant === 'detail' && task.data?.output && (
             <div className="bg-background rounded-lg p-3 overflow-y-auto flex-1 min-h-0">
               <div className="prose dark:prose-invert max-w-none">
