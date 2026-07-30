@@ -821,6 +821,73 @@ def test_new_attempt_creates_its_report_without_scanning_report_history(monkeypa
     assert state.report.taskId == state.task.id
 
 
+def test_procedure_owned_task_is_reused_without_duplicate_task_or_stage_creation(monkeypatch):
+    from plexus.optimization import run_report
+
+    procedure_task = _Task(
+        identifier="procedure-task",
+        accountId="account-1",
+        status="RUNNING",
+        metadata=json.dumps({"procedure_key": "preserve-me"}),
+    )
+    procedure_stages = [
+        _TaskStage(
+            f"procedure-stage-{index}", taskId=procedure_task.id, name=name,
+            order=index, status="RUNNING" if name == "analysis" else "PENDING",
+        )
+        for index, name in enumerate(
+            ("preflight", "analysis", "approval", "optimization", "review", "finalization")
+        )
+    ]
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="procedure-run",
+        report_configuration_id="config-1", existing_task=procedure_task,
+        task_lookup=lambda _: (_ for _ in ()).throw(
+            AssertionError("an adopted Procedure Task must bypass run-key discovery")
+        ),
+        report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda _: procedure_stages, artifact_store=_ArtifactStore(),
+    )
+
+    state = service.start_or_resume({"scope": {}})
+    service.finalize(status="complete")
+
+    assert state.task is procedure_task
+    assert state.report.taskId == procedure_task.id
+    assert _Task.created == []
+    assert _TaskStage.created == []
+    metadata = json.loads(procedure_task.metadata)
+    assert metadata["procedure_key"] == "preserve-me"
+    assert metadata["optimization_run_key"] == "procedure-run"
+    assert metadata["optimization_run_final_status"] == "complete"
+    assert not any(update.get("status") == "COMPLETED" for update in procedure_task.updates)
+
+
+def test_procedure_owned_task_rejects_a_conflicting_run_claim(monkeypatch):
+    from plexus.optimization import run_report
+
+    procedure_task = _Task(
+        identifier="procedure-task",
+        metadata=json.dumps({
+            "optimization_run_key": "another-run",
+            "run_spec": {"scope": {}},
+            "attempt_id": "attempt-1",
+        }),
+    )
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="requested-run",
+        report_configuration_id="config-1", existing_task=procedure_task,
+        artifact_store=_ArtifactStore(),
+    )
+
+    with pytest.raises(ValueError, match="already claimed"):
+        service.start_or_resume({"scope": {}})
+
+
 def test_stage_initialization_failure_marks_the_task_failed_after_publishing_the_report(monkeypatch):
     from plexus.optimization import run_report
 

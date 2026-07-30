@@ -10433,6 +10433,7 @@ class PlexusRuntimeModule:
         from plexus.chat import ChatMessageActionService
         from plexus.cli.shared.client_utils import create_client
         from plexus.dashboard.api.models.account import Account
+        from plexus.dashboard.api.models.task import Task
         from plexus.optimization.portfolio_run import (
             OptimizationPortfolioRunner,
             PortfolioRunDependencies,
@@ -10445,6 +10446,14 @@ class PlexusRuntimeModule:
         account_id = str(args.get("account_id") or "").strip()
         if not account_id:
             raise ValueError("optimization.portfolio_run requires account_id")
+        procedure_task_id = str(self._runtime_context.get("task_id") or "").strip()
+
+        def report_request(request: Mapping[str, Any]) -> dict[str, Any]:
+            return {
+                **dict(request),
+                **({"procedure_task_id": procedure_task_id} if procedure_task_id else {}),
+            }
+
         client = None
         if self._optimization_report_service_factory is None:
             client = create_client()
@@ -10452,16 +10461,25 @@ class PlexusRuntimeModule:
                 raise RuntimeError("optimization.portfolio_run requires an authenticated dashboard client")
             account = Account.get_by_id(account_id, client)
             dashboard_base_url = dashboard_base_url_from_account_settings(account.settings)
-            report_service_factory = lambda run_key, request: OptimizationRunReportService(
-                client=client,
-                account_id=account_id,
-                run_key=run_key,
-                report_configuration_id=request.get("report_configuration_id"),
-                dashboard_base_url=dashboard_base_url,
-            )
+            def report_service_factory(run_key, request):
+                existing_task = None
+                if procedure_task_id:
+                    existing_task = Task.get_by_id(procedure_task_id, client)
+                    if existing_task is None:
+                        raise RuntimeError(
+                            "optimization.portfolio_run Procedure Task was not found"
+                        )
+                return OptimizationRunReportService(
+                    client=client,
+                    account_id=account_id,
+                    run_key=run_key,
+                    report_configuration_id=request.get("report_configuration_id"),
+                    dashboard_base_url=dashboard_base_url,
+                    existing_task=existing_task,
+                )
         else:
             report_service_factory = lambda run_key, request: self._optimization_report_service_factory(
-                account_id, run_key, request
+                account_id, run_key, report_request(request)
             )
 
         action_service = (

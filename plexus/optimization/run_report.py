@@ -829,6 +829,7 @@ class OptimizationRunReportService:
         run_key: str,
         report_configuration_id: Optional[str] = None,
         dashboard_base_url: Optional[str] = None,
+        existing_task: Any = None,
         now: Callable[[], datetime] = _utc_now,
         task_lookup: Optional[Callable[[str], Any]] = None,
         report_lookup: Optional[Callable[[Any], Any]] = None,
@@ -846,6 +847,8 @@ class OptimizationRunReportService:
         self.run_key = run_key
         self.report_configuration_id = report_configuration_id
         self.dashboard_base_url = _normalize_dashboard_base_url(dashboard_base_url)
+        self._existing_task = existing_task
+        self._uses_existing_task = existing_task is not None
         self.now = now
         self._task_lookup = task_lookup or self._find_task
         self._report_lookup = report_lookup or self._find_report
@@ -867,16 +870,36 @@ class OptimizationRunReportService:
         operator_identity = optimization_operator_identity(
             scope=run_spec.get("scope") if isinstance(run_spec, Mapping) else None,
         )
-        task = self._task_lookup(self.run_key)
+        task = self._existing_task if self._uses_existing_task else self._task_lookup(self.run_key)
         created_new_attempt = False
         predecessor: dict[str, Any] = {}
         if task is not None:
             existing_metadata = _metadata(getattr(task, "metadata", {}))
+            existing_run_key = str(existing_metadata.get("optimization_run_key") or "")
+            if self._uses_existing_task and existing_run_key and existing_run_key != self.run_key:
+                raise ValueError("existing Procedure Task is already claimed by another optimization run")
+            if self._uses_existing_task and not existing_metadata.get("optimization_run_key"):
+                if str(getattr(task, "accountId", self.account_id)) != self.account_id:
+                    raise ValueError("existing Procedure Task belongs to a different account")
+                attempt_id = self._attempt_id_factory()
+                if not isinstance(attempt_id, str) or not attempt_id:
+                    raise ValueError("attempt_id_factory must return a nonempty string")
+                existing_metadata.update({
+                    "optimization_run_key": self.run_key,
+                    "attempt_id": attempt_id,
+                    "lifecycle_version": LIFECYCLE_VERSION,
+                    "run_spec": dict(run_spec),
+                    "operator_identity": operator_identity.as_dict(),
+                })
+                task.update(metadata=json.dumps(existing_metadata))
+                created_new_attempt = True
             existing_spec = existing_metadata.get("run_spec")
             if isinstance(existing_spec, Mapping) and not _same_run_spec(existing_spec, run_spec):
                 raise ValueError("a run key cannot be reused with a different frozen run specification")
             final_status = str(existing_metadata.get("optimization_run_final_status") or "").lower()
             if str(getattr(task, "status", "")).upper() == "FAILED" or final_status in {"failed", "blocked"}:
+                if self._uses_existing_task:
+                    raise ValueError("a terminal Procedure Task cannot be reused for another optimization attempt")
                 previous_report = self._report_lookup(task)
                 predecessor = {
                     "previous_attempt_id": existing_metadata.get("attempt_id"),
@@ -940,7 +963,11 @@ class OptimizationRunReportService:
                         "running", None, identity=operator_identity,
                     ),
                 )
-            stages = self._ensure_fixed_stages(task)
+            stages = (
+                list(self._stage_lookup(task))
+                if self._uses_existing_task
+                else self._ensure_fixed_stages(task)
+            )
             blocks = self._ensure_fixed_blocks(report)
             self._state = OptimizationRunReportState(
                 task=task, report=report, blocks=blocks,
@@ -952,7 +979,11 @@ class OptimizationRunReportService:
                 (stage for stage in stages if str(getattr(stage, "status", "")).upper() == "RUNNING"),
                 stages[0] if stages else None,
             )
-            if running_stage is not None and getattr(task, "currentStageId", None) != running_stage.id:
+            if (
+                not self._uses_existing_task
+                and running_stage is not None
+                and getattr(task, "currentStageId", None) != running_stage.id
+            ):
                 task.update(currentStageId=running_stage.id)
             self._ensure_initial_envelopes(self._state)
         except Exception as exc:
@@ -1136,12 +1167,17 @@ class OptimizationRunReportService:
                 self._latest_revision(state.report),
                 identity=state.operator_identity,
             ))
-            self._complete_all_stages()
-            state.task.update(
-                status="COMPLETED",
-                completedAt=_iso(self.now()),
-                metadata=json.dumps(task_metadata),
-            )
+            if self._uses_existing_task:
+                # The outer Tactus procedure remains the lifecycle authority
+                # for its Task and coarse stages.
+                state.task.update(metadata=json.dumps(task_metadata))
+            else:
+                self._complete_all_stages()
+                state.task.update(
+                    status="COMPLETED",
+                    completedAt=_iso(self.now()),
+                    metadata=json.dumps(task_metadata),
+                )
             return state
         except Exception as exc:
             self.fail(f"Failed to finalize report: {exc}")
@@ -1169,6 +1205,8 @@ class OptimizationRunReportService:
         return state
 
     def _advance_stage_for_milestone(self, milestone: str) -> None:
+        if self._uses_existing_task:
+            return
         target_name = _MILESTONE_STAGE.get(str(milestone))
         if target_name is None:
             return
@@ -1198,6 +1236,8 @@ class OptimizationRunReportService:
             state.task.update(currentStageId=target.id)
 
     def _complete_all_stages(self) -> None:
+        if self._uses_existing_task:
+            return
         state = self._require_state()
         completed_at = self.now()
         for stage in sorted(state.stages.values(), key=lambda item: int(getattr(item, "order", 0))):
@@ -1212,6 +1252,8 @@ class OptimizationRunReportService:
 
     def _fail_active_stage(self, message: str) -> None:
         """Best-effort stage failure; the Task remains the canonical signal."""
+        if self._uses_existing_task:
+            return
         state = self._require_state()
         ordered = sorted(state.stages.values(), key=lambda item: int(getattr(item, "order", 0)))
         active = next(

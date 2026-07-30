@@ -2747,6 +2747,7 @@ def _rank_inventory_card(card_id: str, score_id: str, champion_version: str) -> 
 
 def test_default_optimization_portfolio_run_composes_existing_operations_into_one_waiting_report_without_dispatching():
     calls: list[tuple[str, dict]] = []
+    report_factory_requests: list[dict] = []
 
     class ActionService:
         def __init__(self):
@@ -2792,13 +2793,16 @@ def test_default_optimization_portfolio_run_composes_existing_operations_into_on
             return value(args) if callable(value) else value
         return invoke
 
+    def report_factory(account_id, run_key, request):
+        assert (account_id, run_key) == ("account-opaque", "report-run-opaque")
+        report_factory_requests.append(request)
+        return report
+
     module = execute.PlexusRuntimeModule(
         FastMCP("test-default-optimization-portfolio-run"),
         trace_id="procedure-opaque",
-        runtime_context={"account_id": "account-opaque"},
-        optimization_report_service_factory=lambda account_id, run_key, _request: (
-            report if (account_id, run_key) == ("account-opaque", "report-run-opaque") else None
-        ),
+        runtime_context={"account_id": "account-opaque", "task_id": "procedure-task-opaque"},
+        optimization_report_service_factory=report_factory,
         optimization_action_service_factory=lambda _client: action_service,
         optimization_handlers={
             "rank": handler("rank", {
@@ -2827,6 +2831,7 @@ def test_default_optimization_portfolio_run_composes_existing_operations_into_on
         "started", "ranking", "assessment", "diagnosis", "approval",
     ]
     assert all(row[1] == "procedure-opaque" for row in action_service.created)
+    assert report_factory_requests[0]["procedure_task_id"] == "procedure-task-opaque"
 
 
 def test_default_portfolio_runtime_fails_closed_when_an_advisory_action_has_no_chat_message_authority():
@@ -2917,6 +2922,10 @@ def test_default_portfolio_runtime_builds_chat_message_authority_from_the_authen
             return None
 
     monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    monkeypatch.setattr(
+        "plexus.dashboard.api.models.account.Account.get_by_id",
+        lambda _account_id, _client: SimpleNamespace(settings={}),
+    )
     monkeypatch.setattr("plexus.optimization.run_report.OptimizationRunReportService", ReportService)
     monkeypatch.setattr("plexus.chat.ChatMessageActionService", ActionService)
     assessment = _ready_optimization_target(
