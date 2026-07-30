@@ -79,18 +79,33 @@ Add to your `.cursor/mcp.json`:
 }
 ```
 
-## .claude Directory Structure
+## Repository Agent Skills and Specialized Agents
 
-Plexus uses the `.claude` directory to define standardized behaviors for AI agents.
+Plexus uses the repository-owned `skills/` directory as the general agent-skills standard. Each skill is a portable `SKILL.md` package with optional resources and host metadata. The `.claude/agents/` directory remains available for legacy and Plexus-specific specialist personas.
 
-### Skills (`/skills/`)
-Skills are reusable definitions of **how** to perform specific tasks. They provide the "muscle memory" for agents.
+### Software delivery team (`/skills/`)
 
-- **plexus-score-setup**: Standard workflow for creating scorecard/score records via the API. Ensures all metadata is captured correctly before creation.
-- **plexus-guidelines**: Formatting and validation rules for creating high-quality guidelines documents.
+Use `software-delivery-team` for coordinated product-to-engineering delivery. In the ordinary human-facing session, the active agent is the Product Owner and delivery coordinator; it delegates technical ownership to an Engineering Lead rather than spawning a second Product Owner.
 
-### Agents (`/.claude/agents/`)
-Agents are specialized personas with specific permissions, tools, and instructions for complex workflows.
+- **software-delivery-team**: Shared role model, handoffs, spawn-proxy behavior, parallelism, and acceptance flow.
+- **product-owner**: Human-facing product intent, scope, criteria, coordination, and product acceptance.
+- **engineering-lead**: Technical investigation, planning, Coding/Review delegation, integration, and technical acceptance.
+- **coding-agent**: Bounded implementation and validation under an Engineering Lead.
+- **review-agent**: Independent, read-only evaluation and severity-classified findings.
+
+When an agent host cannot spawn nested children, the active Product Owner may execute Lead-authored spawn requests as a transport proxy. The Engineering Lead remains the logical manager and receives the child reports.
+
+### Operational skills (`/skills/`)
+
+- **score-setup**: Create scorecard and score metadata records via the supported runtime APIs.
+- **guidelines**: Create and validate classifier guidelines documents.
+- **score-code-editor**: Edit and validate Tactus score code through the supported workflow.
+- **score-optimizer**: Run, debug, and steer feedback-alignment optimization.
+- **client-redaction**: Scan and remediate sensitive client references under repository confidentiality rules.
+
+### Legacy and specialized agents (`/.claude/agents/`)
+
+These are specialized personas with specific permissions, tools, and instructions for complex Plexus workflows.
 
 - **plexus-score-config-updater**: The **only** agent authorized to touch score YAML configurations. It follows a strict safe-deployment protocol (Load Docs -> Pull -> Edit -> Validate -> Push).
 - **plexus-score-guidelines-updater**: Specialist for writing and refining score guidelines based on policy documents.
