@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
+from pathlib import Path
 from typing import Any, Mapping, Optional, Protocol, Sequence
 from urllib.parse import urlparse
 
@@ -19,7 +21,7 @@ import requests
 
 
 _TICKET_MUTATION = """
-mutation CreateArtifactTransferTickets($requests: [ArtifactTransferRequest!]!) {
+mutation CreateArtifactTransferTickets($requests: [ArtifactTransferRequestInput!]!) {
   createArtifactTransferTickets(requests: $requests) {
     objectKey
     method
@@ -129,6 +131,15 @@ class ArtifactTransferRequest:
 
 
 @dataclass(frozen=True)
+class ArtifactUpload:
+    """A verified write request and its bytes for one batched authorization."""
+
+    request: ArtifactTransferRequest
+    content: bytes
+    existing_metadata: Optional[Mapping[str, Any]] = None
+
+
+@dataclass(frozen=True)
 class ArtifactTransferTicket:
     """A short-lived HTTPS transfer authorization returned by GraphQL."""
 
@@ -196,6 +207,7 @@ class GraphQLArtifactStore:
         *,
         http_session: Optional[HTTPSession] = None,
         timeout_seconds: float = 30.0,
+        ca_bundle: Optional[str] = None,
     ) -> None:
         if not hasattr(executor, "execute") or not callable(executor.execute):
             raise TypeError("executor must provide an execute(query, variables) method")
@@ -204,6 +216,15 @@ class GraphQLArtifactStore:
         self._executor = executor
         self._http_session = http_session or requests.Session()
         self._timeout_seconds = timeout_seconds
+        configured_ca_bundle = ca_bundle if ca_bundle is not None else os.getenv(
+            "PLEXUS_ARTIFACT_CA_BUNDLE"
+        )
+        self._ca_bundle: Optional[str] = None
+        if configured_ca_bundle and configured_ca_bundle.strip():
+            bundle_path = Path(configured_ca_bundle).expanduser()
+            if not bundle_path.is_file():
+                raise ValueError("configured artifact CA bundle does not exist")
+            self._ca_bundle = str(bundle_path.resolve())
 
     def request_tickets(
         self, requests_to_authorize: Sequence[ArtifactTransferRequest]
@@ -244,28 +265,72 @@ class GraphQLArtifactStore:
         existing_metadata: Optional[Mapping[str, Any]] = None,
     ) -> dict[str, Any]:
         """Upload verified bytes, then return metadata for a caller to persist."""
-        if request.operation != "WRITE":
-            raise ValueError("upload_bytes requires a WRITE request")
-        payload = self._require_bytes(content)
-        self._verify_content(request, payload)
-        ticket, _ = self._transfer_with_one_expiry_retry(request, payload)
-        return self.build_metadata(
-            existing_metadata=existing_metadata,
-            object_key=ticket.object_key,
-            sha256=request.sha256,
-            size_bytes=request.size_bytes,
-            content_type=request.content_type,
-        )
+        return self.upload_batch(
+            [ArtifactUpload(request, content, existing_metadata)]
+        )[0]
+
+    def upload_batch(self, uploads: Sequence[ArtifactUpload]) -> list[dict[str, Any]]:
+        """Authorize up to twenty verified writes with one ticket request.
+
+        An explicit signed-URL expiry may refresh only its individual ticket once;
+        no other authorization, transfer, or integrity failure is retried.
+        """
+        if not uploads:
+            raise ValueError("artifact upload batches must not be empty")
+        if not all(isinstance(upload, ArtifactUpload) for upload in uploads):
+            raise TypeError("upload batches must contain ArtifactUpload instances")
+
+        validated_uploads: list[tuple[ArtifactUpload, bytes]] = []
+        for upload in uploads:
+            if upload.request.operation != "WRITE":
+                raise ValueError("upload_batch requires WRITE requests")
+            payload = self._require_bytes(upload.content)
+            self._verify_content(upload.request, payload)
+            validated_uploads.append((upload, payload))
+
+        tickets = self.request_tickets([upload.request for upload, _ in validated_uploads])
+        metadata: list[dict[str, Any]] = []
+        for (upload, payload), ticket in zip(validated_uploads, tickets):
+            completed_ticket, _ = self._transfer_ticket_with_one_expiry_retry(
+                upload.request,
+                ticket,
+                payload,
+            )
+            metadata.append(
+                self.build_metadata(
+                    existing_metadata=upload.existing_metadata,
+                    object_key=completed_ticket.object_key,
+                    sha256=upload.request.sha256,
+                    size_bytes=upload.request.size_bytes,
+                    content_type=upload.request.content_type,
+                )
+            )
+        return metadata
 
     def download_bytes(self, request: ArtifactTransferRequest) -> bytes:
         """Download and verify bytes; no unchecked or alternate source is returned."""
-        if request.operation != "READ":
-            raise ValueError("download_bytes requires a READ request")
-        _ticket, content = self._transfer_with_one_expiry_retry(request, None)
-        if content is None:
-            raise ArtifactTransferError("HTTPS download did not return content")
-        self._verify_content(request, content)
-        return content
+        return self.download_batch([request])[0]
+
+    def download_batch(self, requests_to_download: Sequence[ArtifactTransferRequest]) -> list[bytes]:
+        """Authorize up to twenty reads with one ticket request and verify each."""
+        if not requests_to_download:
+            raise ValueError("artifact download batches must not be empty")
+        if any(request.operation != "READ" for request in requests_to_download):
+            raise ValueError("download_batch requires READ requests")
+
+        tickets = self.request_tickets(requests_to_download)
+        content_items: list[bytes] = []
+        for request, ticket in zip(requests_to_download, tickets):
+            _completed_ticket, content = self._transfer_ticket_with_one_expiry_retry(
+                request,
+                ticket,
+                None,
+            )
+            if content is None:
+                raise ArtifactTransferError("HTTPS download did not return content")
+            self._verify_content(request, content)
+            content_items.append(content)
+        return content_items
 
     @staticmethod
     def build_metadata(
@@ -292,6 +357,14 @@ class GraphQLArtifactStore:
         self, request: ArtifactTransferRequest, payload: Optional[bytes]
     ) -> tuple[ArtifactTransferTicket, Optional[bytes]]:
         ticket = self.request_tickets([request])[0]
+        return self._transfer_ticket_with_one_expiry_retry(request, ticket, payload)
+
+    def _transfer_ticket_with_one_expiry_retry(
+        self,
+        request: ArtifactTransferRequest,
+        ticket: ArtifactTransferTicket,
+        payload: Optional[bytes],
+    ) -> tuple[ArtifactTransferTicket, Optional[bytes]]:
         try:
             return self._transfer(ticket, payload)
         except _ExpiredSignedURL:
@@ -307,13 +380,14 @@ class GraphQLArtifactStore:
         if ticket.is_expired(datetime.now(timezone.utc)):
             raise _ExpiredSignedURL("signed URL expired before transfer")
         try:
-            response = self._http_session.request(
-                ticket.method,
-                ticket.url,
-                headers=ticket.required_headers,
-                data=payload,
-                timeout=self._timeout_seconds,
-            )
+            request_kwargs: dict[str, Any] = {
+                "headers": ticket.required_headers,
+                "data": payload,
+                "timeout": self._timeout_seconds,
+            }
+            if self._ca_bundle:
+                request_kwargs["verify"] = self._ca_bundle
+            response = self._http_session.request(ticket.method, ticket.url, **request_kwargs)
         except requests.RequestException as exc:
             raise ArtifactTransferError("HTTPS artifact transfer failed") from exc
         except Exception as exc:

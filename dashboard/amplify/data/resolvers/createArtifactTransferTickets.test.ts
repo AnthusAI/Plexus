@@ -16,6 +16,7 @@ jest.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: jest.fn() }), 
 const mockGetSignedUrl = jest.requireMock('@aws-sdk/s3-request-presigner').getSignedUrl as jest.Mock;
 const dynamoSend = jest.requireMock('@aws-sdk/client-dynamodb').DynamoDBClient.mock.results[0].value.send as jest.Mock;
 const mockGetItemCommand = jest.requireMock('@aws-sdk/client-dynamodb').GetItemCommand as jest.Mock;
+const mockPutObjectCommand = jest.requireMock('@aws-sdk/client-s3').PutObjectCommand as jest.Mock;
 
 const sha256 = 'a'.repeat(64);
 
@@ -60,7 +61,6 @@ describe('createArtifactTransferTickets', () => {
       requiredHeaders: {
         'content-type': 'text/csv',
         'content-length': '42',
-        'x-amz-checksum-sha256': Buffer.from(sha256, 'hex').toString('base64'),
       },
       expiresAt: expect.any(String),
     }]);
@@ -71,6 +71,9 @@ describe('createArtifactTransferTickets', () => {
       Key: { id: { S: 'dataset-1' } },
       ConsistentRead: true,
     });
+    expect(mockPutObjectCommand).toHaveBeenCalledWith(expect.objectContaining({
+      ChecksumSHA256: Buffer.from(sha256, 'hex').toString('base64'),
+    }));
   });
 
   it('issues a read ticket to an authenticated IAM workload', async () => {
@@ -121,13 +124,14 @@ describe('createArtifactTransferTickets', () => {
   it('normalizes an uppercase SHA-256 checksum before issuing a write ticket', async () => {
     dynamoSend.mockResolvedValue({ Item: { id: { S: 'dataset-1' }, accountId: { S: 'account-1' } } });
 
-    await expect(handler(event([{
+    const result = await handler(event([{
       operation: 'WRITE', resourceType: 'DATA_SET', resourceId: 'dataset-1', artifactType: 'DATASET_FILE', filename: 'training.csv', contentType: 'text/csv', sizeBytes: 42, sha256: sha256.toUpperCase(),
-    }]) as any)).resolves.toEqual([expect.objectContaining({
-      requiredHeaders: expect.objectContaining({
-        'x-amz-checksum-sha256': Buffer.from(sha256, 'hex').toString('base64'),
-      }),
-    })]);
+    }]) as any);
+
+    expect(result[0].requiredHeaders).not.toHaveProperty('x-amz-checksum-sha256');
+    expect(mockPutObjectCommand).toHaveBeenCalledWith(expect.objectContaining({
+      ChecksumSHA256: Buffer.from(sha256, 'hex').toString('base64'),
+    }));
   });
 
   it('preserves safe nested task artifact names while deriving the account-scoped key', async () => {

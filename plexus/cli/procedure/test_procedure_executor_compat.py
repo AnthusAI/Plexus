@@ -2040,6 +2040,75 @@ async def test_execute_tactus_marks_stages_failed_when_runtime_returns_failure(m
 
 
 @pytest.mark.asyncio
+async def test_execute_tactus_preserves_persisted_human_wait_without_failing_stages(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    completed = []
+    failed = []
+
+    class _WaitingStorage:
+        def state_set(self, *_args, **_kwargs):
+            return None
+
+        def load_procedure_metadata(self, _procedure_id):
+            return SimpleNamespace(
+                status="WAITING_FOR_HUMAN",
+                waiting_on_message_id="pending-message-1",
+            )
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeWithFailureResult)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: _WaitingStorage(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._advance_task_to_running_stage",
+        lambda *_a, **_k: None,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._complete_all_task_stages",
+        lambda _client, task_id: completed.append(task_id),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._fail_all_task_stages",
+        lambda _client, task_id, error_message="": failed.append((task_id, error_message)),
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-stage-waiting",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  return { success = false }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={},
+        _task_id_for_stage_tracking="task-waiting",
+    )
+
+    assert result["success"] is False
+    assert result["status"] == "WAITING_FOR_HUMAN"
+    assert result["waiting_on_message_id"] == "pending-message-1"
+    assert "error" not in result
+    assert completed == []
+    assert failed == []
+
+
+@pytest.mark.asyncio
 async def test_execute_tactus_marks_stages_failed_when_runtime_returns_wrapped_failure(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 

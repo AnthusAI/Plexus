@@ -185,7 +185,7 @@ class TestLatestVersionIntegration:
             'championVersionId': self.champion_version_id
         }]
 
-    @patch('plexus.cli.evaluation.evaluations.PlexusDashboardClient')
+    @patch('plexus.cli.evaluation.evaluations.create_client')
     @patch('plexus.cli.evaluation.evaluations.get_latest_score_version')
     @patch('plexus.cli.evaluation.evaluations.load_scorecard_from_api')
     def test_latest_flag_resolves_version(self, mock_load, mock_get_latest, mock_client_class):
@@ -317,7 +317,7 @@ class TestScoreVersionAssociation:
 class TestLatestVersionErrorHandling:
     """Test error handling in latest version resolution."""
     
-    @patch('plexus.cli.evaluation.evaluations.PlexusDashboardClient') 
+    @patch('plexus.cli.evaluation.evaluations.create_client')
     @patch('plexus.cli.evaluation.evaluations.get_latest_score_version')
     @patch('plexus.cli.evaluation.evaluations.load_scorecard_from_api')
     def test_latest_flag_fallback_on_error(self, mock_load, mock_get_latest, mock_client_class):

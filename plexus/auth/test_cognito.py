@@ -74,6 +74,19 @@ def test_loopback_callback_reports_an_occupied_registered_port(config):
         listener.close()
 
 
+def test_loopback_callback_does_not_wait_for_reverse_dns(config, monkeypatch):
+    service = CognitoAuthService(config=config, credential_store=Mock())
+    monkeypatch.setattr(
+        socket,
+        "getfqdn",
+        Mock(side_effect=AssertionError("loopback login must not perform reverse DNS")),
+    )
+
+    listener = service._bind_loopback_callback("state")
+
+    listener.close()
+
+
 def test_login_binds_loopback_listener_before_opening_browser(config):
     listener = Mock()
     listener.wait.return_value = "authorization-code"

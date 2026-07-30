@@ -10,7 +10,7 @@ from plexus.cli.shared import client_utils
 pytestmark = pytest.mark.unit
 
 
-def test_create_client_prefers_explicit_runtime_api_credentials(monkeypatch):
+def test_create_client_uses_explicit_cognito_locally_without_api_key(monkeypatch):
     monkeypatch.setattr(client_utils, "load_config", lambda: None)
     monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "acct-key")
     monkeypatch.setenv("PLEXUS_API_URL", "https://runtime.example/graphql")
@@ -21,9 +21,10 @@ def test_create_client_prefers_explicit_runtime_api_credentials(monkeypatch):
     captured = {}
 
     class _StubClient:
-        def __init__(self, api_url=None, api_key=None, context=None):
+        def __init__(self, api_url=None, api_key=None, context=None, auth_mode=None):
             captured["api_url"] = api_url
             captured["api_key"] = api_key
+            captured["auth_mode"] = auth_mode
             captured["account_key"] = context.account_key if context else None
             self.api_url = api_url
             self.context = context
@@ -33,24 +34,27 @@ def test_create_client_prefers_explicit_runtime_api_credentials(monkeypatch):
     client_utils.create_client()
 
     assert captured["api_url"] == "https://runtime.example/graphql"
-    assert captured["api_key"] == "runtime-key"
+    assert captured["api_key"] is None
+    assert captured["auth_mode"] == "cognito"
     assert captured["account_key"] == "acct-key"
 
 
-def test_create_client_uses_frontend_defaults_when_runtime_unset(monkeypatch):
+def test_create_client_uses_iam_for_lambda_without_api_key(monkeypatch):
     monkeypatch.setattr(client_utils, "load_config", lambda: None)
     monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "acct-key")
     monkeypatch.delenv("PLEXUS_API_URL", raising=False)
-    monkeypatch.delenv("PLEXUS_API_KEY", raising=False)
+    monkeypatch.setenv("PLEXUS_API_KEY", "runtime-key")
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "worker")
     monkeypatch.setenv("NEXT_PUBLIC_PLEXUS_API_URL", "https://frontend.example/graphql")
     monkeypatch.setenv("NEXT_PUBLIC_PLEXUS_API_KEY", "frontend-key")
 
     captured = {}
 
     class _StubClient:
-        def __init__(self, api_url=None, api_key=None, context=None):
+        def __init__(self, api_url=None, api_key=None, context=None, auth_mode=None):
             captured["api_url"] = api_url
             captured["api_key"] = api_key
+            captured["auth_mode"] = auth_mode
             captured["account_key"] = context.account_key if context else None
             self.api_url = api_url
             self.context = context
@@ -60,8 +64,36 @@ def test_create_client_uses_frontend_defaults_when_runtime_unset(monkeypatch):
     client_utils.create_client()
 
     assert captured["api_url"] == "https://frontend.example/graphql"
-    assert captured["api_key"] == "frontend-key"
+    assert captured["api_key"] is None
+    assert captured["auth_mode"] == "iam"
     assert captured["account_key"] == "acct-key"
+
+
+def test_create_client_discovers_graphql_url_from_amplify_outputs(monkeypatch, tmp_path):
+    output = tmp_path / "amplify_outputs.json"
+    output.write_text(
+        '{"data":{"url":"https://sandbox.example/graphql"}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(client_utils, "load_config", lambda: None)
+    monkeypatch.setattr(client_utils, "_amplify_output_paths", lambda: (output,))
+    monkeypatch.delenv("PLEXUS_API_URL", raising=False)
+    monkeypatch.delenv("NEXT_PUBLIC_PLEXUS_API_URL", raising=False)
+    captured = {}
+
+    class _StubClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.api_url = kwargs["api_url"]
+            self.context = kwargs["context"]
+
+    monkeypatch.setattr(client_utils, "PlexusDashboardClient", _StubClient)
+
+    client_utils.create_client()
+
+    assert captured["api_url"] == "https://sandbox.example/graphql"
+    assert captured["auth_mode"] == "cognito"
+    assert captured["api_key"] is None
 
 
 def test_cli_startup_preserves_explicit_runtime_env_over_dotenv(tmp_path):
@@ -125,11 +157,12 @@ def test_create_client_sets_actor_context_from_env(monkeypatch):
     captured = {}
 
     class _StubClient:
-        def __init__(self, api_url=None, api_key=None, context=None):
+        def __init__(self, api_url=None, api_key=None, context=None, auth_mode=None):
             captured["actor_user_id"] = context.actor_user_id if context else None
             captured["actor_type"] = context.actor_type if context else None
             captured["actor_key"] = context.actor_key if context else None
             captured["actor_source"] = context.actor_source if context else None
+            captured["auth_mode"] = auth_mode
             self.api_url = api_url
             self.context = context
 
@@ -140,3 +173,44 @@ def test_create_client_sets_actor_context_from_env(monkeypatch):
     assert captured["actor_type"] == "agent"
     assert captured["actor_key"] == "execute_tactus"
     assert captured["actor_source"] == "execute_tactus"
+    assert captured["auth_mode"] == "cognito"
+
+
+def test_create_client_honors_explicit_api_key_mode(monkeypatch):
+    monkeypatch.setattr(client_utils, "load_config", lambda: None)
+    monkeypatch.setenv("PLEXUS_API_URL", "https://runtime.example/graphql")
+    monkeypatch.setenv("PLEXUS_API_KEY", "explicit-key")
+    monkeypatch.setenv("PLEXUS_GRAPHQL_AUTH_MODE", "api_key")
+    captured = {}
+
+    class _StubClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.api_url = kwargs["api_url"]
+            self.context = kwargs["context"]
+
+    monkeypatch.setattr(client_utils, "PlexusDashboardClient", _StubClient)
+    client_utils.create_client()
+
+    assert captured["auth_mode"] == "api_key"
+    assert captured["api_key"] == "explicit-key"
+
+
+def test_create_client_uses_iam_for_ecs_workload(monkeypatch):
+    monkeypatch.setattr(client_utils, "load_config", lambda: None)
+    monkeypatch.setenv("PLEXUS_API_URL", "https://runtime.example/graphql")
+    monkeypatch.setenv("PLEXUS_API_KEY", "must-not-be-used")
+    monkeypatch.setenv("ECS_CONTAINER_METADATA_URI_V4", "http://169.254.170.2/v4")
+    captured = {}
+
+    class _StubClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.api_url = kwargs["api_url"]
+            self.context = kwargs["context"]
+
+    monkeypatch.setattr(client_utils, "PlexusDashboardClient", _StubClient)
+    client_utils.create_client()
+
+    assert captured["auth_mode"] == "iam"
+    assert captured["api_key"] is None

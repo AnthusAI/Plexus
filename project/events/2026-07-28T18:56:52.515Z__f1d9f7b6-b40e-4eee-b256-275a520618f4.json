@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f1d9f7b6-b40e-4eee-b256-275a520618f4",
+  "issue_id": "plx-6b7f11e5-731f-446a-b739-e5587db6f025",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T18:56:52.515Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Count and clear persisted checkpoints through the storage adapter",
+    "description": "## Problem\n\nThe continuation reset path treats the GraphQL artifact pointer stored in Procedure metadata as if it were an inline checkpoint collection. It reports the number of pointer fields as checkpoints and clears the pointer without using the supported storage protocol.\n\n## Expected behavior\n\nGiven procedure checkpoints are stored as authorized artifacts\nWhen an operator resets checkpoints while preserving State\nThen the command counts actual execution-log entries\nAnd clears them through the storage adapter\nAnd preserves State, Lua state, dashboard state, optimizer artifacts, and integrity metadata.\n\n## Acceptance\n\n- A behavior test first demonstrates that pointer-field count is not checkpoint count.\n- Reset reports the actual number of execution-log entries.\n- State remains unchanged and the saved execution log is empty.\n- No inline or direct-storage fallback is introduced.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": []
+  }
+}

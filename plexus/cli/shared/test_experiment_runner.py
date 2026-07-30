@@ -273,6 +273,7 @@ async def test_run_procedure_persists_compacted_task_output_attachment(monkeypat
             "format_type": "json",
             "existing_attached_files": None,
             "status": "completed",
+            "client": fake_client,
         }
     ]
     assert fake_task.update_calls[-1]["output"] == '{"output_compacted": true, "output_attachment": "tasks/task-123/output.json"}'
@@ -280,6 +281,34 @@ async def test_run_procedure_persists_compacted_task_output_attachment(monkeypat
     assert fake_task.update_calls[-1]["dispatchStatus"] == "LOCAL"
     assert fake_task.update_calls[-1]["workerNodeId"] is None
     assert json.loads(fake_task.update_calls[-1]["metadata"])["dispatch_mode"] == "local"
+
+
+@pytest.mark.asyncio
+async def test_run_procedure_fails_when_required_task_output_artifact_cannot_persist(monkeypatch):
+    fake_task = _FakeTask()
+    fake_client = _FakeClient()
+    _patch_tracker(monkeypatch, fake_task)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._fail_all_task_stages",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.persist_task_output_artifact",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("ticket rejected")),
+    )
+
+    async def _run_impl(_procedure_id, **_options):
+        return {"success": True, "status": "completed", "message": "ok"}
+
+    _patch_service(monkeypatch, _run_impl)
+
+    result = await run_procedure_with_task_tracking(
+        procedure_id="proc-123", client=fake_client, account_id="acct-123",
+    )
+
+    assert result["status"] == "FAILED"
+    assert "Required task output artifact" in result["error"]
+    assert fake_task.update_calls[-1]["status"] == "FAILED"
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,37 @@
+{
+  "id": "plx-01d0a593-b3b4-4252-b3c8-0f36479f5633",
+  "title": "Run credential-free artifact persistence in local Kubernetes",
+  "description": "As a Plexus platform engineer, I want the local Kubernetes stack to execute credential-free procedure and optimizer artifact persistence, so that the repeatable public demo validates the same supported artifact boundary as hosted deployments.\n\nFeature: Local Kubernetes artifact transfer compatibility\n\nScenario: Procedure and optimizer artifacts use authorized transfer tickets\nGiven Plexus is deployed in Docker Desktop Kubernetes with the trusted local control plane and persistent local object storage\nWhen the public demo runs procedure persistence, optimizer output, interruption recovery, and retained verification\nThen each migrated artifact is authorized through the existing GraphQL transfer-ticket operation\nAnd bytes are transferred over verified HTTPS\nAnd no direct-S3, insecure transport, authentication, or storage fallback is used for migrated consumers\nAnd evaluation consumers not migrated by PR 513 remain explicitly identified as out of scope",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8c942288-c9b6-4935-b232-76480e85d75a",
+      "author": "ryan.porter",
+      "text": "Additional compatibility scenario found by the live strict suite:\n\nScenario: Resume optimization from the demo feedback baseline\nGiven a run-scoped feedback evaluation selected from the retained deterministic seed anchor\nWhen the Kubernetes demo passes that completed evaluation to the optimizer as its recent baseline\nThen the evaluation records explicit feedback_start_at and feedback_end_at bounds, the positive lookback days, and the requested maximum item count\nAnd the optimizer resumes the exact frozen cohort without selecting a new one",
+      "created_at": "2026-07-28T18:55:10.651588Z"
+    },
+    {
+      "id": "97b985b4-5725-47ca-bcae-6b3f197a8666",
+      "author": "ryan.porter",
+      "text": "Additional observable scenario:\n\nScenario: Ticket authorization is visible without leaking artifact details\nGiven a local Kubernetes client requests an authorized artifact transfer ticket\nWhen the private GraphQL proxy issues the ticket\nThen kubectl logs exposes a correlation identifier, request count, and resource types through the proxy application logger\nAnd the log omits signed URLs, object keys, filenames, checksums, resource IDs, and credentials",
+      "created_at": "2026-07-28T20:15:25.434219Z"
+    },
+    {
+      "id": "a2bcaf0f-db96-4aee-9543-6a62e79a5b18",
+      "author": "ryan.porter",
+      "text": "Additional observable scenario:\n\nScenario: Every worker entry point uses explicit local authentication\nGiven the local Helm release configures workers for GraphQL API-key authentication\nWhen the main worker deployment and scheduled procedure-recovery workload start\nThen both receive PLEXUS_GRAPHQL_AUTH_MODE=api_key and the Secret-backed API key\nAnd neither attempts Cognito, IAM, or another authentication fallback",
+      "created_at": "2026-07-28T20:26:46.529333Z"
+    }
+  ],
+  "created_at": "2026-07-28T17:57:47.425636Z",
+  "updated_at": "2026-07-28T20:26:46.529333Z",
+  "closed_at": null,
+  "custom": {}
+}

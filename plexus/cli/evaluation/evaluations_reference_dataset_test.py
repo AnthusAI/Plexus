@@ -781,7 +781,7 @@ def test_fetch_accuracy_evaluation_summary_for_json_extracts_persisted_fields():
         ),
     )
 
-    with patch("plexus.cli.evaluation.evaluations.PlexusDashboardClient", return_value=client), patch(
+    with patch("plexus.cli.evaluation.evaluations.create_client", return_value=client), patch(
         "plexus.cli.evaluation.evaluations.DashboardEvaluation.get_by_id",
         return_value=evaluation,
     ):
@@ -805,7 +805,7 @@ def test_fetch_accuracy_evaluation_summary_for_json_extracts_persisted_fields():
 
 
 def test_fetch_accuracy_evaluation_summary_for_json_returns_empty_on_lookup_error():
-    with patch("plexus.cli.evaluation.evaluations.PlexusDashboardClient"), patch(
+    with patch("plexus.cli.evaluation.evaluations.create_client"), patch(
         "plexus.cli.evaluation.evaluations.DashboardEvaluation.get_by_id",
         side_effect=RuntimeError("lookup failed"),
     ):

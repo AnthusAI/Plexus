@@ -27,6 +27,7 @@ import boto3
 import pytest
 
 from plexus.storage.graphql_artifact_store import (
+    ArtifactUpload,
     ArtifactAuthorizationError,
     ArtifactIntegrityError,
     ArtifactTicketError,
@@ -60,6 +61,21 @@ class FakeHTTPSession:
                 "headers": headers,
                 "data": data,
                 "timeout": timeout,
+            }
+        )
+        return self.responses.pop(0)
+
+
+class FakeCAHTTPSession(FakeHTTPSession):
+    def request(self, method, url, *, headers, data=None, timeout=None, verify=None):
+        self.calls.append(
+            {
+                "method": method,
+                "url": url,
+                "headers": headers,
+                "data": data,
+                "timeout": timeout,
+                "verify": verify,
             }
         )
         return self.responses.pop(0)
@@ -122,6 +138,7 @@ def test_requests_batched_tickets_with_frozen_contract_fields():
         "https://storage.example/second",
     ]
     query, variables = executor.calls[0]
+    assert "$requests: [ArtifactTransferRequestInput!]!" in query
     assert "createArtifactTransferTickets" in query
     for field in ("objectKey", "method", "url", "requiredHeaders", "expiresAt"):
         assert field in query
@@ -179,6 +196,39 @@ def test_upload_transfers_verified_bytes_before_returning_metadata_without_s3(mo
         "size_bytes": len(PAYLOAD),
         "content_type": "application/json",
     }
+
+
+def test_upload_batch_requests_all_tickets_once_before_uploading_each_verified_artifact():
+    second_payload = b"second application-authorized artifact"
+    second_request = ArtifactTransferRequest(
+        operation="WRITE",
+        resource_type="PROCEDURE",
+        resource_id="procedure-1",
+        artifact_type="PROCEDURE_ATTACHMENT",
+        filename="lua_state.json",
+        content_type="application/json",
+        size_bytes=len(second_payload),
+        sha256=hashlib.sha256(second_payload).hexdigest(),
+    )
+    executor = FakeExecutor([[ticket(), ticket(url="https://storage.example/second")]])
+    http = FakeHTTPSession([FakeResponse(200), FakeResponse(200)])
+    store = GraphQLArtifactStore(executor, http_session=http)
+
+    metadata = store.upload_batch(
+        [
+            ArtifactUpload(write_request(), PAYLOAD),
+            ArtifactUpload(second_request, second_payload),
+        ]
+    )
+
+    assert len(executor.calls) == 1
+    assert len(executor.calls[0][1]["requests"]) == 2
+    assert [call["url"] for call in http.calls] == [
+        "https://storage.example/upload",
+        "https://storage.example/second",
+    ]
+    assert metadata[0]["_s3_key"] == "artifacts/report-1/output.json"
+    assert metadata[1]["_s3_key"] == "artifacts/report-1/output.json"
 
 
 def test_decodes_required_headers_returned_as_graphql_awsjson():
@@ -255,6 +305,18 @@ def test_download_checksum_failure_fails_closed_without_retries():
     assert len(http.calls) == 1
 
 
+def test_download_batch_requests_all_tickets_once_and_verifies_each_payload():
+    executor = FakeExecutor([[ticket(method="GET"), ticket(method="GET", url="https://storage.example/second")]])
+    http = FakeHTTPSession([FakeResponse(200, content=PAYLOAD), FakeResponse(200, content=PAYLOAD)])
+    store = GraphQLArtifactStore(executor, http_session=http)
+
+    payloads = store.download_batch([read_request(), read_request()])
+
+    assert payloads == [PAYLOAD, PAYLOAD]
+    assert len(executor.calls) == 1
+    assert len(executor.calls[0][1]["requests"]) == 2
+
+
 def test_upload_rejects_mismatched_declared_bytes_before_requesting_ticket():
     executor = FakeExecutor([])
     store = GraphQLArtifactStore(executor, http_session=FakeHTTPSession([]))
@@ -273,3 +335,22 @@ def test_http_failure_fails_closed_without_inline_or_s3_fallback():
         store.upload_bytes(write_request(), PAYLOAD)
 
     assert len(executor.calls) == 1
+
+
+def test_configured_local_ca_bundle_is_used_for_https_verification(tmp_path, monkeypatch):
+    ca_bundle = tmp_path / "minio-ca.crt"
+    ca_bundle.write_text("test local CA")
+    monkeypatch.setenv("PLEXUS_ARTIFACT_CA_BUNDLE", str(ca_bundle))
+    executor = FakeExecutor([[ticket()]])
+    http = FakeCAHTTPSession([FakeResponse(200)])
+
+    GraphQLArtifactStore(executor, http_session=http).upload_bytes(write_request(), PAYLOAD)
+
+    assert http.calls[0]["verify"] == str(ca_bundle)
+
+
+def test_missing_configured_local_ca_bundle_fails_closed(monkeypatch):
+    monkeypatch.setenv("PLEXUS_ARTIFACT_CA_BUNDLE", "/missing/minio-ca.crt")
+
+    with pytest.raises(ValueError, match="CA bundle"):
+        GraphQLArtifactStore(FakeExecutor([]), http_session=FakeHTTPSession([]))

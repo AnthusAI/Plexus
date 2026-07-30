@@ -220,6 +220,50 @@ def test_claim_scoring_job_is_private_and_idempotent(monkeypatch):
     assert upstream.calls == 0
 
 
+def test_local_artifact_transfer_ticket_mutation_is_handled_without_upstream(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    client, _store, upstream = client_with_fakes(monkeypatch)
+
+    class FakeArtifactTickets:
+        def issue(self, requests):
+            assert requests[0]["resourceId"] == "task-1"
+            return [{
+                "objectKey": "tasks/task-1/output.json",
+                "method": "GET",
+                "url": "https://plexus-local-object-store:9000/signed",
+                "requiredHeaders": {},
+                "expiresAt": "2026-07-28T20:00:00Z",
+            }]
+
+    monkeypatch.setattr(proxy_app, "artifact_tickets", FakeArtifactTickets())
+    response = client.post(
+        "/graphql",
+        json={
+            "query": """
+            mutation Tickets($requests: [ArtifactTransferRequestInput!]!) {
+                createArtifactTransferTickets(requests: $requests) {
+                    objectKey method url requiredHeaders expiresAt
+                }
+            }
+            """,
+            "variables": {"requests": [{
+                "operation": "READ",
+                "resourceType": "TASK",
+                "resourceId": "task-1",
+                "artifactType": "TASK_ATTACHMENT",
+                "filename": "output.json",
+                "contentType": "application/json",
+                "sizeBytes": 42,
+                "sha256": "a" * 64,
+            }]},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["createArtifactTransferTickets"][0]["method"] == "GET"
+    assert upstream.calls == 0
+
+
 def test_control_operation_is_cached(monkeypatch):
     client, _store, upstream = client_with_fakes(monkeypatch)
     payload = {

@@ -20,6 +20,7 @@ def harness() -> DemoHarness:
         output_dir=output_dir,
         promote=os.environ.get("PLEXUS_DEMO_PROMOTE") == "1",
         resume=os.environ.get("PLEXUS_DEMO_RESUME") == "1",
+        interrupt_after_optimizer=os.environ.get("PLEXUS_DEMO_INTERRUPT_AFTER_OPTIMIZER") == "1",
     )
 
 

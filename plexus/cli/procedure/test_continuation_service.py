@@ -1,6 +1,116 @@
 import json
 from types import SimpleNamespace
 
+import boto3
+
+
+def test_prepare_branch_persists_verified_code_attachment_without_s3(monkeypatch):
+    from plexus.cli.procedure import continuation_service as cs
+
+    source = {
+        "id": "source-procedure",
+        "accountId": "account-1",
+        "name": "Source procedure",
+        "code": "name: source\nparams: {}\n",
+        "scorecardId": "scorecard-1",
+        "scoreId": "score-1",
+    }
+    monkeypatch.setattr(cs, "_load_procedure", lambda _client, _id: source)
+    monkeypatch.setattr(
+        cs,
+        "_update_yaml_params",
+        lambda _code, max_iterations, _hint, _target: f"name: branch\ncycles: {max_iterations}\n",
+    )
+    monkeypatch.setattr(
+        boto3,
+        "client",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("S3 must not be used")),
+    )
+
+    class FakeArtifactStore:
+        uploads = []
+
+        def __init__(self, _client):
+            pass
+
+        def upload_batch(self, uploads):
+            self.uploads.extend(uploads)
+            return [
+                {
+                    "_s3_key": f"procedures/{upload.request.resource_id}/{upload.request.filename}",
+                    "sha256": upload.request.sha256,
+                    "size_bytes": upload.request.size_bytes,
+                    "content_type": upload.request.content_type,
+                }
+                for upload in uploads
+            ]
+
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.storage.GraphQLArtifactStore",
+        FakeArtifactStore,
+    )
+    operation_order = []
+
+    class FakeProcedureService:
+        def __init__(self, _client):
+            pass
+
+        def _get_or_create_task_with_stages_for_procedure(self, **kwargs):
+            operation_order.append(("task", kwargs))
+            return SimpleNamespace(id="branch-task")
+
+    monkeypatch.setattr(
+        "plexus.cli.procedure.service.ProcedureService",
+        FakeProcedureService,
+    )
+    clone_calls = []
+    monkeypatch.setattr(
+        "plexus.cli.procedure.reset_service.clone_state_for_branch",
+        lambda _client, source_id, target_id, cycle: (
+            operation_order.append(("clone", target_id)),
+            clone_calls.append((source_id, target_id, cycle)),
+            {"iterations_copied": cycle},
+        )[-1],
+    )
+
+    class FakeClient:
+        def __init__(self):
+            self.updates = []
+
+        def execute(self, query, variables):
+            if "createProcedure" in query:
+                return {"createProcedure": {"id": "branch-procedure", "metadata": "{}"}}
+            if "updateProcedure" in query:
+                self.updates.append(variables["input"])
+                return {"updateProcedure": {"id": "branch-procedure"}}
+            raise AssertionError(f"Unexpected GraphQL operation: {query}")
+
+    client = FakeClient()
+    result = cs.prepare_branch(client, "source-procedure", cycle=2, additional_cycles=3)
+
+    assert result["target_id"] == "branch-procedure"
+    assert len(FakeArtifactStore.uploads) == 1
+    upload = FakeArtifactStore.uploads[0]
+    assert upload.request.filename == "code.tac"
+    assert upload.content == b"name: branch\ncycles: 5\n"
+    metadata = json.loads(client.updates[0]["metadata"])
+    assert metadata["code_s3_key"] == "procedures/branch-procedure/code.tac"
+    assert metadata["code_artifact"]["sha256"] == upload.request.sha256
+    assert clone_calls == [("source-procedure", "branch-procedure", 2)]
+    assert operation_order == [
+        (
+            "task",
+            {
+                "procedure_id": "branch-procedure",
+                "account_id": "account-1",
+                "scorecard_id": "scorecard-1",
+                "score_id": "score-1",
+                "dispatch_mode": "local",
+            },
+        ),
+        ("clone", "branch-procedure"),
+    ]
+
 
 def test_build_continuation_context_recovers_baseline_params_and_state_ids(monkeypatch):
     from plexus.cli.procedure import continuation_service as cs

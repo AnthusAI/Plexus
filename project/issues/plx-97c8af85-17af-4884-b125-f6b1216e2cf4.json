@@ -1,0 +1,37 @@
+{
+  "id": "plx-97c8af85-17af-4884-b125-f6b1216e2cf4",
+  "title": "Finalize direct procedure state after human-response resume",
+  "description": "## Problem\n\nThe direct resume command replays a persisted human response and completes procedure logic, but it bypasses the task-tracked local execution path. The procedure and its task can remain marked running after successful completion, and final task output is not updated.\n\n## Expected behavior\n\nGiven a local procedure is waiting for a human response\nAnd a canonical response exists\nWhen the operator resumes the procedure\nThen execution reuses the supported local task-tracked path\nAnd the procedure and task reach their truthful terminal states\nAnd final task output is persisted through the application-authorized artifact path.\n\n## Acceptance\n\n- An executable behavior test first proves resume bypasses terminal-state finalization.\n- Resume uses the same local task-tracking path as initial execution.\n- Successful replay completes both procedure and task and persists final output.\n- No remote dispatch or storage fallback is introduced.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bce39ce6-004d-4ef2-a95b-6b1dff691a8d",
+      "author": "ryan.porter",
+      "text": "Kickoff: live Cognito acceptance replayed the persisted approval and wrote completed state artifacts, but Procedure remained RUNNING and the existing Task remained RUNNING because resume_procedure invokes ProcedureService directly. Writing a focused behavior test that requires resume to call the local task-tracked runner with the procedure account ID.",
+      "created_at": "2026-07-28T18:51:59.421239Z"
+    },
+    {
+      "id": "f0684f63-6fe4-4dce-a2d7-22f7a8a62a6b",
+      "author": "ryan.porter",
+      "text": "Milestone: the behavior-first test is green. Resume now re-enters the supported local task-tracked runner so Procedure, Task stages, and final output can reach truthful terminal state.",
+      "created_at": "2026-07-28T19:11:13.880307Z"
+    },
+    {
+      "id": "d1d89e2a-d608-41e5-8493-710ef789f216",
+      "author": "ryan.porter",
+      "text": "Commit 30c3c4f49. Publication handoff: fix is pushed to draft PR #513 at head d6f60e219. The final combined PR #513 + PR #495 candidate passed 470 cross-PR tests, 4,026 Python tests on both 3.11 and 3.12, dashboard typecheck and 680 unit tests, Storybook build, and 700 Chromium tests. Cognito and IAM-role sandbox canaries passed without direct S3 or stored AWS credentials. Keep this bug in progress until the fix lands in develop.",
+      "created_at": "2026-07-28T19:38:08.688055Z"
+    }
+  ],
+  "created_at": "2026-07-28T18:51:54.595317Z",
+  "updated_at": "2026-07-28T19:38:08.688055Z",
+  "closed_at": null,
+  "custom": {}
+}

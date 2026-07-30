@@ -1,6 +1,10 @@
 {{- $environment := default "development" .Values.global.environment -}}
 {{- $localEnvironments := list "local" "development" "dev" "test" -}}
 {{- $tag := .Values.image.tag | default .Chart.AppVersion -}}
+{{- $graphqlAuthMode := .Values.plexus.api.authMode -}}
+{{- if not (has $graphqlAuthMode (list "api_key" "iam")) -}}
+{{- fail "plexus.api.authMode must be one of api_key or iam" -}}
+{{- end -}}
 {{- if and (not (has $environment $localEnvironments)) (or (eq $tag "latest") (eq $tag "local")) -}}
 {{- fail (printf "image.tag must be immutable for environment %q; got %q" $environment $tag) -}}
 {{- end -}}
