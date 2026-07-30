@@ -45,7 +45,7 @@ COPY --chown=plexus:plexus . /app
 # Install the scoring, evaluation, and infrastructure extras.
 # The ML training stack (torch, transformers, xgboost, ...) is excluded;
 # evaluation includes only the local embeddings required for feedback RCA.
-ARG PLEXUS_EXTRAS="scoring,evaluation,infra"
+ARG PLEXUS_EXTRAS="scoring,worker,evaluation,infra"
 # PyPI's Linux ARM64 torch distribution includes CUDA runtime packages.  The
 # Docker Desktop worker is CPU-only, so install the matching CPU wheel first;
 # the sentence-transformers dependency then reuses it instead of downloading a

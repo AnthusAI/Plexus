@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import aws_cdk as cdk
 import aws_cdk.assertions as assertions
+import pytest
 from aws_cdk import Duration
 from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_iam as iam
@@ -45,7 +46,7 @@ def _build_template():
             runtime_config_secret=secret,
             reserved_concurrency=25,
             max_event_source_concurrency=10,
-            visibility_timeout=Duration.seconds(600),
+            visibility_timeout=Duration.seconds(1800),
             environment_variables={"CUSTOM_MODE": "enabled"},
             bedrock_model_resources=[
                 "arn:aws:bedrock:*::foundation-model/*",
@@ -83,7 +84,7 @@ def test_construct_creates_standard_request_and_response_queues_with_dlqs():
         "AWS::SQS::Queue",
         {
             "QueueName": "plexus-development-scoring-standard-request-queue",
-            "VisibilityTimeout": 600,
+            "VisibilityTimeout": 1800,
             "RedrivePolicy": assertions.Match.object_like(
                 {
                     "maxReceiveCount": 3,
@@ -91,6 +92,62 @@ def test_construct_creates_standard_request_and_response_queues_with_dlqs():
             ),
         },
     )
+
+
+def test_construct_retains_owned_queues_by_default():
+    template, _ = _build_template()
+
+    queues = template.find_resources("AWS::SQS::Queue")
+    assert len(queues) == 4
+    for queue in queues.values():
+        assert queue["DeletionPolicy"] == "Retain"
+        assert queue["UpdateReplacePolicy"] == "Retain"
+
+
+def test_construct_creates_explicit_retained_log_group():
+    template, _ = _build_template()
+
+    template.has_resource(
+        "AWS::Logs::LogGroup",
+        {
+            "DeletionPolicy": "Retain",
+            "UpdateReplacePolicy": "Retain",
+            "Properties": {
+                "LogGroupName": ("/plexus/score-processor/plexus-development-scoring"),
+                "RetentionInDays": 30,
+            },
+        },
+    )
+
+
+def test_construct_rejects_visibility_shorter_than_six_lambda_timeouts():
+    app = cdk.App()
+    stack = cdk.Stack(app, "InvalidVisibility")
+    repository = ecr.Repository.from_repository_name(
+        stack,
+        "ImageRepository",
+        repository_name="plexus/score-processor-artifacts-development",
+    )
+    secret = secretsmanager.Secret.from_secret_name_v2(
+        stack,
+        "RuntimeConfig",
+        secret_name="plexus/development/config",
+    )
+
+    with pytest.raises(ValueError, match="at least six times"):
+        AsyncScoreProcessing(
+            stack,
+            "AsyncScoreProcessing",
+            props=AsyncScoreProcessingProps(
+                resource_prefix="plexus-development-scoring",
+                environment_name="development",
+                image_repository=repository,
+                image_tag_or_digest="sha256:1234567890abcdef",
+                runtime_config_secret=secret,
+                lambda_timeout=Duration.seconds(300),
+                visibility_timeout=Duration.seconds(300),
+            ),
+        )
 
 
 def test_construct_creates_lambda_from_pinned_ecr_image():

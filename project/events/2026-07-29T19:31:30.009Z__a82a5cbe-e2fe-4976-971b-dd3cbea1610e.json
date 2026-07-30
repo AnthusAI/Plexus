@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a82a5cbe-e2fe-4976-971b-dd3cbea1610e",
+  "issue_id": "plx-60632694-d9ae-4bfd-835f-d70bf26f90b6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T19:31:30.009Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "The newly published scoring-only image scan reports critical and high findings in unnecessary operating-system packages pulled by git, Graphviz, and related libraries. Remove unused packages, use a stable supported base variant, rebuild, and verify the ECR scan rather than dismissing the findings.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+    "priority": 0,
+    "status": "open",
+    "title": "Remove critical OS findings from scoring runtime artifact"
+  }
+}

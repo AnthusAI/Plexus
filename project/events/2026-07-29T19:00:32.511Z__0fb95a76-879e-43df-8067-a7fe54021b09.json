@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0fb95a76-879e-43df-8067-a7fe54021b09",
+  "issue_id": "plx-77e7d9ef-efc7-450c-a8d3-02beef12da33",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T19:00:32.511Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "As a platform operator, I want reusable async score processor resources to use retry-safe queue visibility and explicit retained logging, so that downstream deployments do not duplicate work or silently lose operational history.\n\nFeature: Production-safe async score processor resources\n\nScenario: Queue visibility covers worker execution\nGiven an async score processor Lambda has a configured timeout\nWhen its request and response queues are created\nThen each queue visibility timeout is at least six times the worker timeout\n\nScenario: Runtime logs have an explicit lifecycle\nGiven an async score processor Lambda is deployed\nWhen its log group is synthesized\nThen the log group has explicit retention and a retained removal policy\n\nScenario: Queue data survives stack replacement\nGiven an async score processing stack owns request, response, and dead-letter queues\nWhen the stack is replaced or deleted\nThen the queues are retained by default",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+    "priority": 1,
+    "status": "open",
+    "title": "Async score processor resources use production-safe lifecycle defaults"
+  }
+}

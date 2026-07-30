@@ -88,10 +88,16 @@
       "author": "ryan.porter",
       "text": "During rebase onto current PR 513 head, the upstream branch already introduced the canonical plexus.api.authMode model. The older local graphqlAuthMode field would have emitted a second PLEXUS_GRAPHQL_AUTH_MODE=api_key and overridden explicit IAM rendering. Removed that obsolete duplicate path, retained upstream API-key/CronJob wiring, and kept the regression assertion that recovery uses the same Secret-backed key. Rebased focused validation is green: 148 product/demo/chart/optimizer tests and 65 proxy tests, with 6 intentional proxy environment deselections; Ruff and diff checks pass.",
       "created_at": "2026-07-28T20:41:52.205593Z"
+    },
+    {
+      "id": "109d5829-398f-411e-8291-2f27efcd211b",
+      "author": "ryan.porter",
+      "text": "PR #513 conflict-resolution decision: current develop deliberately keeps the production scoring extra minimal, while the local Kubernetes worker still requires the broader legacy CLI import set proven by the strict demo. Preserve both contracts by retaining develop's slim scoring extra, declaring the broader dependencies in a dedicated worker extra, installing that extra only in the Kubernetes worker image, and retaining the complete-install union including the optional cost calculator. Validate the dependency contract and both runtime lanes before merging.",
+      "created_at": "2026-07-30T21:55:19.807183Z"
     }
   ],
   "created_at": "2026-07-28T17:58:38.910670Z",
-  "updated_at": "2026-07-28T20:41:52.205593Z",
+  "updated_at": "2026-07-30T21:55:19.807183Z",
   "closed_at": null,
   "custom": {}
 }
