@@ -69,6 +69,7 @@ _MILESTONE_STAGE = {
     "finalization": "finalization",
 }
 _FINAL_STATES = {
+    "complete",
     "completed",
     "complete_with_unresolved_actions",
     "completed_with_unresolved_actions",

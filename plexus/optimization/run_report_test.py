@@ -783,6 +783,7 @@ def test_finalize_records_an_honest_incomplete_terminal_state_without_reclassify
 @pytest.mark.parametrize(
     ("requested", "task_status"),
     [
+        ("complete", "COMPLETED"),
         ("completed", "COMPLETED"),
         ("complete_with_unresolved_actions", "COMPLETED"),
         ("completed_with_unresolved_actions", "COMPLETED"),
