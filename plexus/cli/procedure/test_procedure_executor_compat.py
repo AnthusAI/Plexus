@@ -103,6 +103,17 @@ class _FakeRuntime:
         return {"success": True, "status": "planned"}
 
 
+class _RuntimeCapturingPythonModules(_FakeRuntime):
+    registered_modules = {}
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        _RuntimeCapturingPythonModules.registered_modules = {}
+
+    def register_python_module(self, name, module):
+        _RuntimeCapturingPythonModules.registered_modules[name] = module
+
+
 class _LegacyRuntimeNoTraceSink:
     last_context = None
 
@@ -619,6 +630,64 @@ async def test_execute_tactus_initializes_embedded_mcp_transport(monkeypatch):
 
     assert result["success"] is True
     assert mcp_server.transport.connected is True
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_forwards_procedure_task_context_to_plexus_runtime_module(
+    monkeypatch,
+):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeCapturingPythonModules)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[3] / "MCP"))
+    from tools.tactus_runtime import execute as tactus_execute
+
+    captured = {}
+
+    class _CapturingPlexusRuntimeModule:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        tactus_execute,
+        "PlexusRuntimeModule",
+        _CapturingPlexusRuntimeModule,
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-task-context",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  return { success = true }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={"task_id": "task-123", "account_id": "account-456"},
+    )
+
+    assert result["success"] is True
+    assert captured["runtime_context"]["task_id"] == "task-123"
+    assert captured["runtime_context"]["account_id"] == "account-456"
+    assert captured["runtime_context"] is _RuntimeCapturingPythonModules.last_context
 
 
 @pytest.mark.asyncio

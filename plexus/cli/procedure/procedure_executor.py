@@ -1800,6 +1800,15 @@ async def _execute_tactus(
             except Exception as exc:
                 logger.warning("Could not bridge MCP tools into Tactus toolset registry: %s", exc)
 
+        # Build one shared runtime context before registering runtime modules.  The
+        # plexus.* module needs the Procedure Task identity at construction time so
+        # living reports and artifacts attach to the same Task that Tactus updates.
+        runtime_context: Any = context
+        if isinstance(context, dict):
+            runtime_context = dict(context)
+        elif context is None:
+            runtime_context = {}
+
         # Register the plexus.* runtime module directly into the Tactus procedure
         # runtime so that procedure Lua can call plexus.evaluation.run({...}),
         # plexus.score.pull({...}), plexus.rubric_memory.recent_entries({...}), etc.
@@ -1841,6 +1850,7 @@ async def _execute_tactus(
                     report_runner=_default_report_runner_sync,
                     procedure_runner=_default_procedure_runner,
                     budget=_proc_budget,
+                    runtime_context=runtime_context,
                 )
                 runtime.register_python_module("plexus", _plexus_module)
                 logger.info("Registered plexus.* runtime module in procedure runtime")
@@ -1854,12 +1864,6 @@ async def _execute_tactus(
 
         # Hydrate console-trigger text into runtime context so procedures can access
         # the exact user prompt even when runtime message history is empty.
-        runtime_context: Any = context
-        if isinstance(context, dict):
-            runtime_context = dict(context)
-        elif context is None:
-            runtime_context = {}
-
         if isinstance(runtime_context, dict):
             runtime_account_id = runtime_context.get("account_id") or runtime_context.get("accountId")
             if runtime_account_id:
