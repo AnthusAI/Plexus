@@ -23,6 +23,9 @@ from tactus.core.exceptions import ProcedureWaitingForHuman
 
 
 MAX_APPROVAL_TARGETS = 5
+MAX_PRIORITY_DIAGNOSES = 10
+DEFAULT_MAX_SEMANTIC_DIAGNOSES = 25
+DIAGNOSIS_SCOPE_POLICY_VERSION = "portfolio-diagnosis-scope-v1"
 OPTIMIZATION_APPROVAL_TTL_SECONDS = 24 * 60 * 60
 
 
@@ -41,6 +44,7 @@ class PortfolioRunDependencies:
     # adapter owns authorization and the atomic parent-response claim.
     human_review: Callable[[dict[str, Any]], Mapping[str, Any]]
     create_action: Callable[[dict[str, Any]], Mapping[str, Any]] | None = None
+    publish_update: Callable[[dict[str, Any]], Mapping[str, Any]] | None = None
     supersede_action: Callable[[str, str], Mapping[str, Any]] | None = None
 
 
@@ -72,11 +76,13 @@ class OptimizationPortfolioRunner:
             "rank": None,
             "assessments": [],
             "diagnoses": [],
+            "diagnosis_coverage": _pending_diagnosis_coverage(request),
             "dispatch": None,
             "reviews": [],
             "actions": [],
             "approval_requests": [],
             "promotion_candidates": [],
+            "notification_failures": [],
         }
 
         try:
@@ -91,11 +97,18 @@ class OptimizationPortfolioRunner:
                 "relation": "optimization_run",
             }
             self._publish(service, "started", state)
+            self._notify(
+                state,
+                event="started",
+                milestone="STARTED",
+                title="Optimization portfolio analysis started",
+                summary="The living Report is available while exhaustive ranking proceeds.",
+            )
 
             rank = dict(self._dependencies.rank(_with_persist_false(request)))
             state["rank"] = rank
+            self._publish(service, "ranking", state)
             if not _coverage_complete(rank):
-                self._publish(service, "ranking_assessment", state)
                 state["summary"] = self._summary(state)
                 self._publish(service, "finalization", state)
                 _finalize(service, "INCOMPLETE")
@@ -125,25 +138,63 @@ class OptimizationPortfolioRunner:
             # on their own. Publish them before model-backed diagnosis so a
             # slow or failed semantic pass cannot hide completed evidence.
             state["assessments"] = assessment_rows
-            self._publish(service, "ranking_assessment", state)
+            diagnosis_targets, diagnosis_coverage = _diagnosis_selection(
+                ranked_rows,
+                assessment_rows,
+                max_semantic_diagnoses=_max_semantic_diagnoses(request),
+            )
+            state["diagnosis_coverage"] = diagnosis_coverage
+            self._publish(service, "assessment", state)
+
+            if diagnosis_coverage["blockers"]:
+                self._publish(service, "diagnosis", state)
+                state["summary"] = self._summary(state)
+                self._publish(service, "finalization", state)
+                _finalize(service, "INCOMPLETE")
+                return self._result("INCOMPLETE", state)
 
             diagnosis_rows: list[dict[str, Any]] = []
-            for row, assessment in zip(ranked_rows, assessment_rows):
+            for row, assessment in diagnosis_targets:
                 scorecard_id, score_id = _exact_target(row)
-                diagnosis = dict(self._dependencies.diagnose({
-                    "account_id": account_id,
-                    "scorecard_id": scorecard_id,
-                    "score_id": score_id,
-                    "assessment": assessment,
-                    "assessment_packet": assessment,
-                    "window": rank.get("window") or {},
-                    "feedback_watermark": assessment.get("feedback_watermark"),
-                    "persist": False,
-                }))
+                try:
+                    diagnosis = dict(self._dependencies.diagnose({
+                        "account_id": account_id,
+                        "scorecard_id": scorecard_id,
+                        "score_id": score_id,
+                        "assessment": assessment,
+                        "assessment_packet": assessment,
+                        "window": rank.get("window") or {},
+                        "feedback_watermark": assessment.get("feedback_watermark"),
+                        "persist": False,
+                    }))
+                except Exception:
+                    diagnosis_coverage["failed_count"] += 1
+                    diagnosis_coverage["selected_scope_complete"] = False
+                    state["diagnoses"] = diagnosis_rows
+                    raise
+                if assessment.get("scorecard_name") and not diagnosis.get("scorecard_name"):
+                    diagnosis["scorecard_name"] = assessment["scorecard_name"]
+                if assessment.get("score_name") and not diagnosis.get("score_name"):
+                    diagnosis["score_name"] = assessment["score_name"]
                 diagnosis_rows.append(diagnosis)
+                diagnosis_coverage["completed_count"] += 1
 
             state["diagnoses"] = diagnosis_rows
+            diagnosis_coverage["selected_scope_complete"] = (
+                diagnosis_coverage["completed_count"] == diagnosis_coverage["selected_count"]
+                and diagnosis_coverage["failed_count"] == 0
+            )
             self._publish(service, "diagnosis", state)
+            self._notify(
+                state,
+                event="analysis_ready",
+                milestone="COMPLETED",
+                title="Optimization portfolio analysis is ready",
+                summary=(
+                    f"Assessed {len(assessment_rows)} ranked scores and completed "
+                    f"{diagnosis_coverage['completed_count']} selected semantic diagnoses."
+                ),
+            )
 
             action_rows = _non_launch_actions(diagnosis_rows)
             if self._dependencies.create_action is not None:
@@ -159,18 +210,40 @@ class OptimizationPortfolioRunner:
                 ]
             ready = _ready_targets(assessment_rows, diagnosis_rows)
             batches = [ready[index:index + MAX_APPROVAL_TARGETS] for index in range(0, len(ready), MAX_APPROVAL_TARGETS)]
-            submitted_approvals = request.get("approval_responses")
-            has_submitted_approvals = "approval_responses" in request
-            approvals: list[dict[str, Any]] = []
-            pending_approval_requests: list[dict[str, Any]] = []
-            for index, batch in enumerate(batches, start=1):
-                review_request = _approval_request(
+            review_requests = [
+                _approval_request(
                     run_key=run_key,
                     account_id=account_id,
                     batch_number=index,
                     targets=batch,
                     report_ref=state["report_ref"],
                 )
+                for index, batch in enumerate(batches, start=1)
+            ]
+            # Publish the pending decisions before invoking Human.review.  A
+            # real Tactus adapter suspends at that call, so publishing only
+            # afterward would leave the living Report claiming diagnosis was
+            # still in progress for the entire human wait.
+            state["approval_requests"] = list(review_requests)
+            state["actions"] = action_rows
+            self._publish(service, "approval", state)
+            if action_rows or review_requests:
+                self._notify(
+                    state,
+                    event="action_required",
+                    milestone="APPROVAL_NEEDED",
+                    title="Optimization portfolio decisions need attention",
+                    summary=(
+                        f"{len(action_rows)} advisory actions and "
+                        f"{len(review_requests)} optimization approval batches are open."
+                    ),
+                )
+
+            submitted_approvals = request.get("approval_responses")
+            has_submitted_approvals = "approval_responses" in request
+            approvals: list[dict[str, Any]] = []
+            pending_approval_requests: list[dict[str, Any]] = []
+            for batch, review_request in zip(batches, review_requests):
                 response = (
                     _bound_approval_response(review_request, submitted_approvals)
                     if has_submitted_approvals
@@ -187,7 +260,8 @@ class OptimizationPortfolioRunner:
                 })
             state["approval_requests"] = pending_approval_requests
             state["actions"] = action_rows
-            self._publish(service, "approval", state)
+            if pending_approval_requests and len(pending_approval_requests) != len(review_requests):
+                self._publish(service, "approval", state)
 
             # A Tactus procedure may deliberately request the first action,
             # checkpoint, and call us again with its authoritative response.
@@ -197,6 +271,7 @@ class OptimizationPortfolioRunner:
             if request.get("wait_for_human") is True and unresolved_approval:
                 return self._result("WAITING_FOR_APPROVAL", state)
 
+            self._publish(service, "optimization", state)
             dispatches: list[dict[str, Any]] = []
             rejected: list[dict[str, Any]] = []
             for batch in _chunks(approvals, MAX_APPROVAL_TARGETS):
@@ -212,6 +287,9 @@ class OptimizationPortfolioRunner:
                     item for item in (dispatch.get("rejected") or []) if isinstance(item, Mapping)
                 )
             state["dispatch"] = {"batches": dispatches, "rejected": rejected}
+            # Make procedure IDs and launch rejections visible before any
+            # potentially long terminal-evidence review.
+            self._publish(service, "optimization", state)
 
             # Only a successfully dispatched optimizer procedure may reach
             # review.  In particular, stale evidence never becomes a promotion
@@ -254,6 +332,13 @@ class OptimizationPortfolioRunner:
                 has_unresolved_actions=bool(_non_launch_actions(diagnosis_rows) or unresolved_approval),
             )
             _finalize(service, status)
+            self._notify(
+                state,
+                event="completed",
+                milestone="COMPLETED",
+                title="Optimization portfolio run completed",
+                summary=f"Terminal state: {status.lower().replace('_', ' ')}.",
+            )
             return self._result(status, state)
         except OptimizationRunPublicationError as exc:
             # Publication is a safety boundary: never execute ahead of the
@@ -272,6 +357,13 @@ class OptimizationPortfolioRunner:
                 service.fail(f"Optimization portfolio run failed: {exc}")
             except Exception:  # pragma: no cover - best effort only
                 pass
+            self._notify(
+                state,
+                event="failed",
+                milestone="FAILED",
+                title="Optimization portfolio run failed",
+                summary="Open the living Report for the durable failure evidence.",
+            )
             return self._result("FAILED", state, error=str(exc))
 
     def _summary(self, state: Mapping[str, Any]) -> dict[str, Any]:
@@ -291,6 +383,32 @@ class OptimizationPortfolioRunner:
             stakeholder_view=_stakeholder_view(state, milestone=milestone),
         )
 
+    def _notify(
+        self,
+        state: dict[str, Any],
+        *,
+        event: str,
+        milestone: str,
+        title: str,
+        summary: str,
+    ) -> None:
+        if self._dependencies.publish_update is None:
+            return
+        try:
+            self._dependencies.publish_update({
+                "event_key": f"optimization:{state['run_key']}:{event}",
+                "account_id": state["account_id"],
+                "milestone": milestone,
+                "title": title,
+                "summary": summary,
+                "resource_refs": [dict(state["report_ref"])],
+            })
+        except Exception as exc:
+            state.setdefault("notification_failures", []).append({
+                "event": event,
+                "error": str(exc),
+            })
+
     @staticmethod
     def _result(status: str, state: Mapping[str, Any], *, error: str | None = None) -> dict[str, Any]:
         result = {
@@ -299,6 +417,7 @@ class OptimizationPortfolioRunner:
             "promotion_candidates": list(state.get("promotion_candidates") or []),
             "rank": state.get("rank"),
             "summary": state.get("summary"),
+            "diagnosis_coverage": dict(state.get("diagnosis_coverage") or {}),
             "actions": state.get("actions") or [],
             "approval_requests": state.get("approval_requests") or [],
             "dispatch": state.get("dispatch"),
@@ -382,6 +501,87 @@ def _ranked_rows(rank: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [dict(row) for row in rows if isinstance(row, Mapping)]
 
 
+def _pending_diagnosis_coverage(request: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "policy_version": DIAGNOSIS_SCOPE_POLICY_VERSION,
+        "ranked_count": 0,
+        "top_priority_count": 0,
+        "monitoring_candidate_count": 0,
+        "overlap_count": 0,
+        "selected_count": 0,
+        "completed_count": 0,
+        "failed_count": 0,
+        "skipped_count": 0,
+        "max_semantic_diagnoses": _max_semantic_diagnoses(request),
+        "selected_scope_complete": False,
+        "portfolio_semantic_complete": False,
+        "blockers": [],
+    }
+
+
+def _max_semantic_diagnoses(request: Mapping[str, Any]) -> int:
+    value = request.get("max_semantic_diagnoses", DEFAULT_MAX_SEMANTIC_DIAGNOSES)
+    if isinstance(value, bool):
+        raise ValueError("max_semantic_diagnoses must be a non-negative integer")
+    try:
+        result = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("max_semantic_diagnoses must be a non-negative integer") from exc
+    if result < 0 or result != value:
+        raise ValueError("max_semantic_diagnoses must be a non-negative integer")
+    return result
+
+
+def _diagnosis_selection(
+    ranked_rows: Sequence[Mapping[str, Any]],
+    assessment_rows: Sequence[Mapping[str, Any]],
+    *,
+    max_semantic_diagnoses: int,
+) -> tuple[list[tuple[dict[str, Any], dict[str, Any]]], dict[str, Any]]:
+    paired = [
+        (dict(row), dict(assessment))
+        for row, assessment in zip(ranked_rows, assessment_rows)
+    ]
+    top_priority_keys = {
+        _target_key(row)
+        for row, _assessment in paired[:MAX_PRIORITY_DIAGNOSES]
+    }
+    monitoring_keys = {
+        _target_key(assessment)
+        for _row, assessment in paired
+        if _is_monitoring_candidate(assessment)
+    }
+    selected_keys = (top_priority_keys | monitoring_keys) - {None}
+    selected = [
+        (row, assessment)
+        for row, assessment in paired
+        if _target_key(row) in selected_keys
+    ]
+    blockers: list[dict[str, Any]] = []
+    if len(selected) > max_semantic_diagnoses:
+        blockers.append({
+            "code": "semantic_diagnosis_limit_exceeded",
+            "selected_count": len(selected),
+            "max_semantic_diagnoses": max_semantic_diagnoses,
+        })
+    coverage = {
+        "policy_version": DIAGNOSIS_SCOPE_POLICY_VERSION,
+        "ranked_count": len(paired),
+        "top_priority_count": min(MAX_PRIORITY_DIAGNOSES, len(paired)),
+        "monitoring_candidate_count": len(monitoring_keys - {None}),
+        "overlap_count": len((top_priority_keys & monitoring_keys) - {None}),
+        "selected_count": len(selected),
+        "completed_count": 0,
+        "failed_count": 0,
+        "skipped_count": len(paired) - len(selected),
+        "max_semantic_diagnoses": max_semantic_diagnoses,
+        "selected_scope_complete": False,
+        "portfolio_semantic_complete": len(selected) == len(paired),
+        "blockers": blockers,
+    }
+    return selected, coverage
+
+
 def _exact_target(row: Mapping[str, Any]) -> tuple[str, str]:
     scorecard_id = _required_text(row, "scorecard_id")
     score_id = _required_text(row, "score_id")
@@ -398,9 +598,9 @@ def _ready_targets(assessments: Sequence[Mapping[str, Any]], diagnoses: Sequence
         if target_key is None or not _is_ready(assessment):
             continue
         diagnosis = diagnosis_by_target.get(target_key)
-        # A diagnosis may be a legacy packet that preserves only the assessment
-        # readiness.  It must not override that ready state with an absence.
-        if diagnosis is not None and not _diagnosis_permits_launch(diagnosis):
+        # Deterministic assessment may identify an opportunity, but only a
+        # complete semantic diagnosis can make it eligible for human approval.
+        if diagnosis is None or not _diagnosis_permits_launch(diagnosis):
             continue
         scorecard_id, score_id = target_key
         fingerprint = assessment.get("evidence_fingerprint") or assessment.get("fingerprint")
@@ -428,9 +628,18 @@ def _target_key(packet: Mapping[str, Any]) -> tuple[str, str] | None:
 
 
 def _is_ready(packet: Mapping[str, Any]) -> bool:
+    return _coverage_complete(packet) and _optimization_readiness(packet) == "ready_to_optimize"
+
+
+def _is_monitoring_candidate(packet: Mapping[str, Any]) -> bool:
+    return _coverage_complete(packet) and _optimization_readiness(packet) == "monitoring_candidate"
+
+
+def _optimization_readiness(packet: Mapping[str, Any]) -> Any:
     states = packet.get("states")
-    readiness = states.get("optimization", states.get("readiness")) if isinstance(states, Mapping) else packet.get("readiness_state")
-    return _coverage_complete(packet) and readiness == "ready_to_optimize"
+    if isinstance(states, Mapping):
+        return states.get("optimization", states.get("readiness"))
+    return packet.get("readiness_state")
 
 
 def _diagnosis_permits_launch(packet: Mapping[str, Any]) -> bool:
@@ -628,11 +837,25 @@ def _non_launch_actions(diagnoses: Sequence[Mapping[str, Any]]) -> list[dict[str
             continue
         questions = packet.get("stakeholder_questions") or []
         if questions:
-            actions.append({"kind": "stakeholder_clarification", "scorecard_id": key[0], "score_id": key[1], "questions": list(questions)})
+            actions.append({
+                "kind": "stakeholder_clarification",
+                "scorecard_id": key[0],
+                "score_id": key[1],
+                "scorecard_name": packet.get("scorecard_name"),
+                "score_name": packet.get("score_name"),
+                "questions": list(questions),
+            })
         states = packet.get("states") if isinstance(packet.get("states"), Mapping) else {}
         feedback = states.get("feedback_collection") or packet.get("feedback_collection_state")
         if feedback in {"reduce_to_periodic_monitoring", "collect_targeted_classes", "pause_pending_repair_or_clarification"}:
-            actions.append({"kind": "feedback_collection_review", "scorecard_id": key[0], "score_id": key[1], "recommendation": feedback})
+            actions.append({
+                "kind": "feedback_collection_review",
+                "scorecard_id": key[0],
+                "score_id": key[1],
+                "scorecard_name": packet.get("scorecard_name"),
+                "score_name": packet.get("score_name"),
+                "recommendation": feedback,
+            })
     return actions
 
 
@@ -641,14 +864,26 @@ def _action_request_for_finding(
 ) -> dict[str, Any]:
     kind = str(action["kind"])
     scorecard_id, score_id = str(action["scorecard_id"]), str(action["score_id"])
+    scorecard_name = str(action.get("scorecard_name") or "").strip()
+    score_name = str(action.get("score_name") or "").strip()
+    named_target = " — ".join(value for value in (scorecard_name, score_name) if value)
     if kind == "stakeholder_clarification":
         expiry, schema = None, {"type": "object", "required": ["response"], "properties": {"response": {"type": "string"}}}
+        title = f"Clarify policy for {score_name}" if score_name else "Stakeholder clarification"
+        questions = [str(value).strip() for value in action.get("questions") or [] if str(value).strip()]
+        message = questions[0] if questions else "A stakeholder policy decision is required."
     else:
         expiry, schema = None, {"type": "object", "required": ["decision"], "properties": {"decision": {"enum": ["acknowledge", "defer"]}}}
+        title = f"Review feedback collection for {score_name}" if score_name else "Review feedback collection"
+        recommendation = str(action.get("recommendation") or "").replace("_", " ").strip()
+        message = f"Recommendation: {recommendation}." if recommendation else "Review the feedback collection recommendation."
+    score_ref = {"system": "plexus", "kind": "score", "id": score_id, "scorecardId": scorecard_id}
+    if named_target:
+        score_ref["label"] = named_target
     return {
         "action_key": f"{kind}:{run_key}:{scorecard_id}:{score_id}", "kind": kind,
-        "account_id": account_id, "title": kind.replace("_", " ").title(),
-        "resource_refs": [dict(report_ref), {"system": "plexus", "kind": "score", "id": score_id, "scorecardId": scorecard_id}],
+        "account_id": account_id, "title": title, "message": message,
+        "resource_refs": [dict(report_ref), score_ref],
         "preconditions": {"run_key": run_key}, "expires_at": expiry,
         "response_schema": schema, "ui_schema": {"kind": "finding_review"}, "payload": dict(action),
     }
@@ -702,6 +937,7 @@ def _evidence_snapshot(state: Mapping[str, Any]) -> dict[str, Any]:
         "rank": state.get("rank"),
         "assessments": list(state.get("assessments") or []),
         "diagnoses": list(state.get("diagnoses") or []),
+        "diagnosis_coverage": dict(state.get("diagnosis_coverage") or {}),
         "actions": list(state.get("actions") or []),
         "approval_requests": list(state.get("approval_requests") or []),
         "dispatch": state.get("dispatch"),
@@ -745,6 +981,44 @@ def _stakeholder_dashboard_url(*packets: Mapping[str, Any]) -> str | None:
     return None
 
 
+def _milestone_narrative(milestone: str) -> tuple[str, str]:
+    narratives = {
+        "started": (
+            "Enumerating every scorecard and analyzing the frozen feedback window.",
+            "A ranked portfolio will be published after exhaustive coverage is verified.",
+        ),
+        "ranking": (
+            "Applying deterministic readiness and feedback-investment checks to every ranked score.",
+            "Assessment results and the bounded semantic-diagnosis scope will be published next.",
+        ),
+        "assessment": (
+            "Running semantic diagnosis for the selected highest-priority and monitoring candidates.",
+            "Guideline conflicts, stakeholder questions, and safe optimization candidates will be published next.",
+        ),
+        "diagnosis": (
+            "Preparing human decisions for diagnosed findings and safe optimization targets.",
+            "No optimizer will start until each exact target receives an explicit decision.",
+        ),
+        "approval": (
+            "Waiting for, or reconciling, human decisions on the exact diagnosed targets.",
+            "Approved work will be rechecked for freshness before any optimizer starts.",
+        ),
+        "optimization": (
+            "Running only the explicitly approved optimization targets and preserving their evidence.",
+            "Completed evaluations will be reviewed before any promotion request is created.",
+        ),
+        "optimization_review": (
+            "Reviewing completed optimizer and evaluation evidence for safe improvement.",
+            "The final report will separate promotion-ready results, continued work, and incomplete evidence.",
+        ),
+        "finalization": (
+            "Finalizing the durable report, workbook, unresolved actions, and audit trail.",
+            "This run is ending without automatic score, guideline, feedback, or champion changes.",
+        ),
+    }
+    return narratives.get(milestone, (f"Processing {milestone}.", "The next durable milestone will update this report."))
+
+
 def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, Any]:
     rank = state.get("rank") if isinstance(state.get("rank"), Mapping) else {}
     assessments = {_target_key(row): row for row in state.get("assessments") or [] if isinstance(row, Mapping) and _target_key(row) is not None}
@@ -758,6 +1032,11 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
         key = _target_key(row)
         assessment = assessments.get(key, {})
         diagnosis = diagnoses.get(key, {})
+        awaiting_semantic_diagnosis = (
+            _is_ready(assessment)
+            and key not in diagnoses
+            and milestone not in {"started", "ranking", "assessment"}
+        )
         review = reviews.get(key, {})
         states = {
             **(assessment.get("states") if isinstance(assessment.get("states"), Mapping) else {}),
@@ -772,12 +1051,18 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
         promotion = states.get("promotion_readiness") or review.get("post_run_state") or "not_evaluated"
         rationale = diagnosis.get("rationale") or assessment.get("rationale") or "Evidence-based priority."
         coverage_status = _stakeholder_coverage(diagnosis, assessment, rank)
+        if awaiting_semantic_diagnosis:
+            readiness = "incomplete"
+            next_action = "await_semantic_diagnosis"
+            rationale = "Deterministic assessment found an opportunity; semantic diagnosis is not complete for this score."
+            coverage_status = "incomplete"
         trend = _stakeholder_trend(diagnosis, assessment)
         dashboard_url = _stakeholder_dashboard_url(diagnosis, assessment, row)
         evidence_count = row.get("valid_feedback_count")
         base = {
             "scorecard_name": row.get("scorecard_name") or assessment.get("scorecard_name") or "Unlabeled scorecard",
             "score_name": row.get("score_name") or assessment.get("score_name") or "Unlabeled score",
+            "scorecard_ref": sha256(key[0].encode("utf-8")).hexdigest()[:16] if key else None,
         }
         portfolio.append({
             **base,
@@ -833,6 +1118,11 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
         key = _target_key(row)
         assessment = assessments.get(key, {})
         diagnosis = diagnoses.get(key, {})
+        awaiting_semantic_diagnosis = (
+            _is_ready(assessment)
+            and key not in diagnoses
+            and milestone not in {"started", "ranking", "assessment"}
+        )
         review = reviews.get(key, {})
         states = {
             **(assessment.get("states") if isinstance(assessment.get("states"), Mapping) else {}),
@@ -844,13 +1134,20 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
         promotion = states.get("promotion_readiness") or review.get("post_run_state") or "not_evaluated"
         rationale = review.get("rationale") or diagnosis.get("rationale") or assessment.get("rationale") or "No optimizer outcome yet."
         next_action = review.get("primary_next_action") or diagnosis.get("primary_next_action") or assessment.get("primary_next_action") or "review"
+        coverage_status = _stakeholder_coverage(review, diagnosis, assessment, rank)
+        if awaiting_semantic_diagnosis:
+            readiness = "incomplete"
+            next_action = "await_semantic_diagnosis"
+            rationale = "Deterministic assessment found an opportunity; semantic diagnosis is not complete for this score."
+            coverage_status = "incomplete"
         outcomes.append({
             "scorecard_name": row.get("scorecard_name") or "Unlabeled scorecard",
             "score_name": row.get("score_name") or "Unlabeled score",
+            "scorecard_ref": sha256(key[0].encode("utf-8")).hexdigest()[:16] if key else None,
             "evidence_count": row.get("valid_feedback_count"),
             "outcome": review.get("post_run_state") or "not_run",
-            "evidence_status": _stakeholder_coverage(review, diagnosis, assessment, rank),
-            "coverage_status": _stakeholder_coverage(review, diagnosis, assessment, rank),
+            "evidence_status": coverage_status,
+            "coverage_status": coverage_status,
             "trend": _stakeholder_trend(diagnosis, assessment),
             "collection_state": collection,
             "readiness": readiness,
@@ -859,12 +1156,34 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             "next_action": next_action,
             "dashboard_url": _stakeholder_dashboard_url(review, diagnosis, assessment, row),
         })
+    coverage = rank.get("coverage") if isinstance(rank.get("coverage"), Mapping) else {}
+    scope_coverage = coverage.get("scope") if isinstance(coverage.get("scope"), Mapping) else {}
+    activity_coverage = coverage.get("activity") if isinstance(coverage.get("activity"), Mapping) else {}
+    diagnosis_coverage = state.get("diagnosis_coverage") if isinstance(state.get("diagnosis_coverage"), Mapping) else {}
+    current_activity, next_checkpoint = _milestone_narrative(milestone)
+    ranked_count = len(_ranked_rows(rank))
+    assessed_count = len(assessments)
+    diagnosis_selected = int(diagnosis_coverage.get("selected_count") or 0)
+    diagnosis_completed = int(diagnosis_coverage.get("completed_count") or 0)
+    diagnosis_failed = int(diagnosis_coverage.get("failed_count") or 0)
+    coverage_status = (
+        "pending" if not rank else "complete" if _coverage_complete(rank) else "incomplete"
+    )
     return {
         "overview": {
             "headline": "Optimization portfolio run",
-            "coverage_status": "complete" if _coverage_complete(rank) else "incomplete",
+            "lifecycle_status": "running",
+            "current_activity": current_activity,
+            "next_checkpoint": next_checkpoint,
+            "coverage_status": coverage_status,
             "ranking_window": str(rank.get("window") or "pending"),
-            "ranked_score_count": len(_ranked_rows(rank)),
+            "scorecards_inspected": scope_coverage.get("total_scorecards_inspected", coverage.get("scorecards_discovered", 0)),
+            "ranked_score_count": ranked_count,
+            "unranked_score_count": len(rank.get("unranked") or []),
+            "cooldown_excluded_count": rank.get("recent_activity_excluded_count", activity_coverage.get("recent_activity_excluded_count", 0)),
+            "assessment_progress": f"{assessed_count} of {ranked_count} ranked scores complete",
+            "diagnosis_coverage": f"{diagnosis_completed} of {diagnosis_selected} selected diagnoses complete; {diagnosis_failed} failed",
+            "pending_approval_count": len(state.get("approval_requests") or []),
             "notes": f"Latest milestone: {milestone}. No score, guideline, champion, or feedback setting is changed automatically.",
         },
         "portfolio": portfolio,

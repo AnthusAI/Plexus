@@ -9,11 +9,12 @@ to immutable JSON/XLSX revisions.
 
 from __future__ import annotations
 
+import csv
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
-from io import BytesIO
-import json
+from io import BytesIO, StringIO
 from typing import Any, Callable, Mapping, Optional
 from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
@@ -21,6 +22,11 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.writer.excel import ExcelWriter
+
+from plexus.optimization.operator_identity import (
+    OptimizationOperatorIdentity,
+    optimization_operator_identity,
+)
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
 from plexus.dashboard.api.models.report import Report
@@ -48,8 +54,26 @@ SHEET_NAMES = (
     "Definitions",
 )
 _STAGES = ("preflight", "ranking", "assessment", "diagnosis", "approval", "optimization", "review", "finalization")
+_MILESTONE_STAGE = {
+    # Milestones describe the evidence that was just made durable.  Point the
+    # dashboard at the work that follows so the Report never appears stuck on
+    # a phase whose result is already published.
+    "started": "ranking",
+    "ranking": "assessment",
+    "assessment": "diagnosis",
+    "diagnosis": "approval",
+    "approval": "approval",
+    "optimization": "optimization",
+    "optimization_review": "review",
+    "finalization": "finalization",
+}
 _FINAL_STATES = {
-    "completed", "complete_with_unresolved_actions", "incomplete", "blocked", "failed",
+    "completed",
+    "complete_with_unresolved_actions",
+    "completed_with_unresolved_actions",
+    "incomplete",
+    "blocked",
+    "failed",
 }
 
 _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
@@ -99,7 +123,13 @@ _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("Dashboard Link", "dashboard_url"),
     ),
 }
-_OVERVIEW_KEYS = {"headline", "coverage_status", "ranking_window", "ranked_score_count", "notes"}
+_OVERVIEW_KEYS = {
+    "headline", "lifecycle_status", "current_activity", "next_checkpoint",
+    "coverage_status", "ranking_window", "scorecards_inspected",
+    "ranked_score_count", "unranked_score_count", "cooldown_excluded_count",
+    "assessment_progress", "diagnosis_coverage", "pending_approval_count", "notes",
+}
+_ROW_METADATA_KEYS = {"scorecard_ref"}
 
 
 class OptimizationRunPublicationError(RuntimeError):
@@ -111,8 +141,10 @@ class OptimizationRunReportState:
     task: Any
     report: Any
     blocks: dict[str, Any]
+    stages: dict[str, Any]
     run_spec: Mapping[str, Any]
     attempt_id: str
+    operator_identity: OptimizationOperatorIdentity
 
 
 @dataclass(frozen=True)
@@ -133,6 +165,8 @@ class PublishedRevision:
     evidence_checksum: str
     workbook_checksum: str
     row_counts: Mapping[str, int]
+    overview: Mapping[str, Any]
+    artifacts: tuple[Mapping[str, Any], ...] = ()
 
 
 def _utc_now() -> datetime:
@@ -194,7 +228,7 @@ def _validate_view(view: Mapping[str, Any]) -> None:
         rows = view.get(group, [])
         if not isinstance(rows, list):
             raise ValueError(f"{group} must be a list")
-        allowed = {key for _, key in columns}
+        allowed = {key for _, key in columns} | _ROW_METADATA_KEYS
         for row in rows:
             if not isinstance(row, Mapping):
                 raise ValueError(f"{group} rows must be mappings")
@@ -342,6 +376,178 @@ def build_stakeholder_workbook(
     return WorkbookArtifact(content=content, checksum=sha256(content).hexdigest(), row_counts=row_counts)
 
 
+def _markdown_text(value: Any) -> str:
+    return str(value or "").replace("\r", " ").replace("\n", " ").replace("|", "\\|").strip()
+
+
+def _artifact_descriptor(
+    *,
+    logical_id: str,
+    kind: str,
+    display_name: str,
+    scope: str,
+    content_type: str,
+    content: bytes,
+    object_key: str,
+    task_id: str,
+    source_revision: int,
+    scorecard_name: Optional[str] = None,
+) -> dict[str, Any]:
+    descriptor: dict[str, Any] = {
+        "logical_id": logical_id,
+        "kind": kind,
+        "display_name": display_name,
+        "scope": scope,
+        "content_type": content_type,
+        "size_bytes": len(content),
+        "sha256": sha256(content).hexdigest(),
+        "task_id": task_id,
+        "object_key": object_key,
+        "source_revision": source_revision,
+    }
+    if scorecard_name:
+        descriptor["scorecard_name"] = scorecard_name
+    return descriptor
+
+
+def _scorecard_summary_markdown(
+    scorecard_name: str,
+    scorecard_ref: str,
+    rows: list[Mapping[str, Any]],
+    stakeholder_view: Mapping[str, Any],
+) -> bytes:
+    readiness_counts: dict[str, int] = {}
+    collection_counts: dict[str, int] = {}
+    for row in rows:
+        readiness = _markdown_text(row.get("readiness") or "inconclusive")
+        collection = _markdown_text(row.get("collection_state") or "inconclusive")
+        readiness_counts[readiness] = readiness_counts.get(readiness, 0) + 1
+        collection_counts[collection] = collection_counts.get(collection, 0) + 1
+
+    def _counts(values: Mapping[str, int]) -> str:
+        return ", ".join(f"{key}: {value}" for key, value in sorted(values.items())) or "None"
+
+    def _opportunity(row: Mapping[str, Any]) -> float:
+        try:
+            return float(row.get("reviewed_error_opportunity") or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    priority_rows = sorted(rows, key=_opportunity, reverse=True)
+    lines = [
+        f"# {_markdown_text(scorecard_name)}",
+        "",
+        f"This scorecard has {len(rows)} scored criteria in this optimization report.",
+        "",
+        f"Readiness: {_counts(readiness_counts)}.",
+        f"Feedback investment: {_counts(collection_counts)}.",
+        "",
+        "## Score details",
+        "",
+        "| Score | Valid feedback | Reviewed disagreements | Readiness | Next action |",
+        "|---|---:|---:|---|---|",
+    ]
+    for row in priority_rows:
+        lines.append(
+            "| " + " | ".join([
+                _markdown_text(row.get("score_name") or "Unlabeled score"),
+                _markdown_text(row.get("valid_feedback_count")),
+                _markdown_text(row.get("reviewed_disagreements")),
+                _markdown_text(row.get("readiness") or "inconclusive"),
+                _markdown_text(row.get("next_action") or "review"),
+            ]) + " |"
+        )
+
+    issues = [
+        row for row in stakeholder_view.get("questions_and_issues", [])
+        if (
+            row.get("scorecard_ref") == scorecard_ref
+            or (
+                not row.get("scorecard_ref")
+                and row.get("scorecard_name") == scorecard_name
+            )
+        )
+    ]
+    if issues:
+        lines.extend(["", "## Questions and issues", ""])
+        for issue in issues:
+            finding = _markdown_text(issue.get("finding") or issue.get("rationale") or "Review required")
+            score_name = _markdown_text(issue.get("score_name") or "Score")
+            lines.append(f"- {score_name}: {finding}")
+
+    lines.extend([
+        "",
+        "This summary contains stakeholder-safe findings only. The living Plexus Report is the cover page and lifecycle authority.",
+        "",
+    ])
+    return "\n".join(lines).encode("utf-8")
+
+
+def _scorecard_csv(rows: list[Mapping[str, Any]]) -> bytes:
+    output = StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\r\n")
+    writer.writerow([title for title, _ in _ROW_COLUMNS["portfolio"]])
+    for row in rows:
+        writer.writerow([_safe_cell(row.get(key)) for _, key in _ROW_COLUMNS["portfolio"]])
+    return ("\ufeff" + output.getvalue()).encode("utf-8")
+
+
+def build_scorecard_artifacts(
+    stakeholder_view: Mapping[str, Any],
+    *,
+    revision_number: int,
+    task_id: str,
+    uploader: Callable[[str, str, bytes], str],
+) -> list[dict[str, Any]]:
+    """Publish one safe Markdown summary and quantitative CSV per scorecard."""
+    _validate_view(stakeholder_view)
+    grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    for row in stakeholder_view.get("portfolio", []):
+        scorecard_name = str(row.get("scorecard_name") or "Unlabeled scorecard")
+        stable_key = str(row.get("scorecard_ref") or scorecard_name)
+        grouped.setdefault((stable_key, scorecard_name), []).append(row)
+
+    descriptors: list[dict[str, Any]] = []
+    for (stable_key, scorecard_name), rows in sorted(grouped.items(), key=lambda item: item[0][1].casefold()):
+        scope_hash = sha256(stable_key.encode("utf-8")).hexdigest()[:16]
+        artifacts = (
+            (
+                "scorecard_summary",
+                "Summary",
+                "text/markdown; charset=utf-8",
+                f"scorecard-{scope_hash}-summary-r{revision_number:04d}.md",
+                _scorecard_summary_markdown(
+                    scorecard_name,
+                    stable_key,
+                    rows,
+                    stakeholder_view,
+                ),
+            ),
+            (
+                "scorecard_portfolio_csv",
+                "Quantitative results",
+                "text/csv; charset=utf-8",
+                f"scorecard-{scope_hash}-portfolio-r{revision_number:04d}.csv",
+                _scorecard_csv(rows),
+            ),
+        )
+        for kind, display_name, content_type, filename, content in artifacts:
+            object_key = uploader(task_id, filename, content)
+            descriptors.append(_artifact_descriptor(
+                logical_id=f"{kind}:{scope_hash}",
+                kind=kind,
+                display_name=display_name,
+                scope="scorecard",
+                content_type=content_type,
+                content=content,
+                object_key=object_key,
+                task_id=task_id,
+                source_revision=revision_number,
+                scorecard_name=scorecard_name,
+            ))
+    return descriptors
+
+
 class OptimizationRunReportService:
     """Publish a periodic run to one stable Report and append-only revisions."""
 
@@ -386,6 +592,9 @@ class OptimizationRunReportService:
             if not _same_run_spec(self._state.run_spec, run_spec):
                 raise ValueError("a run key cannot be reused with a different frozen run specification")
             return self._state
+        operator_identity = optimization_operator_identity(
+            scope=run_spec.get("scope") if isinstance(run_spec, Mapping) else None,
+        )
         task = self._task_lookup(self.run_key)
         predecessor: dict[str, Any] = {}
         if task is not None:
@@ -411,12 +620,16 @@ class OptimizationRunReportService:
                 "attempt_id": attempt_id,
                 "lifecycle_version": LIFECYCLE_VERSION,
                 "run_spec": dict(run_spec),
+                "operator_identity": operator_identity.as_dict(),
                 **{key: value for key, value in predecessor.items() if value},
             }
             task = Task.create(
                 client=self.client, accountId=self.account_id, type="OptimizationRunReport",
                 target=f"optimization/run/{self.run_key}", command="optimization portfolio run",
-                description="Durable periodic optimization report", status="RUNNING", dispatchStatus="LOCAL",
+                description=(
+                    f"{operator_identity.display_title} — {operator_identity.display_scope}"
+                ),
+                status="RUNNING", dispatchStatus="LOCAL",
                 startedAt=_iso(self.now()), metadata=json.dumps(task_metadata),
             )
         else:
@@ -424,28 +637,45 @@ class OptimizationRunReportService:
             attempt_id = str(task_metadata.get("attempt_id") or "")
             if not attempt_id:
                 raise ValueError("existing optimization run attempt is missing attempt_id")
-        self._ensure_fixed_stages(task)
+        stages = self._ensure_fixed_stages(task)
         report = self._report_lookup(task)
         if report is None:
             config_id = self.report_configuration_id or _get_programmatic_config_id(self.account_id, self.client)
-            parameters = {"optimization_run": {
+            parameters = {
+                "_display_title": operator_identity.display_title,
+                "_display_subtitle": operator_identity.display_scope,
+                "optimization_run": {
                 "run_key": self.run_key,
                 "attempt_id": attempt_id,
                 "lifecycle_version": LIFECYCLE_VERSION,
                 "run_spec": dict(run_spec),
+                "operator_identity": operator_identity.as_dict(),
                 "latest_revision": None,
                 "revisions": [],
                 **{key: value for key, value in predecessor.items() if value},
             }}
             report = Report.create(
                 client=self.client, accountId=self.account_id, taskId=task.id,
-                name="Optimization Run", reportConfigurationId=config_id, parameters=parameters,
-                output=self._render_report_manifest("running", None),
+                name=operator_identity.display_title,
+                reportConfigurationId=config_id,
+                parameters=parameters,
+                output=self._render_report_manifest(
+                    "running", None, identity=operator_identity,
+                ),
             )
         blocks = self._ensure_fixed_blocks(report)
         self._state = OptimizationRunReportState(
-            task=task, report=report, blocks=blocks, run_spec=dict(run_spec), attempt_id=attempt_id,
+            task=task, report=report, blocks=blocks,
+            stages={str(getattr(stage, "name", "")): stage for stage in stages},
+            run_spec=dict(run_spec), attempt_id=attempt_id,
+            operator_identity=operator_identity,
         )
+        running_stage = next(
+            (stage for stage in stages if str(getattr(stage, "status", "")).upper() == "RUNNING"),
+            stages[0] if stages else None,
+        )
+        if running_stage is not None and getattr(task, "currentStageId", None) != running_stage.id:
+            task.update(currentStageId=running_stage.id)
         try:
             self._ensure_initial_envelopes(self._state)
         except Exception as exc:
@@ -462,6 +692,8 @@ class OptimizationRunReportService:
         revision_number = self._latest_revision_number(state.report) + 1
         try:
             generated_at = self.now()
+            _validate_view(stakeholder_view)
+            safe_overview = dict(stakeholder_view.get("overview") or {})
             raw_evidence = _json(decision_evidence)
             evidence_checksum = sha256(raw_evidence).hexdigest()
             workbook = build_stakeholder_workbook(stakeholder_view, revision_number=revision_number, generated_at=generated_at)
@@ -469,11 +701,47 @@ class OptimizationRunReportService:
             self._attach_task_file(state.task, raw_path)
             workbook_path = self._artifact_uploader(state.task.id, f"optimization-workbook-r{revision_number:04d}.xlsx", workbook.content)
             self._attach_task_file(state.task, workbook_path)
+            artifacts = [
+                _artifact_descriptor(
+                    logical_id="run_evidence",
+                    kind="run_evidence",
+                    display_name="Decision evidence",
+                    scope="run",
+                    content_type="application/json",
+                    content=raw_evidence,
+                    object_key=raw_path,
+                    task_id=state.task.id,
+                    source_revision=revision_number,
+                ),
+                _artifact_descriptor(
+                    logical_id="stakeholder_workbook",
+                    kind="stakeholder_workbook",
+                    display_name="Stakeholder workbook",
+                    scope="run",
+                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    content=workbook.content,
+                    object_key=workbook_path,
+                    task_id=state.task.id,
+                    source_revision=revision_number,
+                ),
+            ]
+            artifacts.extend(build_scorecard_artifacts(
+                stakeholder_view,
+                revision_number=revision_number,
+                task_id=state.task.id,
+                uploader=self._artifact_uploader,
+            ))
             manifest = {
                 "revision": revision_number, "milestone": milestone, "published_at": _iso(generated_at),
                 "coverage_complete": bool((decision_evidence.get("coverage") or {}).get("complete", decision_evidence.get("coverage_complete", False))),
                 "evidence_checksum": evidence_checksum, "workbook_checksum": workbook.checksum,
                 "workbook_path": workbook_path, "row_counts": dict(workbook.row_counts),
+                "scorecard_count": sum(
+                    1 for item in artifacts if item["kind"] == "scorecard_summary"
+                ),
+                "score_count": len(stakeholder_view.get("portfolio", [])),
+                "artifacts": artifacts,
+                "overview": safe_overview,
             }
             manifest_bytes = _json(manifest)
             manifest_path = self._artifact_uploader(state.task.id, f"optimization-revision-r{revision_number:04d}.json", manifest_bytes)
@@ -491,8 +759,14 @@ class OptimizationRunReportService:
                 evidence_checksum=evidence_checksum,
                 workbook_checksum=workbook.checksum,
                 row_counts=workbook.row_counts,
+                overview=safe_overview,
+                artifacts=tuple(artifacts),
             )
             self._record_latest_revision(state, revision)
+            # TaskStage is the dashboard's lifecycle projection. Advance it
+            # only after the immutable evidence, workbook, block pointers, and
+            # Report cover page have all been made durable.
+            self._advance_stage_for_milestone(milestone)
             return revision
         except Exception as exc:
             self.fail(f"Failed to durably publish {milestone}: {exc}")
@@ -515,7 +789,12 @@ class OptimizationRunReportService:
         try:
             task_metadata = _metadata(getattr(state.task, "metadata", {}))
             task_metadata["optimization_run_final_status"] = terminal_status
-            state.report.update(output=self._render_report_manifest(terminal_status, self._latest_revision(state.report)))
+            state.report.update(output=self._render_report_manifest(
+                terminal_status,
+                self._latest_revision(state.report),
+                identity=state.operator_identity,
+            ))
+            self._complete_all_stages()
             state.task.update(
                 status="COMPLETED",
                 completedAt=_iso(self.now()),
@@ -530,16 +809,88 @@ class OptimizationRunReportService:
         state = self._require_state()
         task_metadata = _metadata(getattr(state.task, "metadata", {}))
         task_metadata["optimization_run_final_status"] = "failed"
+        self._fail_active_stage(str(message))
         state.task.update(
             status="FAILED", errorMessage=str(message), completedAt=_iso(self.now()),
             metadata=json.dumps(task_metadata),
         )
         try:
-            state.report.update(output=self._render_report_manifest("failed", self._latest_revision(state.report), message))
+            state.report.update(output=self._render_report_manifest(
+                "failed",
+                self._latest_revision(state.report),
+                message,
+                identity=state.operator_identity,
+            ))
         except Exception:
             # The Task failure is the canonical safety signal if the report view is unavailable.
             pass
         return state
+
+    def _advance_stage_for_milestone(self, milestone: str) -> None:
+        target_name = _MILESTONE_STAGE.get(str(milestone))
+        if target_name is None:
+            return
+        state = self._require_state()
+        target = state.stages.get(target_name)
+        if target is None:
+            raise RuntimeError(f"missing TaskStage for milestone {milestone}: {target_name}")
+        target_order = int(getattr(target, "order", _STAGES.index(target_name)))
+        changed_at = self.now()
+        for stage in sorted(state.stages.values(), key=lambda item: int(getattr(item, "order", 0))):
+            order = int(getattr(stage, "order", 0))
+            status = str(getattr(stage, "status", "")).upper()
+            if order < target_order and status not in {"COMPLETED", "FAILED"}:
+                stage.update(
+                    status="COMPLETED",
+                    statusMessage="Complete",
+                    startedAt=getattr(stage, "startedAt", None) or changed_at,
+                    completedAt=changed_at,
+                )
+            elif order == target_order and status == "PENDING":
+                stage.update(
+                    status="RUNNING",
+                    statusMessage=f"Publishing {milestone}",
+                    startedAt=getattr(stage, "startedAt", None) or changed_at,
+                )
+        if getattr(state.task, "currentStageId", None) != target.id:
+            state.task.update(currentStageId=target.id)
+
+    def _complete_all_stages(self) -> None:
+        state = self._require_state()
+        completed_at = self.now()
+        for stage in sorted(state.stages.values(), key=lambda item: int(getattr(item, "order", 0))):
+            if str(getattr(stage, "status", "")).upper() in {"COMPLETED", "FAILED"}:
+                continue
+            stage.update(
+                status="COMPLETED",
+                statusMessage="Complete",
+                startedAt=getattr(stage, "startedAt", None) or completed_at,
+                completedAt=completed_at,
+            )
+
+    def _fail_active_stage(self, message: str) -> None:
+        """Best-effort stage failure; the Task remains the canonical signal."""
+        state = self._require_state()
+        ordered = sorted(state.stages.values(), key=lambda item: int(getattr(item, "order", 0)))
+        active = next(
+            (stage for stage in ordered if str(getattr(stage, "status", "")).upper() == "RUNNING"),
+            None,
+        )
+        if active is None:
+            active = next(
+                (stage for stage in ordered if str(getattr(stage, "status", "")).upper() != "COMPLETED"),
+                None,
+            )
+        if active is None or str(getattr(active, "status", "")).upper() == "FAILED":
+            return
+        try:
+            active.update(
+                status="FAILED",
+                statusMessage=message[:1000],
+                completedAt=self.now(),
+            )
+        except Exception:
+            pass
 
     def _require_state(self) -> OptimizationRunReportState:
         if self._state is None:
@@ -611,8 +962,20 @@ class OptimizationRunReportService:
                 name = "optimization-workbook-r0000.xlsx"
                 initial_view = {
                     "overview": {
-                        "headline": "Optimization run started",
+                        "headline": state.operator_identity.display_title,
+                        "lifecycle_status": "running",
+                        "current_activity": "Preparing exhaustive portfolio discovery.",
+                        "next_checkpoint": "Ranking begins after the run and report are durably initialized.",
                         "coverage_status": "pending",
+                        "ranking_window": "pending",
+                        "scorecards_inspected": 0,
+                        "ranked_score_count": 0,
+                        "unranked_score_count": 0,
+                        "cooldown_excluded_count": 0,
+                        "assessment_progress": "Not started",
+                        "diagnosis_coverage": "Not started",
+                        "pending_approval_count": 0,
+                        "notes": "No score, guideline, champion, or feedback setting is changed automatically.",
                     },
                     "portfolio": [],
                     "priorities": [],
@@ -647,6 +1010,7 @@ class OptimizationRunReportService:
             "evidence_path": revision.raw_evidence_path,
             "evidence_checksum": revision.evidence_checksum, "workbook_checksum": revision.workbook_checksum,
             "row_counts": dict(revision.row_counts),
+            "overview": dict(revision.overview),
         }
         revisions = list(run.get("revisions") or [])
         if any(int(item.get("number") or -1) == revision.number for item in revisions if isinstance(item, Mapping)):
@@ -656,8 +1020,16 @@ class OptimizationRunReportService:
         run["revisions"] = revisions
         run["run_key"] = self.run_key
         run["lifecycle_version"] = LIFECYCLE_VERSION
+        run["operator_identity"] = state.operator_identity.as_dict()
+        parameters["_display_title"] = state.operator_identity.display_title
+        parameters["_display_subtitle"] = state.operator_identity.display_scope
         parameters["optimization_run"] = run
-        state.report.update(parameters=parameters, output=self._render_report_manifest("RUNNING", latest))
+        state.report.update(
+            parameters=parameters,
+            output=self._render_report_manifest(
+                "RUNNING", latest, identity=state.operator_identity,
+            ),
+        )
         task_metadata = _metadata(getattr(state.task, "metadata", {}))
         task_metadata["optimization_run_key"] = self.run_key
         task_metadata["latest_revision"] = latest
@@ -672,13 +1044,77 @@ class OptimizationRunReportService:
         return ((_metadata(getattr(report, "parameters", {})).get("optimization_run") or {}).get("latest_revision"))
 
     @staticmethod
-    def _render_report_manifest(status: str, revision: Optional[Mapping[str, Any]], error: Optional[str] = None) -> str:
-        lines = ["# Optimization Run", "", f"Status: {status}"]
+    def _render_report_manifest(
+        status: str,
+        revision: Optional[Mapping[str, Any]],
+        error: Optional[str] = None,
+        *,
+        identity: OptimizationOperatorIdentity,
+    ) -> str:
+        def safe(value: Any) -> str:
+            return " ".join(str(value or "").split()).strip()
+
+        overview = revision.get("overview") if isinstance(revision, Mapping) else {}
+        overview = overview if isinstance(overview, Mapping) else {}
+        milestone = safe(revision.get("milestone")) if isinstance(revision, Mapping) else ""
+        stage_name = (
+            _MILESTONE_STAGE.get(milestone, "preflight").replace("_", " ").title()
+        )
+        normalized_status = safe(status) or "running"
+        coverage = safe(overview.get("coverage_status")) or "pending"
+        inspected = overview.get("scorecards_inspected", 0)
+        ranked = overview.get("ranked_score_count", 0)
+        unranked = overview.get("unranked_score_count", 0)
+        cooldown = overview.get("cooldown_excluded_count", 0)
+        lines = [
+            f"# {identity.display_title}",
+            "",
+            f"Scope: {identity.display_scope}",
+            f"Status: {normalized_status}",
+            f"Current phase: {stage_name}",
+        ]
         if revision:
-            lines.append(f"Latest durable revision: {revision.get('number')}")
-            lines.append(f"Milestone: {revision.get('milestone')}")
+            lines.extend([
+                f"Latest durable revision: {revision.get('number')}",
+                f"Milestone: {milestone}",
+            ])
+        current_activity = safe(overview.get("current_activity"))
+        next_checkpoint = safe(overview.get("next_checkpoint"))
+        if current_activity:
+            lines.extend(["", "## What is happening now", "", current_activity])
+        if next_checkpoint:
+            lines.extend(["", "Next checkpoint: " + next_checkpoint])
+        lines.extend([
+            "",
+            "## Coverage and progress",
+            "",
+            f"Coverage: {coverage.title()}",
+            (
+                f"Portfolio: {inspected} scorecards inspected; {ranked} ranked; "
+                f"{unranked} unranked; {cooldown} cooldown exclusions."
+            ),
+        ])
+        for label, key in (
+            ("Assessment", "assessment_progress"),
+            ("Diagnosis", "diagnosis_coverage"),
+            ("Pending approvals", "pending_approval_count"),
+        ):
+            value = safe(overview.get(key))
+            if value:
+                lines.append(f"{label}: {value}")
+        notes = safe(overview.get("notes"))
+        if notes or coverage.lower() == "incomplete":
+            lines.extend(["", "## Limitations", ""])
+            if coverage.lower() == "incomplete":
+                lines.append("Coverage is incomplete, so findings and priorities are partial rather than exact.")
+            if notes:
+                lines.append(notes)
+        lines.extend([
+            "",
+            "The latest stakeholder workbook and immutable evidence are available in this Report's artifact blocks.",
+        ])
         if error:
-            lines.extend(["", f"Publication error: {error}"])
+            lines.extend(["", f"Publication error: {safe(error)}"])
         return "\n".join(lines)
 
     def _find_task(self, run_key: str) -> Any:
@@ -723,7 +1159,12 @@ class OptimizationRunReportService:
         digest = sha256(content).hexdigest()
         content_type = (
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            if name.endswith(".xlsx") else "application/json"
+            if name.endswith(".xlsx")
+            else "text/markdown; charset=utf-8"
+            if name.endswith(".md")
+            else "text/csv; charset=utf-8"
+            if name.endswith(".csv")
+            else "application/json"
         )
         write_request = ArtifactTransferRequest(
             operation="WRITE",

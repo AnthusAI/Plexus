@@ -51,7 +51,7 @@ class _ReportService:
 
 def _dependencies(
     *, rank, assess, diagnose, summary, dispatch, review, report, human_review,
-    create_action=None,
+    create_action=None, publish_update=None,
 ):
     from plexus.optimization.portfolio_run import PortfolioRunDependencies
 
@@ -65,7 +65,42 @@ def _dependencies(
         report_service=lambda _run_key, _request: report,
         human_review=human_review,
         create_action=create_action,
+        publish_update=publish_update,
     )
+
+
+def test_portfolio_run_publishes_idempotent_operator_milestones_after_report_updates():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    updates: list[dict[str, Any]] = []
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": []},
+        assess=lambda _request: {},
+        diagnose=lambda _request: {},
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda _request: {},
+        review=lambda _request: {},
+        report=report,
+        human_review=lambda _request: {},
+        publish_update=lambda update: updates.append(update) or {"created": True},
+    ))
+
+    result = runner.run({"account_id": "account-1", "run_key": "daily-run"})
+
+    assert result["status"] == "COMPLETED"
+    assert [update["event_key"] for update in updates] == [
+        "optimization:daily-run:started",
+        "optimization:daily-run:analysis_ready",
+        "optimization:daily-run:completed",
+    ]
+    assert updates[0]["milestone"] == "STARTED"
+    assert updates[1]["milestone"] == "COMPLETED"
+    assert updates[2]["milestone"] == "COMPLETED"
+    assert all(update["resource_refs"] == [{
+        "system": "plexus", "kind": "report", "id": "report-1",
+        "relation": "optimization_run",
+    }] for update in updates)
 
 
 def test_portfolio_run_creates_the_living_report_before_analysis_and_only_launches_independently_approved_exact_targets():
@@ -116,7 +151,8 @@ def test_portfolio_run_creates_the_living_report_before_analysis_and_only_launch
     assert len(report.started) == 1
     assert report.milestones[0][0] == "started"
     assert [milestone[0] for milestone in report.milestones] == [
-        "started", "ranking_assessment", "diagnosis", "approval", "optimization_review", "finalization"
+        "started", "ranking", "assessment", "diagnosis", "approval",
+        "optimization", "optimization", "optimization_review", "finalization",
     ]
     assert review_requests[0]["action_key"] == "optimization-approval:daily-account-1-2026-07-01:1"
     assert review_requests[0]["response_schema"]["type"] == "object"
@@ -153,10 +189,10 @@ def test_incomplete_ranking_is_published_and_finalized_incomplete_without_assess
     assert result["status"] == "INCOMPLETE"
     assert calls == {"assess": 0, "review": 0, "dispatch": 0}
     assert report.terminal == ["INCOMPLETE"]
-    assert [row[0] for row in report.milestones] == ["started", "ranking_assessment", "finalization"]
+    assert [row[0] for row in report.milestones] == ["started", "ranking", "finalization"]
 
 
-def test_all_assessments_are_published_before_semantic_diagnosis_begins():
+def test_ranking_and_all_assessments_are_published_as_distinct_milestones_before_semantic_diagnosis_begins():
     from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
 
     report = _ReportService()
@@ -170,12 +206,17 @@ def test_all_assessments_are_published_before_semantic_diagnosis_begins():
     assessed: list[str] = []
 
     def assess(request):
+        if not assessed:
+            assert [row[0] for row in report.milestones] == ["started", "ranking"]
+            ranking_evidence = report.milestones[-1][1]
+            assert ranking_evidence["rank"]["ranked"] == rank_packet["ranked"]
+            assert ranking_evidence["assessments"] == []
         assessed.append(request["score_id"])
         return _assessment(request["scorecard_id"], request["score_id"])
 
     def diagnose(request):
         assert assessed == ["one", "two"]
-        assert [row[0] for row in report.milestones] == ["started", "ranking_assessment"]
+        assert [row[0] for row in report.milestones] == ["started", "ranking", "assessment"]
         published = report.milestones[-1][1]
         assert len(published["assessments"]) == 2
         assert published["diagnoses"] == []
@@ -198,9 +239,133 @@ def test_all_assessments_are_published_before_semantic_diagnosis_begins():
     result = runner.run({"account_id": "account-1", "run_key": "assessment-first"})
 
     assert result["status"] == "COMPLETED"
-    assert [row[0] for row in report.milestones[:3]] == [
-        "started", "ranking_assessment", "diagnosis"
+    assert [row[0] for row in report.milestones[:4]] == [
+        "started", "ranking", "assessment", "diagnosis"
     ]
+
+
+def test_semantic_diagnosis_is_bounded_to_top_ten_plus_monitoring_candidates_in_rank_order():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    ranked = [
+        {
+            "scorecard_id": "card",
+            "score_id": f"score-{index:02d}",
+            "scorecard_name": "Example Portfolio",
+            "score_name": f"Score {index:02d}",
+        }
+        for index in range(14)
+    ]
+    diagnosed: list[str] = []
+
+    def assess(request):
+        packet = _assessment(request["scorecard_id"], request["score_id"])
+        if request["score_id"] in {"score-04", "score-11"}:
+            packet["states"] = {"optimization": "monitoring_candidate"}
+        return packet
+
+    def diagnose(request):
+        diagnosed.append(request["score_id"])
+        return dict(request["assessment"])
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": ranked},
+        assess=assess,
+        diagnose=diagnose,
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda _request: (_ for _ in ()).throw(AssertionError("must wait for approval")),
+        review=lambda _request: {},
+        report=report,
+        human_review=lambda _request: {"decisions": []},
+    ))
+
+    result = runner.run({
+        "account_id": "account-1",
+        "run_key": "bounded-diagnosis",
+        "wait_for_human": True,
+        "max_semantic_diagnoses": 12,
+    })
+
+    assert diagnosed == [
+        "score-00", "score-01", "score-02", "score-03", "score-04",
+        "score-05", "score-06", "score-07", "score-08", "score-09",
+        "score-11",
+    ]
+    diagnosis_evidence = next(
+        evidence for milestone, evidence, _view in report.milestones
+        if milestone == "diagnosis"
+    )
+    assert diagnosis_evidence["diagnosis_coverage"] == {
+        "policy_version": "portfolio-diagnosis-scope-v1",
+        "ranked_count": 14,
+        "top_priority_count": 10,
+        "monitoring_candidate_count": 2,
+        "overlap_count": 1,
+        "selected_count": 11,
+        "completed_count": 11,
+        "failed_count": 0,
+        "skipped_count": 3,
+        "max_semantic_diagnoses": 12,
+        "selected_scope_complete": True,
+        "portfolio_semantic_complete": False,
+        "blockers": [],
+    }
+    approval_target_ids = {
+        target["score_id"]
+        for request in result["approval_requests"]
+        for target in request["targets"]
+    }
+    assert approval_target_ids == {
+        "score-00", "score-01", "score-02", "score-03",
+        "score-05", "score-06", "score-07", "score-08", "score-09",
+    }
+    diagnosis_view = next(
+        view for milestone, _evidence, view in report.milestones
+        if milestone == "diagnosis"
+    )
+    assert diagnosis_view["portfolio"][10]["readiness"] == "incomplete"
+    assert diagnosis_view["portfolio"][10]["next_action"] == "await_semantic_diagnosis"
+
+
+def test_semantic_diagnosis_limit_fails_closed_before_any_model_backed_work():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    diagnosed: list[str] = []
+    ranked = [
+        {"scorecard_id": "card", "score_id": f"score-{index:02d}"}
+        for index in range(10)
+    ]
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": ranked},
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: diagnosed.append(request["score_id"]) or request["assessment"],
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda _request: (_ for _ in ()).throw(AssertionError("must not dispatch")),
+        review=lambda _request: {},
+        report=report,
+        human_review=lambda _request: (_ for _ in ()).throw(AssertionError("must not request approval")),
+    ))
+
+    result = runner.run({
+        "account_id": "account-1",
+        "run_key": "semantic-limit",
+        "max_semantic_diagnoses": 9,
+    })
+
+    assert result["status"] == "INCOMPLETE"
+    assert diagnosed == []
+    assert report.terminal == ["INCOMPLETE"]
+    coverage = result["diagnosis_coverage"]
+    assert coverage["selected_count"] == 10
+    assert coverage["completed_count"] == 0
+    assert coverage["selected_scope_complete"] is False
+    assert coverage["blockers"] == [{
+        "code": "semantic_diagnosis_limit_exceeded",
+        "selected_count": 10,
+        "max_semantic_diagnoses": 9,
+    }]
 
 
 def test_diagnosis_failure_preserves_the_published_assessment_milestone():
@@ -210,7 +375,12 @@ def test_diagnosis_failure_preserves_the_published_assessment_milestone():
     runner = OptimizationPortfolioRunner(_dependencies(
         rank=lambda _request: {
             "coverage": {"complete": True},
-            "ranked": [{"scorecard_id": "card", "score_id": "score"}],
+            "ranked": [{
+                "scorecard_id": "card",
+                "score_id": "score",
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Priority Score",
+            }],
         },
         assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
         diagnose=lambda _request: (_ for _ in ()).throw(RuntimeError("diagnosis unavailable")),
@@ -225,7 +395,7 @@ def test_diagnosis_failure_preserves_the_published_assessment_milestone():
 
     assert result["status"] == "FAILED"
     assert result["error"] == "diagnosis unavailable"
-    assert [row[0] for row in report.milestones] == ["started", "ranking_assessment"]
+    assert [row[0] for row in report.milestones] == ["started", "ranking", "assessment"]
     assert report.milestones[-1][1]["assessments"]
     assert report.milestones[-1][1]["diagnoses"] == []
     assert report.failures == ["Optimization portfolio run failed: diagnosis unavailable"]
@@ -275,6 +445,42 @@ def test_tactus_checkpoint_mode_leaves_the_same_report_running_until_an_authorit
     assert result["status"] == "WAITING_FOR_APPROVAL"
     assert report.terminal == []
     assert result["approval_requests"][0]["action_key"] == "optimization-approval:wait:1"
+
+
+def test_tactus_suspension_happens_only_after_pending_approval_is_durable_in_the_report():
+    import pytest
+    from tactus.core.exceptions import ProcedureWaitingForHuman
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {
+            "coverage": {"complete": True},
+            "ranked": [{
+                "scorecard_id": "card",
+                "score_id": "score",
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Priority Score",
+            }],
+        },
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: request["assessment"],
+        summary=lambda _request: {},
+        dispatch=lambda _request: (_ for _ in ()).throw(AssertionError("must not dispatch")),
+        review=lambda _request: {},
+        report=report,
+        human_review=lambda _request: (_ for _ in ()).throw(
+            ProcedureWaitingForHuman("procedure-1", "message-1")
+        ),
+    ))
+
+    with pytest.raises(ProcedureWaitingForHuman):
+        runner.run({"account_id": "account-1", "run_key": "suspend"})
+
+    assert report.milestones[-1][0] == "approval"
+    approval_evidence = report.milestones[-1][1]
+    assert approval_evidence["approval_requests"][0]["action_key"] == "optimization-approval:suspend:1"
+    assert report.terminal == []
 
 
 def test_saved_approval_cannot_authorize_recomputed_evidence():
@@ -456,6 +662,8 @@ def test_nonblocking_findings_are_persisted_as_existing_chat_messages_and_report
     report = _ReportService()
     action_inputs: list[dict[str, Any]] = []
     assessment = _assessment("card", "score")
+    assessment["scorecard_name"] = "Example Portfolio"
+    assessment["score_name"] = "Priority Score"
     diagnosis = {
         **assessment,
         "states": {"optimization": "stakeholder_clarification_required"},
@@ -483,6 +691,11 @@ def test_nonblocking_findings_are_persisted_as_existing_chat_messages_and_report
     result = runner.run({"account_id": "account-1", "run_key": "questions"})
 
     assert action_inputs[0]["action_key"].startswith("stakeholder_clarification:questions:")
+    assert action_inputs[0]["title"] == "Clarify policy for Priority Score"
+    assert action_inputs[0]["message"] == "Which policy should apply?"
+    assert action_inputs[0]["payload"]["scorecard_name"] == "Example Portfolio"
+    assert action_inputs[0]["payload"]["score_name"] == "Priority Score"
+    assert action_inputs[0]["resource_refs"][1]["label"] == "Example Portfolio — Priority Score"
     assert result["actions"][0]["message_id"] == "chat-message-1"
     assert result["actions"][0]["response_status"] == "COMPLETED"
     assert result["actions"][0]["response_message_id"] == "response-1"
@@ -544,3 +757,43 @@ def test_stakeholder_projection_preserves_available_counts_states_trends_and_act
     assert "opaque-score" not in str(view)
     assert view["priorities"][0]["evidence_count"] == 240
     assert view["feedback_investment"][0]["coverage_status"] == "complete"
+
+
+def test_stakeholder_overview_explains_current_work_and_next_durable_checkpoint():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    started = _stakeholder_view({
+        "rank": None,
+        "assessments": [],
+        "diagnoses": [],
+        "reviews": [],
+        "approval_requests": [],
+        "diagnosis_coverage": {"selected_count": 0, "completed_count": 0, "failed_count": 0},
+    }, milestone="started")
+    assert started["overview"]["coverage_status"] == "pending"
+    assert "Enumerating every scorecard" in started["overview"]["current_activity"]
+    assert "ranked portfolio" in started["overview"]["next_checkpoint"]
+
+    ranked = _stakeholder_view({
+        "rank": {
+            "coverage": {
+                "complete": True,
+                "scope": {"total_scorecards_inspected": 12},
+                "activity": {"recent_activity_excluded_count": 3},
+            },
+            "ranked": [{"scorecard_id": "card", "score_id": "score"}],
+            "unranked": [{}, {}],
+            "window": {"start": "a", "end": "b"},
+        },
+        "assessments": [],
+        "diagnoses": [],
+        "reviews": [],
+        "approval_requests": [],
+        "diagnosis_coverage": {"selected_count": 1, "completed_count": 0, "failed_count": 0},
+    }, milestone="ranking")
+    assert ranked["overview"]["scorecards_inspected"] == 12
+    assert ranked["overview"]["ranked_score_count"] == 1
+    assert ranked["overview"]["unranked_score_count"] == 2
+    assert ranked["overview"]["cooldown_excluded_count"] == 3
+    assert ranked["overview"]["assessment_progress"] == "0 of 1 ranked scores complete"
+    assert "deterministic readiness" in ranked["overview"]["current_activity"]

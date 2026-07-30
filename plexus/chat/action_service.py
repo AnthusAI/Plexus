@@ -97,6 +97,80 @@ class ChatMessageActionService:
         created = self._create_message(normalized, session)
         return {"action": created, "created": True}
 
+    def publish_update(
+        self,
+        update: Mapping[str, Any],
+        *,
+        procedure_id: str,
+        session_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Create one idempotent milestone notification using ChatMessage."""
+        event_key = str(update.get("event_key") or "").strip()
+        account_id = str(update.get("account_id") or update.get("accountId") or "").strip()
+        milestone = str(update.get("milestone") or "").strip().upper()
+        title = str(update.get("title") or "").strip()
+        if not event_key or not account_id or not procedure_id or not milestone or not title:
+            raise ValueError("event_key, account_id, procedure_id, milestone, and title are required")
+        resource_refs = update.get("resource_refs") or []
+        if not isinstance(resource_refs, list) or any(not isinstance(row, Mapping) for row in resource_refs):
+            raise ValueError("resource_refs must be a list of objects")
+        session = self._resolve_session(
+            account_id=account_id,
+            procedure_id=procedure_id,
+            session_id=session_id,
+        )
+        message_id = f"update-{_fingerprint({'account_id': account_id, 'procedure_id': procedure_id, 'event_key': event_key})[:48]}"
+        existing = self._get_message(message_id)
+        if existing is not None:
+            return {"update": existing, "created": False}
+        now = datetime.now(timezone.utc).isoformat()
+        metadata = {
+            "event_key": event_key,
+            "milestone": milestone,
+            "title": title,
+            "summary": str(update.get("summary") or "").strip() or None,
+            "resource_refs": [dict(row) for row in resource_refs],
+        }
+        create_input = {
+            "id": message_id,
+            "accountId": account_id,
+            "sessionId": session["id"],
+            "procedureId": procedure_id,
+            "role": "ASSISTANT",
+            "humanInteraction": "NOTIFICATION",
+            "messageType": "MESSAGE",
+            "content": title,
+            "metadata": json.dumps(metadata),
+            "responseStatus": "COMPLETED",
+            "createdAt": now,
+        }
+        mutation = """
+        mutation CreateChatMessageUpdate($input: CreateChatMessageInput!) {
+            createChatMessage(input: $input) {
+                id accountId sessionId procedureId role humanInteraction content metadata
+                responseStatus createdAt sequenceNumber
+            }
+        }
+        """
+        try:
+            result = self.client.execute(
+                mutation,
+                {"input": create_input},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
+        except Exception:
+            existing = self._get_message(message_id)
+            if existing is not None:
+                return {"update": existing, "created": False}
+            raise
+        created = _graphql_field(result, "createChatMessage")
+        if isinstance(created, Mapping):
+            return {"update": dict(created), "created": True}
+        existing = self._get_message(message_id)
+        if existing is not None:
+            return {"update": existing, "created": False}
+        raise RuntimeError("Unable to create ChatMessage update")
+
     def resolve_first_valid_response(
         self,
         message_id: str,
@@ -588,6 +662,9 @@ class ChatMessageActionService:
             "procedure_id": action["procedure_id"],
             "request_type": request_type,
             "action_key": action["action_key"],
+            "kind": action.get("kind"),
+            "title": action.get("title"),
+            "message": action.get("message"),
             "resource_refs": action["resource_refs"],
             "preconditions": action["preconditions"],
             "precondition_fingerprint": action["precondition_fingerprint"],

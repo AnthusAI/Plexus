@@ -40,6 +40,7 @@ SCORE_AUDIT_DIFF_TEXT_MAX_CHARS = 20_000
 SCORE_AUDIT_UNIFIED_DIFF_MAX_CHARS = 20_000
 FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY = 4
 FEEDBACK_ALIGNMENT_SCORECARD_CONCURRENCY = 5
+OPTIMIZATION_RANK_INVENTORY_PAGE_SIZE = 100
 
 
 PLEXUS_DOCS_DIR = os.path.normpath(
@@ -9673,6 +9674,7 @@ class PlexusRuntimeModule:
             page_args = {
                 "return_metadata": True,
                 "_include_scores": True,
+                "limit": OPTIMIZATION_RANK_INVENTORY_PAGE_SIZE,
                 "next_token": next_token,
                 "account_id": args.get("account_id"),
                 "as_of": as_of,
@@ -10488,6 +10490,17 @@ class PlexusRuntimeModule:
             )
             return {**dict(persisted), "resolution": resolution}
 
+        def publish_update(payload: dict[str, Any]) -> Mapping[str, Any]:
+            if action_service is None or not procedure_id or not hasattr(action_service, "publish_update"):
+                raise RuntimeError(
+                    "optimization.portfolio_run requires ChatMessage update authority"
+                )
+            return action_service.publish_update(
+                payload,
+                procedure_id=procedure_id,
+                session_id=session_id,
+            )
+
         def operation(name: str) -> Callable[[dict[str, Any]], Any]:
             return lambda payload: self._optimization_handlers[name](
                 _merge_runtime_context_args(dict(payload), self._runtime_context)
@@ -10507,6 +10520,11 @@ class PlexusRuntimeModule:
                 # accepted through this compatibility dependency.
                 human_review=lambda _request: {"decisions": []},
                 create_action=create_action,
+                publish_update=(
+                    publish_update
+                    if action_service is not None and hasattr(action_service, "publish_update")
+                    else None
+                ),
             )
         )
         return runner.run({**args, "wait_for_human": True})

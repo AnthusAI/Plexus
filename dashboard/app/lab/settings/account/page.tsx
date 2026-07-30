@@ -6,9 +6,14 @@ import { useAuthenticator } from "@aws-amplify/ui-react"
 import { generateClient } from "@aws-amplify/api"
 import type { Schema } from "@/amplify/data/resource"
 import type { AccountSettings } from "@/types/account-config"
-import { isValidAccountSettings } from "@/types/account-config"
+import {
+    isValidAccountSettings,
+    mergeAccountSettings,
+    validateDashboardBaseUrl,
+} from "@/types/account-config"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
 import { useAccount } from "@/app/contexts/AccountContext"
@@ -35,6 +40,8 @@ export default function LabAccountSettings() {
     const { toast } = useToast()
     const { selectedAccount, refreshAccount } = useAccount()
     const [hiddenItems, setHiddenItems] = useState<string[]>([])
+    const [dashboardBaseUrl, setDashboardBaseUrl] = useState("")
+    const [dashboardBaseUrlError, setDashboardBaseUrlError] = useState<string | null>(null)
     const [isSaving, setIsSaving] = useState(false)
 
     useEffect(() => {
@@ -49,6 +56,7 @@ export default function LabAccountSettings() {
                 JSON.parse(selectedAccount.settings) : selectedAccount.settings
             if (isValidAccountSettings(parsedSettings)) {
                 setHiddenItems(parsedSettings.hiddenMenuItems)
+                setDashboardBaseUrl(parsedSettings.reporting?.dashboardBaseUrl ?? "")
             }
         }
     }, [selectedAccount])
@@ -67,9 +75,24 @@ export default function LabAccountSettings() {
 
         setIsSaving(true)
         try {
-            const newSettings: AccountSettings = {
-                hiddenMenuItems: hiddenItems
+            const parsedSettings = selectedAccount.settings
+                ? (typeof selectedAccount.settings === 'string'
+                    ? JSON.parse(selectedAccount.settings)
+                    : selectedAccount.settings)
+                : { hiddenMenuItems: [] }
+            const currentSettings: AccountSettings = isValidAccountSettings(parsedSettings)
+                ? parsedSettings
+                : { hiddenMenuItems: [] }
+            const validation = validateDashboardBaseUrl(dashboardBaseUrl)
+            if (!validation.valid) {
+                setDashboardBaseUrlError(validation.message)
+                return
             }
+
+            const newSettings = mergeAccountSettings(currentSettings, {
+                hiddenMenuItems: hiddenItems,
+                dashboardBaseUrl,
+            })
             await accountApi.update(selectedAccount.id, JSON.stringify(newSettings))
             
             // Refresh the account data to update the menu
@@ -109,8 +132,46 @@ export default function LabAccountSettings() {
             <div>
                 <h1 className="text-3xl font-bold">Account Settings</h1>
                 <p className="text-muted-foreground">
-                    Customize your account menu visibility settings.
+                    Configure account-wide dashboard behavior and menu visibility.
                 </p>
+            </div>
+
+            <div className="bg-card p-6 space-y-4 rounded-lg">
+                <div>
+                    <h2 className="text-xl font-semibold">Report Links for {selectedAccount.name}</h2>
+                    <p className="text-muted-foreground">
+                        Set the deployed dashboard origin used for durable links in reports and exported artifacts.
+                    </p>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="dashboard-base-url">Dashboard base URL</Label>
+                    <Input
+                        id="dashboard-base-url"
+                        type="url"
+                        value={dashboardBaseUrl}
+                        placeholder="https://dashboard.example.com"
+                        aria-invalid={Boolean(dashboardBaseUrlError)}
+                        aria-describedby={dashboardBaseUrlError ? "dashboard-base-url-error" : undefined}
+                        onChange={(event) => {
+                            setDashboardBaseUrl(event.target.value)
+                            setDashboardBaseUrlError(null)
+                        }}
+                        onBlur={() => {
+                            const validation = validateDashboardBaseUrl(dashboardBaseUrl)
+                            if (!validation.valid) {
+                                setDashboardBaseUrlError(validation.message)
+                            }
+                        }}
+                    />
+                    {dashboardBaseUrlError && (
+                        <p id="dashboard-base-url-error" className="text-sm text-destructive">
+                            {dashboardBaseUrlError}
+                        </p>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                        Use the HTTPS origin only, without a path. Leave blank until the deployed URL is known.
+                    </p>
+                </div>
             </div>
 
             <div className="bg-card p-6 space-y-6 rounded-lg">

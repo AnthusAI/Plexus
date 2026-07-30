@@ -10,6 +10,7 @@ def _action(**overrides):
         "account_id": "account-1",
         "kind": "stakeholder_clarification",
         "title": "Review finding",
+        "message": "Which policy should apply?",
         "resource_refs": [{"system": "plexus", "kind": "score", "id": "score-1"}],
         "preconditions": {"evidence": "one"},
         "response_schema": {"type": "object"},
@@ -140,8 +141,71 @@ def test_create_or_get_supersedes_incompatible_pending_then_creates_message():
     control = json.loads(create_input["metadata"])["control"]
     assert control["action_key"] == "review:one"
     assert control["evidence_fingerprint"] == _fingerprint({"evidence": "two"})
+    assert control["kind"] == "stakeholder_clarification"
+    assert control["title"] == "Review finding"
+    assert control["message"] == "Which policy should apply?"
     assert create_input["responseStatus"] == "PENDING"
     assert all("updateProcedure" not in call.args[0] for call in client.execute.call_args_list)
+
+
+def test_publish_update_creates_one_idempotent_notification_for_an_event_key():
+    client = Mock()
+    created = {
+        "id": "update-created",
+        "accountId": "account-1",
+        "sessionId": "session-1",
+        "procedureId": "procedure-1",
+        "humanInteraction": "NOTIFICATION",
+        "content": "Portfolio analysis started",
+        "createdAt": "2026-07-30T12:00:00Z",
+    }
+    client.execute.side_effect = [
+        {"getChatSession": _session()},
+        {"getChatMessage": None},
+        {"createChatMessage": created},
+    ]
+
+    result = ChatMessageActionService(client).publish_update(
+        {
+            "event_key": "optimization:run-1:started",
+            "account_id": "account-1",
+            "milestone": "STARTED",
+            "title": "Portfolio analysis started",
+            "summary": "The living report is available while ranking proceeds.",
+            "resource_refs": [{"system": "plexus", "kind": "report", "id": "report-1"}],
+        },
+        procedure_id="procedure-1",
+        session_id="session-1",
+    )
+
+    assert result == {"update": created, "created": True}
+    create_input = client.execute.call_args_list[2].args[1]["input"]
+    assert create_input["humanInteraction"] == "NOTIFICATION"
+    assert create_input["content"] == "Portfolio analysis started"
+    control = json.loads(create_input["metadata"])
+    assert control["event_key"] == "optimization:run-1:started"
+    assert control["milestone"] == "STARTED"
+    assert control["summary"] == "The living report is available while ranking proceeds."
+    assert control["resource_refs"] == [{"system": "plexus", "kind": "report", "id": "report-1"}]
+
+    existing_client = Mock()
+    existing_client.execute.side_effect = [
+        {"getChatSession": _session()},
+        {"getChatMessage": created},
+    ]
+    replay = ChatMessageActionService(existing_client).publish_update(
+        {
+            "event_key": "optimization:run-1:started",
+            "account_id": "account-1",
+            "milestone": "STARTED",
+            "title": "Portfolio analysis started",
+            "resource_refs": [],
+        },
+        procedure_id="procedure-1",
+        session_id="session-1",
+    )
+    assert replay == {"update": created, "created": False}
+    assert len(existing_client.execute.call_args_list) == 2
 
 
 def test_resolve_first_valid_response_validates_authority_and_atomically_completes_parent():

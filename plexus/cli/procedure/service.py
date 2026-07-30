@@ -271,6 +271,11 @@ class ProcedureService:
                 name=name,
             )
 
+            procedure_name = str(getattr(procedure, "name", None) or name or "Procedure")
+            procedure_type: Optional[str] = None
+            display_title = procedure_name
+            display_scope: Optional[str] = None
+
             # Upload YAML as an application-authorized attachment and record
             # both the compatible key and integrity envelope in metadata.
             # Also seed scorecard_name/score_name so the dashboard subtitle renders
@@ -290,7 +295,30 @@ class ProcedureService:
                     try:
                         _yaml_data = yaml.safe_load(yaml_config)
                         if isinstance(_yaml_data, dict) and _yaml_data.get("procedure_type"):
-                            current_meta["procedure_type"] = _yaml_data["procedure_type"]
+                            procedure_type = str(_yaml_data["procedure_type"])
+                            current_meta["procedure_type"] = procedure_type
+                        if isinstance(_yaml_data, dict):
+                            from plexus.cli.procedure.parameter_parser import ProcedureParameterParser
+                            from plexus.optimization.operator_identity import optimization_operator_identity
+
+                            parameter_values = ProcedureParameterParser.extract_parameter_values(yaml_config)
+                            scope = {
+                                key: parameter_values[key]
+                                for key in ("scorecard_ids", "scorecard_name_prefixes")
+                                if key in parameter_values
+                            }
+                            semantic_text = f"{procedure_name} {procedure_type or ''}".lower()
+                            if "optimiz" in semantic_text:
+                                identity = optimization_operator_identity(
+                                    scope=scope,
+                                    scorecard_name=scorecard_identifier,
+                                    score_name=score_identifier,
+                                )
+                                display_title = identity.display_title
+                                display_scope = identity.display_scope
+                                current_meta["optimization_kind"] = identity.kind
+                                current_meta["display_title"] = display_title
+                                current_meta["display_scope"] = display_scope
                     except Exception:
                         pass
                 if yaml_config:
@@ -325,6 +353,10 @@ class ProcedureService:
                 score_id=score_id,
                 stage_configs=stage_configs,
                 dispatch_mode=dispatch_mode,
+                procedure_name=procedure_name,
+                procedure_type=procedure_type,
+                display_title=display_title,
+                display_scope=display_scope,
             )
             if task:
                 logger.info(f"Using Task {task.id} with {len(task.get_stages())} stages for procedure {procedure.id}")
@@ -1815,6 +1847,10 @@ Based on this data, you should prioritize examining error types with the highest
         score_id: Optional[str] = None,
         stage_configs: Optional[Dict[str, Any]] = None,
         dispatch_mode: Optional[str] = None,
+        procedure_name: Optional[str] = None,
+        procedure_type: Optional[str] = None,
+        display_title: Optional[str] = None,
+        display_scope: Optional[str] = None,
     ) -> Optional['Task']:
         """
         Get or create a Task with stages based on the procedure's state machine.
@@ -1893,6 +1929,14 @@ Based on this data, you should prioritize examining error types with the highest
                 "procedure_id": procedure_id,
                 "task_type": "Procedure",
             }
+            if procedure_name:
+                metadata["procedure_name"] = procedure_name
+            if procedure_type:
+                metadata["procedure_type"] = procedure_type
+            if display_title:
+                metadata["display_title"] = display_title
+            if display_scope:
+                metadata["display_scope"] = display_scope
             normalized_dispatch_mode = (dispatch_mode or "").strip().lower()
             if normalized_dispatch_mode:
                 metadata["dispatch_mode"] = normalized_dispatch_mode
@@ -1907,7 +1951,11 @@ Based on this data, you should prioritize examining error types with the highest
                 status="PENDING",  # Initial status
                 target=f"procedure/{procedure_id}",
                 command=f"procedure run {procedure_id}",
-                description=f"Procedure workflow for {procedure_id}",
+                description=(
+                    f"{display_title} — {display_scope}"
+                    if display_title and display_scope
+                    else f"{procedure_name or 'Procedure'} workflow"
+                ),
                 dispatchStatus=initial_dispatch_status,
                 metadata=json.dumps(metadata)
                 # createdAt and updatedAt are auto-generated by the database

@@ -2823,7 +2823,9 @@ def test_default_optimization_portfolio_run_composes_existing_operations_into_on
     assert result["approval_requests"][0]["action_key"] == "optimization-approval:report-run-opaque:1"
     assert [name for name, _ in calls] == ["rank", "assess", "diagnose"]
     assert all(args["persist"] is False for _, args in calls)
-    assert [milestone[0] for milestone in report.milestones] == ["started", "ranking_assessment", "diagnosis", "approval"]
+    assert [milestone[0] for milestone in report.milestones] == [
+        "started", "ranking", "assessment", "diagnosis", "approval",
+    ]
     assert all(row[1] == "procedure-opaque" for row in action_service.created)
 
 
@@ -3131,6 +3133,7 @@ def test_default_optimization_run_reports_each_dispatch_failure_without_losing_s
 
 def test_default_optimization_rank_paginates_with_one_retry_and_one_frozen_alignment_read() -> None:
     page_calls: list[str | None] = []
+    page_limits: list[int | None] = []
     alignment_calls: list[dict] = []
     first_page_attempts = 0
 
@@ -3138,6 +3141,7 @@ def test_default_optimization_rank_paginates_with_one_retry_and_one_frozen_align
         nonlocal first_page_attempts
         token = args.get("next_token")
         page_calls.append(token)
+        page_limits.append(args.get("limit"))
         if token is None:
             first_page_attempts += 1
             if first_page_attempts == 1:
@@ -3174,6 +3178,7 @@ def test_default_optimization_rank_paginates_with_one_retry_and_one_frozen_align
     result = module.optimization.rank({"days": 90})
 
     assert page_calls == [None, None, "page-2"]
+    assert page_limits == [100, 100, 100]
     assert alignment_calls[0]["scorecards"] == ["sc-1", "sc-2"]
     assert alignment_calls[0]["days"] == 90
     assert alignment_calls[0]["window_start"].endswith("T00:00:00Z")

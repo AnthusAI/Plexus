@@ -22,6 +22,12 @@ def test_portfolio_run_procedure_uses_the_single_runtime_orchestrator_and_struct
     assert "preconditions" in parsed["code"]
     assert "response_schema" in parsed["code"]
     assert "approval_responses" in parsed["code"]
+    assert parsed["params"]["max_semantic_diagnoses"] == {
+        "type": "number",
+        "required": True,
+        "description": "Explicit maximum number of model-backed semantic score diagnoses for this portfolio run.",
+    }
+    assert "max_semantic_diagnoses = params.max_semantic_diagnoses" in parsed["code"]
     assert "while true do" in parsed["code"]
     assert "set_champion" not in parsed["code"]
     assert "score.update" not in parsed["code"]

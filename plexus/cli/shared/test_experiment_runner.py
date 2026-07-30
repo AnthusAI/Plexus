@@ -8,6 +8,7 @@ import pytest
 
 from plexus.cli.shared.async_cleanup import drain_litellm_service_logging_tasks
 from plexus.cli.shared.experiment_runner import _extract_run_parameters_from_procedure_yaml
+from plexus.cli.shared.experiment_runner import create_tracker_and_experiment_task
 from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
 
 
@@ -150,6 +151,45 @@ parameters:
     result = _extract_run_parameters_from_procedure_yaml(yaml_text)
     assert result["days"] == 365
     assert result["hint"] == "focus on transfer language"
+
+
+def test_starting_a_run_preserves_semantic_procedure_identity(monkeypatch):
+    fake_task = _FakeTask()
+    fake_task.metadata = json.dumps({
+        "procedure_type": "Portfolio Optimization",
+        "display_title": "Account-wide optimization portfolio",
+        "display_scope": "All scorecards",
+    })
+    procedure = SimpleNamespace(
+        code=None,
+        metadata={"procedure_type": "Portfolio Optimization"},
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner._find_existing_task_for_procedure",
+        lambda *_args, **_kwargs: fake_task.id,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.Task.get_by_id",
+        lambda *_args, **_kwargs: fake_task,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.DashboardProcedure.get_by_id",
+        lambda *_args, **_kwargs: procedure,
+    )
+
+    _, _, task = create_tracker_and_experiment_task(
+        client=SimpleNamespace(),
+        account_id="acct-123",
+        procedure_id="proc-123",
+        run_parameters={"max_samples": 10},
+        local_dispatch=True,
+    )
+
+    metadata = json.loads(task.metadata)
+    assert metadata["procedure_type"] == "Portfolio Optimization"
+    assert metadata["procedure_action"] == "run"
+    assert metadata["display_title"] == "Account-wide optimization portfolio"
+    assert metadata["display_scope"] == "All scorecards"
 
 
 @pytest.mark.asyncio

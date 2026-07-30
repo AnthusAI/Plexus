@@ -17,6 +17,10 @@ params:
     type: number
     required: true
     description: "Explicit maximum optimizer cost per approved batch."
+  max_semantic_diagnoses:
+    type: number
+    required: true
+    description: "Explicit maximum number of model-backed semantic score diagnoses for this portfolio run."
   max_samples:
     type: number
     required: true
@@ -93,6 +97,7 @@ code: |
       scorecard_ids = params.scorecard_ids,
       scorecard_name_prefixes = params.scorecard_name_prefixes,
       max_cost_usd = params.max_cost_usd,
+      max_semantic_diagnoses = params.max_semantic_diagnoses,
       max_samples = params.max_samples,
       max_iterations = params.max_iterations,
       max_concurrency = params.max_concurrency,

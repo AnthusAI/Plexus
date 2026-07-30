@@ -471,7 +471,20 @@ def create_tracker_and_experiment_task(
                 except Exception:
                     task_metadata = {}
             task_metadata["procedure_id"] = procedure_id
-            task_metadata["procedure_type"] = "run"
+            # ``procedure_type`` is the semantic operator-facing kind seeded
+            # from the Procedure YAML.  Preserve it across execution; the CLI
+            # verb belongs in a separate field.
+            task_metadata["procedure_action"] = "run"
+            procedure_metadata = getattr(procedure_record, "metadata", None)
+            if isinstance(procedure_metadata, str):
+                try:
+                    procedure_metadata = json.loads(procedure_metadata)
+                except Exception:
+                    procedure_metadata = {}
+            if isinstance(procedure_metadata, dict):
+                for key in ("procedure_type", "display_title", "display_scope", "optimization_kind"):
+                    if key not in task_metadata and procedure_metadata.get(key):
+                        task_metadata[key] = procedure_metadata[key]
             if local_dispatch:
                 task_metadata = _with_local_dispatch_metadata(task_metadata)
             if run_parameters:

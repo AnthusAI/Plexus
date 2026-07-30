@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from io import BytesIO
+import csv
+from copy import deepcopy
 import inspect
 import json
 from types import SimpleNamespace
@@ -19,9 +21,12 @@ class _Task:
     def __init__(self, identifier: str = "task-1", **values):
         self.id = identifier
         self.accountId = values.get("accountId", "account-1")
+        self.type = values.get("type")
+        self.description = values.get("description")
         self.status = values.get("status", "RUNNING")
         self.metadata = values.get("metadata", {})
         self.attachedFiles = list(values.get("attachedFiles") or [])
+        self.currentStageId = values.get("currentStageId")
         self.updates: list[dict] = []
 
     @classmethod
@@ -35,6 +40,7 @@ class _Task:
         self.status = values.get("status", self.status)
         self.metadata = values.get("metadata", self.metadata)
         self.attachedFiles = list(values.get("attachedFiles", self.attachedFiles))
+        self.currentStageId = values.get("currentStageId", self.currentStageId)
         return self
 
 
@@ -45,6 +51,7 @@ class _Report:
         self.id = identifier
         self.taskId = values["taskId"]
         self.accountId = values["accountId"]
+        self.name = values.get("name")
         self.parameters = values.get("parameters", {})
         self.output = values.get("output")
         self.updates: list[dict] = []
@@ -97,12 +104,22 @@ class _TaskStage:
         self.name = values["name"]
         self.order = values["order"]
         self.status = values["status"]
+        self.statusMessage = values.get("statusMessage")
+        self.startedAt = values.get("startedAt")
+        self.completedAt = values.get("completedAt")
+        self.updates: list[dict] = []
 
     @classmethod
     def create(cls, **values):
         stage = cls(f"stage-{len(cls.created) + 1}", **values)
         cls.created.append(stage)
         return stage
+
+    def update(self, **values):
+        self.updates.append(values)
+        for key, value in values.items():
+            setattr(self, key, value)
+        return self
 
 
 class _ArtifactStore:
@@ -237,6 +254,73 @@ def test_start_or_resume_uses_one_running_task_report_and_fixed_blocks(monkeypat
     assert metadata["attempt_id"]
 
 
+def test_start_is_self_identifying_in_the_task_report_list_and_cover(monkeypatch):
+    service = _service(monkeypatch)
+
+    state = service.start_or_resume({"scope": {}})
+
+    assert state.task.type == "OptimizationRunReport"
+    assert state.task.description == "Account-wide optimization portfolio — All scorecards"
+    assert state.report.name == "Account-wide optimization portfolio"
+    assert state.report.parameters["_display_title"] == "Account-wide optimization portfolio"
+    assert state.report.parameters["_display_subtitle"] == "All scorecards"
+    assert state.report.parameters["optimization_run"]["operator_identity"] == {
+        "kind": "account_wide_portfolio",
+        "display_title": "Account-wide optimization portfolio",
+        "display_scope": "All scorecards",
+    }
+    assert state.report.output.startswith("# Account-wide optimization portfolio")
+    assert "Scope: All scorecards" in state.report.output
+    assert "Current phase: Preflight" in state.report.output
+
+
+def test_milestone_cover_projects_safe_progress_and_preserves_identity_on_finalize(monkeypatch):
+    service = _service(monkeypatch)
+    state = service.start_or_resume({"scope": {}})
+    view = _safe_view()
+    view["overview"] = {
+        "headline": "Daily optimization findings",
+        "lifecycle_status": "running",
+        "current_activity": "Checking deterministic readiness across the ranked portfolio.",
+        "next_checkpoint": "Semantic diagnosis begins after assessment is durable.",
+        "coverage_status": "incomplete",
+        "ranking_window": "2026-05-01 through 2026-07-29 UTC",
+        "scorecards_inspected": 56,
+        "ranked_score_count": 18,
+        "unranked_score_count": 92,
+        "cooldown_excluded_count": 7,
+        "assessment_progress": "12 of 18 ranked scores complete",
+        "diagnosis_coverage": "0 of 10 selected diagnoses complete; 0 failed",
+        "pending_approval_count": 0,
+        "notes": "Coverage is incomplete, so priorities are partial rather than exact.",
+    }
+
+    service.publish_milestone(
+        "assessment",
+        {"coverage": {"complete": False}, "restricted": {"score_id": "opaque-score"}},
+        stakeholder_view=view,
+    )
+
+    cover = state.report.output
+    assert cover.startswith("# Account-wide optimization portfolio")
+    assert "Current phase: Diagnosis" in cover
+    assert "Checking deterministic readiness" in cover
+    assert "Semantic diagnosis begins" in cover
+    assert "Coverage: Incomplete" in cover
+    assert "56 scorecards inspected" in cover
+    assert "18 ranked" in cover
+    assert "7 cooldown exclusions" in cover
+    assert "12 of 18 ranked scores complete" in cover
+    assert "Coverage is incomplete" in cover
+    assert "opaque-score" not in cover
+
+    service.finalize(status="incomplete")
+
+    assert state.report.output.startswith("# Account-wide optimization portfolio")
+    assert "Status: incomplete" in state.report.output
+    assert "Checking deterministic readiness" in state.report.output
+
+
 def test_start_creates_the_fixed_task_stages(monkeypatch):
     service = _service(monkeypatch)
 
@@ -253,6 +337,60 @@ def test_start_creates_the_fixed_task_stages(monkeypatch):
         (7, "finalization", "PENDING"),
     ]
     assert all(stage.taskId == state.task.id for stage in _TaskStage.created)
+
+
+def test_durable_milestones_advance_visible_task_stages_in_lifecycle_order(monkeypatch):
+    service = _service(monkeypatch)
+    service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+
+    service.publish_milestone(
+        "started", {"coverage": {"complete": False}}, stakeholder_view=_safe_view(),
+    )
+    assert [stage.status for stage in _TaskStage.created] == [
+        "COMPLETED", "RUNNING", "PENDING", "PENDING", "PENDING", "PENDING", "PENDING", "PENDING",
+    ]
+    assert _Task.created[0].currentStageId == next(
+        stage.id for stage in _TaskStage.created if stage.name == "ranking"
+    )
+
+    for milestone, running_stage in (
+        ("ranking", "assessment"),
+        ("assessment", "diagnosis"),
+        ("diagnosis", "approval"),
+        ("approval", "approval"),
+        ("optimization", "optimization"),
+        ("optimization_review", "review"),
+        ("finalization", "finalization"),
+    ):
+        service.publish_milestone(
+            milestone, {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+        )
+        target = next(stage for stage in _TaskStage.created if stage.name == running_stage)
+        assert target.status == "RUNNING"
+        assert _Task.created[0].currentStageId == target.id
+        assert all(
+            stage.status == "COMPLETED"
+            for stage in _TaskStage.created
+            if stage.order < target.order
+        )
+        assert all(
+            stage.status == "PENDING"
+            for stage in _TaskStage.created
+            if stage.order > target.order
+        )
+
+
+def test_finalize_completes_every_visible_task_stage(monkeypatch):
+    service = _service(monkeypatch)
+    service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+    service.publish_milestone(
+        "ranking", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+    )
+
+    service.finalize(status="incomplete")
+
+    assert all(stage.status == "COMPLETED" for stage in _TaskStage.created)
+    assert all(stage.completedAt is not None for stage in _TaskStage.created)
 
 
 def test_fixed_blocks_are_immediately_backed_by_compact_artifact_envelopes(monkeypatch):
@@ -355,6 +493,72 @@ def test_publish_milestone_keeps_raw_evidence_restricted_and_points_to_latest_im
     assert "opaque-id" not in str(_Block.created[2].updates[-1])
 
 
+def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without_attaching_each_child(monkeypatch):
+    uploaded: dict[str, bytes] = {}
+    service = _service(monkeypatch)
+    service._artifact_uploader = lambda task_id, name, content: (
+        uploaded.__setitem__(name, content) or f"tasks/{task_id}/{name}"
+    )
+    state = service.start_or_resume({"scope": {}})
+    view = deepcopy(_safe_view())
+    view["portfolio"][0]["scorecard_ref"] = "safe-ref-one"
+    view["portfolio"][0]["score_name"] = "=Formula-like score"
+    second_row = dict(view["portfolio"][0])
+    second_row.update({
+        "scorecard_ref": "safe-ref-two",
+        "score_name": "Second Score",
+        "valid_feedback_count": 75,
+    })
+    view["portfolio"].append(second_row)
+
+    revision = service.publish_milestone(
+        "assessment",
+        {"coverage": {"complete": True}},
+        stakeholder_view=view,
+    )
+
+    manifest = json.loads(uploaded["optimization-revision-r0001.json"])
+    scorecard_artifacts = [
+        artifact for artifact in manifest["artifacts"]
+        if artifact["scope"] == "scorecard"
+    ]
+    assert {artifact["kind"] for artifact in scorecard_artifacts} == {
+        "scorecard_summary",
+        "scorecard_portfolio_csv",
+    }
+    assert len(scorecard_artifacts) == 4
+    assert manifest["scorecard_count"] == 2
+    assert manifest["score_count"] == 2
+    assert all(artifact["source_revision"] == 1 for artifact in scorecard_artifacts)
+    assert {artifact["scorecard_name"] for artifact in scorecard_artifacts} == {"Example Portfolio"}
+    assert len({artifact["logical_id"] for artifact in scorecard_artifacts}) == 4
+    assert all(artifact["sha256"] and artifact["size_bytes"] > 0 for artifact in scorecard_artifacts)
+    assert all(artifact["task_id"] == state.task.id for artifact in scorecard_artifacts)
+    assert all(artifact["object_key"].startswith(f"tasks/{state.task.id}/") for artifact in scorecard_artifacts)
+    assert all(artifact["object_key"] not in state.task.attachedFiles for artifact in scorecard_artifacts)
+    assert len(revision.artifacts) == len(manifest["artifacts"])
+
+    csv_artifact = next(
+        artifact for artifact in scorecard_artifacts
+        if artifact["kind"] == "scorecard_portfolio_csv"
+        and artifact["scorecard_name"] == "Example Portfolio"
+    )
+    csv_name = csv_artifact["object_key"].rsplit("/", 1)[-1]
+    csv_rows = list(csv.DictReader(uploaded[csv_name].decode("utf-8-sig").splitlines()))
+    assert len(csv_rows) == 1
+    assert csv_rows[0]["Score"] == "'=Formula-like score"
+
+    summary_artifact = next(
+        artifact for artifact in scorecard_artifacts
+        if artifact["kind"] == "scorecard_summary"
+        and artifact["scorecard_name"] == "Example Portfolio"
+    )
+    summary_name = summary_artifact["object_key"].rsplit("/", 1)[-1]
+    summary = uploaded[summary_name].decode("utf-8")
+    assert summary.startswith("# Example Portfolio")
+    assert "repair_guidelines" in summary
+
+
 def test_multiple_milestones_preserve_full_revision_history(monkeypatch):
     service = _service(monkeypatch)
     state = service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
@@ -406,8 +610,22 @@ def test_default_artifact_path_uses_only_task_graphql_tickets_without_direct_s3(
         "optimization-workbook-r0001.xlsx",
         "optimization-revision-r0001.json",
     }
+    assert {
+        request.content_type for request in requests
+        if request.filename.endswith((".md", ".csv"))
+    } == {
+        "text/markdown; charset=utf-8",
+        "text/csv; charset=utf-8",
+    }
     assert all(path.startswith(f"tasks/{state.task.id}/") for path in state.task.attachedFiles)
-    assert len(state.task.attachedFiles) == len(store.uploads)
+    child_paths = {
+        f"tasks/{state.task.id}/{request.filename}"
+        for request in requests
+        if request.filename.endswith((".md", ".csv"))
+    }
+    assert child_paths
+    assert child_paths.isdisjoint(state.task.attachedFiles)
+    assert len(state.task.attachedFiles) == len(store.uploads) - len(child_paths)
     assert all(
         json.loads(block.output)["output_attachment"].startswith(f"tasks/{state.task.id}/")
         for block in state.blocks.values()
@@ -466,6 +684,9 @@ def test_publish_failure_marks_task_failed_and_raises_without_silent_progress(mo
 
     assert state.task.status == "FAILED"
     assert any(update.get("status") == "FAILED" for update in state.task.updates)
+    active = next(stage for stage in _TaskStage.created if stage.status == "FAILED")
+    assert active.name == "preflight"
+    assert "attachment envelope write failed" in active.statusMessage
 
 
 def test_finalize_marks_the_single_task_complete_after_the_latest_revision(monkeypatch):
@@ -496,6 +717,7 @@ def test_finalize_records_an_honest_incomplete_terminal_state_without_reclassify
     [
         ("completed", "COMPLETED"),
         ("complete_with_unresolved_actions", "COMPLETED"),
+        ("completed_with_unresolved_actions", "COMPLETED"),
         ("incomplete", "COMPLETED"),
         ("blocked", "COMPLETED"),
     ],

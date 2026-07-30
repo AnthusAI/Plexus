@@ -1061,6 +1061,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   // Transform procedures to ProcedureTaskData - memoized to prevent unnecessary re-renders
   const transformProcedure = useCallback((procedure: ProcedureWithTask): ProcedureTaskData => {
     let procedureType = 'Procedure'
+    let displayTitle: string | undefined
+    let displayScope: string | undefined
     try {
       const meta = typeof procedure.metadata === 'string' ? JSON.parse(procedure.metadata) : procedure.metadata
       if (meta?.procedure_type) {
@@ -1071,6 +1073,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       ) {
         procedureType = 'Optimizer Procedure'
       }
+      if (typeof meta?.display_title === 'string') displayTitle = meta.display_title
+      if (typeof meta?.display_scope === 'string') displayScope = meta.display_scope
     } catch { /* ignore malformed metadata */ }
     return ({
     id: procedure.id,
@@ -1085,6 +1089,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       : null,
     score: procedure.score ? { name: procedure.score.name } : null,
     procedureType: procedureType,
+    displayTitle,
+    displayScope,
     status: procedure.status || undefined,
     description: procedure.description || undefined,
     createdByUserId: resolveCreatedByUserId({

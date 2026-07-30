@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from base64 import b64encode
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 import boto3
 import pytest
@@ -196,6 +198,68 @@ def test_upload_transfers_verified_bytes_before_returning_metadata_without_s3(mo
         "size_bytes": len(PAYLOAD),
         "content_type": "application/json",
     }
+
+
+def test_upload_omits_only_a_redundant_unsigned_checksum_header_already_bound_in_the_url():
+    checksum = b64encode(bytes.fromhex(PAYLOAD_SHA256)).decode("ascii")
+    query = urlencode({
+        "X-Amz-Checksum-Sha256": checksum,
+        "X-Amz-SignedHeaders": "content-length;host",
+    })
+    legacy_ticket = ticket(url=f"https://storage.example/upload?{query}")
+    legacy_ticket["requiredHeaders"] = {
+        "content-length": str(len(PAYLOAD)),
+        "content-type": "application/json",
+        "x-amz-checksum-sha256": checksum,
+    }
+    http = FakeHTTPSession([FakeResponse(200)])
+    store = GraphQLArtifactStore(FakeExecutor([[legacy_ticket]]), http_session=http)
+
+    store.upload_bytes(write_request(), PAYLOAD)
+
+    assert http.calls[0]["headers"] == {
+        "content-length": str(len(PAYLOAD)),
+        "content-type": "application/json",
+    }
+
+
+@pytest.mark.parametrize(
+    ("url_query", "header_value"),
+    [
+        ({"X-Amz-SignedHeaders": "content-length;host"}, "declared-checksum"),
+        (
+            {
+                "X-Amz-Checksum-Sha256": "query-checksum",
+                "X-Amz-SignedHeaders": "content-length;host",
+            },
+            "different-checksum",
+        ),
+        (
+            {
+                "X-Amz-Checksum-Sha256": "declared-checksum",
+                "X-Amz-SignedHeaders": "content-length;host;x-amz-checksum-sha256",
+            },
+            "declared-checksum",
+        ),
+    ],
+)
+def test_upload_preserves_checksum_header_when_query_binding_is_absent_inconsistent_or_signed(
+    url_query, header_value
+):
+    legacy_ticket = ticket(
+        url=f"https://storage.example/upload?{urlencode(url_query)}"
+    )
+    legacy_ticket["requiredHeaders"] = {
+        "content-length": str(len(PAYLOAD)),
+        "x-amz-checksum-sha256": header_value,
+    }
+    http = FakeHTTPSession([FakeResponse(403, text="<Code>AccessDenied</Code>")])
+    store = GraphQLArtifactStore(FakeExecutor([[legacy_ticket]]), http_session=http)
+
+    with pytest.raises(ArtifactAuthorizationError):
+        store.upload_bytes(write_request(), PAYLOAD)
+
+    assert http.calls[0]["headers"]["x-amz-checksum-sha256"] == header_value
 
 
 def test_upload_batch_requests_all_tickets_once_before_uploading_each_verified_artifact():
