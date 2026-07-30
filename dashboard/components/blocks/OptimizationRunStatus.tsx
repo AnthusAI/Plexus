@@ -297,6 +297,12 @@ function parsePresentation(value: unknown): StakeholderPresentation {
         disposition: opportunityDisposition(row.review_disposition || row.policy_disposition),
         scorecard_name: String(row.scorecard_name || 'Unlabeled scorecard'),
         score_name: String(row.score_name || 'Unlabeled score'),
+        disagreement_rate: typeof row.disagreement_rate === 'number'
+          ? row.disagreement_rate
+          : null,
+        valid_feedback_count: typeof row.valid_feedback_count === 'number'
+          ? row.valid_feedback_count
+          : null,
         reason: row.policy_reason && row.policy_reason !== 'meets_rank_policy'
           ? label(String(row.policy_reason))
           : null,

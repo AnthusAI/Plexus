@@ -20,10 +20,16 @@ jest.mock('@/lib/report-artifacts', () => {
 
 jest.mock('@/components/OptimizationOpportunityDistribution', () => ({
   __esModule: true,
-  default: ({ rows }: { rows: Array<{ disposition: string }> }) => (
+  default: ({ rows }: { rows: Array<{
+    disposition: string
+    disagreement_rate?: number | null
+    valid_feedback_count?: number | null
+  }> }) => (
     <div>
       <span>Opportunity distribution</span>
       <span>Cooling down ({rows.filter(row => row.disposition === 'cooldown').length})</span>
+      <span>First disagreement {rows[0]?.disagreement_rate}</span>
+      <span>First feedback volume {rows[0]?.valid_feedback_count}</span>
     </div>
   ),
 }))
@@ -111,6 +117,8 @@ describe('OptimizationRunStatus', () => {
           scorecard_name: 'Example Portfolio',
           score_name: 'Recently changed score',
           opportunity: 60,
+          disagreement_rate: 0.25,
+          valid_feedback_count: 240,
           review_disposition: 'cooldown',
           policy_disposition: 'cooldown',
           policy_reason: 'recent_score_activity',
@@ -207,6 +215,8 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getByText('Cooldown deferrals')).toBeInTheDocument()
     expect(screen.getByText('Opportunity distribution')).toBeInTheDocument()
     expect(screen.getByText('Cooling down (1)')).toBeInTheDocument()
+    expect(screen.getByText('First disagreement 0.25')).toBeInTheDocument()
+    expect(screen.getByText('First feedback volume 240')).toBeInTheDocument()
     expect(screen.getByLabelText('Primary decision mix: 3 scores')).toBeInTheDocument()
     expect(screen.getByText('Optimize: 2')).toBeInTheDocument()
     expect(screen.getByText('Stakeholder clarification: 1')).toBeInTheDocument()

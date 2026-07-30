@@ -31,6 +31,8 @@ export interface OptimizationOpportunityRow {
   reason?: string | null
   eligibility_timestamp?: string | null
   dashboard_url?: string | null
+  disagreement_rate?: number | null
+  valid_feedback_count?: number | null
 }
 
 interface OptimizationOpportunityDistributionProps {
@@ -42,6 +44,8 @@ type OpportunityScale = "linear" | "log"
 interface ChartPoint extends OptimizationOpportunityRow {
   chart_opportunity: number
   display_name: string
+  marker_radius: number
+  disagreement_fraction: number | null
 }
 
 const DISPOSITIONS: Record<OptimizationOpportunityDisposition, {
@@ -89,6 +93,32 @@ function formatOpportunity(value: number): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value)
 }
 
+function formatPercentage(value: number | null | undefined): string {
+  const fraction = normalizeDisagreementRate(value)
+  if (fraction === null) return "Not available"
+  return new Intl.NumberFormat("en-US", { style: "percent", maximumFractionDigits: 0 }).format(fraction)
+}
+
+function formatFeedbackVolume(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "Not available"
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value)
+}
+
+function normalizeDisagreementRate(value: number | null | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null
+  if (value <= 1) return value
+  return value <= 100 ? value / 100 : null
+}
+
+function markerRadius(value: number | null | undefined, minimum: number | null, maximum: number | null): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || minimum === null || maximum === null) {
+    return 5
+  }
+  if (minimum === maximum) return 8
+  const normalized = Math.max(0, Math.min(1, (value - minimum) / (maximum - minimum)))
+  return 5 + Math.sqrt(normalized) * 5
+}
+
 function formatTimestamp(value: string | null | undefined): string | null {
   if (!value) return null
   const date = new Date(value)
@@ -106,27 +136,37 @@ function DispositionMark({ cx, cy, payload }: { cx?: number; cy?: number; payloa
   if (cx == null || cy == null || !payload) return null
   const disposition = DISPOSITIONS[payload.disposition]
   const { color, shape } = disposition
+  const radius = payload.marker_radius
+  const disagreementRadius = payload.disagreement_fraction === null
+    ? 0
+    : Math.max(1.2, radius * payload.disagreement_fraction)
   const common = { fill: color, stroke: "hsl(var(--background))", strokeWidth: 1.5 }
+  const innerFill = disagreementRadius > 0
+    ? <circle cx={cx} cy={cy} r={disagreementRadius} fill="hsl(var(--foreground))" fillOpacity={0.72} />
+    : null
 
   switch (shape) {
     case "square":
-      return <rect x={cx - 4.5} y={cy - 4.5} width={9} height={9} rx={1} {...common} />
+      return <g><rect x={cx - radius} y={cy - radius} width={radius * 2} height={radius * 2} rx={1} {...common} />{innerFill}</g>
     case "triangle":
-      return <path d={`M ${cx} ${cy - 5.5} L ${cx + 5.5} ${cy + 4.5} L ${cx - 5.5} ${cy + 4.5} Z`} {...common} />
+      return <g><path d={`M ${cx} ${cy - radius} L ${cx + radius} ${cy + radius * 0.82} L ${cx - radius} ${cy + radius * 0.82} Z`} {...common} />{innerFill}</g>
     case "diamond":
-      return <path d={`M ${cx} ${cy - 5.5} L ${cx + 5.5} ${cy} L ${cx} ${cy + 5.5} L ${cx - 5.5} ${cy} Z`} {...common} />
+      return <g><path d={`M ${cx} ${cy - radius} L ${cx + radius} ${cy} L ${cx} ${cy + radius} L ${cx - radius} ${cy} Z`} {...common} />{innerFill}</g>
     case "cross":
       return (
-        <path
-          d={`M ${cx - 4.5} ${cy - 4.5} L ${cx + 4.5} ${cy + 4.5} M ${cx + 4.5} ${cy - 4.5} L ${cx - 4.5} ${cy + 4.5}`}
-          fill="none"
-          stroke={color}
-          strokeWidth={2.5}
-          strokeLinecap="round"
-        />
+        <g>
+          <path
+            d={`M ${cx - radius} ${cy - radius} L ${cx + radius} ${cy + radius} M ${cx + radius} ${cy - radius} L ${cx - radius} ${cy + radius}`}
+            fill="none"
+            stroke={color}
+            strokeWidth={2.5}
+            strokeLinecap="round"
+          />
+          {innerFill}
+        </g>
       )
     default:
-      return <circle cx={cx} cy={cy} r={4.5} {...common} />
+      return <g><circle cx={cx} cy={cy} r={radius} {...common} />{innerFill}</g>
   }
 }
 
@@ -142,6 +182,8 @@ function OpportunityTooltip({ active, payload }: { active?: boolean; payload?: A
       <dl className="mt-1 space-y-0.5 text-muted-foreground">
         <div><dt className="inline">Evidence rank: </dt><dd className="inline text-foreground">{point.evidence_rank}</dd></div>
         <div><dt className="inline">Reviewed-error opportunity: </dt><dd className="inline text-foreground">{formatOpportunity(point.opportunity)}</dd></div>
+        <div><dt className="inline">Disagreement rate: </dt><dd className="inline text-foreground">{formatPercentage(point.disagreement_rate)}</dd></div>
+        <div><dt className="inline">Valid feedback: </dt><dd className="inline text-foreground">{formatFeedbackVolume(point.valid_feedback_count)}</dd></div>
         <div><dt className="inline">Disposition: </dt><dd className="inline text-foreground">{disposition.label}</dd></div>
         {point.reason && <div><dt className="inline">Reason: </dt><dd className="inline text-foreground">{point.reason}</dd></div>}
         {eligibleAt && <div><dt className="inline">Eligible after: </dt><dd className="inline text-foreground">{eligibleAt}</dd></div>}
@@ -164,13 +206,27 @@ export default function OptimizationOpportunityDistribution({ rows }: Optimizati
     return positives.length > 0 ? Math.min(...positives) : 1
   }, [sortedRows])
   const containsZeroOrNegative = sortedRows.some(row => row.opportunity <= 0)
+  const feedbackVolumeBounds = useMemo(() => {
+    const values = sortedRows
+      .map(row => row.valid_feedback_count)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0)
+    return values.length > 0
+      ? { minimum: Math.min(...values), maximum: Math.max(...values) }
+      : { minimum: null, maximum: null }
+  }, [sortedRows])
   const points = useMemo<ChartPoint[]>(() => sortedRows.map(row => ({
     ...row,
     chart_opportunity: scale === "log" && row.opportunity <= 0
       ? smallestPositiveOpportunity / 10
       : row.opportunity,
     display_name: displayName(row),
-  })), [scale, smallestPositiveOpportunity, sortedRows])
+    marker_radius: markerRadius(
+      row.valid_feedback_count,
+      feedbackVolumeBounds.minimum,
+      feedbackVolumeBounds.maximum,
+    ),
+    disagreement_fraction: normalizeDisagreementRate(row.disagreement_rate),
+  })), [feedbackVolumeBounds.maximum, feedbackVolumeBounds.minimum, scale, smallestPositiveOpportunity, sortedRows])
   const dispositionCounts = useMemo(() => Object.fromEntries(
     Object.keys(DISPOSITIONS).map(disposition => [
       disposition,
@@ -220,6 +276,10 @@ export default function OptimizationOpportunityDistribution({ rows }: Optimizati
           </span>
         ))}
       </div>
+
+      <p className="mt-2 text-xs text-muted-foreground" aria-label="Feedback signal legend">
+        Point size represents valid feedback volume; larger markers indicate more reviewed feedback. Inner fill represents disagreement rate; a larger inner fill indicates more reviewer disagreement.
+      </p>
 
       <div className="mt-3 rounded-md bg-background p-2">
         {points.length > 0 ? (
@@ -290,6 +350,8 @@ export default function OptimizationOpportunityDistribution({ rows }: Optimizati
                 <th className="px-1 py-1.5 font-medium">Rank</th>
                 <th className="px-1 py-1.5 font-medium">Score</th>
                 <th className="px-1 py-1.5 text-right font-medium">Opportunity</th>
+                <th className="px-1 py-1.5 text-right font-medium">Disagreement</th>
+                <th className="px-1 py-1.5 text-right font-medium">Valid feedback</th>
                 <th className="px-1 py-1.5 font-medium">Disposition</th>
                 <th className="px-1 py-1.5 font-medium">Reason / availability</th>
               </tr>
@@ -304,6 +366,8 @@ export default function OptimizationOpportunityDistribution({ rows }: Optimizati
                       : point.display_name}
                   </td>
                   <td className="px-1 py-1.5 text-right tabular-nums">{formatOpportunity(point.opportunity)}</td>
+                  <td className="px-1 py-1.5 text-right tabular-nums">{formatPercentage(point.disagreement_rate)}</td>
+                  <td className="px-1 py-1.5 text-right tabular-nums">{formatFeedbackVolume(point.valid_feedback_count)}</td>
                   <td className="px-1 py-1.5">{DISPOSITIONS[point.disposition].label}</td>
                   <td className="px-1 py-1.5 text-muted-foreground">
                     {point.reason || (formatTimestamp(point.eligibility_timestamp) ? `Eligible after ${formatTimestamp(point.eligibility_timestamp)}` : "—")}

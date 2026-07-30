@@ -834,6 +834,8 @@ def build_stakeholder_presentation(
             "scorecard_name": row.get("scorecard_name"),
             "score_name": row.get("score_name"),
             "opportunity": row.get("reviewed_error_opportunity"),
+            "valid_feedback_count": row.get("valid_feedback_count"),
+            "disagreement_rate": row.get("disagreement_rate"),
             "review_disposition": row.get("review_disposition", "eligible_below_selection"),
             "policy_disposition": row.get("policy_disposition", "eligible"),
             "policy_reason": row.get("policy_reason", "meets_rank_policy"),

@@ -14,7 +14,14 @@ jest.mock("recharts", () => ({
   ComposedChart: ({ children }: any) => <div data-testid="opportunity-composed-chart">{children}</div>,
   Legend: () => null,
   Line: ({ dataKey }: any) => <div data-testid="opportunity-line" data-key={dataKey} />,
-  Scatter: ({ data, name }: any) => <div data-testid={`disposition-${name}`} data-point-count={data.length} />,
+  Scatter: ({ data, name }: any) => (
+    <div
+      data-testid={`disposition-${name}`}
+      data-point-count={data.length}
+      data-marker-radius={data[0]?.marker_radius}
+      data-disagreement-fraction={data[0]?.disagreement_fraction}
+    />
+  ),
   Tooltip: () => null,
   XAxis: () => null,
   YAxis: ({ scale }: any) => <div data-testid="opportunity-y-axis" data-scale={scale} />,
@@ -93,6 +100,27 @@ describe("OptimizationOpportunityDistribution", () => {
     expect(screen.getByTestId("opportunity-y-axis")).toHaveAttribute("data-scale", "log")
     expect(screen.getByText(/Zero-valued opportunities are placed at the chart floor/i)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Log" })).toHaveAttribute("aria-pressed", "true")
+  })
+
+  it("shows disagreement rate and valid feedback volume as visual signals with a text equivalent", () => {
+    const rowsWithFeedbackSignals = rows.map((row, index) => ({
+      ...row,
+      disagreement_rate: [0.42, 0.18, 0.07, 0.31, 0.12][index],
+      valid_feedback_count: [240, 120, 35, 84, 60][index],
+    }))
+
+    render(<OptimizationOpportunityDistribution rows={rowsWithFeedbackSignals} />)
+
+    expect(screen.getByText(/Point size represents valid feedback volume/i)).toBeInTheDocument()
+    expect(screen.getByText(/Inner fill represents disagreement rate/i)).toBeInTheDocument()
+    expect(screen.getByTestId("disposition-Cooling down")).toHaveAttribute("data-marker-radius", "10")
+    expect(screen.getByTestId("disposition-Selected for review")).toHaveAttribute("data-disagreement-fraction", "0.18")
+
+    fireEvent.click(screen.getByText("Text equivalent: evidence-ranked opportunity list"))
+    expect(screen.getByRole("columnheader", { name: "Disagreement" })).toBeInTheDocument()
+    expect(screen.getByRole("columnheader", { name: "Valid feedback" })).toBeInTheDocument()
+    expect(screen.getByText("42%")).toBeInTheDocument()
+    expect(screen.getByText("240")).toBeInTheDocument()
   })
 
   it("does not render without opportunity rows", () => {
