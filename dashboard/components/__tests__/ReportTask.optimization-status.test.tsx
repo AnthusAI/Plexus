@@ -176,5 +176,8 @@ describe('ReportTask optimization status integration', () => {
       'Scorecard-scoped optimization portfolio — RUNNING',
     )
     expect(screen.getByText('# Findings')).toBeInTheDocument()
+    expect(screen.getByTestId('report-detail-content')).not.toHaveClass('h-full')
+    expect(screen.getByTestId('report-cover-content')).not.toHaveClass('overflow-y-auto')
+    expect(screen.getByTestId('report-cover-content')).not.toHaveClass('flex-1')
   })
 })

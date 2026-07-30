@@ -662,14 +662,20 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       )}
       renderContent={(props) => (
         <TaskContent {...props} hideTaskStatus={true}>
-          <div className={variant === 'detail' ? 'px-3 pb-3 flex flex-col h-full' : ''}>
+          <div
+            className={variant === 'detail' ? 'px-3 pb-3 flex flex-col' : ''}
+            data-testid={variant === 'detail' ? 'report-detail-content' : undefined}
+          >
             {variant === 'detail' && linkedProcedure && (
               <div className="mb-3 flex-none" data-testid="linked-procedure-task">
                 <ProcedureTask variant="grid" procedure={linkedProcedure} />
               </div>
             )}
             {variant === 'detail' && task.data?.output && (
-            <div className="bg-background rounded-lg p-3 overflow-y-auto flex-1 min-h-0">
+            <div
+              className="bg-background rounded-lg p-3"
+              data-testid="report-cover-content"
+            >
               <div className="prose dark:prose-invert max-w-none">
                 <ReactMarkdown
                   components={{
