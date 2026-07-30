@@ -3,6 +3,7 @@ import { render } from '@testing-library/react'
 
 import {
   LIVING_REPORT_REFRESH_INTERVAL_MS,
+  resolveLivingReportTaskId,
   useLivingReportRefresh,
 } from '@/hooks/use-living-report-refresh'
 import { observeTaskStageUpdates, observeTaskUpdates } from '@/utils/subscriptions'
@@ -76,6 +77,27 @@ describe('useLivingReportRefresh', () => {
 
     refresh.mockClear()
     rerender(<Harness status="COMPLETED" refresh={refresh} />)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    refresh.mockClear()
+    jest.advanceTimersByTime(LIVING_REPORT_REFRESH_INTERVAL_MS * 2)
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('retains the report task id while the nested task relation is still hydrating', () => {
+    expect(resolveLivingReportTaskId({ taskId: 'task-1', task: null })).toBe('task-1')
+    expect(resolveLivingReportTaskId({ taskId: 'task-1', task: { id: 'task-2' } })).toBe('task-2')
+  })
+
+  it('performs one final reconciliation when the linked task becomes terminal', () => {
+    const refresh = jest.fn()
+    const { rerender } = render(<Harness status="RUNNING" refresh={refresh} />)
+    refresh.mockClear()
+
+    rerender(<Harness status="COMPLETED" refresh={refresh} />)
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(refresh).toHaveBeenCalledWith('report-1')
+    refresh.mockClear()
     jest.advanceTimersByTime(LIVING_REPORT_REFRESH_INTERVAL_MS * 2)
     expect(refresh).not.toHaveBeenCalled()
   })

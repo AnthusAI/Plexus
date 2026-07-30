@@ -9,6 +9,15 @@ const TERMINAL_TASK_STATUSES = new Set(['COMPLETED', 'FAILED', 'STALLED', 'CANCE
 export const isTerminalLivingReportTask = (status?: string | null): boolean =>
   TERMINAL_TASK_STATUSES.has(String(status || '').toUpperCase())
 
+type LivingReportTaskReference = {
+  taskId?: string | null
+  task?: { id?: string | null } | null
+}
+
+/** Preserve the direct foreign key while the nested Task relation hydrates. */
+export const resolveLivingReportTaskId = (report?: LivingReportTaskReference | null): string | null =>
+  report?.task?.id || report?.taskId || null
+
 type LivingReportRefreshOptions = {
   reportId: string | null
   taskId?: string | null
@@ -29,6 +38,10 @@ export function useLivingReportRefresh({
     const refreshSelectedReport = () => {
       void refresh(reportId)
     }
+
+    // The terminal Task event can arrive just ahead of the final ReportBlock
+    // invalidation. Reconcile once more before disabling background polling.
+    if (isTerminalLivingReportTask(taskStatus)) refreshSelectedReport()
 
     const taskSubscription = observeTaskUpdates().subscribe({
       next: (event: any) => {

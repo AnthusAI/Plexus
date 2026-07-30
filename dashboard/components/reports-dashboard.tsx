@@ -34,7 +34,10 @@ import {
   buildLinkedProcedureSummary,
   linkedProcedureSubtitle,
 } from '@/components/reports/linked-procedure-summary'
-import { useLivingReportRefresh } from '@/hooks/use-living-report-refresh'
+import {
+  resolveLivingReportTaskId,
+  useLivingReportRefresh,
+} from '@/hooks/use-living-report-refresh'
 
 // Define types based on Amplify schema
 type Report = Schema['Report']['type'] & {
@@ -58,6 +61,7 @@ type ReportDisplayData = {
     name?: string | null;
     description?: string | null;
   } | null;
+  taskId?: string | null;
   task?: Task | null;
 };
 
@@ -545,6 +549,7 @@ function transformReportData(report: Report): ReportDisplayData | null {
     createdByUserId: resolveReportAuthorUserId(report),
     output: report.output || null,
     reportConfiguration: configInfo,
+    taskId: (report as any).taskId || (taskData as Task | null)?.id || null,
     task: taskData as Task | null
   };
 
@@ -635,10 +640,11 @@ export default function ReportsDashboard({
     }
   }, [])
 
-  const selectedReportTask = reports.find(report => report.id === selectedReportId)?.task
+  const selectedReport = reports.find(report => report.id === selectedReportId)
+  const selectedReportTask = selectedReport?.task
   useLivingReportRefresh({
     reportId: selectedReportId,
-    taskId: selectedReportTask?.id,
+    taskId: resolveLivingReportTaskId(selectedReport),
     taskStatus: selectedReportTask?.status,
     refresh: refreshSelectedReport,
   })
@@ -814,6 +820,7 @@ export default function ReportsDashboard({
                 name: newReport.reportConfiguration!.name,
                 description: newReport.reportConfiguration!.description
               } : null,
+              taskId: newReport.taskId || newReport.task?.id || null,
               task: newReport.task || null
             };
             
