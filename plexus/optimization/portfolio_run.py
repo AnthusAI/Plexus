@@ -1058,7 +1058,8 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
     priorities: list[dict[str, Any]] = []
     feedback: list[dict[str, Any]] = []
     questions: list[dict[str, Any]] = []
-    for row in _ranked_rows(rank):
+    ranked_rows = _ranked_rows(rank)
+    for rank_position, row in enumerate(ranked_rows, start=1):
         key = _target_key(row)
         assessment = assessments.get(key, {})
         diagnosis = diagnoses.get(key, {})
@@ -1090,6 +1091,7 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
         dashboard_url = _stakeholder_dashboard_url(diagnosis, assessment, row)
         evidence_count = row.get("valid_feedback_count")
         base = {
+            "rank": rank_position,
             "scorecard_name": row.get("scorecard_name") or assessment.get("scorecard_name") or "Unlabeled scorecard",
             "score_name": row.get("score_name") or assessment.get("score_name") or "Unlabeled score",
             "scorecard_ref": sha256(key[0].encode("utf-8")).hexdigest()[:16] if key else None,
@@ -1113,7 +1115,9 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
         })
         priorities.append({
             **base, "evidence_count": evidence_count,
-            "opportunity": row.get("reviewed_error_opportunity"), "state": readiness,
+            "opportunity": row.get("reviewed_error_opportunity"),
+            "disagreement_rate": row.get("disagreement_rate"),
+            "state": readiness,
             "coverage_status": coverage_status, "trend": trend,
             "collection_state": collection, "readiness": readiness,
             "promotion_readiness": promotion, "rationale": rationale,
@@ -1195,11 +1199,17 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
         current_activity, next_checkpoint = _terminal_narrative(terminal_status)
     else:
         current_activity, next_checkpoint = _milestone_narrative(milestone)
-    ranked_count = len(_ranked_rows(rank))
+    ranked_count = len(ranked_rows)
     assessed_count = len(assessments)
     diagnosis_selected = int(diagnosis_coverage.get("selected_count") or 0)
     diagnosis_completed = int(diagnosis_coverage.get("completed_count") or 0)
     diagnosis_failed = int(diagnosis_coverage.get("failed_count") or 0)
+    diagnosis_skipped = int(diagnosis_coverage.get("skipped_count") or 0)
+    diagnosis_max = int(diagnosis_coverage.get("max_semantic_diagnoses") or DEFAULT_MAX_SEMANTIC_DIAGNOSES)
+    diagnosis_top_priority = int(diagnosis_coverage.get("top_priority_count") or 0)
+    diagnosis_monitoring = int(diagnosis_coverage.get("monitoring_candidate_count") or 0)
+    priority_displayed = min(MAX_PRIORITY_DIAGNOSES, ranked_count)
+    priority_cutoff_row = ranked_rows[priority_displayed - 1] if priority_displayed else {}
     coverage_status = (
         "pending" if not rank else "complete" if _coverage_complete(rank) else "incomplete"
     )
@@ -1218,6 +1228,19 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             "cooldown_excluded_count": rank.get("recent_activity_excluded_count", activity_coverage.get("recent_activity_excluded_count", 0)),
             "assessment_progress": f"{assessed_count} of {ranked_count} ranked scores complete",
             "diagnosis_coverage": f"{diagnosis_completed} of {diagnosis_selected} selected diagnoses complete; {diagnosis_failed} failed",
+            "ranking_cutoff": "none",
+            "ranking_policy": "All eligible scores are ranked by reviewed disagreements; no ranking cutoff is applied.",
+            "priority_display_limit": MAX_PRIORITY_DIAGNOSES,
+            "priority_displayed_count": priority_displayed,
+            "priority_cutoff_rank": priority_displayed,
+            "priority_cutoff_opportunity": priority_cutoff_row.get("reviewed_error_opportunity"),
+            "ranked_below_priority_cutoff": max(ranked_count - priority_displayed, 0),
+            "diagnosis_selection_policy": "The highest-ranked opportunities plus every monitoring candidate receive semantic diagnosis, subject to the safety cap.",
+            "diagnosis_top_priority_count": diagnosis_top_priority,
+            "diagnosis_monitoring_candidate_count": diagnosis_monitoring,
+            "diagnosis_selected_count": diagnosis_selected,
+            "diagnosis_skipped_count": diagnosis_skipped,
+            "diagnosis_max_count": diagnosis_max,
             "pending_approval_count": len(state.get("approval_requests") or []),
             "notes": f"Latest milestone: {milestone}. No score, guideline, champion, or feedback setting is changed automatically.",
         },

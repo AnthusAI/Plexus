@@ -30,6 +30,19 @@ type PresentationOverview = {
   cooldown_excluded_count?: number
   assessment_progress?: string
   diagnosis_coverage?: string
+  ranking_cutoff?: string
+  ranking_policy?: string
+  priority_display_limit?: number
+  priority_displayed_count?: number
+  priority_cutoff_rank?: number
+  priority_cutoff_opportunity?: number
+  ranked_below_priority_cutoff?: number
+  diagnosis_selection_policy?: string
+  diagnosis_top_priority_count?: number
+  diagnosis_monitoring_candidate_count?: number
+  diagnosis_selected_count?: number
+  diagnosis_skipped_count?: number
+  diagnosis_max_count?: number
   pending_approval_count?: number
   current_activity?: string
   next_checkpoint?: string
@@ -37,9 +50,15 @@ type PresentationOverview = {
 }
 
 type PriorityRow = {
+  rank?: number
   scorecard_name?: string
   score_name?: string
   opportunity?: number
+  evidence_count?: number
+  disagreement_rate?: number
+  readiness?: string
+  collection_state?: string
+  rationale?: string
   next_action?: string
 }
 
@@ -425,6 +444,33 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
       )}
 
       <section className="rounded-lg bg-card p-6">
+        <h3 className="text-lg font-semibold">How priorities were selected</h3>
+        <p className="text-sm text-muted-foreground">The ranking and the deeper semantic review use related but different boundaries.</p>
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          <div className="rounded-md bg-muted/30 p-4">
+            <div className="font-medium">No ranking cutoff</div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              All {overview.ranked_score_count ?? presentation.score_count} eligible scores are ranked by reviewed disagreements over the frozen feedback window.
+            </p>
+          </div>
+          <div className="rounded-md bg-muted/30 p-4">
+            <div className="font-medium">Top {overview.priority_display_limit ?? 10} are highlighted</div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {Number(overview.ranked_below_priority_cutoff || 0) > 0
+                ? `The highlighted list ends at rank ${overview.priority_cutoff_rank ?? overview.priority_displayed_count ?? 0}, at ${overview.priority_cutoff_opportunity ?? 0} reviewed disagreements. ${overview.ranked_below_priority_cutoff} ranked scores remain below this display cutoff.`
+                : `All ${overview.priority_displayed_count ?? presentation.top_priorities.length} ranked scores fit in the highlighted list.`}
+            </p>
+          </div>
+          <div className="rounded-md bg-muted/30 p-4">
+            <div className="font-medium">{overview.diagnosis_selected_count ?? 0} selected for semantic diagnosis</div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              The top {overview.diagnosis_top_priority_count ?? 0} ranked opportunities plus {overview.diagnosis_monitoring_candidate_count ?? 0} monitoring candidates are selected, with overlap counted once. {overview.diagnosis_skipped_count ?? 0} ranked scores were not semantically diagnosed. Safety cap: {overview.diagnosis_max_count ?? 25}.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-lg bg-card p-6">
         <h3 className="text-lg font-semibold">Primary decision mix</h3>
         <p className="text-sm text-muted-foreground">Each score appears exactly once according to its primary next action.</p>
         <div className="mt-4 flex h-8 overflow-hidden rounded-md bg-muted" aria-label={`Primary decision mix: ${decisionTotal} scores`}>
@@ -459,11 +505,23 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
 
       <section className="rounded-lg bg-card p-6">
         <h3 className="text-lg font-semibold">Top priorities</h3>
+        <p className="text-sm text-muted-foreground">Ranked by the number of reviewed disagreements, with policy and readiness context for human review.</p>
         <div className="mt-3 space-y-2">
           {presentation.top_priorities.map((priority, index) => (
-            <div key={`${priority.scorecard_name}-${priority.score_name}-${index}`} className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/30 p-3 text-sm">
-              <div><span className="font-medium">{priority.score_name || 'Unlabeled score'}</span><span className="text-muted-foreground"> · {priority.scorecard_name || 'Unlabeled scorecard'}</span></div>
-              <div className="text-muted-foreground">{priority.opportunity ?? 0} reviewed disagreements · {label(priority.next_action || 'review')}</div>
+            <div key={`${priority.scorecard_name}-${priority.score_name}-${index}`} className="rounded-md bg-muted/30 p-4 text-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="rounded bg-muted px-2 py-1 text-xs font-medium">#{priority.rank ?? index + 1}</span>
+                  <div>
+                    <div><span className="font-medium">{priority.score_name || 'Unlabeled score'}</span><span className="text-muted-foreground"> · {priority.scorecard_name || 'Unlabeled scorecard'}</span></div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {priority.evidence_count ?? 0} valid feedback · {typeof priority.disagreement_rate === 'number' ? `${(priority.disagreement_rate * 100).toFixed(1)}% disagreement` : 'disagreement rate unavailable'} · {label(priority.readiness || 'inconclusive')}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right text-muted-foreground">{priority.opportunity ?? 0} reviewed disagreements<br />{label(priority.next_action || 'review')}</div>
+              </div>
+              {priority.rationale && <p className="mt-3 text-muted-foreground">{priority.rationale}</p>}
             </div>
           ))}
         </div>

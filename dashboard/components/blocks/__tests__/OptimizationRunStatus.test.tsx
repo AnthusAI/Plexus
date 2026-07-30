@@ -75,6 +75,17 @@ describe('OptimizationRunStatus', () => {
           ranked_score_count: 3,
           assessment_progress: '3 of 3 ranked scores complete',
           diagnosis_coverage: '1 of 1 selected diagnoses complete; 0 failed',
+          ranking_cutoff: 'none',
+          priority_display_limit: 10,
+          priority_displayed_count: 1,
+          priority_cutoff_rank: 1,
+          priority_cutoff_opportunity: 42,
+          ranked_below_priority_cutoff: 2,
+          diagnosis_top_priority_count: 1,
+          diagnosis_monitoring_candidate_count: 0,
+          diagnosis_selected_count: 1,
+          diagnosis_skipped_count: 2,
+          diagnosis_max_count: 25,
           pending_approval_count: 1,
           current_activity: 'Preparing human decisions.',
           next_checkpoint: 'Approved work will be freshness checked.',
@@ -87,6 +98,12 @@ describe('OptimizationRunStatus', () => {
           scorecard_name: 'Example Portfolio',
           score_name: 'Priority Score',
           opportunity: 42,
+          rank: 1,
+          evidence_count: 120,
+          disagreement_rate: 0.35,
+          readiness: 'ready_to_optimize',
+          collection_state: 'continue_broad_collection',
+          rationale: 'Reviewed errors show a safe opportunity.',
           next_action: 'request_optimization_approval',
         }],
         scorecards: [{
@@ -150,12 +167,17 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getByText('Optimize: 2')).toBeInTheDocument()
     expect(screen.getByText('Stakeholder clarification: 1')).toBeInTheDocument()
     expect(screen.getByText('Priority Score')).toBeInTheDocument()
+    expect(screen.getByText('No ranking cutoff')).toBeInTheDocument()
+    expect(screen.getByText(/Top 10 are highlighted/)).toBeInTheDocument()
+    expect(screen.getByText(/1 selected for semantic diagnosis/)).toBeInTheDocument()
+    expect(screen.getByText(/120 valid feedback/)).toBeInTheDocument()
+    expect(screen.getByText('Reviewed errors show a safe opportunity.')).toBeInTheDocument()
     expect(mockReadTaskArtifact).toHaveBeenCalledTimes(1)
 
     await user.click(screen.getByRole('button', { name: /Example Portfolio/ }))
 
-    expect(await screen.findByText('Reviewed errors show a safe opportunity.')).toBeInTheDocument()
-    expect(screen.getByText(/120 valid feedback/)).toBeInTheDocument()
+    expect(await screen.findAllByText('Reviewed errors show a safe opportunity.')).toHaveLength(2)
+    expect(screen.getAllByText(/120 valid feedback/)).toHaveLength(2)
     expect(screen.getByText('Should this exception be treated as acceptable?')).toBeInTheDocument()
     expect(mockReadTaskArtifact).toHaveBeenCalledTimes(2)
     expect(screen.getByRole('link', { name: 'Summary artifact' })).toHaveAttribute(

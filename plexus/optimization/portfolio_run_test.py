@@ -806,3 +806,55 @@ def test_stakeholder_overview_explains_current_work_and_next_durable_checkpoint(
     assert ranked["overview"]["cooldown_excluded_count"] == 3
     assert ranked["overview"]["assessment_progress"] == "0 of 1 ranked scores complete"
     assert "deterministic readiness" in ranked["overview"]["current_activity"]
+
+
+def test_stakeholder_overview_explains_ranking_and_semantic_diagnosis_cutoffs():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    ranked_rows = [
+        {
+            "scorecard_id": "card",
+            "score_id": f"score-{index:02d}",
+            "scorecard_name": "Example Portfolio",
+            "score_name": f"Score {index:02d}",
+            "valid_feedback_count": 200 + index,
+            "reviewed_disagreements": 30 - index,
+            "disagreement_rate": (30 - index) / (200 + index),
+            "reviewed_error_opportunity": 30 - index,
+        }
+        for index in range(12)
+    ]
+    view = _stakeholder_view({
+        "rank": {
+            "coverage": {"complete": True},
+            "ranked": ranked_rows,
+            "unranked": [],
+            "window": {"start": "a", "end": "b"},
+        },
+        "assessments": [],
+        "diagnoses": [],
+        "reviews": [],
+        "approval_requests": [],
+        "diagnosis_coverage": {
+            "top_priority_count": 10,
+            "monitoring_candidate_count": 1,
+            "selected_count": 11,
+            "completed_count": 0,
+            "failed_count": 0,
+            "skipped_count": 1,
+            "max_semantic_diagnoses": 25,
+        },
+    }, milestone="assessment")
+
+    overview = view["overview"]
+    assert overview["ranking_cutoff"] == "none"
+    assert overview["priority_display_limit"] == 10
+    assert overview["priority_displayed_count"] == 10
+    assert overview["priority_cutoff_rank"] == 10
+    assert overview["priority_cutoff_opportunity"] == 21
+    assert overview["ranked_below_priority_cutoff"] == 2
+    assert overview["diagnosis_selected_count"] == 11
+    assert overview["diagnosis_skipped_count"] == 1
+    assert overview["diagnosis_max_count"] == 25
+    assert view["priorities"][0]["rank"] == 1
+    assert view["priorities"][0]["disagreement_rate"] == 0.15

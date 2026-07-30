@@ -80,7 +80,7 @@ _FINAL_STATES = {
 
 _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
     "portfolio": (
-        ("Scorecard", "scorecard_name"), ("Score", "score_name"),
+        ("Rank", "rank"), ("Scorecard", "scorecard_name"), ("Score", "score_name"),
         ("Valid Feedback", "valid_feedback_count"),
         ("Reviewed Disagreements", "reviewed_disagreements"),
         ("Disagreement Rate", "disagreement_rate"),
@@ -92,8 +92,9 @@ _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("Next Action", "next_action"), ("Dashboard Link", "dashboard_url"),
     ),
     "priorities": (
-        ("Scorecard", "scorecard_name"), ("Score", "score_name"),
+        ("Rank", "rank"), ("Scorecard", "scorecard_name"), ("Score", "score_name"),
         ("Evidence Count", "evidence_count"), ("Opportunity", "opportunity"),
+        ("Disagreement Rate", "disagreement_rate"),
         ("State", "state"), ("Coverage", "coverage_status"), ("Recent Trend", "trend"),
         ("Collection State", "collection_state"), ("Readiness", "readiness"),
         ("Promotion Readiness", "promotion_readiness"), ("Rationale", "rationale"),
@@ -131,6 +132,11 @@ _OVERVIEW_KEYS = {
     "scorecards_in_scope",
     "ranked_score_count", "unranked_score_count", "cooldown_excluded_count",
     "assessment_progress", "diagnosis_coverage", "pending_approval_count", "notes",
+    "ranking_cutoff", "ranking_policy", "priority_display_limit",
+    "priority_displayed_count", "priority_cutoff_rank", "priority_cutoff_opportunity",
+    "ranked_below_priority_cutoff", "diagnosis_selection_policy",
+    "diagnosis_top_priority_count", "diagnosis_monitoring_candidate_count",
+    "diagnosis_selected_count", "diagnosis_skipped_count", "diagnosis_max_count",
 }
 _ROW_METADATA_KEYS = {"scorecard_ref"}
 
@@ -801,14 +807,19 @@ def build_stakeholder_presentation(
             "artifacts": artifacts_by_ref.get(scope_hash, []),
         })
 
+    overview = dict(stakeholder_view.get("overview") or {})
+    try:
+        priority_display_limit = max(0, int(overview.get("priority_display_limit") or 10))
+    except (TypeError, ValueError):
+        priority_display_limit = 10
     priorities = sorted(
         stakeholder_view.get("priorities", []),
         key=lambda row: float(row.get("opportunity") or 0)
         if isinstance(row.get("opportunity"), (int, float)) else 0.0,
         reverse=True,
-    )[:10]
+    )[:priority_display_limit]
     return {
-        "overview": dict(stakeholder_view.get("overview") or {}),
+        "overview": overview,
         "score_count": len(rows),
         "scorecard_count": len(scorecards),
         "primary_decision_mix": primary_decision_mix,
