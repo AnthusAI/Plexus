@@ -222,9 +222,13 @@ class OptimizationPortfolioRunner:
                 )
 
             state["diagnoses"] = diagnosis_rows
-            diagnosis_coverage["selected_scope_complete"] = (
-                diagnosis_coverage["completed_count"] == diagnosis_coverage["selected_count"]
+            diagnosis_coverage["scheduled_scope_complete"] = (
+                diagnosis_coverage["completed_count"] == diagnosis_coverage["scheduled_count"]
                 and diagnosis_coverage["failed_count"] == 0
+            )
+            diagnosis_coverage["selected_scope_complete"] = (
+                diagnosis_coverage["scheduled_scope_complete"]
+                and diagnosis_coverage["deferred_by_cap_count"] == 0
             )
             self._publish(service, "diagnosis", state)
             self._notify(
@@ -580,10 +584,13 @@ def _pending_diagnosis_coverage(request: Mapping[str, Any]) -> dict[str, Any]:
         "monitoring_candidate_count": 0,
         "overlap_count": 0,
         "selected_count": 0,
+        "scheduled_count": 0,
+        "deferred_by_cap_count": 0,
         "completed_count": 0,
         "failed_count": 0,
         "skipped_count": 0,
         "max_semantic_diagnoses": _max_semantic_diagnoses(request),
+        "scheduled_scope_complete": False,
         "selected_scope_complete": False,
         "portfolio_semantic_complete": False,
         "blockers": [],
@@ -628,13 +635,8 @@ def _diagnosis_selection(
         for row, assessment in paired
         if _target_key(row) in selected_keys
     ]
-    blockers: list[dict[str, Any]] = []
-    if len(selected) > max_semantic_diagnoses:
-        blockers.append({
-            "code": "semantic_diagnosis_limit_exceeded",
-            "selected_count": len(selected),
-            "max_semantic_diagnoses": max_semantic_diagnoses,
-        })
+    scheduled = selected[:max_semantic_diagnoses]
+    deferred_by_cap_count = len(selected) - len(scheduled)
     coverage = {
         "policy_version": DIAGNOSIS_SCOPE_POLICY_VERSION,
         "ranked_count": len(paired),
@@ -642,15 +644,20 @@ def _diagnosis_selection(
         "monitoring_candidate_count": len(monitoring_keys - {None}),
         "overlap_count": len((top_priority_keys & monitoring_keys) - {None}),
         "selected_count": len(selected),
+        "scheduled_count": len(scheduled),
+        "deferred_by_cap_count": deferred_by_cap_count,
         "completed_count": 0,
         "failed_count": 0,
         "skipped_count": len(paired) - len(selected),
         "max_semantic_diagnoses": max_semantic_diagnoses,
+        "scheduled_scope_complete": False,
         "selected_scope_complete": False,
-        "portfolio_semantic_complete": len(selected) == len(paired),
-        "blockers": blockers,
+        "portfolio_semantic_complete": (
+            len(selected) == len(paired) and deferred_by_cap_count == 0
+        ),
+        "blockers": [],
     }
-    return selected, coverage
+    return scheduled, coverage
 
 
 def _exact_target(row: Mapping[str, Any]) -> tuple[str, str]:
@@ -980,6 +987,13 @@ def _terminal_status(state: Mapping[str, Any], *, has_unresolved_actions: bool) 
         return "INCOMPLETE"
     dispatch = state.get("dispatch") or {}
     if (dispatch.get("rejected") or []):
+        return "INCOMPLETE"
+    diagnosis_coverage = state.get("diagnosis_coverage")
+    if (
+        isinstance(diagnosis_coverage, Mapping)
+        and int(diagnosis_coverage.get("selected_count") or 0) > 0
+        and diagnosis_coverage.get("selected_scope_complete") is not True
+    ):
         return "INCOMPLETE"
     if has_unresolved_actions:
         return "COMPLETED_WITH_UNRESOLVED_ACTIONS"
@@ -1335,6 +1349,8 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
     evidence_ranked_count = len(evidence_rows)
     assessed_count = len(assessments)
     diagnosis_selected = int(diagnosis_coverage.get("selected_count") or 0)
+    diagnosis_scheduled = int(diagnosis_coverage.get("scheduled_count") or 0)
+    diagnosis_deferred = int(diagnosis_coverage.get("deferred_by_cap_count") or 0)
     diagnosis_completed = int(diagnosis_coverage.get("completed_count") or 0)
     diagnosis_failed = int(diagnosis_coverage.get("failed_count") or 0)
     diagnosis_skipped = int(diagnosis_coverage.get("skipped_count") or 0)
@@ -1366,7 +1382,10 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             "unranked_score_count": len(rank.get("unranked") or []),
             "cooldown_excluded_count": rank.get("recent_activity_excluded_count", activity_coverage.get("recent_activity_excluded_count", 0)),
             "assessment_progress": f"{assessed_count} of {ranked_count} eligible candidates assessed",
-            "diagnosis_coverage": f"{diagnosis_completed} of {diagnosis_selected} selected diagnoses complete; {diagnosis_failed} failed",
+            "diagnosis_coverage": (
+                f"{diagnosis_completed} of {diagnosis_scheduled} scheduled diagnoses complete; "
+                f"{diagnosis_failed} failed; {diagnosis_deferred} deferred by the safety cap"
+            ),
             "ranking_cutoff": "none",
             "ranking_policy": "Evidence rank is calculated before policy gates. Cooldown, structural blockers, and incomplete evidence remain visible without changing that rank.",
             "priority_display_limit": MAX_PRIORITY_DIAGNOSES,
@@ -1378,6 +1397,8 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             "diagnosis_top_priority_count": diagnosis_top_priority,
             "diagnosis_monitoring_candidate_count": diagnosis_monitoring,
             "diagnosis_selected_count": diagnosis_selected,
+            "diagnosis_scheduled_count": diagnosis_scheduled,
+            "diagnosis_deferred_count": diagnosis_deferred,
             "diagnosis_skipped_count": diagnosis_skipped,
             "diagnosis_max_count": diagnosis_max,
             "pending_approval_count": len(state.get("approval_requests") or []),

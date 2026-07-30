@@ -46,6 +46,8 @@ type PresentationOverview = {
   diagnosis_top_priority_count?: number
   diagnosis_monitoring_candidate_count?: number
   diagnosis_selected_count?: number
+  diagnosis_scheduled_count?: number
+  diagnosis_deferred_count?: number
   diagnosis_skipped_count?: number
   diagnosis_max_count?: number
   pending_approval_count?: number
@@ -614,7 +616,7 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
           <div className="rounded-md bg-muted/30 p-4">
             <div className="font-medium">{overview.diagnosis_selected_count ?? 0} selected for deeper review</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              The top {overview.diagnosis_top_priority_count ?? 0} eligible candidates plus {overview.diagnosis_monitoring_candidate_count ?? 0} monitoring candidates are selected, with overlap counted once. {overview.diagnosis_skipped_count ?? 0} eligible candidates were not semantically diagnosed. Safety cap: {overview.diagnosis_max_count ?? 25}.
+              The top {overview.diagnosis_top_priority_count ?? 0} eligible candidates plus {overview.diagnosis_monitoring_candidate_count ?? 0} monitoring candidates are selected, with overlap counted once. {overview.diagnosis_scheduled_count ?? overview.diagnosis_selected_count ?? 0} are scheduled in this run; {overview.diagnosis_deferred_count ?? 0} are deferred by the safety cap. {overview.diagnosis_skipped_count ?? 0} eligible candidates fall outside the diagnosis policy. Safety cap: {overview.diagnosis_max_count ?? 25}.
             </p>
           </div>
         </div>

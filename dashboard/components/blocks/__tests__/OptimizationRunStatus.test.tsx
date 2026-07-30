@@ -92,7 +92,7 @@ describe('OptimizationRunStatus', () => {
           ranked_score_count: 3,
           cooldown_excluded_count: 1,
           assessment_progress: '3 of 3 ranked scores complete',
-          diagnosis_coverage: '1 of 1 selected diagnoses complete; 0 failed',
+          diagnosis_coverage: '1 of 1 scheduled diagnoses complete; 0 failed; 0 deferred by the safety cap',
           ranking_cutoff: 'none',
           priority_display_limit: 10,
           priority_displayed_count: 1,
@@ -102,6 +102,8 @@ describe('OptimizationRunStatus', () => {
           diagnosis_top_priority_count: 1,
           diagnosis_monitoring_candidate_count: 0,
           diagnosis_selected_count: 1,
+          diagnosis_scheduled_count: 1,
+          diagnosis_deferred_count: 0,
           diagnosis_skipped_count: 2,
           diagnosis_max_count: 25,
           pending_approval_count: 1,
@@ -224,6 +226,7 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getByText('Evidence rank before policy gates')).toBeInTheDocument()
     expect(screen.getByText(/Top 10 evidence ranks are highlighted/)).toBeInTheDocument()
     expect(screen.getByText(/1 selected for deeper review/)).toBeInTheDocument()
+    expect(screen.getByText(/1 are scheduled in this run; 0 are deferred by the safety cap/)).toBeInTheDocument()
     expect(screen.getByText(/120 valid feedback/)).toBeInTheDocument()
     expect(screen.getByText('Reviewed errors show a safe opportunity.')).toBeInTheDocument()
     expect(mockReadTaskArtifact).toHaveBeenCalledTimes(1)

@@ -142,7 +142,8 @@ _OVERVIEW_KEYS = {
     "priority_displayed_count", "priority_cutoff_rank", "priority_cutoff_opportunity",
     "ranked_below_priority_cutoff", "diagnosis_selection_policy",
     "diagnosis_top_priority_count", "diagnosis_monitoring_candidate_count",
-    "diagnosis_selected_count", "diagnosis_skipped_count", "diagnosis_max_count",
+    "diagnosis_selected_count", "diagnosis_scheduled_count", "diagnosis_deferred_count",
+    "diagnosis_skipped_count", "diagnosis_max_count",
 }
 _ROW_METADATA_KEYS = {
     "scorecard_ref", "rank", "evidence_rank", "candidate_rank", "policy_disposition",

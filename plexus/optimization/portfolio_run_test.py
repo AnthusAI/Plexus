@@ -375,10 +375,13 @@ def test_semantic_diagnosis_is_bounded_to_top_ten_plus_monitoring_candidates_in_
         "monitoring_candidate_count": 2,
         "overlap_count": 1,
         "selected_count": 11,
+        "scheduled_count": 11,
+        "deferred_by_cap_count": 0,
         "completed_count": 11,
         "failed_count": 0,
         "skipped_count": 3,
         "max_semantic_diagnoses": 12,
+        "scheduled_scope_complete": True,
         "selected_scope_complete": True,
         "portfolio_semantic_complete": False,
         "blockers": [],
@@ -400,7 +403,7 @@ def test_semantic_diagnosis_is_bounded_to_top_ten_plus_monitoring_candidates_in_
     assert diagnosis_view["portfolio"][10]["next_action"] == "await_semantic_diagnosis"
 
 
-def test_semantic_diagnosis_limit_fails_closed_before_any_model_backed_work():
+def test_semantic_diagnosis_limit_runs_the_highest_priority_subset_and_reports_deferred_coverage():
     from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
 
     report = _ReportService()
@@ -412,7 +415,10 @@ def test_semantic_diagnosis_limit_fails_closed_before_any_model_backed_work():
     runner = OptimizationPortfolioRunner(_dependencies(
         rank=lambda _request: {"coverage": {"complete": True}, "ranked": ranked},
         assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
-        diagnose=lambda request: diagnosed.append(request["score_id"]) or request["assessment"],
+        diagnose=lambda request: diagnosed.append(request["score_id"]) or {
+            **request["assessment"],
+            "states": {"optimization": "repair_required"},
+        },
         summary=lambda _request: {"coverage": {"complete": True}},
         dispatch=lambda _request: (_ for _ in ()).throw(AssertionError("must not dispatch")),
         review=lambda _request: {},
@@ -423,21 +429,62 @@ def test_semantic_diagnosis_limit_fails_closed_before_any_model_backed_work():
     result = runner.run({
         "account_id": "account-1",
         "run_key": "semantic-limit",
-        "max_semantic_diagnoses": 9,
+        "max_semantic_diagnoses": 2,
+    })
+
+    assert result["status"] == "INCOMPLETE"
+    assert diagnosed == ["score-00", "score-01"]
+    assert report.terminal == ["INCOMPLETE"]
+    coverage = result["diagnosis_coverage"]
+    assert coverage["selected_count"] == 10
+    assert coverage["scheduled_count"] == 2
+    assert coverage["deferred_by_cap_count"] == 8
+    assert coverage["completed_count"] == 2
+    assert coverage["scheduled_scope_complete"] is True
+    assert coverage["selected_scope_complete"] is False
+    assert coverage["blockers"] == []
+
+    diagnosis_view = next(
+        view for milestone, _evidence, view in report.milestones
+        if milestone == "diagnosis"
+    )
+    assert diagnosis_view["overview"]["diagnosis_coverage"] == (
+        "2 of 2 scheduled diagnoses complete; 0 failed; 8 deferred by the safety cap"
+    )
+    assert diagnosis_view["overview"]["diagnosis_scheduled_count"] == 2
+    assert diagnosis_view["overview"]["diagnosis_deferred_count"] == 8
+
+
+def test_zero_semantic_diagnosis_limit_defers_selected_work_without_invoking_a_model():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    diagnosed: list[str] = []
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {
+            "coverage": {"complete": True},
+            "ranked": [{"scorecard_id": "card", "score_id": "score-00"}],
+        },
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: diagnosed.append(request["score_id"]) or request["assessment"],
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda _request: (_ for _ in ()).throw(AssertionError("must not dispatch")),
+        review=lambda _request: {},
+        report=report,
+        human_review=lambda _request: (_ for _ in ()).throw(AssertionError("must not request approval")),
+    ))
+
+    result = runner.run({
+        "account_id": "account-1",
+        "run_key": "zero-semantic-limit",
+        "max_semantic_diagnoses": 0,
     })
 
     assert result["status"] == "INCOMPLETE"
     assert diagnosed == []
-    assert report.terminal == ["INCOMPLETE"]
-    coverage = result["diagnosis_coverage"]
-    assert coverage["selected_count"] == 10
-    assert coverage["completed_count"] == 0
-    assert coverage["selected_scope_complete"] is False
-    assert coverage["blockers"] == [{
-        "code": "semantic_diagnosis_limit_exceeded",
-        "selected_count": 10,
-        "max_semantic_diagnoses": 9,
-    }]
+    assert result["diagnosis_coverage"]["scheduled_count"] == 0
+    assert result["diagnosis_coverage"]["deferred_by_cap_count"] == 1
+    assert result["diagnosis_coverage"]["failed_count"] == 0
 
 
 def test_diagnosis_failure_preserves_the_published_assessment_milestone():
@@ -907,10 +954,12 @@ def test_stakeholder_overview_explains_ranking_and_semantic_diagnosis_cutoffs():
             "top_priority_count": 10,
             "monitoring_candidate_count": 1,
             "selected_count": 11,
+            "scheduled_count": 5,
+            "deferred_by_cap_count": 6,
             "completed_count": 0,
             "failed_count": 0,
             "skipped_count": 1,
-            "max_semantic_diagnoses": 25,
+            "max_semantic_diagnoses": 5,
         },
     }, milestone="assessment")
 
@@ -922,8 +971,13 @@ def test_stakeholder_overview_explains_ranking_and_semantic_diagnosis_cutoffs():
     assert overview["priority_cutoff_opportunity"] == 21
     assert overview["ranked_below_priority_cutoff"] == 2
     assert overview["diagnosis_selected_count"] == 11
+    assert overview["diagnosis_scheduled_count"] == 5
+    assert overview["diagnosis_deferred_count"] == 6
     assert overview["diagnosis_skipped_count"] == 1
-    assert overview["diagnosis_max_count"] == 25
+    assert overview["diagnosis_max_count"] == 5
+    assert overview["diagnosis_coverage"] == (
+        "0 of 5 scheduled diagnoses complete; 0 failed; 6 deferred by the safety cap"
+    )
     assert view["priorities"][0]["rank"] == 1
     assert view["priorities"][0]["disagreement_rate"] == 0.15
     assert view["feedback_investment"][0]["rank"] == 1
@@ -938,10 +992,14 @@ def test_stakeholder_overview_explains_ranking_and_semantic_diagnosis_cutoffs():
         },
         "diagnosis_coverage": {
             "selected_count": 10,
+            "scheduled_count": 0,
+            "deferred_by_cap_count": 10,
             "max_semantic_diagnoses": 0,
         },
     }, milestone="assessment")
     assert zero_cap_view["overview"]["diagnosis_max_count"] == 0
+    assert zero_cap_view["overview"]["diagnosis_scheduled_count"] == 0
+    assert zero_cap_view["overview"]["diagnosis_deferred_count"] == 10
 
 
 def test_stakeholder_view_preserves_pre_policy_rank_and_visible_cooldown_disposition():
