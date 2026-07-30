@@ -3,7 +3,7 @@
   "title": "Integrate PR 513 with the Kubernetes demo suite",
   "description": "Validate PR 513 from an isolated integration branch against the committed Docker Desktop Kubernetes demo. Preserve the initial unmodified failure, implement only the specified local GraphQL ticket, verified TLS, explicit authentication, and resume-path compatibility, then prove two fresh strict runs plus retained verification. Use public data only and record sanitized evidence.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -94,10 +94,16 @@
       "author": "ryan.porter",
       "text": "PR #513 conflict-resolution decision: current develop deliberately keeps the production scoring extra minimal, while the local Kubernetes worker still requires the broader legacy CLI import set proven by the strict demo. Preserve both contracts by retaining develop's slim scoring extra, declaring the broader dependencies in a dedicated worker extra, installing that extra only in the Kubernetes worker image, and retaining the complete-install union including the optional cost calculator. Validate the dependency contract and both runtime lanes before merging.",
       "created_at": "2026-07-30T21:55:19.807183Z"
+    },
+    {
+      "id": "35a67654-b4cf-42ab-829d-f4d7e42dbad0",
+      "author": "ryan.porter",
+      "text": "PR #513 merged into develop as d71e3836242edeb3031334a70b82284af9f804ef after conflict resolution and local Python 3.11/3.12 validation. The conflict resolution preserves the slim production scoring extra and introduces a dedicated Kubernetes worker extra for legacy CLI dependencies. GitHub-hosted jobs were unable to start because of the organization billing/spending-limit condition; equivalent local suites passed.",
+      "created_at": "2026-07-30T22:05:47.351545Z"
     }
   ],
   "created_at": "2026-07-28T17:58:38.910670Z",
-  "updated_at": "2026-07-30T21:55:19.807183Z",
-  "closed_at": null,
+  "updated_at": "2026-07-30T22:05:47.611519Z",
+  "closed_at": "2026-07-30T22:05:47.611519Z",
   "custom": {}
 }
