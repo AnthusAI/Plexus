@@ -97,6 +97,10 @@ def test_portfolio_run_publishes_idempotent_operator_milestones_after_report_upd
     assert updates[0]["milestone"] == "STARTED"
     assert updates[1]["milestone"] == "COMPLETED"
     assert updates[2]["milestone"] == "COMPLETED"
+    terminal_view = report.milestones[-1][2]
+    assert terminal_view["overview"]["lifecycle_status"] == "completed"
+    assert "complete" in terminal_view["overview"]["current_activity"].lower()
+    assert "Finalizing" not in terminal_view["overview"]["current_activity"]
     assert all(update["resource_refs"] == [{
         "system": "plexus", "kind": "report", "id": "report-1",
         "relation": "optimization_run",
@@ -190,6 +194,7 @@ def test_incomplete_ranking_is_published_and_finalized_incomplete_without_assess
     assert calls == {"assess": 0, "review": 0, "dispatch": 0}
     assert report.terminal == ["INCOMPLETE"]
     assert [row[0] for row in report.milestones] == ["started", "ranking", "finalization"]
+    assert report.milestones[-1][2]["overview"]["lifecycle_status"] == "incomplete"
 
 
 def test_ranking_and_all_assessments_are_published_as_distinct_milestones_before_semantic_diagnosis_begins():

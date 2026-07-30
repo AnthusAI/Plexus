@@ -110,6 +110,7 @@ class OptimizationPortfolioRunner:
             self._publish(service, "ranking", state)
             if not _coverage_complete(rank):
                 state["summary"] = self._summary(state)
+                state["terminal_status"] = "INCOMPLETE"
                 self._publish(service, "finalization", state)
                 _finalize(service, "INCOMPLETE")
                 return self._result("INCOMPLETE", state)
@@ -149,6 +150,7 @@ class OptimizationPortfolioRunner:
             if diagnosis_coverage["blockers"]:
                 self._publish(service, "diagnosis", state)
                 state["summary"] = self._summary(state)
+                state["terminal_status"] = "INCOMPLETE"
                 self._publish(service, "finalization", state)
                 _finalize(service, "INCOMPLETE")
                 return self._result("INCOMPLETE", state)
@@ -325,12 +327,13 @@ class OptimizationPortfolioRunner:
             state["reviews"] = review_rows
             state["summary"] = self._summary(state)
             self._publish(service, "optimization_review", state)
-            self._publish(service, "finalization", state)
 
             status = _terminal_status(
                 state,
                 has_unresolved_actions=bool(_non_launch_actions(diagnosis_rows) or unresolved_approval),
             )
+            state["terminal_status"] = status
+            self._publish(service, "finalization", state)
             _finalize(service, status)
             self._notify(
                 state,
@@ -933,6 +936,7 @@ def _evidence_snapshot(state: Mapping[str, Any]) -> dict[str, Any]:
     coverage = rank.get("coverage") if isinstance(rank, Mapping) else {"complete": False, "failures": ["ranking not yet available"]}
     return {
         "run_key": state["run_key"],
+        "terminal_status": state.get("terminal_status"),
         "coverage": dict(coverage or {}),
         "rank": state.get("rank"),
         "assessments": list(state.get("assessments") or []),
@@ -1017,6 +1021,32 @@ def _milestone_narrative(milestone: str) -> tuple[str, str]:
         ),
     }
     return narratives.get(milestone, (f"Processing {milestone}.", "The next durable milestone will update this report."))
+
+
+def _terminal_narrative(status: str) -> tuple[str, str]:
+    narratives = {
+        "completed": (
+            "Portfolio analysis and review are complete.",
+            "Review the ranked priorities, decisions, and attached evidence.",
+        ),
+        "completed_with_unresolved_actions": (
+            "Portfolio analysis is complete; human decisions remain open.",
+            "Resolve the outstanding actions before approved work can continue.",
+        ),
+        "incomplete": (
+            "The run ended with incomplete evidence.",
+            "Review the documented coverage failures before relying on its conclusions.",
+        ),
+        "blocked": (
+            "The run ended blocked by an unresolved dependency.",
+            "Resolve the documented blocker before starting another attempt.",
+        ),
+        "failed": (
+            "The run failed before it could publish a complete conclusion.",
+            "Review the failure evidence and retry only after the cause is addressed.",
+        ),
+    }
+    return narratives.get(status, ("The run has ended.", "Review its terminal evidence and next actions."))
 
 
 def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, Any]:
@@ -1160,7 +1190,11 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
     scope_coverage = coverage.get("scope") if isinstance(coverage.get("scope"), Mapping) else {}
     activity_coverage = coverage.get("activity") if isinstance(coverage.get("activity"), Mapping) else {}
     diagnosis_coverage = state.get("diagnosis_coverage") if isinstance(state.get("diagnosis_coverage"), Mapping) else {}
-    current_activity, next_checkpoint = _milestone_narrative(milestone)
+    terminal_status = str(state.get("terminal_status") or "").strip().lower()
+    if terminal_status:
+        current_activity, next_checkpoint = _terminal_narrative(terminal_status)
+    else:
+        current_activity, next_checkpoint = _milestone_narrative(milestone)
     ranked_count = len(_ranked_rows(rank))
     assessed_count = len(assessments)
     diagnosis_selected = int(diagnosis_coverage.get("selected_count") or 0)
@@ -1172,7 +1206,7 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
     return {
         "overview": {
             "headline": "Optimization portfolio run",
-            "lifecycle_status": "running",
+            "lifecycle_status": terminal_status or "running",
             "current_activity": current_activity,
             "next_checkpoint": next_checkpoint,
             "coverage_status": coverage_status,
