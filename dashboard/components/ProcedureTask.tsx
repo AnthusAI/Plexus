@@ -209,6 +209,15 @@ const procedureOperatorIdentity = (
     ? taskMetadata.run_parameters
     : {}
   const selectedScope = selectedScorecardScope(runParameters)
+  const storedIdentity = taskMetadata.operator_identity && typeof taskMetadata.operator_identity === 'object'
+    ? taskMetadata.operator_identity as Record<string, any>
+    : {}
+  const storedTitle = typeof storedIdentity.display_title === 'string'
+    ? storedIdentity.display_title.trim()
+    : ''
+  const storedScope = typeof storedIdentity.display_scope === 'string'
+    ? storedIdentity.display_scope.trim()
+    : ''
 
   if (isOptimization && scoreName) {
     return {
@@ -221,12 +230,12 @@ const procedureOperatorIdentity = (
   if (/portfolio/i.test(rawType) || /portfolio/i.test(procedure.title || '')) {
     return {
       type: rawType,
-      displayTitle: procedure.displayTitle || (
+      displayTitle: procedure.displayTitle || storedTitle || (
         selectedScope
           ? 'Scorecard-scoped optimization portfolio'
           : 'Account-wide optimization portfolio'
       ),
-      displayScope: procedure.displayScope || selectedScope || 'All scorecards',
+      displayScope: procedure.displayScope || storedScope || selectedScope || 'All scorecards',
     }
   }
 
@@ -1084,6 +1093,24 @@ export default function ProcedureTask({
     }
     return rawMetadata && typeof rawMetadata === 'object' && !Array.isArray(rawMetadata) ? rawMetadata : {}
   }, [procedure.task?.metadata])
+  const optimizationTerminalOutcome = useMemo(() => {
+    const raw = String(
+      (taskMetadata as Record<string, any>).optimization_run_final_status
+      || procedure.status
+      || '',
+    ).trim().toUpperCase()
+    if (raw === 'INCOMPLETE' || raw === 'BLOCKED') return raw
+    if (raw === 'COMPLETE_WITH_UNRESOLVED_ACTIONS') return 'COMPLETED_WITH_UNRESOLVED_ACTIONS'
+    if (raw === 'COMPLETED_WITH_UNRESOLVED_ACTIONS') return raw
+    return undefined
+  }, [procedure.status, taskMetadata])
+  const optimizationStatusMessage = optimizationTerminalOutcome === 'INCOMPLETE'
+    ? 'Incomplete evidence'
+    : optimizationTerminalOutcome === 'BLOCKED'
+      ? 'Blocked pending resolution'
+      : optimizationTerminalOutcome === 'COMPLETED_WITH_UNRESOLVED_ACTIONS'
+        ? 'Analysis complete with unresolved actions'
+        : undefined
   const hasLocalProcedureRuntime = useMemo(() => {
     const runtime = (taskMetadata as Record<string, any>).runtime
     const hasRuntimeIdentity = runtime && typeof runtime === 'object' && (
@@ -1167,6 +1194,7 @@ export default function ProcedureTask({
     estimatedCompletionAt: procedure.task?.estimatedCompletionAt,
     completedAt: procedure.task?.completedAt,
     status: effectiveTaskStatus,
+    terminalOutcome: optimizationTerminalOutcome,
     errorMessage: procedure.task?.errorMessage || procedure.errorMessage,
     dispatchStatus: procedure.task?.dispatchStatus,
     dispatchMode: dispatchDisplayMode,
@@ -1408,7 +1436,8 @@ export default function ProcedureTask({
       estimatedCompletionAt={taskObject.estimatedCompletionAt}
       status={taskObject.status || 'PENDING'}
       command={taskObject.command}
-      statusMessage={taskStatusMessage}
+      statusMessage={optimizationStatusMessage || taskStatusMessage}
+      terminalOutcome={optimizationTerminalOutcome}
       errorMessage={taskObject.errorMessage}
       dispatchStatus={taskObject.dispatchStatus}
       dispatchMode={taskObject.dispatchMode}

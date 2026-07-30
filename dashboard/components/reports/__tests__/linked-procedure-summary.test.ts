@@ -1,4 +1,8 @@
-import { buildLinkedProcedureSummary } from '@/components/reports/linked-procedure-summary'
+import {
+  buildLinkedProcedureSummary,
+  linkedProcedureSubtitle,
+  optimizationFinalStatusFromReportBlocks,
+} from '@/components/reports/linked-procedure-summary'
 
 const linkedTask = {
   id: 'task-1',
@@ -72,5 +76,52 @@ describe('buildLinkedProcedureSummary', () => {
       reportCreatedAt: '2026-07-30T12:00:02.000Z',
       task: { ...linkedTask, target: 'report/report-1', metadata: '{}' } as any,
     })).toBeNull()
+  })
+
+  it('projects the precise incomplete outcome without changing the coarse Task status', () => {
+    const summary = buildLinkedProcedureSummary({
+      reportId: 'report-1',
+      reportName: 'Scorecard-scoped optimization portfolio',
+      reportCreatedAt: '2026-07-30T12:00:02.000Z',
+      task: {
+        ...linkedTask,
+        status: 'COMPLETED',
+        metadata: JSON.stringify({
+          ...JSON.parse(linkedTask.metadata),
+          optimization_run_final_status: 'incomplete',
+        }),
+      } as any,
+    })
+
+    expect(summary?.status).toBe('INCOMPLETE')
+    expect(summary?.task?.status).toBe('COMPLETED')
+    expect(linkedProcedureSubtitle(summary!)).toBe('Portfolio Optimization • Incomplete')
+  })
+
+  it('uses the living Report revision when its terminal outcome arrives before Task metadata refreshes', () => {
+    const reportOutcome = optimizationFinalStatusFromReportBlocks([{
+      type: 'OptimizationRunStatus',
+      output: {
+        preview: {
+          summary: {
+            overview: { lifecycle_status: 'incomplete' },
+          },
+        },
+      },
+    }])
+    const summary = buildLinkedProcedureSummary({
+      reportId: 'report-1',
+      reportName: 'Scorecard-scoped optimization portfolio',
+      reportCreatedAt: '2026-07-30T12:00:02.000Z',
+      task: {
+        ...linkedTask,
+        status: 'COMPLETED',
+      } as any,
+      optimizationFinalStatus: reportOutcome,
+    })
+
+    expect(reportOutcome).toBe('INCOMPLETE')
+    expect(summary?.status).toBe('INCOMPLETE')
+    expect(summary?.task?.status).toBe('COMPLETED')
   })
 })

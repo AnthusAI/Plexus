@@ -37,6 +37,7 @@ class _Task:
 
     def update(self, **values):
         self.updates.append(values)
+        self.description = values.get("description", self.description)
         self.status = values.get("status", self.status)
         self.metadata = values.get("metadata", self.metadata)
         self.attachedFiles = list(values.get("attachedFiles", self.attachedFiles))
@@ -859,6 +860,7 @@ def test_procedure_owned_task_is_reused_without_duplicate_task_or_stage_creation
         identifier="procedure-task",
         accountId="account-1",
         status="RUNNING",
+        description="Account-wide optimization portfolio — All scorecards",
         metadata=json.dumps({"procedure_key": "preserve-me"}),
     )
     procedure_stages = [
@@ -884,7 +886,9 @@ def test_procedure_owned_task_is_reused_without_duplicate_task_or_stage_creation
         stage_lookup=lambda _: procedure_stages, artifact_store=_ArtifactStore(),
     )
 
-    state = service.start_or_resume({"scope": {}})
+    state = service.start_or_resume({
+        "scope": {"scorecard_name_prefixes": ["Example portfolio"]}
+    })
     service.finalize(status="complete")
 
     assert state.task is procedure_task
@@ -895,6 +899,15 @@ def test_procedure_owned_task_is_reused_without_duplicate_task_or_stage_creation
     assert metadata["procedure_key"] == "preserve-me"
     assert metadata["optimization_run_key"] == "procedure-run"
     assert metadata["optimization_run_final_status"] == "complete"
+    assert metadata["operator_identity"] == {
+        "kind": "scorecard_scoped_portfolio",
+        "display_title": "Scorecard-scoped optimization portfolio",
+        "display_scope": 'scorecard names beginning with "Example portfolio"',
+    }
+    assert procedure_task.description == (
+        'Scorecard-scoped optimization portfolio — scorecard names beginning with '
+        '"Example portfolio"'
+    )
     assert not any(update.get("status") == "COMPLETED" for update in procedure_task.updates)
 
 

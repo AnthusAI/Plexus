@@ -32,6 +32,7 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
     startedAt?: string
     estimatedCompletionAt?: string
     status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
+    terminalOutcome?: string
     dispatchStatus?: string
     dispatchMode?: string
     celeryTaskId?: string
@@ -363,6 +364,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
             startedAt={task.startedAt}
             estimatedCompletionAt={task.estimatedCompletionAt}
             status={task.status || 'PENDING'}
+            terminalOutcome={task.terminalOutcome}
             command={task.command || task.description}
             statusMessage={statusMessage}
             errorMessage={task.errorMessage}

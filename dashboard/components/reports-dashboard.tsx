@@ -33,6 +33,7 @@ import { parseOutputString } from '@/lib/utils'
 import {
   buildLinkedProcedureSummary,
   linkedProcedureSubtitle,
+  optimizationFinalStatusFromReportBlocks,
 } from '@/components/reports/linked-procedure-summary'
 import {
   resolveLivingReportTaskId,
@@ -1175,6 +1176,7 @@ export default function ReportsDashboard({
 
     // Ensure we have a valid display name for the report
     const displayName = report.name || 'Report';
+    const optimizationFinalStatus = optimizationFinalStatusFromReportBlocks(selectedReportBlocks)
     const linkedProcedure = buildLinkedProcedureSummary({
       reportId: report.id,
       reportName: displayName,
@@ -1182,6 +1184,7 @@ export default function ReportsDashboard({
       reportUpdatedAt: report.updatedAt,
       reportCreatedByUserId: report.createdByUserId,
       task: report.task as any,
+      optimizationFinalStatus,
     });
     const displaySubtitle = linkedProcedure
       ? linkedProcedureSubtitle(linkedProcedure)
@@ -1402,6 +1405,9 @@ export default function ReportsDashboard({
                           
                           // Ensure we have a valid display name for the report - USE FORCED STRING TYPE
                           const displayName = String(report.name || 'Report');
+                          const optimizationFinalStatus = report.id === selectedReportId
+                            ? optimizationFinalStatusFromReportBlocks(selectedReportBlocks)
+                            : undefined
                           const linkedProcedure = buildLinkedProcedureSummary({
                             reportId: report.id,
                             reportName: displayName,
@@ -1409,6 +1415,7 @@ export default function ReportsDashboard({
                             reportUpdatedAt: report.updatedAt,
                             reportCreatedByUserId: report.createdByUserId,
                             task: report.task as any,
+                            optimizationFinalStatus,
                           });
                           const displaySubtitle = linkedProcedure
                             ? linkedProcedureSubtitle(linkedProcedure)

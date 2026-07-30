@@ -439,6 +439,45 @@ describe('ProcedureTask optimizer auth flow', () => {
     expect(screen.getByText('Clear greeting')).toBeInTheDocument()
   })
 
+  it('shows an incomplete portfolio outcome instead of a completed success', () => {
+    render(
+      <ProcedureTask
+        variant="detail"
+        procedure={{
+          ...baseProcedure,
+          title: 'Optimization Portfolio Run',
+          status: 'INCOMPLETE',
+          procedureType: 'Portfolio Optimization',
+          scorecard: null,
+          score: null,
+          task: {
+            ...baseProcedure.task,
+            status: 'COMPLETED',
+            metadata: JSON.stringify({
+              procedure_type: 'Portfolio Optimization',
+              optimization_run_final_status: 'incomplete',
+              operator_identity: {
+                kind: 'scorecard_scoped_portfolio',
+                display_title: 'Scorecard-scoped optimization portfolio',
+                display_scope: 'Selected scorecards',
+              },
+            }),
+            stages: {
+              items: [
+                { id: 'analysis', name: 'Analysis', order: 1, status: 'COMPLETED' },
+                { id: 'finalization', name: 'Finalization', order: 2, status: 'COMPLETED' },
+              ],
+            },
+          },
+        } as any}
+      />
+    )
+
+    expect(screen.getByText('Incomplete evidence')).toBeInTheDocument()
+    expect(screen.getByText('Incomplete')).toBeInTheDocument()
+    expect(screen.queryByText(/^Complete$/)).not.toBeInTheDocument()
+  })
+
   it('reserves a blank accuracy bar slot in grid mode before feedback summary is loaded', () => {
     render(
       <ProcedureTask

@@ -928,7 +928,13 @@ class OptimizationRunReportService:
                     "run_spec": dict(run_spec),
                     "operator_identity": operator_identity.as_dict(),
                 })
-                task.update(metadata=json.dumps(existing_metadata))
+                task.update(
+                    metadata=json.dumps(existing_metadata),
+                    description=(
+                        f"{operator_identity.display_title} — "
+                        f"{operator_identity.display_scope}"
+                    ),
+                )
                 created_new_attempt = True
             existing_spec = existing_metadata.get("run_spec")
             if isinstance(existing_spec, Mapping) and not _same_run_spec(existing_spec, run_spec):

@@ -26,6 +26,7 @@ type LinkedProcedureSummaryInput = {
   reportUpdatedAt?: string | null
   reportCreatedByUserId?: string | null
   task?: LinkedTask | null
+  optimizationFinalStatus?: string | null
 }
 
 const record = (value: unknown): Record<string, any> => {
@@ -59,9 +60,40 @@ const conciseScope = (identity: Record<string, any>): string | undefined => {
   return undefined
 }
 
+const optimizationLifecycleStatus = (
+  metadata: Record<string, any>,
+  fallback?: string | null,
+  reportStatus?: string | null,
+): string | undefined => {
+  const raw = typeof reportStatus === 'string' && reportStatus.trim()
+    ? reportStatus.trim().toUpperCase()
+    : typeof metadata.optimization_run_final_status === 'string'
+      ? metadata.optimization_run_final_status.trim().toUpperCase()
+      : ''
+  const normalized = raw === 'COMPLETE'
+    ? 'COMPLETED'
+    : raw === 'COMPLETE_WITH_UNRESOLVED_ACTIONS'
+      ? 'COMPLETED_WITH_UNRESOLVED_ACTIONS'
+      : raw
+  return normalized || fallback || undefined
+}
+
+export const optimizationFinalStatusFromReportBlocks = (
+  blocks: Array<{ type?: string | null; output?: unknown }> | null | undefined,
+): string | undefined => {
+  const statusBlock = blocks?.find(block => block.type === 'OptimizationRunStatus')
+  if (!statusBlock) return undefined
+  const output = record(statusBlock.output)
+  const preview = record(output.preview)
+  const summary = record(preview.summary)
+  const overview = record(summary.overview)
+  const raw = overview.lifecycle_status
+  return typeof raw === 'string' && raw.trim() ? raw.trim().toUpperCase() : undefined
+}
+
 export const linkedProcedureSubtitle = (procedure: ProcedureTaskData): string => {
   const type = procedure.procedureType || procedure.task?.type || 'Procedure'
-  const rawStatus = procedure.task?.status || procedure.status || 'PENDING'
+  const rawStatus = procedure.status || procedure.task?.status || 'PENDING'
   const status = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase()
   return `${type} • ${status}`
 }
@@ -72,6 +104,7 @@ export const buildLinkedProcedureSummary = ({
   reportUpdatedAt,
   reportCreatedByUserId,
   task,
+  optimizationFinalStatus,
 }: LinkedProcedureSummaryInput): ProcedureTaskData | null => {
   if (!task) return null
   const metadata = record(task.metadata)
@@ -89,6 +122,11 @@ export const buildLinkedProcedureSummary = ({
       ? identity.display_title.trim()
       : reportName
   )
+  const lifecycleStatus = optimizationLifecycleStatus(
+    metadata,
+    task.status,
+    optimizationFinalStatus,
+  )
 
   return {
     id,
@@ -99,7 +137,7 @@ export const buildLinkedProcedureSummary = ({
     procedureType,
     displayTitle,
     displayScope: conciseScope(identity),
-    status: task.status || undefined,
+    status: lifecycleStatus,
     taskId: task.id,
     createdByUserId: reportCreatedByUserId || null,
     task: {

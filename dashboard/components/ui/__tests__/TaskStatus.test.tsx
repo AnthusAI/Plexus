@@ -114,4 +114,24 @@ describe('TaskStatus', () => {
     expect(screen.getByText('Pending...')).toBeInTheDocument()
     expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
   })
+
+  test('labels a safely concluded run with incomplete evidence as incomplete', () => {
+    const stages = [
+      { key: 'Analysis', label: 'Analysis', name: 'Analysis', order: 1, status: 'COMPLETED' },
+      { key: 'Finalization', label: 'Finalization', name: 'Finalization', order: 2, status: 'COMPLETED' },
+    ] as any
+
+    render(
+      <TaskStatus
+        showStages
+        stages={stages}
+        stageConfigs={stages}
+        status="COMPLETED"
+        terminalOutcome="INCOMPLETE"
+      />
+    )
+
+    expect(screen.getByText('Incomplete')).toBeInTheDocument()
+    expect(screen.queryByText(/^Complete$/)).not.toBeInTheDocument()
+  })
 })
