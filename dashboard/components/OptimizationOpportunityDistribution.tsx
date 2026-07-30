@@ -55,27 +55,27 @@ const DISPOSITIONS: Record<OptimizationOpportunityDisposition, {
 }> = {
   selected_for_review: {
     label: "Selected for review",
-    color: "hsl(var(--chart-1))",
+    color: "var(--chart-1)",
     shape: "circle",
   },
   eligible: {
     label: "Eligible",
-    color: "hsl(var(--chart-2))",
+    color: "var(--chart-2)",
     shape: "square",
   },
   cooldown: {
     label: "Cooling down",
-    color: "hsl(var(--chart-3))",
+    color: "var(--chart-3)",
     shape: "triangle",
   },
   blocked: {
     label: "Blocked",
-    color: "hsl(var(--chart-4))",
+    color: "var(--chart-4)",
     shape: "cross",
   },
   incomplete: {
     label: "Incomplete evidence",
-    color: "hsl(var(--chart-5))",
+    color: "var(--chart-5)",
     shape: "diamond",
   },
 }
@@ -139,10 +139,10 @@ function DispositionMark({ cx, cy, payload }: { cx?: number; cy?: number; payloa
   const radius = payload.marker_radius
   const disagreementRadius = payload.disagreement_fraction === null
     ? 0
-    : Math.max(1.2, radius * payload.disagreement_fraction)
-  const common = { fill: color, stroke: "hsl(var(--background))", strokeWidth: 1.5 }
+    : Math.max(1.2, radius * Math.sqrt(payload.disagreement_fraction))
+  const common = { fill: color, stroke: "var(--background)", strokeWidth: 1.5 }
   const innerFill = disagreementRadius > 0
-    ? <circle cx={cx} cy={cy} r={disagreementRadius} fill="hsl(var(--foreground))" fillOpacity={0.72} />
+    ? <circle cx={cx} cy={cy} r={disagreementRadius} fill="var(--foreground)" fillOpacity={0.72} />
     : null
 
   switch (shape) {
@@ -281,18 +281,44 @@ export default function OptimizationOpportunityDistribution({ rows }: Optimizati
         Point size represents valid feedback volume; larger markers indicate more reviewed feedback. Inner fill represents disagreement rate; a larger inner fill indicates more reviewer disagreement.
       </p>
 
+      <div
+        className="mt-2 flex flex-wrap gap-x-6 gap-y-2 rounded-md bg-background/60 px-3 py-2 text-[11px] text-muted-foreground"
+        aria-label="Feedback visual encoding key"
+      >
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-foreground">Feedback volume</span>
+          <span>Less feedback</span>
+          <svg width="42" height="20" viewBox="0 0 42 20" aria-hidden="true">
+            <circle cx="8" cy="10" r="4" fill="var(--chart-1)" stroke="var(--background)" strokeWidth="1.5" />
+            <circle cx="30" cy="10" r="8" fill="var(--chart-1)" stroke="var(--background)" strokeWidth="1.5" />
+          </svg>
+          <span>More feedback</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-foreground">Disagreement rate</span>
+          <span>Lower disagreement</span>
+          <svg width="48" height="20" viewBox="0 0 48 20" aria-hidden="true">
+            <circle cx="9" cy="10" r="8" fill="var(--chart-1)" stroke="var(--background)" strokeWidth="1.5" />
+            <circle cx="9" cy="10" r="2.5" fill="var(--foreground)" fillOpacity="0.72" />
+            <circle cx="37" cy="10" r="8" fill="var(--chart-1)" stroke="var(--background)" strokeWidth="1.5" />
+            <circle cx="37" cy="10" r="6.5" fill="var(--foreground)" fillOpacity="0.72" />
+          </svg>
+          <span>Higher disagreement</span>
+        </div>
+      </div>
+
       <div className="mt-3 rounded-md bg-background p-2">
         {points.length > 0 ? (
           <ChartContainer config={chartConfig} className="h-[300px] w-full">
             <ComposedChart data={points} margin={{ top: 16, right: 24, left: 18, bottom: 30 }}>
-              <CartesianGrid stroke="hsl(var(--foreground) / 0.12)" strokeDasharray="3 3" />
+              <CartesianGrid stroke="var(--foreground)" strokeOpacity={0.12} strokeDasharray="3 3" />
               <XAxis
                 dataKey="evidence_rank"
                 type="number"
                 domain={[1, "dataMax"]}
                 allowDecimals={false}
                 name="Evidence rank"
-                label={{ value: "Evidence rank (highest opportunity first)", position: "insideBottom", offset: -18, fill: "hsl(var(--foreground) / 0.7)", fontSize: 11 }}
+                label={{ value: "Evidence rank (highest opportunity first)", position: "insideBottom", offset: -18, fill: "var(--foreground)", fillOpacity: 0.7, fontSize: 11 }}
               />
               <YAxis
                 dataKey="chart_opportunity"
@@ -301,7 +327,7 @@ export default function OptimizationOpportunityDistribution({ rows }: Optimizati
                 domain={scale === "log" ? [Math.max(smallestPositiveOpportunity / 10, Number.MIN_VALUE), "auto"] : [0, Math.max(opportunityMax * 1.05, 1)]}
                 tickFormatter={(value) => formatOpportunity(Number(value))}
                 name="Reviewed-error opportunity"
-                label={{ value: `Reviewed-error opportunity (${scale} scale)`, angle: -90, position: "insideLeft", fill: "hsl(var(--foreground) / 0.7)", fontSize: 11 }}
+                label={{ value: `Reviewed-error opportunity (${scale} scale)`, angle: -90, position: "insideLeft", fill: "var(--foreground)", fillOpacity: 0.7, fontSize: 11 }}
                 width={70}
               />
               <Tooltip content={<OpportunityTooltip />} />
@@ -309,7 +335,8 @@ export default function OptimizationOpportunityDistribution({ rows }: Optimizati
               <Line
                 type="monotone"
                 dataKey="chart_opportunity"
-                stroke="hsl(var(--foreground) / 0.45)"
+                stroke="var(--foreground)"
+                strokeOpacity={0.45}
                 strokeWidth={2}
                 dot={false}
                 isAnimationActive={false}
@@ -321,6 +348,7 @@ export default function OptimizationOpportunityDistribution({ rows }: Optimizati
                   data={points.filter(point => point.disposition === disposition)}
                   dataKey="chart_opportunity"
                   name={DISPOSITIONS[disposition].label}
+                  fill={DISPOSITIONS[disposition].color}
                   shape={<DispositionMark />}
                   isAnimationActive={false}
                 />

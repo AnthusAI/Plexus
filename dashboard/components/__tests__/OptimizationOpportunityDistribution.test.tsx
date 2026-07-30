@@ -14,9 +14,10 @@ jest.mock("recharts", () => ({
   ComposedChart: ({ children }: any) => <div data-testid="opportunity-composed-chart">{children}</div>,
   Legend: () => null,
   Line: ({ dataKey }: any) => <div data-testid="opportunity-line" data-key={dataKey} />,
-  Scatter: ({ data, name }: any) => (
+  Scatter: ({ data, fill, name }: any) => (
     <div
       data-testid={`disposition-${name}`}
+      data-fill={fill}
       data-point-count={data.length}
       data-marker-radius={data[0]?.marker_radius}
       data-disagreement-fraction={data[0]?.disagreement_fraction}
@@ -113,6 +114,12 @@ describe("OptimizationOpportunityDistribution", () => {
 
     expect(screen.getByText(/Point size represents valid feedback volume/i)).toBeInTheDocument()
     expect(screen.getByText(/Inner fill represents disagreement rate/i)).toBeInTheDocument()
+    expect(screen.getByLabelText("Feedback visual encoding key")).toBeInTheDocument()
+    expect(screen.getByText("Less feedback")).toBeInTheDocument()
+    expect(screen.getByText("More feedback")).toBeInTheDocument()
+    expect(screen.getByText("Lower disagreement")).toBeInTheDocument()
+    expect(screen.getByText("Higher disagreement")).toBeInTheDocument()
+    expect(screen.getByTestId("disposition-Selected for review")).toHaveAttribute("data-fill", "var(--chart-1)")
     expect(screen.getByTestId("disposition-Cooling down")).toHaveAttribute("data-marker-radius", "10")
     expect(screen.getByTestId("disposition-Selected for review")).toHaveAttribute("data-disagreement-fraction", "0.18")
 
