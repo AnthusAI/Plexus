@@ -148,7 +148,7 @@ describe('OptimizationRunStatus', () => {
         }, {
           scorecard_name: 'Example Portfolio',
           score_name: 'Secondary Score',
-          opportunity: 21,
+          opportunity: 6,
           rank: 2,
           evidence_count: 60,
           disagreement_rate: 0.10,
@@ -247,14 +247,19 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getByText(/1 are scheduled in this run; 0 are deferred by the safety cap/)).toBeInTheDocument()
     expect(screen.getByText(/120 valid feedback/)).toBeInTheDocument()
     expect(screen.getByText('Reviewed errors show a safe opportunity.')).toBeInTheDocument()
-    expect(screen.getByRole('meter', { name: 'Ranking opportunity for Priority Score' })).toHaveAttribute('aria-valuenow', '42')
-    expect(screen.getByRole('meter', { name: 'Ranking opportunity for Secondary Score' })).toHaveStyle({ width: '50%' })
-    expect(screen.getByRole('meter', { name: 'Feedback volume for Secondary Score' })).toHaveStyle({ width: '50%' })
-    expect(screen.getByRole('meter', { name: 'Disagreement rate for Priority Score' })).toHaveStyle({ width: '35%' })
-    expect(screen.getByRole('meter', { name: 'Disagreement rate for Secondary Score' })).toHaveStyle({ width: '10%' })
-    expect(screen.getByRole('meter', { name: 'Ranking opportunity for Unavailable Evidence Score' })).toHaveStyle({ width: '0%' })
-    expect(screen.getByRole('meter', { name: 'Feedback volume for Unavailable Evidence Score' })).toHaveStyle({ width: '0%' })
-    expect(screen.getByRole('meter', { name: 'Disagreement rate for Unavailable Evidence Score' })).toHaveAttribute('aria-valuetext', 'Unavailable')
+    expect(screen.getByText('78 agreements')).toBeInTheDocument()
+    expect(screen.getByText('42 disagreements')).toBeInTheDocument()
+    expect(screen.getByText('35.0% disagreement')).toBeInTheDocument()
+    expect(screen.getByRole('meter', { name: 'Feedback outcomes for Priority Score' })).toHaveStyle({ width: '100%' })
+    expect(screen.getByRole('meter', { name: 'Feedback outcomes for Priority Score' })).toHaveAttribute(
+      'aria-valuetext',
+      '78 agreements, 42 disagreements, 120 valid feedback, 35.0% disagreement',
+    )
+    expect(screen.getByLabelText('Agreements for Priority Score')).toHaveStyle({ width: '65%' })
+    expect(screen.getByLabelText('Disagreements for Priority Score')).toHaveStyle({ width: '35%' })
+    expect(screen.getByRole('meter', { name: 'Feedback outcomes for Secondary Score' })).toHaveStyle({ width: '50%' })
+    expect(screen.getByRole('meter', { name: 'Feedback outcomes for Unavailable Evidence Score' })).toHaveStyle({ width: '0%' })
+    expect(screen.getByRole('meter', { name: 'Feedback outcomes for Unavailable Evidence Score' })).toHaveAttribute('aria-valuetext', 'Unavailable')
     expect(mockReadTaskArtifact).toHaveBeenCalledTimes(1)
 
     rerender(

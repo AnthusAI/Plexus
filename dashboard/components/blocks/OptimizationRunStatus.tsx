@@ -256,42 +256,75 @@ function finiteNonNegative(value: number | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
 }
 
-function PrioritySignal({
-  name,
+function countLabel(value: number, singular: string): string {
+  return `${value} ${singular}${value === 1 ? '' : 's'}`
+}
+
+function FeedbackCompositionSignal({
   scoreName,
-  value,
+  feedbackTotal,
+  disagreements,
   maximum,
-  valueText,
-  colorClass,
 }: {
-  name: string
   scoreName: string
-  value: number
+  feedbackTotal: number
+  disagreements: number
   maximum: number
-  valueText: string
-  colorClass: string
 }) {
-  const safeValue = finiteNonNegative(value)
-  const safeMaximum = Math.max(finiteNonNegative(maximum), safeValue, 1)
-  const percentage = Math.min(100, safeValue / safeMaximum * 100)
+  const safeTotal = finiteNonNegative(feedbackTotal)
+  const safeDisagreements = Math.min(safeTotal, finiteNonNegative(disagreements))
+  const agreements = Math.max(0, safeTotal - safeDisagreements)
+  const safeMaximum = Math.max(finiteNonNegative(maximum), safeTotal, 1)
+  const totalPercentage = Math.min(100, safeTotal / safeMaximum * 100)
+  const disagreementPercentage = safeTotal ? safeDisagreements / safeTotal * 100 : 0
+  const agreementPercentage = safeTotal ? 100 - disagreementPercentage : 0
+  const valueText = safeTotal
+    ? `${countLabel(agreements, 'agreement')}, ${countLabel(safeDisagreements, 'disagreement')}, ${safeTotal} valid feedback, ${disagreementPercentage.toFixed(1)}% disagreement`
+    : 'Unavailable'
 
   return (
     <div className="min-w-0">
-      <div className="flex items-baseline justify-between gap-2 text-xs">
-        <span className="truncate text-muted-foreground">{name}</span>
-        <span className="shrink-0 tabular-nums text-foreground">{valueText}</span>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs">
+        <span className="font-medium text-foreground">Feedback outcomes</span>
+        {safeTotal > 0 ? (
+          <span className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 tabular-nums">
+            <span className="inline-flex items-center gap-1.5">
+              <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />
+              {countLabel(agreements, 'agreement')}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm bg-rose-500" />
+              {countLabel(safeDisagreements, 'disagreement')}
+            </span>
+            <span className="text-muted-foreground">{safeTotal} valid feedback</span>
+            <span className="text-muted-foreground">{disagreementPercentage.toFixed(1)}% disagreement</span>
+          </span>
+        ) : (
+          <span className="text-muted-foreground">Unavailable</span>
+        )}
       </div>
-      <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
+      <div className="mt-2 h-3 overflow-hidden rounded-full bg-muted">
         <div
           role="meter"
-          aria-label={`${name} for ${scoreName}`}
+          aria-label={`Feedback outcomes for ${scoreName}`}
           aria-valuemin={0}
           aria-valuemax={safeMaximum}
-          aria-valuenow={safeValue}
+          aria-valuenow={safeTotal}
           aria-valuetext={valueText}
-          className={`h-full min-w-0 rounded-full ${colorClass}`}
-          style={{ width: `${percentage}%` }}
-        />
+          className="flex h-full min-w-0 overflow-hidden rounded-full"
+          style={{ width: `${totalPercentage}%` }}
+        >
+          <div
+            aria-label={`Agreements for ${scoreName}`}
+            className="h-full bg-emerald-500"
+            style={{ width: `${agreementPercentage}%` }}
+          />
+          <div
+            aria-label={`Disagreements for ${scoreName}`}
+            className="h-full bg-rose-500"
+            style={{ width: `${disagreementPercentage}%` }}
+          />
+        </div>
       </div>
     </div>
   )
@@ -604,10 +637,6 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
   const incompleteDiagnosisCount = Math.max(0, Number(overview.diagnosis_incomplete_count || 0))
   const deferredDiagnosisCount = Math.max(0, Number(overview.diagnosis_deferred_count || 0))
   const runHasIncompleteCoverage = inventoryCoverageStatus === 'incomplete' || analysisCoverageStatus === 'incomplete'
-  const maximumPriorityOpportunity = Math.max(
-    0,
-    ...presentation.top_priorities.map(priority => finiteNonNegative(priority.opportunity)),
-  )
   const maximumPriorityFeedback = Math.max(
     0,
     ...presentation.top_priorities.map(priority => finiteNonNegative(priority.evidence_count)),
@@ -744,16 +773,12 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
 
       <section className="rounded-lg bg-card p-6">
         <h3 className="text-lg font-semibold">Top priorities</h3>
-        <p className="text-sm text-muted-foreground">Shown in original evidence order. Bars compare the visible priorities: opportunity and feedback volume use the largest visible value, while disagreement uses a fixed 0–100% scale. Cooldown and other policy gates remain visible and do not renumber the list.</p>
+        <p className="text-sm text-muted-foreground">Shown in original evidence order. Every feedback bar uses the largest visible feedback total as the same maximum: bar length shows reviewed volume, green shows agreements, and red shows disagreements. Cooldown and other policy gates remain visible and do not renumber the list.</p>
         <div className="mt-3 space-y-2">
           {presentation.top_priorities.map((priority, index) => {
             const scoreName = priority.score_name || 'Unlabeled score'
             const opportunity = finiteNonNegative(priority.opportunity)
             const feedbackVolume = finiteNonNegative(priority.evidence_count)
-            const hasDisagreementRate = typeof priority.disagreement_rate === 'number' && Number.isFinite(priority.disagreement_rate)
-            const disagreementRate = hasDisagreementRate
-              ? Math.min(1, Math.max(0, priority.disagreement_rate as number))
-              : 0
             return (
             <div key={`${priority.scorecard_name}-${priority.score_name}-${index}`} className="rounded-md bg-muted/30 p-4 text-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -771,30 +796,12 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
                 </div>
                 <div className="text-right text-muted-foreground">{label(priority.next_action || 'review')}</div>
               </div>
-              <div className="mt-4 grid gap-3 xl:grid-cols-3">
-                <PrioritySignal
-                  name="Ranking opportunity"
+              <div className="mt-4">
+                <FeedbackCompositionSignal
                   scoreName={scoreName}
-                  value={opportunity}
-                  maximum={maximumPriorityOpportunity}
-                  valueText={`${opportunity} reviewed disagreements`}
-                  colorClass="bg-primary"
-                />
-                <PrioritySignal
-                  name="Feedback volume"
-                  scoreName={scoreName}
-                  value={feedbackVolume}
+                  feedbackTotal={feedbackVolume}
+                  disagreements={opportunity}
                   maximum={maximumPriorityFeedback}
-                  valueText={`${feedbackVolume} valid feedback`}
-                  colorClass="bg-blue-500"
-                />
-                <PrioritySignal
-                  name="Disagreement rate"
-                  scoreName={scoreName}
-                  value={disagreementRate}
-                  maximum={1}
-                  valueText={hasDisagreementRate ? `${(disagreementRate * 100).toFixed(1)}%` : 'Unavailable'}
-                  colorClass="bg-amber-500"
                 />
               </div>
               {priority.rationale && <p className="mt-3 text-muted-foreground">{priority.rationale}</p>}
