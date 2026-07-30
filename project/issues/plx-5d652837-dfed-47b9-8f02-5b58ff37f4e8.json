@@ -40,10 +40,16 @@
       "author": "ryan.porter",
       "text": "Final independent audit fixes are complete. Ranking now derives the feedback window and score-activity cutoff from one frozen UTC instant, including across a midnight boundary. Assessment and launch provenance now recompute canonical cooldown evidence, require exact booleans, and reject malformed or internally inconsistent timestamps. Final post-fix validation: focused optimization/runtime 364 passed; Python 3.11 full suite 3,999 passed; Python 3.12 full suite 3,999 passed; static gates remain green. The story stays in progress until merge to develop.",
       "created_at": "2026-07-28T18:06:26.758138Z"
+    },
+    {
+      "id": "8cea3be0-c711-401e-89bc-5b26c447a2f6",
+      "author": "ryan.porter",
+      "text": "Final integration pass started on current develop. Preserve this issue's existing observable behavior and fail-closed evidence contract, resolve only integration conflicts, and verify focused specifications plus complete local CI before merge.",
+      "created_at": "2026-07-30T23:45:29.174277Z"
     }
   ],
   "created_at": "2026-07-28T17:09:16.380112Z",
-  "updated_at": "2026-07-28T18:06:26.758138Z",
+  "updated_at": "2026-07-30T23:45:29.174277Z",
   "closed_at": null,
   "custom": {}
 }

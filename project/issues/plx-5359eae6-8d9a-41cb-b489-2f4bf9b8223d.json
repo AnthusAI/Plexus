@@ -40,10 +40,16 @@
       "author": "ryan.porter",
       "text": "Correction: the two most recent anti-churn test notes were recorded on this already-complete scoped-ranking story by mistake. The seven-day cooldown work and its validation belong to story plx-5d6528; this story remains unchanged in scope.",
       "created_at": "2026-07-28T17:27:36.472189Z"
+    },
+    {
+      "id": "8b4665b5-1b0a-47f4-a6bd-36b4c2132250",
+      "author": "ryan.porter",
+      "text": "Final integration pass started on current develop. Preserve this issue's existing observable behavior and fail-closed evidence contract, resolve only integration conflicts, and verify focused specifications plus complete local CI before merge.",
+      "created_at": "2026-07-30T23:45:28.790777Z"
     }
   ],
   "created_at": "2026-07-28T00:40:41.295656Z",
-  "updated_at": "2026-07-28T17:27:36.472189Z",
+  "updated_at": "2026-07-30T23:45:28.790777Z",
   "closed_at": null,
   "custom": {}
 }
