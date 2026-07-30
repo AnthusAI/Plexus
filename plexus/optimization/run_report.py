@@ -537,6 +537,30 @@ def _scorecard_csv(rows: list[Mapping[str, Any]]) -> bytes:
     return ("\ufeff" + output.getvalue()).encode("utf-8")
 
 
+def _scorecard_presentation(
+    scorecard_name: str,
+    scorecard_ref: str,
+    rows: list[Mapping[str, Any]],
+    stakeholder_view: Mapping[str, Any],
+) -> bytes:
+    issues = [
+        dict(row) for row in stakeholder_view.get("questions_and_issues", [])
+        if (
+            row.get("scorecard_ref") == scorecard_ref
+            or (
+                not row.get("scorecard_ref")
+                and row.get("scorecard_name") == scorecard_name
+            )
+        )
+    ]
+    return _json({
+        "scorecard_name": scorecard_name,
+        "scorecard_ref": scorecard_ref,
+        "scores": [dict(row) for row in rows],
+        "questions_and_issues": issues,
+    })
+
+
 def build_scorecard_artifacts(
     stakeholder_view: Mapping[str, Any],
     *,
@@ -575,6 +599,18 @@ def build_scorecard_artifacts(
                 f"scorecard-{scope_hash}-portfolio-r{revision_number:04d}.csv",
                 _scorecard_csv(rows),
             ),
+            (
+                "scorecard_presentation",
+                "Interactive score details",
+                "application/json",
+                f"scorecard-{scope_hash}-presentation-r{revision_number:04d}.json",
+                _scorecard_presentation(
+                    scorecard_name,
+                    stable_key,
+                    rows,
+                    stakeholder_view,
+                ),
+            ),
         )
         for kind, display_name, content_type, filename, content in artifacts:
             object_key = uploader(task_id, filename, content)
@@ -591,6 +627,92 @@ def build_scorecard_artifacts(
                 scorecard_name=scorecard_name,
             ))
     return descriptors
+
+
+def _primary_decision_category(row: Mapping[str, Any]) -> str:
+    action = str(row.get("next_action") or "").strip().lower()
+    if "optimiz" in action:
+        return "optimize"
+    if "promot" in action:
+        return "promotion_review"
+    if "question" in action or "clarif" in action or "stakeholder" in action:
+        return "stakeholder_clarification"
+    if "repair" in action or "guideline" in action or "rubric" in action:
+        return "repair"
+    if "collect" in action or "feedback" in action:
+        return "targeted_feedback"
+    if "cooldown" in action or action.startswith("wait"):
+        return "cooldown"
+    if "monitor" in action:
+        return "monitoring"
+    return "review_or_insufficient_evidence"
+
+
+def build_stakeholder_presentation(
+    stakeholder_view: Mapping[str, Any],
+    *,
+    scorecard_artifacts: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Build the safe, deterministic aggregate/card projection for the dashboard."""
+    _validate_view(stakeholder_view)
+    rows = list(stakeholder_view.get("portfolio", []))
+    primary_decision_mix: dict[str, int] = {}
+    grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    for row in rows:
+        category = _primary_decision_category(row)
+        primary_decision_mix[category] = primary_decision_mix.get(category, 0) + 1
+        scorecard_name = str(row.get("scorecard_name") or "Unlabeled scorecard")
+        scorecard_ref = str(row.get("scorecard_ref") or scorecard_name)
+        grouped.setdefault((scorecard_ref, scorecard_name), []).append(row)
+
+    secondary_issue_counts: dict[str, int] = {}
+    for issue in stakeholder_view.get("questions_and_issues", []):
+        kind = str(issue.get("kind") or "other issue")
+        secondary_issue_counts[kind] = secondary_issue_counts.get(kind, 0) + 1
+
+    artifacts_by_ref: dict[str, list[Mapping[str, Any]]] = {}
+    for artifact in scorecard_artifacts:
+        logical_id = str(artifact.get("logical_id") or "")
+        scope_hash = logical_id.rsplit(":", 1)[-1]
+        artifacts_by_ref.setdefault(scope_hash, []).append(dict(artifact))
+
+    scorecards: list[dict[str, Any]] = []
+    for (scorecard_ref, scorecard_name), score_rows in sorted(
+        grouped.items(), key=lambda item: item[0][1].casefold()
+    ):
+        scope_hash = sha256(scorecard_ref.encode("utf-8")).hexdigest()[:16]
+        decision_mix: dict[str, int] = {}
+        for row in score_rows:
+            category = _primary_decision_category(row)
+            decision_mix[category] = decision_mix.get(category, 0) + 1
+        scorecards.append({
+            "scorecard_ref": scorecard_ref,
+            "scorecard_name": scorecard_name,
+            "score_count": len(score_rows),
+            "primary_decision_mix": decision_mix,
+            "reviewed_error_opportunity": sum(
+                float(row.get("reviewed_error_opportunity") or 0)
+                for row in score_rows
+                if isinstance(row.get("reviewed_error_opportunity"), (int, float))
+            ),
+            "artifacts": artifacts_by_ref.get(scope_hash, []),
+        })
+
+    priorities = sorted(
+        stakeholder_view.get("priorities", []),
+        key=lambda row: float(row.get("opportunity") or 0)
+        if isinstance(row.get("opportunity"), (int, float)) else 0.0,
+        reverse=True,
+    )[:10]
+    return {
+        "overview": dict(stakeholder_view.get("overview") or {}),
+        "score_count": len(rows),
+        "scorecard_count": len(scorecards),
+        "primary_decision_mix": primary_decision_mix,
+        "secondary_issue_counts": secondary_issue_counts,
+        "top_priorities": [dict(row) for row in priorities],
+        "scorecards": scorecards,
+    }
 
 
 class OptimizationRunReportService:
@@ -772,12 +894,36 @@ class OptimizationRunReportService:
                     source_revision=revision_number,
                 ),
             ]
-            artifacts.extend(build_scorecard_artifacts(
+            scorecard_artifacts = build_scorecard_artifacts(
                 stakeholder_view,
                 revision_number=revision_number,
                 task_id=state.task.id,
                 uploader=self._artifact_uploader,
-            ))
+            )
+            artifacts.extend(scorecard_artifacts)
+            presentation = build_stakeholder_presentation(
+                stakeholder_view,
+                scorecard_artifacts=scorecard_artifacts,
+            )
+            presentation_bytes = _json(presentation)
+            presentation_path = self._artifact_uploader(
+                state.task.id,
+                f"optimization-presentation-r{revision_number:04d}.json",
+                presentation_bytes,
+            )
+            self._attach_task_file(state.task, presentation_path)
+            presentation_artifact = _artifact_descriptor(
+                logical_id="stakeholder_presentation",
+                kind="stakeholder_presentation",
+                display_name="Stakeholder presentation data",
+                scope="run",
+                content_type="application/json",
+                content=presentation_bytes,
+                object_key=presentation_path,
+                task_id=state.task.id,
+                source_revision=revision_number,
+            )
+            artifacts.append(presentation_artifact)
             if self.dashboard_base_url:
                 for artifact in artifacts:
                     artifact["dashboard_url"] = _report_artifact_url(
@@ -804,7 +950,16 @@ class OptimizationRunReportService:
             self._attach_task_file(state.task, manifest_path)
             self._update_block(state.blocks["evidence"], raw_path, {"revision": revision_number, "milestone": milestone, "checksum": evidence_checksum})
             self._update_block(state.blocks["workbook"], workbook_path, {"revision": revision_number, "milestone": milestone, "checksum": workbook.checksum, "row_counts": dict(workbook.row_counts)})
-            self._update_block(state.blocks["status"], manifest_path, manifest)
+            self._update_block(state.blocks["status"], manifest_path, {
+                "type": "optimization_run_status",
+                "status": "published",
+                "summary": {
+                    "revision": revision_number,
+                    "milestone": milestone,
+                    "overview": safe_overview,
+                    "presentation": presentation_artifact,
+                },
+            })
             revision = PublishedRevision(
                 number=revision_number,
                 milestone=milestone,

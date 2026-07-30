@@ -529,6 +529,21 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     )
 
     manifest = json.loads(uploaded["optimization-revision-r0001.json"])
+    presentation_artifact = next(
+        artifact for artifact in manifest["artifacts"]
+        if artifact["kind"] == "stakeholder_presentation"
+    )
+    presentation_name = presentation_artifact["object_key"].rsplit("/", 1)[-1]
+    presentation = json.loads(uploaded[presentation_name])
+    assert sum(presentation["primary_decision_mix"].values()) == 2
+    assert presentation["score_count"] == 2
+    assert len(presentation["scorecards"]) == 2
+    assert presentation["scorecards"][0]["score_count"] == 1
+    assert presentation["top_priorities"][0]["opportunity"] == 70
+    assert presentation_artifact["object_key"] in state.task.attachedFiles
+    status_envelope = json.loads(state.blocks["status"].output)
+    assert status_envelope["preview"]["type"] == "optimization_run_status"
+    assert status_envelope["preview"]["summary"]["presentation"] == presentation_artifact
     scorecard_artifacts = [
         artifact for artifact in manifest["artifacts"]
         if artifact["scope"] == "scorecard"
@@ -536,13 +551,14 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     assert {artifact["kind"] for artifact in scorecard_artifacts} == {
         "scorecard_summary",
         "scorecard_portfolio_csv",
+        "scorecard_presentation",
     }
-    assert len(scorecard_artifacts) == 4
+    assert len(scorecard_artifacts) == 6
     assert manifest["scorecard_count"] == 2
     assert manifest["score_count"] == 2
     assert all(artifact["source_revision"] == 1 for artifact in scorecard_artifacts)
     assert {artifact["scorecard_name"] for artifact in scorecard_artifacts} == {"Example Portfolio"}
-    assert len({artifact["logical_id"] for artifact in scorecard_artifacts}) == 4
+    assert len({artifact["logical_id"] for artifact in scorecard_artifacts}) == 6
     assert all(artifact["sha256"] and artifact["size_bytes"] > 0 for artifact in scorecard_artifacts)
     assert all(artifact["task_id"] == state.task.id for artifact in scorecard_artifacts)
     assert all(
@@ -575,6 +591,16 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     summary = uploaded[summary_name].decode("utf-8")
     assert summary.startswith("# Example Portfolio")
     assert "repair_guidelines" in summary
+
+    detail_artifact = next(
+        artifact for artifact in scorecard_artifacts
+        if artifact["kind"] == "scorecard_presentation"
+    )
+    detail_name = detail_artifact["object_key"].rsplit("/", 1)[-1]
+    detail = json.loads(uploaded[detail_name])
+    assert detail["scorecard_name"] == "Example Portfolio"
+    assert len(detail["scores"]) == 1
+    assert detail["scores"][0]["score_name"] == "=Formula-like score"
 
 
 def test_report_artifact_base_url_rejects_non_https_or_non_origin_values(monkeypatch):
@@ -660,7 +686,7 @@ def test_default_artifact_path_uses_only_task_graphql_tickets_without_direct_s3(
     child_paths = {
         f"tasks/{state.task.id}/{request.filename}"
         for request in requests
-        if request.filename.endswith((".md", ".csv"))
+        if request.filename.startswith("scorecard-")
     }
     assert child_paths
     assert child_paths.isdisjoint(state.task.attachedFiles)

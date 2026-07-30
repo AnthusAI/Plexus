@@ -14,6 +14,7 @@ export interface ArtifactDescriptor extends TaskArtifactReference {
   source_revision: number
   scorecard_name?: string
   score_name?: string
+  dashboard_url?: string
 }
 
 export interface ReportRevisionReference {
@@ -93,7 +94,7 @@ function parseTaskArtifactReference(value: unknown): TaskArtifactReference | nul
   }
 }
 
-function parseArtifactDescriptor(value: unknown): ArtifactDescriptor | null {
+export function parseArtifactDescriptor(value: unknown): ArtifactDescriptor | null {
   const candidate = objectValue(value)
   const reference = parseTaskArtifactReference(candidate)
   const scope = candidate?.scope
@@ -122,6 +123,9 @@ function parseArtifactDescriptor(value: unknown): ArtifactDescriptor | null {
       : undefined,
     score_name: typeof candidate.score_name === 'string'
       ? candidate.score_name
+      : undefined,
+    dashboard_url: typeof candidate.dashboard_url === 'string'
+      ? candidate.dashboard_url
       : undefined,
   }
 }
