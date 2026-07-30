@@ -1298,6 +1298,12 @@ class OptimizationRunReportService:
                 f"Latest durable revision: {revision.get('number')}",
                 f"Milestone: {milestone}",
             ])
+        lines.extend([
+            "",
+            "```block",
+            "class: OptimizationRunStatus",
+            "```",
+        ])
         current_activity = safe(overview.get("current_activity"))
         next_checkpoint = safe(overview.get("next_checkpoint"))
         if current_activity:

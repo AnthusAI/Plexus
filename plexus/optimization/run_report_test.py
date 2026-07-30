@@ -273,6 +273,7 @@ def test_start_is_self_identifying_in_the_task_report_list_and_cover(monkeypatch
     assert state.report.output.startswith("# Account-wide optimization portfolio")
     assert "Scope: All scorecards" in state.report.output
     assert "Current phase: Preflight" in state.report.output
+    assert "```block\nclass: OptimizationRunStatus\n```" in state.report.output
 
 
 def test_milestone_cover_projects_safe_progress_and_preserves_identity_on_finalize(monkeypatch):
