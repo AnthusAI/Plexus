@@ -517,6 +517,12 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     view = deepcopy(_safe_view())
     view["portfolio"][0]["scorecard_ref"] = "safe-ref-one"
     view["portfolio"][0]["score_name"] = "=Formula-like score"
+    view["questions_and_issues"][0].update({
+        "scorecard_ref": "safe-ref-one",
+        "score_name": "=Formula-like score",
+        "finding": "Should this policy exception require stakeholder confirmation?",
+        "next_action": "request_stakeholder_clarification",
+    })
     second_row = dict(view["portfolio"][0])
     second_row.update({
         "scorecard_ref": "safe-ref-two",
@@ -575,6 +581,18 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     assert all(artifact["object_key"] not in state.task.attachedFiles for artifact in scorecard_artifacts)
     assert len(revision.artifacts) == len(manifest["artifacts"])
 
+    score_artifacts = [
+        artifact for artifact in manifest["artifacts"]
+        if artifact["scope"] == "score"
+    ]
+    assert len(score_artifacts) == 2
+    assert {artifact["kind"] for artifact in score_artifacts} == {"score_brief"}
+    assert {artifact["score_name"] for artifact in score_artifacts} == {
+        "=Formula-like score",
+        "Second Score",
+    }
+    assert all(artifact["object_key"] not in state.task.attachedFiles for artifact in score_artifacts)
+
     csv_artifact = next(
         artifact for artifact in scorecard_artifacts
         if artifact["kind"] == "scorecard_portfolio_csv"
@@ -604,6 +622,13 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     assert detail["scorecard_name"] == "Example Portfolio"
     assert len(detail["scores"]) == 1
     assert detail["scores"][0]["score_name"] == "=Formula-like score"
+    brief_descriptor = detail["scores"][0]["artifacts"][0]
+    assert brief_descriptor["kind"] == "score_brief"
+    brief_name = brief_descriptor["object_key"].rsplit("/", 1)[-1]
+    brief = uploaded[brief_name].decode("utf-8")
+    assert brief.startswith("# =Formula-like score")
+    assert "Should this policy exception require stakeholder confirmation?" in brief
+    assert "request_stakeholder_clarification" in brief
 
 
 def test_report_artifact_base_url_rejects_non_https_or_non_origin_values(monkeypatch):
@@ -689,7 +714,7 @@ def test_default_artifact_path_uses_only_task_graphql_tickets_without_direct_s3(
     child_paths = {
         f"tasks/{state.task.id}/{request.filename}"
         for request in requests
-        if request.filename.startswith("scorecard-")
+        if request.filename.startswith(("scorecard-", "score-"))
     }
     assert child_paths
     assert child_paths.isdisjoint(state.task.attachedFiles)

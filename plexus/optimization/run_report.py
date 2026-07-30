@@ -439,6 +439,7 @@ def _artifact_descriptor(
     task_id: str,
     source_revision: int,
     scorecard_name: Optional[str] = None,
+    score_name: Optional[str] = None,
 ) -> dict[str, Any]:
     descriptor: dict[str, Any] = {
         "logical_id": logical_id,
@@ -454,7 +455,73 @@ def _artifact_descriptor(
     }
     if scorecard_name:
         descriptor["scorecard_name"] = scorecard_name
+    if score_name:
+        descriptor["score_name"] = score_name
     return descriptor
+
+
+def _score_issues(
+    stakeholder_view: Mapping[str, Any],
+    *,
+    scorecard_name: str,
+    scorecard_ref: str,
+    score_name: str,
+) -> list[Mapping[str, Any]]:
+    return [
+        issue for issue in stakeholder_view.get("questions_and_issues", [])
+        if issue.get("score_name") == score_name
+        and (
+            issue.get("scorecard_ref") == scorecard_ref
+            or (
+                not issue.get("scorecard_ref")
+                and issue.get("scorecard_name") == scorecard_name
+            )
+        )
+    ]
+
+
+def _score_brief_markdown(
+    scorecard_name: str,
+    scorecard_ref: str,
+    row: Mapping[str, Any],
+    stakeholder_view: Mapping[str, Any],
+) -> bytes:
+    score_name = str(row.get("score_name") or "Unlabeled score")
+    lines = [
+        f"# {_markdown_text(score_name)}",
+        "",
+        f"Scorecard: {_markdown_text(scorecard_name)}",
+        "",
+        "## Current finding",
+        "",
+        f"- Readiness: {_markdown_text(row.get('readiness') or 'inconclusive')}",
+        f"- Feedback collection: {_markdown_text(row.get('collection_state') or 'inconclusive')}",
+        f"- Valid feedback: {_markdown_text(row.get('valid_feedback_count') or 0)}",
+        f"- Reviewed disagreements: {_markdown_text(row.get('reviewed_disagreements') or 0)}",
+        f"- Next action: {_markdown_text(row.get('next_action') or 'review')}",
+        "",
+        _markdown_text(row.get("rationale") or "No stakeholder-safe rationale is available yet."),
+    ]
+    issues = _score_issues(
+        stakeholder_view,
+        scorecard_name=scorecard_name,
+        scorecard_ref=scorecard_ref,
+        score_name=score_name,
+    )
+    if issues:
+        lines.extend(["", "## Questions and issues", ""])
+        for issue in issues:
+            finding = _markdown_text(
+                issue.get("finding") or issue.get("rationale") or "Review required"
+            )
+            next_action = _markdown_text(issue.get("next_action") or "review")
+            lines.append(f"- {finding} Next action: {next_action}.")
+    lines.extend([
+        "",
+        "This brief contains stakeholder-safe findings only. The living Plexus Report is the cover page and lifecycle authority.",
+        "",
+    ])
+    return "\n".join(lines).encode("utf-8")
 
 
 def _scorecard_summary_markdown(
@@ -544,6 +611,7 @@ def _scorecard_presentation(
     scorecard_ref: str,
     rows: list[Mapping[str, Any]],
     stakeholder_view: Mapping[str, Any],
+    score_artifacts: list[list[Mapping[str, Any]]],
 ) -> bytes:
     issues = [
         dict(row) for row in stakeholder_view.get("questions_and_issues", [])
@@ -558,7 +626,10 @@ def _scorecard_presentation(
     return _json({
         "scorecard_name": scorecard_name,
         "scorecard_ref": scorecard_ref,
-        "scores": [dict(row) for row in rows],
+        "scores": [
+            {**dict(row), "artifacts": [dict(artifact) for artifact in artifacts]}
+            for row, artifacts in zip(rows, score_artifacts)
+        ],
         "questions_and_issues": issues,
     })
 
@@ -581,6 +652,35 @@ def build_scorecard_artifacts(
     descriptors: list[dict[str, Any]] = []
     for (stable_key, scorecard_name), rows in sorted(grouped.items(), key=lambda item: item[0][1].casefold()):
         scope_hash = sha256(stable_key.encode("utf-8")).hexdigest()[:16]
+        score_artifacts: list[list[Mapping[str, Any]]] = []
+        for row_index, row in enumerate(rows):
+            score_name = str(row.get("score_name") or "Unlabeled score")
+            score_hash = sha256(
+                f"{stable_key}\0{score_name}\0{row_index}".encode("utf-8")
+            ).hexdigest()[:16]
+            content = _score_brief_markdown(
+                scorecard_name,
+                stable_key,
+                row,
+                stakeholder_view,
+            )
+            filename = f"score-{score_hash}-brief-r{revision_number:04d}.md"
+            object_key = uploader(task_id, filename, content)
+            descriptor = _artifact_descriptor(
+                logical_id=f"score_brief:{score_hash}",
+                kind="score_brief",
+                display_name="Score brief",
+                scope="score",
+                content_type="text/markdown",
+                content=content,
+                object_key=object_key,
+                task_id=task_id,
+                source_revision=revision_number,
+                scorecard_name=scorecard_name,
+                score_name=score_name,
+            )
+            descriptors.append(descriptor)
+            score_artifacts.append([descriptor])
         artifacts = (
             (
                 "scorecard_summary",
@@ -611,6 +711,7 @@ def build_scorecard_artifacts(
                     stable_key,
                     rows,
                     stakeholder_view,
+                    score_artifacts,
                 ),
             ),
         )

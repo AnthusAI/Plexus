@@ -50,6 +50,17 @@ const summaryDescriptor = {
   object_key: 'tasks/task-1/scorecard-summary-r0002.md',
 }
 
+const scoreBriefDescriptor = {
+  ...detailDescriptor,
+  logical_id: 'score_brief:def456',
+  kind: 'score_brief',
+  display_name: 'Score brief',
+  scope: 'score' as const,
+  content_type: 'text/markdown',
+  object_key: 'tasks/task-1/score-brief-r0002.md',
+  score_name: 'Priority Score',
+}
+
 describe('OptimizationRunStatus', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -96,8 +107,14 @@ describe('OptimizationRunStatus', () => {
           readiness: 'ready_to_optimize',
           rationale: 'Reviewed errors show a safe opportunity.',
           next_action: 'request_optimization_approval',
+          artifacts: [scoreBriefDescriptor],
         }],
-        questions_and_issues: [],
+        questions_and_issues: [{
+          kind: 'stakeholder_question',
+          score_name: 'Priority Score',
+          finding: 'Should this exception be treated as acceptable?',
+          next_action: 'request_stakeholder_clarification',
+        }],
       }))))
   })
 
@@ -138,10 +155,15 @@ describe('OptimizationRunStatus', () => {
 
     expect(await screen.findByText('Reviewed errors show a safe opportunity.')).toBeInTheDocument()
     expect(screen.getByText(/120 valid feedback/)).toBeInTheDocument()
+    expect(screen.getByText('Should this exception be treated as acceptable?')).toBeInTheDocument()
     expect(mockReadTaskArtifact).toHaveBeenCalledTimes(2)
     expect(screen.getByRole('link', { name: 'Summary artifact' })).toHaveAttribute(
       'href',
       '/lab/reports/report-1?revision=2&artifact=scorecard_summary%3Aabc123',
+    )
+    expect(screen.getByRole('link', { name: 'Open score brief' })).toHaveAttribute(
+      'href',
+      '/lab/reports/report-1?revision=2&artifact=score_brief%3Adef456',
     )
   })
 })

@@ -70,12 +70,21 @@ type ScoreDetail = {
   readiness?: string
   rationale?: string
   next_action?: string
+  artifacts?: ArtifactDescriptor[]
+}
+
+type ScoreQuestion = {
+  kind?: string
+  score_name?: string
+  finding?: string
+  rationale?: string
+  next_action?: string
 }
 
 type ScorecardPresentation = {
   scorecard_name: string
   scores: ScoreDetail[]
-  questions_and_issues: Array<Record<string, unknown>>
+  questions_and_issues: ScoreQuestion[]
 }
 
 const DECISION_COLORS = [
@@ -218,8 +227,22 @@ function ScorecardSection({ scorecard, reportId }: { scorecard: ScorecardCard; r
       }
       setDetails({
         scorecard_name: String(value.scorecard_name || scorecard.scorecard_name),
-        scores: value.scores,
-        questions_and_issues: value.questions_and_issues,
+        scores: value.scores.map((rawScore: unknown) => {
+          const score = record(rawScore)
+          if (!score) throw new Error('Scorecard details contain a malformed score.')
+          const artifacts = Array.isArray(score.artifacts)
+            ? score.artifacts.map(parseArtifactDescriptor)
+            : []
+          if (artifacts.some((artifact: ArtifactDescriptor | null) => artifact === null)) {
+            throw new Error('Scorecard details contain a malformed score artifact.')
+          }
+          return { ...score, artifacts: artifacts as ArtifactDescriptor[] }
+        }),
+        questions_and_issues: value.questions_and_issues.map((rawIssue: unknown) => {
+          const issue = record(rawIssue)
+          if (!issue) throw new Error('Scorecard details contain a malformed question or issue.')
+          return issue
+        }),
       })
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError))
@@ -257,21 +280,45 @@ function ScorecardSection({ scorecard, reportId }: { scorecard: ScorecardCard; r
             </div>
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
-          {details?.scores.map((score, index) => (
-            <details key={`${score.score_name || 'score'}-${index}`} className="rounded-md bg-card p-3">
-              <summary className="cursor-pointer font-medium">
-                {score.score_name || 'Unlabeled score'}
-                {score.readiness && <span className="ml-2 text-xs font-normal text-muted-foreground">{label(score.readiness)}</span>}
-              </summary>
-              <div className="mt-3 space-y-2 text-sm">
-                <p>{score.rationale || 'No rationale available.'}</p>
-                <p className="text-muted-foreground">
-                  {score.valid_feedback_count ?? 0} valid feedback · {score.reviewed_disagreements ?? 0} reviewed disagreements
-                </p>
-                <p><span className="text-muted-foreground">Next action:</span> {label(score.next_action || 'review')}</p>
-              </div>
-            </details>
-          ))}
+          {details?.scores.map((score, index) => {
+            const scoreQuestions = details.questions_and_issues.filter(
+              issue => issue.score_name === score.score_name,
+            )
+            const scoreBrief = score.artifacts?.find(artifact => artifact.kind === 'score_brief')
+            return (
+              <details key={`${score.score_name || 'score'}-${index}`} className="rounded-md bg-card p-3">
+                <summary className="cursor-pointer font-medium">
+                  {score.score_name || 'Unlabeled score'}
+                  {score.readiness && <span className="ml-2 text-xs font-normal text-muted-foreground">{label(score.readiness)}</span>}
+                </summary>
+                <div className="mt-3 space-y-2 text-sm">
+                  <p>{score.rationale || 'No rationale available.'}</p>
+                  <p className="text-muted-foreground">
+                    {score.valid_feedback_count ?? 0} valid feedback · {score.reviewed_disagreements ?? 0} reviewed disagreements
+                  </p>
+                  <p><span className="text-muted-foreground">Next action:</span> {label(score.next_action || 'review')}</p>
+                  {scoreQuestions.length > 0 && (
+                    <div className="rounded-md bg-amber-500/10 p-3">
+                      <div className="font-medium">Questions and issues</div>
+                      <ul className="mt-2 list-disc space-y-2 pl-5">
+                        {scoreQuestions.map((issue, issueIndex) => (
+                          <li key={`${issue.kind || 'issue'}-${issueIndex}`}>
+                            {issue.finding || issue.rationale || 'Review required.'}
+                            {issue.next_action && (
+                              <span className="text-muted-foreground"> Next: {label(issue.next_action)}.</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {scoreBrief && (
+                    <ArtifactLink descriptor={scoreBrief} reportId={reportId}>Open score brief</ArtifactLink>
+                  )}
+                </div>
+              </details>
+            )
+          })}
           {details && details.questions_and_issues.length > 0 && (
             <div className="rounded-md bg-amber-500/10 p-3 text-sm">
               {details.questions_and_issues.length} stakeholder question or structural issue{details.questions_and_issues.length === 1 ? '' : 's'}.
