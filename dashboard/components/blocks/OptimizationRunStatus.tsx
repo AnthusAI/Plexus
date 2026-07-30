@@ -106,6 +106,19 @@ type ScorecardPresentation = {
   questions_and_issues: ScoreQuestion[]
 }
 
+type LiveProgress = {
+  phase: string
+  current: number
+  total: number
+  message?: string
+  updatedAt?: string
+}
+
+type CompactStatus = {
+  presentation: ArtifactDescriptor | null
+  liveProgress: LiveProgress | null
+}
+
 const DECISION_COLORS = [
   'bg-blue-500',
   'bg-amber-500',
@@ -131,19 +144,77 @@ function reportIdFromLocation(): string | null {
   return match ? decodeURIComponent(match[1]) : null
 }
 
-function parseStatusPresentationDescriptor(output: ReportBlockProps['output']): ArtifactDescriptor | null {
+function parseCompactStatus(output: ReportBlockProps['output']): CompactStatus {
   let parsed: unknown = output
   if (typeof output === 'string') {
     try {
       parsed = JSON.parse(output)
     } catch {
-      return null
+      return { presentation: null, liveProgress: null }
     }
   }
   const envelope = record(parsed)
   const preview = record(envelope?.preview)
   const summary = record(preview?.summary)
-  return parseArtifactDescriptor(summary?.presentation)
+  const rawProgress = record(summary?.live_progress)
+  const current = Number(rawProgress?.current)
+  const total = Number(rawProgress?.total)
+  const phase = typeof rawProgress?.phase === 'string' ? rawProgress.phase.trim() : ''
+  const isValidProgress = phase.length > 0
+    && Number.isFinite(current)
+    && current >= 0
+    && Number.isFinite(total)
+    && total > 0
+
+  return {
+    presentation: parseArtifactDescriptor(summary?.presentation),
+    liveProgress: isValidProgress
+      ? {
+          phase,
+          current: Math.min(current, total),
+          total,
+          message: typeof rawProgress?.message === 'string' ? rawProgress.message : undefined,
+          updatedAt: typeof rawProgress?.updated_at === 'string' ? rawProgress.updated_at : undefined,
+        }
+      : null,
+  }
+}
+
+function presentationKey(descriptor: ArtifactDescriptor | null): string | null {
+  if (!descriptor) return null
+  return [descriptor.task_id, descriptor.object_key, descriptor.sha256, descriptor.source_revision].join(':')
+}
+
+function progressLabel(progress: LiveProgress): string {
+  const unit = progress.phase === 'assessment' ? 'scores assessed' :
+    progress.phase === 'diagnosis' ? 'analysis steps complete' : 'scores processed'
+  return `${progress.current} of ${progress.total} ${unit}`
+}
+
+function LiveProgressCard({ progress }: { progress: LiveProgress }) {
+  const phaseLabel = label(progress.phase)
+  const percentage = Math.round(progress.current / progress.total * 100)
+
+  return (
+    <div className="rounded-md bg-primary/5 p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">{phaseLabel} in progress</div>
+        <div className="text-sm font-medium">{progressLabel(progress)}</div>
+      </div>
+      <div
+        className="mt-3 h-2 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label={`${phaseLabel} progress`}
+        aria-valuemin={0}
+        aria-valuemax={progress.total}
+        aria-valuenow={progress.current}
+        aria-valuetext={progressLabel(progress)}
+      >
+        <div className="h-full bg-primary transition-[width]" style={{ width: `${percentage}%` }} />
+      </div>
+      {progress.message && <p className="mt-3 text-sm text-muted-foreground">{progress.message}</p>}
+    </div>
+  )
 }
 
 function parsePresentation(value: unknown): StakeholderPresentation {
@@ -350,20 +421,26 @@ function ScorecardSection({ scorecard, reportId }: { scorecard: ScorecardCard; r
 }
 
 const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProps) => {
-  const descriptor = useMemo(() => parseStatusPresentationDescriptor(output), [output])
+  const compactStatus = useMemo(() => parseCompactStatus(output), [output])
+  const descriptor = compactStatus.presentation
+  // A progress-only ReportBlock update has the same immutable presentation.
+  // Keep this object stable so it updates the visible progress immediately
+  // without downloading that artifact again.
+  const descriptorKey = presentationKey(descriptor)
+  const stableDescriptor = useMemo(() => descriptor, [descriptorKey])
   const [presentation, setPresentation] = useState<StakeholderPresentation | null>(null)
   const [error, setError] = useState<string | null>(null)
   const reportId = reportIdFromLocation()
 
   useEffect(() => {
     let cancelled = false
-    if (!descriptor) {
+    if (!stableDescriptor) {
       setError('The latest optimization presentation is not available yet.')
       return
     }
     setError(null)
     setPresentation(null)
-    void loadJsonArtifact(descriptor)
+    void loadJsonArtifact(stableDescriptor)
       .then(value => {
         if (!cancelled) setPresentation(parsePresentation(value))
       })
@@ -373,7 +450,7 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
     return () => {
       cancelled = true
     }
-  }, [descriptor])
+  }, [stableDescriptor])
 
   if (error) {
     return (
@@ -395,6 +472,7 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
   }
 
   const overview = presentation.overview
+  const liveProgress = compactStatus.liveProgress
   const decisions = Object.entries(presentation.primary_decision_mix)
     .filter(([, count]) => count > 0)
     .sort((left, right) => right[1] - left[1])
@@ -430,8 +508,12 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
         </div>
 
         <div className="mt-6 grid gap-3 md:grid-cols-2">
-          <div className="rounded-md bg-muted/30 p-4"><div className="text-xs uppercase tracking-wide text-muted-foreground">Assessment</div><div className="mt-1 text-sm">{overview.assessment_progress || 'Pending'}</div></div>
-          <div className="rounded-md bg-muted/30 p-4"><div className="text-xs uppercase tracking-wide text-muted-foreground">Diagnosis</div><div className="mt-1 text-sm">{overview.diagnosis_coverage || 'Pending'}</div></div>
+          {liveProgress?.phase === 'assessment'
+            ? <LiveProgressCard progress={liveProgress} />
+            : <div className="rounded-md bg-muted/30 p-4"><div className="text-xs uppercase tracking-wide text-muted-foreground">Assessment</div><div className="mt-1 text-sm">{overview.assessment_progress || 'Pending'}</div></div>}
+          {liveProgress?.phase === 'diagnosis'
+            ? <LiveProgressCard progress={liveProgress} />
+            : <div className="rounded-md bg-muted/30 p-4"><div className="text-xs uppercase tracking-wide text-muted-foreground">Diagnosis</div><div className="mt-1 text-sm">{overview.diagnosis_coverage || 'Pending'}</div></div>}
         </div>
       </section>
 

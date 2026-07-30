@@ -137,7 +137,7 @@ describe('OptimizationRunStatus', () => {
 
   it('shows reconciled aggregate visuals and loads score details only when expanded', async () => {
     const user = userEvent.setup()
-    render(
+    const { rerender } = render(
       <OptimizationRunStatus
         id="block-1"
         type="OptimizationRunStatus"
@@ -153,13 +153,22 @@ describe('OptimizationRunStatus', () => {
               revision: 2,
               milestone: 'diagnosis',
               presentation: presentationDescriptor,
+              live_progress: {
+                phase: 'assessment',
+                current: 10,
+                total: 100,
+                message: 'Assessing 10 of 100 scores.',
+                updated_at: '2026-07-30T18:00:00Z',
+              },
             },
           },
         }}
       />,
     )
 
-    expect(await screen.findByText('3 of 3 ranked scores complete')).toBeInTheDocument()
+    expect(await screen.findByText('10 of 100 scores assessed')).toBeInTheDocument()
+    expect(screen.getByText('Assessing 10 of 100 scores.')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: 'Assessment progress' })).toHaveAttribute('aria-valuenow', '10')
     expect(screen.getByText('Scorecards inspected')).toBeInTheDocument()
     expect(screen.queryByText('Account inventory inspected')).not.toBeInTheDocument()
     expect(screen.getByText('Scorecards in scope')).toBeInTheDocument()
@@ -172,6 +181,74 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getByText(/1 selected for semantic diagnosis/)).toBeInTheDocument()
     expect(screen.getByText(/120 valid feedback/)).toBeInTheDocument()
     expect(screen.getByText('Reviewed errors show a safe opportunity.')).toBeInTheDocument()
+    expect(mockReadTaskArtifact).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <OptimizationRunStatus
+        id="block-1"
+        type="OptimizationRunStatus"
+        name="Run Status"
+        position={0}
+        config={{}}
+        output={{
+          output_compacted: true,
+          preview: {
+            type: 'optimization_run_status',
+            status: 'published',
+            summary: {
+              revision: 2,
+              milestone: 'diagnosis',
+              presentation: presentationDescriptor,
+              live_progress: {
+                phase: 'assessment',
+                current: 11,
+                total: 100,
+                message: 'Assessing 11 of 100 scores.',
+                updated_at: '2026-07-30T18:01:00Z',
+              },
+            },
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByText('11 of 100 scores assessed')).toBeInTheDocument()
+    expect(screen.getByText('Assessing 11 of 100 scores.')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: 'Assessment progress' })).toHaveAttribute('aria-valuenow', '11')
+    expect(mockReadTaskArtifact).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <OptimizationRunStatus
+        id="block-1"
+        type="OptimizationRunStatus"
+        name="Run Status"
+        position={0}
+        config={{}}
+        output={{
+          output_compacted: true,
+          preview: {
+            type: 'optimization_run_status',
+            status: 'published',
+            summary: {
+              revision: 2,
+              milestone: 'diagnosis',
+              presentation: presentationDescriptor,
+              live_progress: {
+                phase: 'diagnosis',
+                current: 73,
+                total: 125,
+                message: 'Diagnosing 73 of 125 selected scores.',
+                updated_at: '2026-07-30T18:02:00Z',
+              },
+            },
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByText('73 of 125 analysis steps complete')).toBeInTheDocument()
+    expect(screen.getByText('Diagnosing 73 of 125 selected scores.')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: 'Diagnosis progress' })).toHaveAttribute('aria-valuenow', '73')
     expect(mockReadTaskArtifact).toHaveBeenCalledTimes(1)
 
     await user.click(screen.getByRole('button', { name: /Example Portfolio/ }))

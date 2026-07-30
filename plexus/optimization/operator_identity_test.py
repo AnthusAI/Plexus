@@ -25,6 +25,17 @@ def test_prefix_and_exact_scorecard_scope_is_human_readable_without_opaque_ids()
     assert "3f9b66cb" not in identity.display_scope
 
 
+def test_lua_array_mappings_preserve_scorecard_scoped_identity():
+    identity = optimization_operator_identity(scope={
+        "scorecard_ids": {},
+        "scorecard_name_prefixes": {1: "Example"},
+    })
+
+    assert identity.kind == "scorecard_scoped_portfolio"
+    assert identity.display_title == "Scorecard-scoped optimization portfolio"
+    assert identity.display_scope == 'scorecard names beginning with "Example"'
+
+
 def test_exact_scope_can_be_enriched_with_names_after_exhaustive_enumeration():
     identity = optimization_operator_identity(
         scope={"scorecard_ids": ["opaque-one", "opaque-two"]},

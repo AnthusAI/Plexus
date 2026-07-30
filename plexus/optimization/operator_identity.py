@@ -40,10 +40,17 @@ def _text(value: Any) -> str | None:
     return normalized[:240]
 
 
+def _collection_values(value: Any) -> list[Any]:
+    """Accept Python sequences and Lua-array mappings from the runtime bridge."""
+    if isinstance(value, Mapping):
+        return list(value.values())
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return list(value)
+    return []
+
+
 def _values(value: Any) -> list[str]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
-        return []
-    return [text for item in value if (text := _text(item))]
+    return [text for item in _collection_values(value) if (text := _text(item))]
 
 
 def _name_list(names: Sequence[str]) -> str:
@@ -89,12 +96,7 @@ def optimization_operator_identity(
 
     scope = scope if isinstance(scope, Mapping) else {}
     scorecard_ids = scope.get("scorecard_ids")
-    exact_count = (
-        len(scorecard_ids)
-        if isinstance(scorecard_ids, Sequence)
-        and not isinstance(scorecard_ids, (str, bytes, bytearray))
-        else 0
-    )
+    exact_count = len(_collection_values(scorecard_ids))
     prefixes = _values(scope.get("scorecard_name_prefixes"))
     matched_names = _values(matched_scorecard_names)
     scoped = bool(exact_count or prefixes or safe_scorecard or matched_names)

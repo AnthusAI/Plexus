@@ -982,7 +982,10 @@ class OptimizationRunReportService:
             blocks = self._ensure_fixed_blocks(report)
             self._state = OptimizationRunReportState(
                 task=task, report=report, blocks=blocks,
-                stages={str(getattr(stage, "name", "")): stage for stage in stages},
+                stages={
+                    str(getattr(stage, "name", "")).strip().lower(): stage
+                    for stage in stages
+                },
                 run_spec=dict(run_spec), attempt_id=attempt_id,
                 operator_identity=operator_identity,
             )
@@ -1155,6 +1158,73 @@ class OptimizationRunReportService:
         except Exception as exc:
             self.fail(f"Failed to durably publish {milestone}: {exc}")
             raise OptimizationRunPublicationError(f"Could not publish optimization milestone {milestone}") from exc
+
+    def publish_progress(
+        self, *, phase: str, current: int, total: int, message: str
+    ) -> None:
+        """Publish lightweight live progress without creating an evidence revision.
+
+        Milestones remain the immutable audit trail.  This method updates only
+        the existing analysis stage, compact status block, and Report cover so
+        operators can see movement during long assessment and diagnosis loops.
+        """
+        state = self._require_state()
+        normalized_phase = str(phase or "").strip().lower()
+        normalized_message = " ".join(str(message or "").split()).strip()
+        if normalized_phase not in {"assessment", "diagnosis"}:
+            raise ValueError("progress phase must be assessment or diagnosis")
+        if isinstance(current, bool) or isinstance(total, bool):
+            raise ValueError("progress counts must be integers")
+        current = int(current)
+        total = int(total)
+        if current < 0 or total < 0 or current > total:
+            raise ValueError("progress counts must satisfy 0 <= current <= total")
+        if not normalized_message:
+            raise ValueError("progress message is required")
+
+        progress = {
+            "phase": normalized_phase,
+            "current": current,
+            "total": total,
+            "message": normalized_message,
+            "updated_at": _iso(self.now()),
+        }
+        try:
+            stage = (
+                state.stages.get(normalized_phase)
+                or state.stages.get("analysis")
+            )
+            if stage is None:
+                raise RuntimeError("missing analysis TaskStage for live progress")
+            stage.update(
+                processedItems=current,
+                totalItems=total,
+                statusMessage=normalized_message[:1000],
+            )
+
+            status_block = state.blocks["status"]
+            compact = _metadata(getattr(status_block, "output", {}))
+            preview = dict(compact.get("preview") or {})
+            summary = dict(preview.get("summary") or {})
+            summary["live_progress"] = progress
+            preview["summary"] = summary
+            compact["preview"] = preview
+            status_block.update(
+                output=json.dumps(compact),
+                log="Live progress; see immutable revisions in attachedFiles.",
+            )
+
+            state.report.update(output=self._render_report_manifest(
+                "RUNNING",
+                self._latest_revision(state.report),
+                identity=state.operator_identity,
+                live_progress=progress,
+            ))
+        except Exception as exc:
+            self.fail(f"Failed to publish live {normalized_phase} progress: {exc}")
+            raise OptimizationRunPublicationError(
+                f"Could not publish live {normalized_phase} progress"
+            ) from exc
 
     def finalize(self, *, status: str = "completed") -> OptimizationRunReportState:
         """Finish a run while preserving its stakeholder-visible terminal state.
@@ -1452,6 +1522,7 @@ class OptimizationRunReportService:
         error: Optional[str] = None,
         *,
         identity: OptimizationOperatorIdentity,
+        live_progress: Optional[Mapping[str, Any]] = None,
     ) -> str:
         def safe(value: Any) -> str:
             return " ".join(str(value or "").split()).strip()
@@ -1504,6 +1575,15 @@ class OptimizationRunReportService:
                 f"{unranked} unranked scores; {cooldown} cooldown exclusions."
             ),
         ])
+        if isinstance(live_progress, Mapping):
+            phase = safe(live_progress.get("phase")).title()
+            current = live_progress.get("current", 0)
+            total = live_progress.get("total", 0)
+            unit = "scores assessed" if phase.lower() == "assessment" else "analysis steps complete"
+            lines.extend([
+                f"{phase}: {current} of {total} {unit}",
+                safe(live_progress.get("message")),
+            ])
         for label, key in (
             ("Assessment", "assessment_progress"),
             ("Diagnosis", "diagnosis_coverage"),

@@ -32,6 +32,7 @@ class _ReportService:
     milestones: list[tuple[str, dict[str, Any], dict[str, Any]]] = field(default_factory=list)
     terminal: list[str] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
+    progress_updates: list[dict[str, Any]] = field(default_factory=list)
     report: Any = field(default_factory=lambda: type("Report", (), {"id": "report-1"})())
 
     def start_or_resume(self, run_spec):
@@ -41,6 +42,9 @@ class _ReportService:
     def publish_milestone(self, milestone, evidence, *, stakeholder_view):
         self.milestones.append((milestone, dict(evidence), dict(stakeholder_view)))
         return object()
+
+    def publish_progress(self, **progress):
+        self.progress_updates.append(dict(progress))
 
     def finalize(self, *, status="COMPLETED"):
         self.terminal.append(status)
@@ -105,6 +109,69 @@ def test_portfolio_run_publishes_idempotent_operator_milestones_after_report_upd
         "system": "plexus", "kind": "report", "id": "report-1",
         "relation": "optimization_run",
     }] for update in updates)
+
+
+def test_long_analysis_exposes_incremental_progress_without_extra_report_revisions(monkeypatch):
+    import plexus.optimization.portfolio_run as portfolio_run
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    # Keep this synthetic progress run bounded to two semantic diagnoses while
+    # retaining a larger deterministic assessment batch.  The production
+    # policy diagnoses the top ten; the fixture deliberately uses a smaller
+    # policy-sized batch so its assertions cover progress through both phases.
+    monkeypatch.setattr(portfolio_run, "MAX_PRIORITY_DIAGNOSES", 2)
+
+    report = _ReportService()
+    ranked = [
+        {
+            "scorecard_id": "card-1",
+            "score_id": f"score-{index}",
+            "scorecard_name": "Example Portfolio",
+            "score_name": f"Example Score {index}",
+        }
+        for index in range(12)
+    ]
+
+    def assess(request):
+        packet = _assessment(request["scorecard_id"], request["score_id"])
+        packet["states"]["optimization"] = "insufficient_evidence"
+        return packet
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": ranked},
+        assess=assess,
+        diagnose=lambda request: request["assessment"],
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda _request: {},
+        review=lambda _request: {},
+        report=report,
+        human_review=lambda _request: {"decisions": []},
+    ))
+
+    result = runner.run({
+        "account_id": "account-1",
+        "run_key": "progress-run",
+        "max_semantic_diagnoses": 2,
+    })
+
+    assert result["status"] == "COMPLETED"
+    assert [
+        (row["phase"], row["current"], row["total"])
+        for row in report.progress_updates
+    ] == [
+        ("assessment", 0, 12),
+        ("assessment", 10, 12),
+        ("assessment", 12, 12),
+        ("diagnosis", 12, 14),
+        ("diagnosis", 13, 14),
+        ("diagnosis", 14, 14),
+    ]
+    assert "Example Score 9" in report.progress_updates[1]["message"]
+    assert "semantic diagnosis" in report.progress_updates[-1]["message"].lower()
+    assert [milestone for milestone, _, _ in report.milestones] == [
+        "started", "ranking", "assessment", "diagnosis", "approval",
+        "optimization", "optimization", "optimization_review", "finalization",
+    ]
 
 
 def test_portfolio_run_creates_the_living_report_before_analysis_and_only_launches_independently_approved_exact_targets():
@@ -862,3 +929,16 @@ def test_stakeholder_overview_explains_ranking_and_semantic_diagnosis_cutoffs():
     assert view["feedback_investment"][0]["rank"] == 1
     assert view["optimization_outcomes"][0]["rank"] == 1
     _validate_view(view)
+
+    zero_cap_view = _stakeholder_view({
+        "rank": {
+            "coverage": {"complete": True},
+            "ranked": ranked_rows,
+            "unranked": [],
+        },
+        "diagnosis_coverage": {
+            "selected_count": 10,
+            "max_semantic_diagnoses": 0,
+        },
+    }, milestone="assessment")
+    assert zero_cap_view["overview"]["diagnosis_max_count"] == 0

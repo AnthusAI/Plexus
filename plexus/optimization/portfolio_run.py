@@ -117,7 +117,14 @@ class OptimizationPortfolioRunner:
 
             ranked_rows = _ranked_rows(rank)
             assessment_rows: list[dict[str, Any]] = []
-            for row in ranked_rows:
+            assessment_total = len(ranked_rows)
+            service.publish_progress(
+                phase="assessment",
+                current=0,
+                total=assessment_total,
+                message=f"Preparing to assess {assessment_total} ranked scores.",
+            )
+            for index, row in enumerate(ranked_rows, start=1):
                 scorecard_id, score_id = _exact_target(row)
                 assessment = dict(self._dependencies.assess({
                     "account_id": account_id,
@@ -134,6 +141,18 @@ class OptimizationPortfolioRunner:
                 if row.get("score_name") and not assessment.get("score_name"):
                     assessment["score_name"] = row["score_name"]
                 assessment_rows.append(assessment)
+                if index % 10 == 0 or index == assessment_total:
+                    scorecard_name = str(row.get("scorecard_name") or "this scorecard")
+                    score_name = str(row.get("score_name") or "this score")
+                    service.publish_progress(
+                        phase="assessment",
+                        current=index,
+                        total=assessment_total,
+                        message=(
+                            f"Assessed {index} of {assessment_total} scores; latest: "
+                            f"{scorecard_name} - {score_name}."
+                        ),
+                    )
 
             # Ranking and assessment are deterministic and materially useful
             # on their own. Publish them before model-backed diagnosis so a
@@ -156,7 +175,17 @@ class OptimizationPortfolioRunner:
                 return self._result("INCOMPLETE", state)
 
             diagnosis_rows: list[dict[str, Any]] = []
-            for row, assessment in diagnosis_targets:
+            diagnosis_total = assessment_total + len(diagnosis_targets)
+            service.publish_progress(
+                phase="diagnosis",
+                current=assessment_total,
+                total=diagnosis_total,
+                message=(
+                    f"Starting semantic diagnosis for {len(diagnosis_targets)} "
+                    "selected scores."
+                ),
+            )
+            for diagnosis_index, (row, assessment) in enumerate(diagnosis_targets, start=1):
                 scorecard_id, score_id = _exact_target(row)
                 try:
                     diagnosis = dict(self._dependencies.diagnose({
@@ -180,6 +209,17 @@ class OptimizationPortfolioRunner:
                     diagnosis["score_name"] = assessment["score_name"]
                 diagnosis_rows.append(diagnosis)
                 diagnosis_coverage["completed_count"] += 1
+                service.publish_progress(
+                    phase="diagnosis",
+                    current=assessment_total + diagnosis_index,
+                    total=diagnosis_total,
+                    message=(
+                        f"Completed semantic diagnosis {diagnosis_index} of "
+                        f"{len(diagnosis_targets)}: "
+                        f"{row.get('scorecard_name') or 'Scorecard'} - "
+                        f"{row.get('score_name') or 'Score'}."
+                    ),
+                )
 
             state["diagnoses"] = diagnosis_rows
             diagnosis_coverage["selected_scope_complete"] = (
@@ -1206,7 +1246,12 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
     diagnosis_completed = int(diagnosis_coverage.get("completed_count") or 0)
     diagnosis_failed = int(diagnosis_coverage.get("failed_count") or 0)
     diagnosis_skipped = int(diagnosis_coverage.get("skipped_count") or 0)
-    diagnosis_max = int(diagnosis_coverage.get("max_semantic_diagnoses") or DEFAULT_MAX_SEMANTIC_DIAGNOSES)
+    raw_diagnosis_max = diagnosis_coverage.get("max_semantic_diagnoses")
+    diagnosis_max = int(
+        DEFAULT_MAX_SEMANTIC_DIAGNOSES
+        if raw_diagnosis_max is None
+        else raw_diagnosis_max
+    )
     diagnosis_top_priority = int(diagnosis_coverage.get("top_priority_count") or 0)
     diagnosis_monitoring = int(diagnosis_coverage.get("monitoring_candidate_count") or 0)
     priority_displayed = min(MAX_PRIORITY_DIAGNOSES, ranked_count)

@@ -105,6 +105,8 @@ class _TaskStage:
         self.order = values["order"]
         self.status = values["status"]
         self.statusMessage = values.get("statusMessage")
+        self.processedItems = values.get("processedItems")
+        self.totalItems = values.get("totalItems")
         self.startedAt = values.get("startedAt")
         self.completedAt = values.get("completedAt")
         self.updates: list[dict] = []
@@ -834,7 +836,7 @@ def test_procedure_owned_task_is_reused_without_duplicate_task_or_stage_creation
     )
     procedure_stages = [
         _TaskStage(
-            f"procedure-stage-{index}", taskId=procedure_task.id, name=name,
+            f"procedure-stage-{index}", taskId=procedure_task.id, name=name.title(),
             order=index, status="RUNNING" if name == "analysis" else "PENDING",
         )
         for index, name in enumerate(
@@ -867,6 +869,64 @@ def test_procedure_owned_task_is_reused_without_duplicate_task_or_stage_creation
     assert metadata["optimization_run_key"] == "procedure-run"
     assert metadata["optimization_run_final_status"] == "complete"
     assert not any(update.get("status") == "COMPLETED" for update in procedure_task.updates)
+
+
+def test_progress_updates_the_existing_analysis_stage_and_live_cover_without_a_new_revision(monkeypatch):
+    from plexus.optimization import run_report
+
+    procedure_task = _Task(
+        identifier="procedure-task",
+        accountId="account-1",
+        status="RUNNING",
+        metadata=json.dumps({"procedure_key": "preserve-me"}),
+    )
+    procedure_stages = [
+        _TaskStage(
+            f"procedure-stage-{index}", taskId=procedure_task.id, name=name.title(),
+            order=index, status="RUNNING" if name == "analysis" else "PENDING",
+        )
+        for index, name in enumerate(
+            ("preflight", "analysis", "approval", "optimization", "review", "finalization")
+        )
+    ]
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="progress-run",
+        report_configuration_id="config-1", existing_task=procedure_task,
+        report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda _: procedure_stages, artifact_store=_ArtifactStore(),
+        now=lambda: datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc),
+    )
+    state = service.start_or_resume({"scope": {}})
+    service.publish_milestone(
+        "ranking", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+    )
+    revision_before = service._latest_revision_number(state.report)
+
+    service.publish_progress(
+        phase="assessment",
+        current=30,
+        total=100,
+        message="Assessing 30 of 100 scores.",
+    )
+
+    analysis = next(stage for stage in procedure_stages if stage.name == "Analysis")
+    assert analysis.processedItems == 30
+    assert analysis.totalItems == 100
+    assert analysis.statusMessage == "Assessing 30 of 100 scores."
+    assert service._latest_revision_number(state.report) == revision_before
+    status_envelope = json.loads(state.blocks["status"].output)
+    assert status_envelope["preview"]["summary"]["live_progress"] == {
+        "phase": "assessment",
+        "current": 30,
+        "total": 100,
+        "message": "Assessing 30 of 100 scores.",
+        "updated_at": "2026-07-29T12:00:00Z",
+    }
+    assert "Assessment: 30 of 100 scores assessed" in state.report.output
 
 
 def test_procedure_owned_task_rejects_a_conflicting_run_claim(monkeypatch):
