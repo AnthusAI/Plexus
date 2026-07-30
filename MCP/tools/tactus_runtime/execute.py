@@ -10432,11 +10432,15 @@ class PlexusRuntimeModule:
         """
         from plexus.chat import ChatMessageActionService
         from plexus.cli.shared.client_utils import create_client
+        from plexus.dashboard.api.models.account import Account
         from plexus.optimization.portfolio_run import (
             OptimizationPortfolioRunner,
             PortfolioRunDependencies,
         )
-        from plexus.optimization.run_report import OptimizationRunReportService
+        from plexus.optimization.run_report import (
+            OptimizationRunReportService,
+            dashboard_base_url_from_account_settings,
+        )
 
         account_id = str(args.get("account_id") or "").strip()
         if not account_id:
@@ -10446,11 +10450,14 @@ class PlexusRuntimeModule:
             client = create_client()
             if client is None:
                 raise RuntimeError("optimization.portfolio_run requires an authenticated dashboard client")
+            account = Account.get_by_id(account_id, client)
+            dashboard_base_url = dashboard_base_url_from_account_settings(account.settings)
             report_service_factory = lambda run_key, request: OptimizationRunReportService(
                 client=client,
                 account_id=account_id,
                 run_key=run_key,
                 report_configuration_id=request.get("report_configuration_id"),
+                dashboard_base_url=dashboard_base_url,
             )
         else:
             report_service_factory = lambda run_key, request: self._optimization_report_service_factory(

@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from io import BytesIO, StringIO
 from typing import Any, Callable, Mapping, Optional
+from urllib.parse import quote, urlencode, urlparse
 from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
@@ -162,6 +163,8 @@ class PublishedRevision:
     raw_evidence_path: str
     workbook_path: str
     manifest_path: str
+    manifest_checksum: str
+    manifest_size_bytes: int
     evidence_checksum: str
     workbook_checksum: str
     row_counts: Mapping[str, int]
@@ -179,6 +182,48 @@ def _iso(value: datetime) -> str:
 
 def _json(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str).encode("utf-8")
+
+
+def _normalize_dashboard_base_url(value: Optional[str]) -> Optional[str]:
+    if value is None or not str(value).strip():
+        return None
+    parsed = urlparse(str(value).strip())
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.path not in {"", "/"}
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("dashboard_base_url must be an HTTPS origin")
+    return f"https://{parsed.netloc}"
+
+
+def dashboard_base_url_from_account_settings(settings: Any) -> Optional[str]:
+    parsed_settings = _metadata(settings)
+    reporting = parsed_settings.get("reporting")
+    if not isinstance(reporting, Mapping):
+        return None
+    value = reporting.get("dashboardBaseUrl")
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("reporting.dashboardBaseUrl must be a string")
+    return _normalize_dashboard_base_url(value)
+
+
+def _report_artifact_url(
+    base_url: str,
+    *,
+    report_id: str,
+    revision_number: int,
+    logical_id: str,
+) -> str:
+    query = urlencode({"revision": revision_number, "artifact": logical_id})
+    return f"{base_url}/lab/reports/{quote(report_id, safe='')}?{query}"
 
 
 def optimization_run_key(account_id: str, run_spec: Mapping[str, Any]) -> str:
@@ -514,7 +559,7 @@ def build_scorecard_artifacts(
             (
                 "scorecard_summary",
                 "Summary",
-                "text/markdown; charset=utf-8",
+                "text/markdown",
                 f"scorecard-{scope_hash}-summary-r{revision_number:04d}.md",
                 _scorecard_summary_markdown(
                     scorecard_name,
@@ -526,7 +571,7 @@ def build_scorecard_artifacts(
             (
                 "scorecard_portfolio_csv",
                 "Quantitative results",
-                "text/csv; charset=utf-8",
+                "text/csv",
                 f"scorecard-{scope_hash}-portfolio-r{revision_number:04d}.csv",
                 _scorecard_csv(rows),
             ),
@@ -558,6 +603,7 @@ class OptimizationRunReportService:
         account_id: str,
         run_key: str,
         report_configuration_id: Optional[str] = None,
+        dashboard_base_url: Optional[str] = None,
         now: Callable[[], datetime] = _utc_now,
         task_lookup: Optional[Callable[[str], Any]] = None,
         report_lookup: Optional[Callable[[Any], Any]] = None,
@@ -574,6 +620,7 @@ class OptimizationRunReportService:
         self.account_id = account_id
         self.run_key = run_key
         self.report_configuration_id = report_configuration_id
+        self.dashboard_base_url = _normalize_dashboard_base_url(dashboard_base_url)
         self.now = now
         self._task_lookup = task_lookup or self._find_task
         self._report_lookup = report_lookup or self._find_report
@@ -731,6 +778,14 @@ class OptimizationRunReportService:
                 task_id=state.task.id,
                 uploader=self._artifact_uploader,
             ))
+            if self.dashboard_base_url:
+                for artifact in artifacts:
+                    artifact["dashboard_url"] = _report_artifact_url(
+                        self.dashboard_base_url,
+                        report_id=state.report.id,
+                        revision_number=revision_number,
+                        logical_id=str(artifact["logical_id"]),
+                    )
             manifest = {
                 "revision": revision_number, "milestone": milestone, "published_at": _iso(generated_at),
                 "coverage_complete": bool((decision_evidence.get("coverage") or {}).get("complete", decision_evidence.get("coverage_complete", False))),
@@ -744,6 +799,7 @@ class OptimizationRunReportService:
                 "overview": safe_overview,
             }
             manifest_bytes = _json(manifest)
+            manifest_checksum = sha256(manifest_bytes).hexdigest()
             manifest_path = self._artifact_uploader(state.task.id, f"optimization-revision-r{revision_number:04d}.json", manifest_bytes)
             self._attach_task_file(state.task, manifest_path)
             self._update_block(state.blocks["evidence"], raw_path, {"revision": revision_number, "milestone": milestone, "checksum": evidence_checksum})
@@ -756,6 +812,8 @@ class OptimizationRunReportService:
                 raw_evidence_path=raw_path,
                 workbook_path=workbook_path,
                 manifest_path=manifest_path,
+                manifest_checksum=manifest_checksum,
+                manifest_size_bytes=len(manifest_bytes),
                 evidence_checksum=evidence_checksum,
                 workbook_checksum=workbook.checksum,
                 row_counts=workbook.row_counts,
@@ -1007,6 +1065,13 @@ class OptimizationRunReportService:
             "number": revision.number, "milestone": revision.milestone,
             "published_at": revision.published_at,
             "manifest_path": revision.manifest_path, "workbook_path": revision.workbook_path,
+            "manifest": {
+                "task_id": state.task.id,
+                "object_key": revision.manifest_path,
+                "content_type": "application/json",
+                "size_bytes": revision.manifest_size_bytes,
+                "sha256": revision.manifest_checksum,
+            },
             "evidence_path": revision.raw_evidence_path,
             "evidence_checksum": revision.evidence_checksum, "workbook_checksum": revision.workbook_checksum,
             "row_counts": dict(revision.row_counts),
@@ -1160,9 +1225,9 @@ class OptimizationRunReportService:
         content_type = (
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             if name.endswith(".xlsx")
-            else "text/markdown; charset=utf-8"
+            else "text/markdown"
             if name.endswith(".md")
-            else "text/csv; charset=utf-8"
+            else "text/csv"
             if name.endswith(".csv")
             else "application/json"
         )

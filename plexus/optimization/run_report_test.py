@@ -200,7 +200,7 @@ def _safe_view():
     }
 
 
-def _service(monkeypatch, *, block_class=_Block):
+def _service(monkeypatch, *, block_class=_Block, dashboard_base_url=None):
     from plexus.optimization import run_report
 
     monkeypatch.setattr(run_report, "Task", _Task)
@@ -212,6 +212,7 @@ def _service(monkeypatch, *, block_class=_Block):
         account_id="account-1",
         run_key="daily-v1-2026-07-29",
         report_configuration_id="config-1",
+        dashboard_base_url=dashboard_base_url,
         now=lambda: datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc),
         task_lookup=lambda _: None,
         report_lookup=lambda _: None,
@@ -488,6 +489,16 @@ def test_publish_milestone_keeps_raw_evidence_restricted_and_points_to_latest_im
     assert ("task", "optimization-revision-r0001.json") in uploaded
     assert revision.raw_evidence_path in state.task.attachedFiles
     assert state.report.parameters["optimization_run"]["latest_revision"]["number"] == 1
+    latest = state.report.parameters["optimization_run"]["latest_revision"]
+    assert latest["manifest"] == {
+        "task_id": state.task.id,
+        "object_key": revision.manifest_path,
+        "content_type": "application/json",
+        "size_bytes": revision.manifest_size_bytes,
+        "sha256": revision.manifest_checksum,
+    }
+    assert latest["manifest"]["size_bytes"] > 0
+    assert len(latest["manifest"]["sha256"]) == 64
     assert [item["number"] for item in state.report.parameters["optimization_run"]["revisions"]] == [1]
     assert "raw_transcript" not in str(_Block.created[0].updates[-1])
     assert "opaque-id" not in str(_Block.created[2].updates[-1])
@@ -495,7 +506,7 @@ def test_publish_milestone_keeps_raw_evidence_restricted_and_points_to_latest_im
 
 def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without_attaching_each_child(monkeypatch):
     uploaded: dict[str, bytes] = {}
-    service = _service(monkeypatch)
+    service = _service(monkeypatch, dashboard_base_url="https://dashboard.example.com")
     service._artifact_uploader = lambda task_id, name, content: (
         uploaded.__setitem__(name, content) or f"tasks/{task_id}/{name}"
     )
@@ -534,6 +545,13 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     assert len({artifact["logical_id"] for artifact in scorecard_artifacts}) == 4
     assert all(artifact["sha256"] and artifact["size_bytes"] > 0 for artifact in scorecard_artifacts)
     assert all(artifact["task_id"] == state.task.id for artifact in scorecard_artifacts)
+    assert all(
+        artifact["dashboard_url"] == (
+            f"https://dashboard.example.com/lab/reports/{state.report.id}"
+            f"?revision=1&artifact={artifact['logical_id'].replace(':', '%3A')}"
+        )
+        for artifact in scorecard_artifacts
+    )
     assert all(artifact["object_key"].startswith(f"tasks/{state.task.id}/") for artifact in scorecard_artifacts)
     assert all(artifact["object_key"] not in state.task.attachedFiles for artifact in scorecard_artifacts)
     assert len(revision.artifacts) == len(manifest["artifacts"])
@@ -557,6 +575,27 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     summary = uploaded[summary_name].decode("utf-8")
     assert summary.startswith("# Example Portfolio")
     assert "repair_guidelines" in summary
+
+
+def test_report_artifact_base_url_rejects_non_https_or_non_origin_values(monkeypatch):
+    for value in (
+        "http://dashboard.example.com",
+        "https://dashboard.example.com/path",
+        "https://user:secret@dashboard.example.com",
+    ):
+        with pytest.raises(ValueError, match="HTTPS origin"):
+            _service(monkeypatch, dashboard_base_url=value)
+
+
+def test_report_artifact_base_url_comes_from_existing_account_settings():
+    from plexus.optimization.run_report import dashboard_base_url_from_account_settings
+
+    assert dashboard_base_url_from_account_settings({
+        "hiddenMenuItems": [],
+        "reporting": {"dashboardBaseUrl": "https://dashboard.example.com/"},
+    }) == "https://dashboard.example.com"
+    assert dashboard_base_url_from_account_settings({"hiddenMenuItems": []}) is None
+    assert dashboard_base_url_from_account_settings(None) is None
 
 
 def test_multiple_milestones_preserve_full_revision_history(monkeypatch):
@@ -614,8 +653,8 @@ def test_default_artifact_path_uses_only_task_graphql_tickets_without_direct_s3(
         request.content_type for request in requests
         if request.filename.endswith((".md", ".csv"))
     } == {
-        "text/markdown; charset=utf-8",
-        "text/csv; charset=utf-8",
+        "text/markdown",
+        "text/csv",
     }
     assert all(path.startswith(f"tasks/{state.task.id}/") for path in state.task.attachedFiles)
     child_paths = {
