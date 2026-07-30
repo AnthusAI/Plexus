@@ -397,7 +397,7 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {[
-            ['Account inventory inspected', overview.scorecards_inspected ?? presentation.scorecard_count],
+            ['Scorecards inspected', overview.scorecards_inspected ?? presentation.scorecard_count],
             ['Scorecards in scope', overview.scorecards_in_scope ?? presentation.scorecard_count],
             ['Scores in portfolio', presentation.score_count],
             ['Ranked opportunities', overview.ranked_score_count ?? 0],

@@ -143,7 +143,8 @@ describe('OptimizationRunStatus', () => {
     )
 
     expect(await screen.findByText('3 of 3 ranked scores complete')).toBeInTheDocument()
-    expect(screen.getByText('Account inventory inspected')).toBeInTheDocument()
+    expect(screen.getByText('Scorecards inspected')).toBeInTheDocument()
+    expect(screen.queryByText('Account inventory inspected')).not.toBeInTheDocument()
     expect(screen.getByText('Scorecards in scope')).toBeInTheDocument()
     expect(screen.getByLabelText('Primary decision mix: 3 scores')).toBeInTheDocument()
     expect(screen.getByText('Optimize: 2')).toBeInTheDocument()
