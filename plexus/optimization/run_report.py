@@ -868,6 +868,7 @@ class OptimizationRunReportService:
             scope=run_spec.get("scope") if isinstance(run_spec, Mapping) else None,
         )
         task = self._task_lookup(self.run_key)
+        created_new_attempt = False
         predecessor: dict[str, Any] = {}
         if task is not None:
             existing_metadata = _metadata(getattr(task, "metadata", {}))
@@ -904,54 +905,79 @@ class OptimizationRunReportService:
                 status="RUNNING", dispatchStatus="LOCAL",
                 startedAt=_iso(self.now()), metadata=json.dumps(task_metadata),
             )
+            created_new_attempt = True
         else:
             task_metadata = _metadata(getattr(task, "metadata", {}))
             attempt_id = str(task_metadata.get("attempt_id") or "")
             if not attempt_id:
                 raise ValueError("existing optimization run attempt is missing attempt_id")
-        stages = self._ensure_fixed_stages(task)
-        report = self._report_lookup(task)
-        if report is None:
-            config_id = self.report_configuration_id or _get_programmatic_config_id(self.account_id, self.client)
-            parameters = {
-                "_display_title": operator_identity.display_title,
-                "_display_subtitle": operator_identity.display_scope,
-                "optimization_run": {
-                "run_key": self.run_key,
-                "attempt_id": attempt_id,
-                "lifecycle_version": LIFECYCLE_VERSION,
-                "run_spec": dict(run_spec),
-                "operator_identity": operator_identity.as_dict(),
-                "latest_revision": None,
-                "revisions": [],
-                **{key: value for key, value in predecessor.items() if value},
-            }}
-            report = Report.create(
-                client=self.client, accountId=self.account_id, taskId=task.id,
-                name=operator_identity.display_title,
-                reportConfigurationId=config_id,
-                parameters=parameters,
-                output=self._render_report_manifest(
-                    "running", None, identity=operator_identity,
-                ),
-            )
-        blocks = self._ensure_fixed_blocks(report)
-        self._state = OptimizationRunReportState(
-            task=task, report=report, blocks=blocks,
-            stages={str(getattr(stage, "name", "")): stage for stage in stages},
-            run_spec=dict(run_spec), attempt_id=attempt_id,
-            operator_identity=operator_identity,
-        )
-        running_stage = next(
-            (stage for stage in stages if str(getattr(stage, "status", "")).upper() == "RUNNING"),
-            stages[0] if stages else None,
-        )
-        if running_stage is not None and getattr(task, "currentStageId", None) != running_stage.id:
-            task.update(currentStageId=running_stage.id)
+        report = None
         try:
+            # Publish the operator-facing cover before the fixed TaskStages and
+            # ReportBlocks incur their sequential remote setup cost.
+            report = None if created_new_attempt else self._report_lookup(task)
+            if report is None:
+                config_id = self.report_configuration_id or _get_programmatic_config_id(self.account_id, self.client)
+                parameters = {
+                    "_display_title": operator_identity.display_title,
+                    "_display_subtitle": operator_identity.display_scope,
+                    "optimization_run": {
+                    "run_key": self.run_key,
+                    "attempt_id": attempt_id,
+                    "lifecycle_version": LIFECYCLE_VERSION,
+                    "run_spec": dict(run_spec),
+                    "operator_identity": operator_identity.as_dict(),
+                    "latest_revision": None,
+                    "revisions": [],
+                    **{key: value for key, value in predecessor.items() if value},
+                }}
+                report = Report.create(
+                    client=self.client, accountId=self.account_id, taskId=task.id,
+                    name=operator_identity.display_title,
+                    reportConfigurationId=config_id,
+                    parameters=parameters,
+                    output=self._render_report_manifest(
+                        "running", None, identity=operator_identity,
+                    ),
+                )
+            stages = self._ensure_fixed_stages(task)
+            blocks = self._ensure_fixed_blocks(report)
+            self._state = OptimizationRunReportState(
+                task=task, report=report, blocks=blocks,
+                stages={str(getattr(stage, "name", "")): stage for stage in stages},
+                run_spec=dict(run_spec), attempt_id=attempt_id,
+                operator_identity=operator_identity,
+            )
+            running_stage = next(
+                (stage for stage in stages if str(getattr(stage, "status", "")).upper() == "RUNNING"),
+                stages[0] if stages else None,
+            )
+            if running_stage is not None and getattr(task, "currentStageId", None) != running_stage.id:
+                task.update(currentStageId=running_stage.id)
             self._ensure_initial_envelopes(self._state)
         except Exception as exc:
-            self.fail(f"Failed to durably initialize report: {exc}")
+            message = f"Failed to durably initialize report: {exc}"
+            if self._state is not None:
+                self.fail(message)
+            else:
+                failed_metadata = _metadata(getattr(task, "metadata", {}))
+                failed_metadata["optimization_run_final_status"] = "failed"
+                failed_metadata["failure"] = message
+                try:
+                    task.update(
+                        status="FAILED",
+                        completedAt=_iso(self.now()),
+                        metadata=json.dumps(failed_metadata),
+                    )
+                except Exception:
+                    pass
+                if report is not None:
+                    try:
+                        report.update(output=self._render_report_manifest(
+                            "failed", None, message, identity=operator_identity,
+                        ))
+                    except Exception:
+                        pass
             raise OptimizationRunPublicationError("Could not initialize optimization run report") from exc
         return self._state
 

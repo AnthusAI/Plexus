@@ -760,6 +760,94 @@ def test_artifact_checksum_mismatch_is_fatal_and_marks_the_attempt_failed(monkey
     assert _Task.created[0].status == "FAILED"
 
 
+def test_start_publishes_the_report_before_initializing_remote_task_stages(monkeypatch):
+    from plexus.optimization import run_report
+
+    events: list[str] = []
+
+    class _TrackingTask(_Task):
+        @classmethod
+        def create(cls, **values):
+            events.append("task")
+            return super().create(**values)
+
+    class _TrackingReport(_Report):
+        @classmethod
+        def create(cls, **values):
+            events.append("report")
+            return super().create(**values)
+
+    class _TrackingStage(_TaskStage):
+        @classmethod
+        def create(cls, **values):
+            events.append(f"stage:{values['name']}")
+            return super().create(**values)
+
+    monkeypatch.setattr(run_report, "Task", _TrackingTask)
+    monkeypatch.setattr(run_report, "Report", _TrackingReport)
+    monkeypatch.setattr(run_report, "TaskStage", _TrackingStage)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="startup-order",
+        report_configuration_id="config-1", task_lookup=lambda _: None,
+        report_lookup=lambda _: None, block_lookup=lambda _: [], stage_lookup=lambda _: [],
+        artifact_store=_ArtifactStore(),
+    )
+
+    service.start_or_resume({"scope": {}})
+
+    assert events.index("report") < events.index("stage:preflight")
+
+
+def test_new_attempt_creates_its_report_without_scanning_report_history(monkeypatch):
+    from plexus.optimization import run_report
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="new-attempt",
+        report_configuration_id="config-1", task_lookup=lambda _: None,
+        report_lookup=lambda _task: (_ for _ in ()).throw(
+            AssertionError("new attempts must not scan historical reports")
+        ),
+        block_lookup=lambda _: [], stage_lookup=lambda _: [],
+        artifact_store=_ArtifactStore(),
+    )
+
+    state = service.start_or_resume({"scope": {}})
+
+    assert state.report.taskId == state.task.id
+
+
+def test_stage_initialization_failure_marks_the_task_failed_after_publishing_the_report(monkeypatch):
+    from plexus.optimization import run_report
+
+    class _FailingStage(_TaskStage):
+        @classmethod
+        def create(cls, **_values):
+            raise RuntimeError("stage service unavailable")
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "TaskStage", _FailingStage)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="startup-failure",
+        report_configuration_id="config-1", task_lookup=lambda _: None,
+        report_lookup=lambda _: None, block_lookup=lambda _: [], stage_lookup=lambda _: [],
+        artifact_store=_ArtifactStore(),
+    )
+
+    with pytest.raises(run_report.OptimizationRunPublicationError, match="initialize"):
+        service.start_or_resume({"scope": {}})
+
+    assert len(_Report.created) == 1
+    assert _Task.created[0].status == "FAILED"
+    assert "stage service unavailable" in _Report.created[0].output
+
+
 def test_publish_failure_marks_task_failed_and_raises_without_silent_progress(monkeypatch):
     class _FailingBlock(_Block):
         def update(self, **values):
