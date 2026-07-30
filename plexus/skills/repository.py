@@ -12,6 +12,14 @@ import yaml
 
 _FRONTMATTER_DELIM = "---"
 _SKILL_FILE_NAME = "SKILL.md"
+_PLEXUS_METADATA_KEYS = (
+    "tags",
+    "applies_to",
+    "console_supported",
+    "requires_subagent",
+    "allowed_modes",
+    "resources",
+)
 
 
 class InvalidSkillKeyError(ValueError):
@@ -214,6 +222,12 @@ def _skill_id_from_path(path: str) -> str:
 
 def _normalize_metadata(metadata: dict[str, Any], skill_id: str) -> dict[str, Any]:
     normalized = dict(metadata)
+    standard_metadata = metadata.get("metadata")
+    if isinstance(standard_metadata, dict):
+        for key in _PLEXUS_METADATA_KEYS:
+            if key not in normalized and key in standard_metadata:
+                normalized[key] = standard_metadata[key]
+
     normalized["id"] = skill_id
     normalized.setdefault("name", skill_id)
     normalized.setdefault("description", "")

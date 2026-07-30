@@ -101,6 +101,59 @@ def test_list_filters_by_query_tags_and_mode(tmp_path) -> None:
     assert [entry["id"] for entry in result.entries] == ["score-code-editor"]
 
 
+def test_standard_nested_metadata_is_available_to_plexus_filters(tmp_path) -> None:
+    path = tmp_path / "software-delivery-team" / "SKILL.md"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "---\n"
+        "name: software-delivery-team\n"
+        "description: Coordinate a delivery team\n"
+        "metadata:\n"
+        "  tags: [software-delivery, multi-agent]\n"
+        "  applies_to: [delivery coordination]\n"
+        "  console_supported: false\n"
+        "  requires_subagent: true\n"
+        "  allowed_modes: [ide]\n"
+        "  resources: [artifacts.md]\n"
+        "---\n"
+        "# Software Delivery Team\n",
+        encoding="utf-8",
+    )
+
+    repo = SkillRepository(str(tmp_path))
+    result = repo.list_skills(tags=["multi-agent"], mode="ide")
+
+    assert [entry["id"] for entry in result.entries] == ["software-delivery-team"]
+    assert result.entries[0]["requires_subagent"] is True
+    assert result.entries[0]["console_supported"] is False
+    skill = repo.get_skill("software-delivery-team", mode="ide")
+    assert skill.metadata["resources"] == ["artifacts.md"]
+
+
+def test_legacy_top_level_metadata_takes_precedence_over_nested_metadata(tmp_path) -> None:
+    path = tmp_path / "portable-skill" / "SKILL.md"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "---\n"
+        "name: portable-skill\n"
+        "description: Portable skill\n"
+        "tags: [legacy]\n"
+        "requires_subagent: false\n"
+        "metadata:\n"
+        "  tags: [nested]\n"
+        "  requires_subagent: true\n"
+        "---\n"
+        "# Portable Skill\n",
+        encoding="utf-8",
+    )
+
+    repo = SkillRepository(str(tmp_path))
+    skill = repo.get_skill("portable-skill")
+
+    assert skill.metadata["tags"] == ["legacy"]
+    assert skill.metadata["requires_subagent"] is False
+
+
 def test_get_skill_returns_body_metadata_and_resource_refs(tmp_path) -> None:
     skill_path = _write_skill(
         tmp_path,
@@ -205,6 +258,11 @@ def test_real_repo_skills_have_explicit_console_support_classification() -> None
 
     ids = {entry["id"] for entry in result.entries}
     assert {
+        "software-delivery-team",
+        "product-owner",
+        "engineering-lead",
+        "coding-agent",
+        "review-agent",
         "score-code-editor",
         "score-setup",
         "guidelines",
@@ -212,6 +270,20 @@ def test_real_repo_skills_have_explicit_console_support_classification() -> None
         "client-redaction",
     } <= ids
     assert result.invalid == []
+
+    entries_by_id = {entry["id"]: entry for entry in result.entries}
+    delivery_role_requirements = {
+        "software-delivery-team": True,
+        "product-owner": True,
+        "engineering-lead": True,
+        "coding-agent": False,
+        "review-agent": False,
+    }
+    for skill_id, requires_subagent in delivery_role_requirements.items():
+        entry = entries_by_id[skill_id]
+        assert entry["console_supported"] is False
+        assert entry["requires_subagent"] is requires_subagent
+        assert entry["allowed_modes"] == ["ide"]
 
     required_fields = {
         "tags",
@@ -222,5 +294,19 @@ def test_real_repo_skills_have_explicit_console_support_classification() -> None
     }
     for skill_file in sorted(skills_root.glob("*/SKILL.md")):
         frontmatter = _read_frontmatter(skill_file)
-        missing = required_fields - set(frontmatter)
+        nested_metadata = frontmatter.get("metadata")
+        classification = dict(nested_metadata) if isinstance(nested_metadata, dict) else {}
+        classification.update(
+            {key: frontmatter[key] for key in required_fields if key in frontmatter}
+        )
+        missing = required_fields - set(classification)
         assert not missing, f"{skill_file} missing explicit fields: {sorted(missing)}"
+
+    delivery_skill = repo.get_skill("software-delivery-team", mode="ide")
+    assert delivery_skill.metadata["console_supported"] is False
+    assert delivery_skill.metadata["requires_subagent"] is True
+    assert "software-delivery-team/artifacts.md" in delivery_skill.resources
+    assert (
+        "software-delivery-team/references/host-adapters.md"
+        in delivery_skill.resources
+    )
