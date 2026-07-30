@@ -249,6 +249,51 @@ function LiveProgressCard({ progress }: { progress: LiveProgress }) {
   )
 }
 
+function finiteNonNegative(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+}
+
+function PrioritySignal({
+  name,
+  scoreName,
+  value,
+  maximum,
+  valueText,
+  colorClass,
+}: {
+  name: string
+  scoreName: string
+  value: number
+  maximum: number
+  valueText: string
+  colorClass: string
+}) {
+  const safeValue = finiteNonNegative(value)
+  const safeMaximum = Math.max(finiteNonNegative(maximum), safeValue, 1)
+  const percentage = Math.min(100, safeValue / safeMaximum * 100)
+
+  return (
+    <div className="min-w-0">
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="truncate text-muted-foreground">{name}</span>
+        <span className="shrink-0 tabular-nums text-foreground">{valueText}</span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
+        <div
+          role="meter"
+          aria-label={`${name} for ${scoreName}`}
+          aria-valuemin={0}
+          aria-valuemax={safeMaximum}
+          aria-valuenow={safeValue}
+          aria-valuetext={valueText}
+          className={`h-full min-w-0 rounded-full ${colorClass}`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
 function parsePresentation(value: unknown): StakeholderPresentation {
   const parsed = typeof value === 'string' ? JSON.parse(value) : value
   const data = record(parsed)
@@ -546,6 +591,14 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
     .filter(([, count]) => count > 0)
     .sort((left, right) => right[1] - left[1])
   const decisionTotal = decisions.reduce((total, [, count]) => total + count, 0)
+  const maximumPriorityOpportunity = Math.max(
+    0,
+    ...presentation.top_priorities.map(priority => finiteNonNegative(priority.opportunity)),
+  )
+  const maximumPriorityFeedback = Math.max(
+    0,
+    ...presentation.top_priorities.map(priority => finiteNonNegative(priority.evidence_count)),
+  )
 
   return (
     <div className="space-y-6">
@@ -659,18 +712,24 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
 
       <section className="rounded-lg bg-card p-6">
         <h3 className="text-lg font-semibold">Top priorities</h3>
-        <p className="text-sm text-muted-foreground">Shown in original evidence order. Cooldown and other policy gates remain visible and do not renumber the list.</p>
+        <p className="text-sm text-muted-foreground">Shown in original evidence order. Bars compare the visible priorities: opportunity and feedback volume use the largest visible value, while disagreement uses a fixed 0–100% scale. Cooldown and other policy gates remain visible and do not renumber the list.</p>
         <div className="mt-3 space-y-2">
-          {presentation.top_priorities.map((priority, index) => (
+          {presentation.top_priorities.map((priority, index) => {
+            const scoreName = priority.score_name || 'Unlabeled score'
+            const opportunity = finiteNonNegative(priority.opportunity)
+            const feedbackVolume = finiteNonNegative(priority.evidence_count)
+            const hasDisagreementRate = typeof priority.disagreement_rate === 'number' && Number.isFinite(priority.disagreement_rate)
+            const disagreementRate = hasDisagreementRate
+              ? Math.min(1, Math.max(0, priority.disagreement_rate as number))
+              : 0
+            return (
             <div key={`${priority.scorecard_name}-${priority.score_name}-${index}`} className="rounded-md bg-muted/30 p-4 text-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-3">
                   <span className="rounded bg-muted px-2 py-1 text-xs font-medium">#{priority.rank ?? index + 1}</span>
                   <div>
-                    <div><span className="font-medium">{priority.score_name || 'Unlabeled score'}</span><span className="text-muted-foreground"> · {priority.scorecard_name || 'Unlabeled scorecard'}</span></div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {priority.evidence_count ?? 0} valid feedback · {typeof priority.disagreement_rate === 'number' ? `${(priority.disagreement_rate * 100).toFixed(1)}% disagreement` : 'disagreement rate unavailable'} · {label(priority.readiness || 'inconclusive')}
-                    </div>
+                    <div><span className="font-medium">{scoreName}</span><span className="text-muted-foreground"> · {priority.scorecard_name || 'Unlabeled scorecard'}</span></div>
+                    <div className="mt-1 text-xs text-muted-foreground">{label(priority.readiness || 'inconclusive')}</div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       {label(priority.review_disposition || priority.policy_disposition || 'eligible')}
                       {priority.policy_reason && priority.policy_reason !== 'meets_rank_policy' ? ` · ${label(priority.policy_reason)}` : ''}
@@ -678,11 +737,37 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
                     </div>
                   </div>
                 </div>
-                <div className="text-right text-muted-foreground">{priority.opportunity ?? 0} reviewed disagreements<br />{label(priority.next_action || 'review')}</div>
+                <div className="text-right text-muted-foreground">{label(priority.next_action || 'review')}</div>
+              </div>
+              <div className="mt-4 grid gap-3 xl:grid-cols-3">
+                <PrioritySignal
+                  name="Ranking opportunity"
+                  scoreName={scoreName}
+                  value={opportunity}
+                  maximum={maximumPriorityOpportunity}
+                  valueText={`${opportunity} reviewed disagreements`}
+                  colorClass="bg-primary"
+                />
+                <PrioritySignal
+                  name="Feedback volume"
+                  scoreName={scoreName}
+                  value={feedbackVolume}
+                  maximum={maximumPriorityFeedback}
+                  valueText={`${feedbackVolume} valid feedback`}
+                  colorClass="bg-blue-500"
+                />
+                <PrioritySignal
+                  name="Disagreement rate"
+                  scoreName={scoreName}
+                  value={disagreementRate}
+                  maximum={1}
+                  valueText={hasDisagreementRate ? `${(disagreementRate * 100).toFixed(1)}%` : 'Unavailable'}
+                  colorClass="bg-amber-500"
+                />
               </div>
               {priority.rationale && <p className="mt-3 text-muted-foreground">{priority.rationale}</p>}
             </div>
-          ))}
+          )})}
         </div>
       </section>
 

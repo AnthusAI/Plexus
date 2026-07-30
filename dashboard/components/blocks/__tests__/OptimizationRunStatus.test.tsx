@@ -145,6 +145,24 @@ describe('OptimizationRunStatus', () => {
           collection_state: 'continue_broad_collection',
           rationale: 'Reviewed errors show a safe opportunity.',
           next_action: 'request_optimization_approval',
+        }, {
+          scorecard_name: 'Example Portfolio',
+          score_name: 'Secondary Score',
+          opportunity: 21,
+          rank: 2,
+          evidence_count: 60,
+          disagreement_rate: 0.10,
+          readiness: 'insufficient_evidence',
+          collection_state: 'continue_broad_collection',
+          rationale: 'More feedback is needed.',
+          next_action: 'collect_more_feedback',
+        }, {
+          scorecard_name: 'Example Portfolio',
+          score_name: 'Unavailable Evidence Score',
+          rank: 3,
+          readiness: 'incomplete',
+          collection_state: 'inconclusive',
+          next_action: 'review_evidence',
         }],
         scorecards: [{
           scorecard_ref: 'safe-ref',
@@ -229,6 +247,14 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getByText(/1 are scheduled in this run; 0 are deferred by the safety cap/)).toBeInTheDocument()
     expect(screen.getByText(/120 valid feedback/)).toBeInTheDocument()
     expect(screen.getByText('Reviewed errors show a safe opportunity.')).toBeInTheDocument()
+    expect(screen.getByRole('meter', { name: 'Ranking opportunity for Priority Score' })).toHaveAttribute('aria-valuenow', '42')
+    expect(screen.getByRole('meter', { name: 'Ranking opportunity for Secondary Score' })).toHaveStyle({ width: '50%' })
+    expect(screen.getByRole('meter', { name: 'Feedback volume for Secondary Score' })).toHaveStyle({ width: '50%' })
+    expect(screen.getByRole('meter', { name: 'Disagreement rate for Priority Score' })).toHaveStyle({ width: '35%' })
+    expect(screen.getByRole('meter', { name: 'Disagreement rate for Secondary Score' })).toHaveStyle({ width: '10%' })
+    expect(screen.getByRole('meter', { name: 'Ranking opportunity for Unavailable Evidence Score' })).toHaveStyle({ width: '0%' })
+    expect(screen.getByRole('meter', { name: 'Feedback volume for Unavailable Evidence Score' })).toHaveStyle({ width: '0%' })
+    expect(screen.getByRole('meter', { name: 'Disagreement rate for Unavailable Evidence Score' })).toHaveAttribute('aria-valuetext', 'Unavailable')
     expect(mockReadTaskArtifact).toHaveBeenCalledTimes(1)
 
     rerender(
