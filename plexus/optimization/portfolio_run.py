@@ -1148,7 +1148,7 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
                 "dashboard_url": dashboard_url,
             })
     outcomes = []
-    for row in _ranked_rows(rank):
+    for rank_position, row in enumerate(ranked_rows, start=1):
         key = _target_key(row)
         assessment = assessments.get(key, {})
         diagnosis = diagnoses.get(key, {})
@@ -1175,6 +1175,7 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             rationale = "Deterministic assessment found an opportunity; semantic diagnosis is not complete for this score."
             coverage_status = "incomplete"
         outcomes.append({
+            "rank": rank_position,
             "scorecard_name": row.get("scorecard_name") or "Unlabeled scorecard",
             "score_name": row.get("score_name") or "Unlabeled score",
             "scorecard_ref": sha256(key[0].encode("utf-8")).hexdigest()[:16] if key else None,

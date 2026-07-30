@@ -810,6 +810,7 @@ def test_stakeholder_overview_explains_current_work_and_next_durable_checkpoint(
 
 def test_stakeholder_overview_explains_ranking_and_semantic_diagnosis_cutoffs():
     from plexus.optimization.portfolio_run import _stakeholder_view
+    from plexus.optimization.run_report import _validate_view
 
     ranked_rows = [
         {
@@ -858,3 +859,6 @@ def test_stakeholder_overview_explains_ranking_and_semantic_diagnosis_cutoffs():
     assert overview["diagnosis_max_count"] == 25
     assert view["priorities"][0]["rank"] == 1
     assert view["priorities"][0]["disagreement_rate"] == 0.15
+    assert view["feedback_investment"][0]["rank"] == 1
+    assert view["optimization_outcomes"][0]["rank"] == 1
+    _validate_view(view)

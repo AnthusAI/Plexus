@@ -101,7 +101,7 @@ _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("Next Action", "next_action"), ("Dashboard Link", "dashboard_url"),
     ),
     "feedback_investment": (
-        ("Scorecard", "scorecard_name"), ("Score", "score_name"),
+        ("Rank", "rank"), ("Scorecard", "scorecard_name"), ("Score", "score_name"),
         ("Evidence Count", "evidence_count"), ("State", "state"),
         ("Coverage", "coverage_status"), ("Recent Trend", "trend"),
         ("Recommendation", "recommendation"), ("Readiness", "readiness"),
@@ -109,7 +109,7 @@ _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("Dashboard Link", "dashboard_url"),
     ),
     "questions_and_issues": (
-        ("Type", "kind"), ("Scorecard", "scorecard_name"), ("Score", "score_name"),
+        ("Rank", "rank"), ("Type", "kind"), ("Scorecard", "scorecard_name"), ("Score", "score_name"),
         ("Evidence Count", "evidence_count"), ("State", "state"),
         ("Coverage", "coverage_status"), ("Guideline State", "guideline_state"),
         ("Feedback/Rubric State", "feedback_rubric_state"),
@@ -117,7 +117,7 @@ _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("Next Action", "next_action"), ("Dashboard Link", "dashboard_url"),
     ),
     "optimization_outcomes": (
-        ("Scorecard", "scorecard_name"), ("Score", "score_name"),
+        ("Rank", "rank"), ("Scorecard", "scorecard_name"), ("Score", "score_name"),
         ("Evidence Count", "evidence_count"), ("Outcome", "outcome"),
         ("Evidence Status", "evidence_status"), ("Coverage", "coverage_status"),
         ("Recent Trend", "trend"), ("Collection State", "collection_state"),
