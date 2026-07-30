@@ -77,6 +77,7 @@ class OptimizationPortfolioRunner:
             "assessments": [],
             "diagnoses": [],
             "diagnosis_coverage": _pending_diagnosis_coverage(request),
+            "approved_targets": [],
             "dispatch": None,
             "reviews": [],
             "actions": [],
@@ -306,6 +307,7 @@ class OptimizationPortfolioRunner:
                 })
             state["approval_requests"] = pending_approval_requests
             state["actions"] = action_rows
+            state["approved_targets"] = list(approvals)
             if pending_approval_requests and len(pending_approval_requests) != len(review_requests):
                 self._publish(service, "approval", state)
 
@@ -1026,6 +1028,7 @@ def _evidence_snapshot(state: Mapping[str, Any]) -> dict[str, Any]:
         "diagnosis_coverage": dict(state.get("diagnosis_coverage") or {}),
         "actions": list(state.get("actions") or []),
         "approval_requests": list(state.get("approval_requests") or []),
+        "approved_targets": list(state.get("approved_targets") or []),
         "dispatch": state.get("dispatch"),
         "reviews": list(state.get("reviews") or []),
         "summary": state.get("summary"),
@@ -1084,7 +1087,22 @@ def _stakeholder_dashboard_url(*packets: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _milestone_narrative(milestone: str) -> tuple[str, str]:
+def _milestone_narrative(
+    milestone: str,
+    *,
+    approved_target_count: int = 0,
+    dispatched_optimizer_count: int = 0,
+) -> tuple[str, str]:
+    if milestone == "optimization" and approved_target_count == 0:
+        return (
+            "No optimizations were launched because no targets were approved in this run.",
+            "The run will finalize the completed analysis and any unresolved human actions.",
+        )
+    if milestone == "optimization_review" and dispatched_optimizer_count == 0:
+        return (
+            "No optimization results are available because no optimizer procedure was launched.",
+            "The final report will preserve the ranked findings, policy decisions, and incomplete evidence.",
+        )
     narratives = {
         "started": (
             "Enumerating every scorecard and analyzing the frozen feedback window.",
@@ -1357,11 +1375,24 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
     scope_coverage = coverage.get("scope") if isinstance(coverage.get("scope"), Mapping) else {}
     activity_coverage = coverage.get("activity") if isinstance(coverage.get("activity"), Mapping) else {}
     diagnosis_coverage = state.get("diagnosis_coverage") if isinstance(state.get("diagnosis_coverage"), Mapping) else {}
+    approved_target_count = len(state.get("approved_targets") or [])
+    dispatch = state.get("dispatch") if isinstance(state.get("dispatch"), Mapping) else {}
+    dispatched_optimizer_count = sum(
+        1
+        for batch in dispatch.get("batches") or []
+        if isinstance(batch, Mapping)
+        for row in batch.get("dispatches") or []
+        if isinstance(row, Mapping) and row.get("status") == "dispatched"
+    )
     terminal_status = str(state.get("terminal_status") or "").strip().lower()
     if terminal_status:
         current_activity, next_checkpoint = _terminal_narrative(terminal_status)
     else:
-        current_activity, next_checkpoint = _milestone_narrative(milestone)
+        current_activity, next_checkpoint = _milestone_narrative(
+            milestone,
+            approved_target_count=approved_target_count,
+            dispatched_optimizer_count=dispatched_optimizer_count,
+        )
     ranked_count = len(ranked_rows)
     evidence_ranked_count = len(evidence_rows)
     assessed_count = len(assessments)
@@ -1442,6 +1473,9 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             "diagnosis_skipped_count": diagnosis_skipped,
             "diagnosis_max_count": diagnosis_max,
             "pending_approval_count": len(state.get("approval_requests") or []),
+            "approved_target_count": approved_target_count,
+            "dispatched_optimizer_count": dispatched_optimizer_count,
+            "optimizer_review_count": len(state.get("reviews") or []),
             "notes": f"Latest milestone: {milestone}. No score, guideline, champion, or feedback setting is changed automatically.",
         },
         "portfolio": portfolio,

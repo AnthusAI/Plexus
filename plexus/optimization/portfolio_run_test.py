@@ -925,6 +925,66 @@ def test_stakeholder_overview_explains_current_work_and_next_durable_checkpoint(
     assert "deterministic readiness" in ranked["overview"]["current_activity"]
 
 
+def test_stakeholder_overview_does_not_imply_optimizer_work_when_no_targets_were_approved():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    state = {
+        "rank": {"coverage": {"complete": True}, "ranked": []},
+        "assessments": [],
+        "diagnoses": [],
+        "reviews": [],
+        "approved_targets": [],
+        "dispatch": {"batches": [], "rejected": []},
+        "approval_requests": [],
+        "diagnosis_coverage": {
+            "selected_count": 0,
+            "scheduled_count": 0,
+            "completed_count": 0,
+            "failed_count": 0,
+            "deferred_by_cap_count": 0,
+        },
+    }
+
+    optimization = _stakeholder_view(state, milestone="optimization")["overview"]
+    assert "no optimizations were launched" in optimization["current_activity"].lower()
+    assert "evaluations will be reviewed" not in optimization["next_checkpoint"].lower()
+
+    review = _stakeholder_view(state, milestone="optimization_review")["overview"]
+    assert "no optimization results" in review["current_activity"].lower()
+    assert "reviewing completed optimizer" not in review["current_activity"].lower()
+
+
+def test_stakeholder_overview_retains_active_narration_for_dispatched_optimizer_work():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    state = {
+        "rank": {"coverage": {"complete": True}, "ranked": []},
+        "assessments": [],
+        "diagnoses": [],
+        "reviews": [{"procedure_id": "procedure-1"}],
+        "approved_targets": [{"scorecard_id": "card", "score_id": "score"}],
+        "dispatch": {
+            "batches": [{
+                "dispatches": [{"status": "dispatched", "procedure_id": "procedure-1"}],
+            }],
+            "rejected": [],
+        },
+        "approval_requests": [],
+        "diagnosis_coverage": {
+            "selected_count": 0,
+            "scheduled_count": 0,
+            "completed_count": 0,
+            "failed_count": 0,
+            "deferred_by_cap_count": 0,
+        },
+    }
+
+    optimization = _stakeholder_view(state, milestone="optimization")["overview"]
+    assert "approved optimization" in optimization["current_activity"].lower()
+    review = _stakeholder_view(state, milestone="optimization_review")["overview"]
+    assert "optimizer and evaluation evidence" in review["current_activity"].lower()
+
+
 def test_stakeholder_overview_separates_complete_inventory_from_incomplete_diagnosis_results():
     from plexus.optimization.portfolio_run import _stakeholder_view
     from plexus.optimization.run_report import _validate_view
