@@ -44,10 +44,18 @@ describe('useLivingReportRefresh', () => {
     jest.clearAllMocks()
   })
 
-  function Harness({ status, refresh }: { status: string; refresh: jest.Mock }) {
+  function Harness({
+    status,
+    refresh,
+    taskId = 'task-1',
+  }: {
+    status?: string
+    refresh: jest.Mock
+    taskId?: string | null
+  }) {
     useLivingReportRefresh({
       reportId: 'report-1',
-      taskId: 'task-1',
+      taskId,
       taskStatus: status,
       refresh,
     })
@@ -68,7 +76,7 @@ describe('useLivingReportRefresh', () => {
     expect(refresh).toHaveBeenNthCalledWith(2, 'report-1')
   })
 
-  it('polls active reports and stops polling when the linked task becomes terminal', () => {
+  it('keeps reconciling the selected report after the linked task becomes terminal', () => {
     const refresh = jest.fn()
     const { rerender } = render(<Harness status="RUNNING" refresh={refresh} />)
 
@@ -79,8 +87,8 @@ describe('useLivingReportRefresh', () => {
     rerender(<Harness status="COMPLETED" refresh={refresh} />)
     expect(refresh).toHaveBeenCalledTimes(1)
     refresh.mockClear()
-    jest.advanceTimersByTime(LIVING_REPORT_REFRESH_INTERVAL_MS * 2)
-    expect(refresh).not.toHaveBeenCalled()
+    jest.advanceTimersByTime(LIVING_REPORT_REFRESH_INTERVAL_MS)
+    expect(refresh).toHaveBeenCalledWith('report-1')
   })
 
   it('retains the report task id while the nested task relation is still hydrating', () => {
@@ -88,7 +96,18 @@ describe('useLivingReportRefresh', () => {
     expect(resolveLivingReportTaskId({ taskId: 'task-1', task: { id: 'task-2' } })).toBe('task-2')
   })
 
-  it('performs one final reconciliation when the linked task becomes terminal', () => {
+  it('reconciles a selected report while its Task link is still hydrating', () => {
+    const refresh = jest.fn()
+    render(<Harness taskId={null} refresh={refresh} />)
+
+    jest.advanceTimersByTime(LIVING_REPORT_REFRESH_INTERVAL_MS)
+
+    expect(refresh).toHaveBeenCalledWith('report-1')
+    expect(observeTaskUpdates).not.toHaveBeenCalled()
+    expect(observeTaskStageUpdates).not.toHaveBeenCalled()
+  })
+
+  it('performs an immediate reconciliation when the linked task becomes terminal', () => {
     const refresh = jest.fn()
     const { rerender } = render(<Harness status="RUNNING" refresh={refresh} />)
     refresh.mockClear()
@@ -98,8 +117,8 @@ describe('useLivingReportRefresh', () => {
     expect(refresh).toHaveBeenCalledTimes(1)
     expect(refresh).toHaveBeenCalledWith('report-1')
     refresh.mockClear()
-    jest.advanceTimersByTime(LIVING_REPORT_REFRESH_INTERVAL_MS * 2)
-    expect(refresh).not.toHaveBeenCalled()
+    jest.advanceTimersByTime(LIVING_REPORT_REFRESH_INTERVAL_MS)
+    expect(refresh).toHaveBeenCalledWith('report-1')
   })
 
   it('cleans up both subscriptions and the active interval', () => {
