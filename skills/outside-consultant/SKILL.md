@@ -21,7 +21,9 @@ metadata:
 
 Act as an optional peer advisor outside the delivery hierarchy. Challenge what
 is happening against what should be happening without taking product,
-technical, implementation, review, or acceptance ownership.
+technical, implementation, review, or acceptance ownership. The active delivery
+session combines Product Owner and Engineering Lead responsibility; remain
+outside that role.
 
 Read the repository's governing instructions and the
 [software-delivery-team](../software-delivery-team/SKILL.md) role model. Use the
@@ -48,8 +50,8 @@ model slug. Record:
 
 Continue when the effective profile is unconfirmed. Never infer confirmation
 from a request, UI assumption, status listing, or self-report. The delivery
-suite's Cursor Auto rule remains specific to spawned Coding and Review agents;
-it does not select the consultant's fresh-session profile.
+suite's Cursor Auto rule remains specific to spawned Coding Agents; it does not
+select the consultant's fresh-session profile.
 
 ## Establish the consultation scope
 
@@ -125,16 +127,15 @@ Use these classifications:
   current direction
 - `Question`: uncertainty that must be resolved before stronger advice is safe
 
-Product and vision recommendations belong to the Product Owner. Architecture
-and delivery recommendations belong to the Engineering Lead. Cross-boundary or
-reserved decisions belong to the human.
+Product, vision, architecture, and delivery recommendations belong to the
+combined main delivery agent. Reserved decisions belong to the human CEO.
 
 Strategic contradictions and major risks require the suggested owner to reply
 on the same targeted issue with the finding ID and comment reference, using
 `adopt`, `defer`, `reject`, or `investigate` plus rationale.
 Advice is not itself a scope change, task assignment, review finding, or
-acceptance decision. Coding and Review agents act only when the Engineering
-Lead incorporates it into an authorized packet.
+acceptance decision. Coding Agents act only when the main delivery agent
+incorporates it into an authorized task.
 
 ## Publish targeted comments, then the synthesis
 
@@ -188,7 +189,7 @@ session open.
 ## Avoid these failures
 
 - Acting from a spawned or nested session
-- Becoming a Product Owner, Engineering Lead, implementer, or reviewer
+- Becoming the main delivery agent, implementer, or reviewer
 - Treating advice as authority to change scope, code, Kanbus state, or status
 - Reviewing only the implementation while ignoring vision and opportunity cost
 - Producing generic criticism without repository or Kanbus evidence

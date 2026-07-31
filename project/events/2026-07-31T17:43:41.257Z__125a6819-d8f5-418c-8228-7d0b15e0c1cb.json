@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "125a6819-d8f5-418c-8228-7d0b15e0c1cb",
+  "issue_id": "plx-2a40fe42-182a-4d92-8013-4a1aea53b7cd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T17:43:41.257Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Simplify the repository delivery suite so the active human-facing agent owns both product and technical leadership, delegates only bounded coding work, reviews results directly, and challenges work against vision, value, and inversion before execution.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Simplify software delivery agent roles"
+  }
+}
