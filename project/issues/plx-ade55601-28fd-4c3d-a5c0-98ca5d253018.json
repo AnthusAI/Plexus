@@ -1,0 +1,25 @@
+{
+  "id": "plx-ade55601-28fd-4c3d-a5c0-98ca5d253018",
+  "title": "Show aggregate optimization status and expandable score details",
+  "description": "As an optimization stakeholder, I want the living Report to summarize portfolio status at a glance and let me expand scorecard and score details, so that I can understand the run without opening raw evidence first.\n\nOut of scope:\n- New GraphQL models or infrastructure resources.\n- Eagerly loading every score detail.\n- Limiting how many sections a user may expand.\n\nFeature: Glanceable optimization Report\n\nScenario: Understand aggregate progress at a glance\nGiven a living optimization Report has a published revision\nWhen a stakeholder opens the Report\nThen the top section shows lifecycle, coverage, work completed, primary decision mix, top priorities, pending actions, and the next checkpoint\nAnd every visual has a text or table equivalent\n\nScenario: Reconcile primary decision totals\nGiven each score may have several overlapping findings\nWhen the Report builds the primary decision chart\nThen every score appears in exactly one primary next-action category\nAnd secondary overlapping issue counts are shown separately\n\nScenario: Expand scorecards and scores on demand\nGiven the portfolio contains many scorecards and scores\nWhen a stakeholder expands one or more scorecards\nThen each remains independently expanded\nAnd score rows and artifact links load on demand\nAnd expanding a score reveals its rationale, evidence, and next action\n\nScenario: Explain incomplete termination\nGiven a run stops with incomplete evidence or a configured work limit\nWhen the Report reaches that state\nThen the overview prominently explains why it stopped\nAnd states the next operator action\n\nScenario: Preserve accessible alternatives\nGiven aggregate charts are displayed\nWhen a user cannot interpret or access the chart\nThen equivalent labeled counts and descriptions remain available",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "77a6c3b6-f32c-45a5-bdf6-3f86ee04afd0",
+      "author": "ryan.porter",
+      "text": "Implemented the first aggregate living-report presentation checkpoint: mutually exclusive primary-decision counts with separate overlapping issue counts, glanceable lifecycle and coverage metrics, top priorities, independently expandable scorecards, on-demand score-detail loading, and exact-revision Markdown/CSV links. Focused validation is green: 46 Python report/orchestration tests, 10 dashboard artifact/report tests, and dashboard TypeScript compilation. No Amplify resources or schema were changed. Next: commit this checkpoint, visually exercise it with a fresh local run, then add action-worthy per-score narrative artifacts and refine any usability defects found.",
+      "created_at": "2026-07-30T16:25:26.157248Z"
+    }
+  ],
+  "created_at": "2026-07-30T16:14:10.935178Z",
+  "updated_at": "2026-07-30T16:25:26.157248Z",
+  "closed_at": null,
+  "custom": {}
+}

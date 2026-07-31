@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "07874a48-51b6-4860-98c8-9c0cac121cdb",
+  "issue_id": "plx-36ed05aa-eb3e-4c70-9aa5-5432b73380fe",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T21:53:07.290Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Publish distinct ranking and assessment milestones",
+    "description": "As an optimization stakeholder, I want ranking and deterministic assessment published as separate durable milestones, so that a long-running portfolio analysis shows useful progress before semantic diagnosis begins.\n\nIncluded:\n- Publish the complete ranking immediately after exhaustive ranking succeeds.\n- Publish deterministic assessment after every ranked score is assessed.\n- Advance the existing living Report and Task stages without creating another Report.\n- Preserve honest partial coverage and immutable workbook revisions.\n\nExcluded:\n- Per-score workbook publication.\n- Optimizer launch or operational score mutation.\n\nFeature: Visible portfolio analysis progress\n\nScenario: Publish ranking before assessment\n  Given an exact exhaustive ranking\n  When the portfolio run begins deterministic assessment\n  Then the living Report publishes a ranking milestone first\n  And the ranking revision contains no invented assessment conclusions\n\nScenario: Publish assessment before diagnosis\n  Given every ranked score has been assessed\n  When semantic diagnosis is about to begin\n  Then the same Report publishes an assessment milestone\n  And semantic diagnosis starts only after that milestone is durable\n\nScenario: Stop when milestone publication fails\n  Given a ranking or assessment revision cannot be published\n  When the runner attempts to advance\n  Then the run fails before semantic diagnosis or optimizer execution.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

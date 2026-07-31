@@ -50,6 +50,7 @@ def test_create_task():
     assert 'mutation CreateTask($input: CreateTaskInput!)' in mutation
     assert 'createTask(input: $input)' in mutation
 
+
 def test_update_task():
     mock_client = MagicMock()
     mock_task = Task(

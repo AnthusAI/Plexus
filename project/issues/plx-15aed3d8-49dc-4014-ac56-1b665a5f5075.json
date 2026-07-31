@@ -1,0 +1,37 @@
+{
+  "id": "plx-15aed3d8-49dc-4014-ac56-1b665a5f5075",
+  "title": "Prioritize actionable candidates under semantic diagnosis caps",
+  "description": "As an operator, I want a bounded semantic-diagnosis budget to prioritize actionable optimization candidates, so that known structural blockers do not consume the only model-backed slot while launchable candidates remain unreviewed.\n\nFeature: Actionable semantic diagnosis ordering\nScenario: A structurally blocked evidence leader does not consume a scarce diagnosis slot\n  Given the highest evidence-ranked score has a deterministic missing or invalid rubric blocker\n  And a lower evidence-ranked score is structurally ready for semantic diagnosis and possible optimization\n  And the run permits one semantic diagnosis\n  When the portfolio selects its semantic diagnosis scope\n  Then it selects the structurally ready score\n  And it keeps the blocked score visible with its original evidence rank and repair action\n  And it does not spend semantic budget re-proving the known mechanical blocker\n\nScenario: Actionable candidates retain evidence order\n  Given multiple structurally ready candidates\n  When a bounded semantic diagnosis scope is selected\n  Then selected candidates retain their original evidence ranking order\n\nOut of scope: changing the evidence ranking metric, hiding blocked scores, automatic promotion, or increasing caller budgets.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "29d15e44-bba2-4dc0-b452-62c78ebf4143",
+      "author": "ryan.porter",
+      "text": "Production dogfooding showed the sole bounded semantic slot consumed by a candidate with an already-known mechanical rubric blocker, returning incomplete evidence while structurally ready candidates remained unreviewed. Adding an ordering specification that preserves evidence rank and visibility but prioritizes actionable diagnosis work.",
+      "created_at": "2026-07-31T14:33:55.125711Z"
+    },
+    {
+      "id": "e1ca4c6a-ed24-4618-b4d3-e34600142125",
+      "author": "ryan.porter",
+      "text": "Implementing the bounded diagnosis-selection fix with an outside-in test: deterministic rubric repair blockers stay visible at their evidence rank but do not consume scarce semantic slots; structurally actionable candidates retain evidence order.",
+      "created_at": "2026-07-31T14:34:18.562988Z"
+    },
+    {
+      "id": "8fe5d354-e4c4-44d8-8ac6-08f78e31b286",
+      "author": "ryan.porter",
+      "text": "Completed the outside-in selection coverage. The policy now records deterministic repair blockers, preserves their report visibility and evidence order, and skips them when allocating capped semantic slots. Validation: poetry run pytest -q plexus/optimization/portfolio_run_test.py -> 134 passed.",
+      "created_at": "2026-07-31T14:36:38.221571Z"
+    }
+  ],
+  "created_at": "2026-07-31T14:33:49.335570Z",
+  "updated_at": "2026-07-31T14:36:38.221571Z",
+  "closed_at": null,
+  "custom": {}
+}

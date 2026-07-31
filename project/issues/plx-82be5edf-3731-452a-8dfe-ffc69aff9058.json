@@ -1,0 +1,67 @@
+{
+  "id": "plx-82be5edf-3731-452a-8dfe-ffc69aff9058",
+  "title": "Visualize optimization portfolio decision distribution",
+  "description": "As an operator, I want stakeholder-safe visual explanations of optimization opportunity so that I can distinguish a steep priority drop-off, understand why a score ranks highly, and compare selected candidates with policy-deferred scores.\n\nScope: dashboard visualization and existing stakeholder presentation fields only; no new backend resource, GraphQL schema, or client-specific data.\n\nFeature: Optimization opportunity evidence visualization\n\nScenario: Preserve evidence rank and policy disposition\nGiven evidence-ranked optimization opportunity rows\nWhen an operator views the distribution component\nThen it shows the complete pre-policy ranked curve with labeled selected, eligible, cooldown, blocked, and incomplete dispositions\nAnd the operator can choose linear or logarithmic opportunity scale\nAnd excluded rows remain visible and interactive.\n\nScenario: Explain the components of opportunity\nGiven a score with valid feedback volume and a disagreement rate\nWhen the operator views its opportunity mark or text equivalent\nThen the disagreement rate and feedback volume are visible alongside reviewed-error opportunity\nAnd their units are explicit\nAnd visual encoding does not rely on color alone.\n\nScenario: Protect stakeholder-safe output\nGiven portfolio presentation data\nWhen the visualization renders\nThen no opaque identifiers, raw feedback, prompts, transcripts, or reviewer comments are displayed.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8570854c-bad6-4049-be38-e04836aae830",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "dca3ac3c-fecf-4f85-97ee-b570f7d2ca7a",
+      "author": "ryan.porter",
+      "text": "Implemented a reusable client-side opportunity-distribution component and focused tests in the integration worktree. It renders every numerically valid evidence-ranked row as a curve, overlays distinct decision marks, includes a visible labeled legend and expandable text equivalent, and supports linear/logarithmic views with an explicit zero-value note. Validation passed: focused Jest suite (3 tests) and dashboard typecheck. No existing renderer, API/schema, or backend files were changed; no commit was created.",
+      "created_at": "2026-07-30T19:23:05.325207Z"
+    },
+    {
+      "id": "db962088-88ff-4d70-883b-1b21145f2584",
+      "author": "ryan.porter",
+      "text": "Acceptance update: the opportunity distribution now renders the complete evidence-ranked curve with distinct marks for selected, eligible, cooldown, blocked, and incomplete dispositions. Linear and logarithmic controls update in place, a full text equivalent remains available, and focused dashboard tests/typechecks passed. Visual DOM validation confirmed the curve and disposition marks render.",
+      "created_at": "2026-07-30T19:43:58.668095Z"
+    },
+    {
+      "id": "33e6f8b0-4140-42d5-bd2a-e73d28215286",
+      "author": "ryan.porter",
+      "text": "Follow-up scope: extend the existing opportunity-distribution component with stakeholder-safe visual encodings and text-equivalent columns for disagreement rate and valid feedback volume. The implementation remains dashboard-only and does not require backend schema changes. I will add a failing focused component specification before updating the component.",
+      "created_at": "2026-07-30T19:57:22.945091Z"
+    },
+    {
+      "id": "65f1eba0-20c1-4667-aeec-1135a0ea5f1a",
+      "author": "ryan.porter",
+      "text": "Completed the feedback-signal extension. The existing chart now accepts optional disagreement-rate and valid-feedback-count values without a backend contract change. Marker size uses normalized valid feedback volume; a visible inner fill uses normalized disagreement rate; both are explained in text and carried in the accessible table and tooltip. Missing/invalid values remain visibly unavailable in text and use the neutral marker baseline. Tests were written first and initially failed, then passed after implementation. Validation: focused Jest suite 4/4, dashboard web/backend typecheck, and targeted diff check. No commit was created.",
+      "created_at": "2026-07-30T19:58:33.890479Z"
+    },
+    {
+      "id": "8ad0d9a1-6198-4542-a2c6-c360d3609668",
+      "author": "ryan.porter",
+      "text": "Incremental implementation now adds two stakeholder-safe visual signals to every evidence-ranked point: marker size represents valid feedback volume and inner fill represents disagreement rate. Exact counts and percentages remain available in the tooltip and text-equivalent table. The stakeholder presentation reuses existing fields and adds no schema or backend resource. Focused frontend/backend tests and typechecks passed.",
+      "created_at": "2026-07-30T20:04:39.616338Z"
+    },
+    {
+      "id": "8c9c8d1a-cef7-497d-8ff4-08df29e8c4cd",
+      "author": "ryan.porter",
+      "text": "Production-backed read-only acceptance passed on commit eeb696a23. The living Report updated in place with 31 evidence-ranked rows; rendered marker radii varied from 1.2 to 10 pixels, demonstrating real volume and disagreement variation. The text equivalent reconciled opportunity, disagreement percentage, valid feedback count, disposition, and policy reason for all rows. The run used zero optimizer cost, zero semantic diagnoses, and made no score mutations. Report and embedded Procedure ended honestly as Incomplete.",
+      "created_at": "2026-07-30T20:12:22.471052Z"
+    },
+    {
+      "id": "d93fe408-b876-4a8a-9d20-97dbf594c75a",
+      "author": "ryan.porter",
+      "text": "Live visual inspection found that the new size and inner-fill calculations were present, but disposition colors rendered as black because the component wrapped already-complete CSS color variables in another color function. Follow-up acceptance will require valid disposition colors plus an explicit visual encoding key for low/high feedback volume and disagreement. I will first extend the focused component specification and confirm it fails before correcting production code.",
+      "created_at": "2026-07-30T20:16:10.284000Z"
+    },
+    {
+      "id": "5b71b6be-7731-49ab-8f6d-54c484a4654f",
+      "author": "ryan.porter",
+      "text": "Follow-up acceptance passed. The chart now uses valid existing dashboard color variables, its visual key shows low/high examples for feedback volume and disagreement, and disagreement fill is area-proportional so moderate rates remain legible. Focused component and report-status suites passed (5 tests), dashboard frontend/backend typechecks passed, diff check passed, and live browser inspection confirmed colored dispositions plus distinct marker size and inner-fill signals. No schema or backend resource changed.",
+      "created_at": "2026-07-30T20:17:43.278365Z"
+    }
+  ],
+  "created_at": "2026-07-30T19:20:51.718069Z",
+  "updated_at": "2026-07-30T20:17:43.278365Z",
+  "closed_at": null,
+  "custom": {}
+}

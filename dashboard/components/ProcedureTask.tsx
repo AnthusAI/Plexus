@@ -229,7 +229,7 @@ const procedureOperatorIdentity = (
 
   if (/portfolio/i.test(rawType) || /portfolio/i.test(procedure.title || '')) {
     return {
-      type: rawType,
+      type: 'Optimization opportunity survey',
       displayTitle: procedure.displayTitle || storedTitle || (
         selectedScope
           ? 'Scorecard-scoped optimization portfolio'
@@ -1020,7 +1020,7 @@ export default function ProcedureTask({
     ? 'FAILED'
     : hasStalledStatus
       ? 'STALLED'
-    : taskStatus === 'RUNNING'
+    : taskStatus === 'RUNNING' || taskStatus === 'WAITING_FOR_CHILDREN'
       ? 'RUNNING'
       : taskStatus === 'COMPLETED'
         ? 'COMPLETED'
@@ -1064,6 +1064,9 @@ export default function ProcedureTask({
 
   const taskStatusMessage = (() => {
     if (hasArchivedStatus) return 'Archived'
+    if (taskStatus === 'WAITING_FOR_CHILDREN') {
+      return 'Waiting for optimizer child procedures to finish.'
+    }
     const stageItems = procedure.task?.stages?.items ?? []
     if (!stageItems.length) return undefined
     if (effectiveTaskStatus === 'FAILED') {

@@ -907,6 +907,43 @@ def test_default_rubric_memory_evidence_pack_runs_provider_awaitable(monkeypatch
     assert result["citation_index"] == [{"id": "citation-2", "mode": "json"}]
 
 
+def test_default_optimization_diagnosis_preflight_proves_rubric_memory_storage_access(
+    monkeypatch,
+) -> None:
+    calls: list[dict] = []
+    monkeypatch.setenv("AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME", "safe-test-bucket")
+    s3_client = SimpleNamespace(
+        list_objects_v2=lambda **request: calls.append(request) or {"KeyCount": 0}
+    )
+
+    result = execute._default_optimization_diagnosis_preflight(
+        {}, s3_client=s3_client,
+    )
+
+    assert result == {"complete": True, "authority": "rubric_memory_storage"}
+    assert calls == [{"Bucket": "safe-test-bucket", "MaxKeys": 1}]
+
+
+def test_default_optimization_diagnosis_preflight_sanitizes_storage_auth_failure(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME", "safe-test-bucket")
+    s3_client = SimpleNamespace(
+        list_objects_v2=lambda **_request: (_ for _ in ()).throw(
+            RuntimeError("SECRET_ACCESS_KEY_SENTINEL")
+        )
+    )
+
+    result = execute._default_optimization_diagnosis_preflight(
+        {}, s3_client=s3_client,
+    )
+
+    assert result["complete"] is False
+    assert result["failure_category"] == "required_evidence_unavailable"
+    assert "refresh worker AWS credentials" in result["message"]
+    assert "SECRET_ACCESS_KEY_SENTINEL" not in str(result)
+
+
 def test_default_procedure_chat_messages_handles_null_sequence_number(
     monkeypatch,
 ) -> None:
@@ -2728,6 +2765,86 @@ def _old_live_score_info(champion_version: str) -> dict:
     }
 
 
+def test_default_portfolio_runtime_constructs_the_graphql_optimizer_child_dispatch_path_from_the_checked_in_source(monkeypatch) -> None:
+    """The real runtime never falls back to a local optimizer subprocess."""
+    from hashlib import sha256
+    from pathlib import Path
+
+    captured: dict[str, object] = {}
+
+    class CapturingRunner:
+        def __init__(self, dependencies):
+            captured["dependencies"] = dependencies
+
+        def run(self, request):
+            captured["request"] = request
+            return {"status": "captured"}
+
+    client = SimpleNamespace(execute=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("constructing child dispatch must not perform a GraphQL mutation")
+    ))
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    monkeypatch.setattr(
+        "plexus.dashboard.api.models.account.Account.get_by_id",
+        lambda _account_id, _client: SimpleNamespace(settings={}),
+    )
+    monkeypatch.setattr(
+        "plexus.optimization.portfolio_run.OptimizationPortfolioRunner",
+        CapturingRunner,
+    )
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-real-optimizer-child-runtime"),
+        trace_id="parent-procedure-opaque",
+        runtime_context={"account_id": "account-opaque", "task_id": "parent-task-opaque"},
+    )
+
+    assert module._default_optimization_portfolio_runner({
+        "account_id": "account-opaque", "run_key": "frozen-run-opaque",
+    }) == {"status": "captured"}
+
+    dependencies = captured["dependencies"]
+    child_request = dependencies.optimizer_child_request({
+        "account_id": "account-opaque",
+        "run_key": "frozen-run-opaque",
+        "scorecard_id": "scorecard-opaque",
+        "score_id": "score-opaque",
+        "assessment_fingerprint": "assessment-opaque",
+        "limits": {
+            "max_cost_usd": 1.0,
+            "max_samples": 10,
+            "max_iterations": 1,
+            "max_concurrency": 1,
+        },
+    })
+    expected_bytes = (
+        Path(execute.PLEXUS_PROJECT_ROOT) / "plexus" / "procedures" /
+        "feedback_alignment_optimizer.yaml"
+    ).read_bytes()
+    assert child_request["optimizer_yaml"] == expected_bytes.decode("utf-8")
+    assert child_request["optimizer_yaml_sha256"] == sha256(expected_bytes).hexdigest()
+    initial = dependencies.optimizer_child_step(child_request, None, may_mutate=False)
+    assert initial["phase"] == "planned"
+    assert initial["complete"] is False
+    assert initial["launch_spec"] == {
+        "version": "optimizer-task-dispatch-v1",
+        "account_id": "account-opaque",
+        "run_key": "frozen-run-opaque",
+        "scorecard_id": "scorecard-opaque",
+        "score_id": "score-opaque",
+        "assessment_fingerprint": "assessment-opaque",
+        "limits": {
+            "max_cost_usd": 1.0,
+            "max_samples": 10,
+            "max_iterations": 1,
+            "max_concurrency": 1,
+        },
+        "optimizer_yaml_sha256": sha256(expected_bytes).hexdigest(),
+        "identity": initial["launch_spec"]["identity"],
+    }
+    assert len(initial["launch_spec"]["identity"]) == 64
+
+
 def _rank_inventory_card(card_id: str, score_id: str, champion_version: str) -> dict:
     return {
         "id": card_id,
@@ -2767,6 +2884,7 @@ def test_default_optimization_portfolio_run_composes_existing_operations_into_on
         def __init__(self):
             self.started = []
             self.milestones = []
+            self.semantic_ledger = None
 
         def start_or_resume(self, spec):
             self.started.append(spec)
@@ -2777,6 +2895,12 @@ def test_default_optimization_portfolio_run_composes_existing_operations_into_on
 
         def publish_progress(self, **_kwargs):
             return None
+
+        def load_semantic_budget_ledger(self):
+            return self.semantic_ledger
+
+        def persist_semantic_budget_ledger(self, value):
+            self.semantic_ledger = dict(value)
 
         def finalize(self, **_kwargs):
             raise AssertionError("waiting run must not finalize")
@@ -2823,6 +2947,7 @@ def test_default_optimization_portfolio_run_composes_existing_operations_into_on
 
     result = module.optimization.portfolio_run({
         "run_key": "report-run-opaque",
+        "max_semantic_cost_usd": "1",
         "limits": {"max_cost_usd": 1.0, "max_samples": 10, "max_iterations": 1, "max_concurrency": 1},
     })
 
@@ -2830,6 +2955,16 @@ def test_default_optimization_portfolio_run_composes_existing_operations_into_on
     assert result["approval_requests"][0]["action_key"] == "optimization-approval:report-run-opaque:1"
     assert [name for name, _ in calls] == ["rank", "assess", "diagnose"]
     assert all(args["persist"] is False for _, args in calls)
+    assessment_args = next(args for name, args in calls if name == "assess")
+    assert isinstance(
+        assessment_args["_portfolio_assessment_context"],
+        execute._PortfolioAssessmentContext,
+    )
+    assert all(
+        "_portfolio_assessment_context" not in args
+        for name, args in calls
+        if name != "assess"
+    )
     assert [milestone[0] for milestone in report.milestones] == [
         "started", "ranking", "assessment", "diagnosis", "approval",
     ]
@@ -2842,6 +2977,9 @@ def test_default_portfolio_runtime_fails_closed_when_an_advisory_action_has_no_c
     optimizer_calls = []
 
     class ReportService:
+        def __init__(self):
+            self.semantic_ledger = None
+
         def start_or_resume(self, _spec):
             return type("State", (), {"report": type("Report", (), {"id": "report-opaque"})()})()
 
@@ -2850,6 +2988,12 @@ def test_default_portfolio_runtime_fails_closed_when_an_advisory_action_has_no_c
 
         def publish_progress(self, **_kwargs):
             return None
+
+        def load_semantic_budget_ledger(self):
+            return self.semantic_ledger
+
+        def persist_semantic_budget_ledger(self, value):
+            self.semantic_ledger = dict(value)
 
         def finalize(self, **_kwargs):
             raise AssertionError("missing authority must not finalize successfully")
@@ -2882,7 +3026,10 @@ def test_default_portfolio_runtime_fails_closed_when_an_advisory_action_has_no_c
         },
     )
 
-    result = module.optimization.portfolio_run({"run_key": "missing-authority"})
+    result = module.optimization.portfolio_run({
+        "run_key": "missing-authority",
+        "max_semantic_cost_usd": "1",
+    })
 
     assert result["status"] == "FAILED"
     assert result["error"] == "optimization.portfolio_run requires ChatMessage action authority"
@@ -2896,10 +3043,11 @@ def test_default_portfolio_runtime_fails_closed_when_an_advisory_action_has_no_c
 def test_default_portfolio_runtime_builds_chat_message_authority_from_the_authenticated_client(monkeypatch):
     client = object()
     action_clients = []
+    authority_events = []
 
     class ReportService:
         def __init__(self, **_kwargs):
-            pass
+            self.semantic_ledger = None
 
         def start_or_resume(self, _spec):
             return type("State", (), {"report": type("Report", (), {"id": "report-opaque"})()})()
@@ -2909,6 +3057,12 @@ def test_default_portfolio_runtime_builds_chat_message_authority_from_the_authen
 
         def publish_progress(self, **_kwargs):
             return None
+
+        def load_semantic_budget_ledger(self):
+            return self.semantic_ledger
+
+        def persist_semantic_budget_ledger(self, value):
+            self.semantic_ledger = dict(value)
 
         def finalize(self, **_kwargs):
             return None
@@ -2930,7 +3084,18 @@ def test_default_portfolio_runtime_builds_chat_message_authority_from_the_authen
         def resolve_first_valid_response(self, *_args, **_kwargs):
             return None
 
-    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    from plexus.auth import cognito
+
+    class AvailableAuthority:
+        def get_access_token(self):
+            authority_events.append("access_token")
+            return "access-token"
+
+    monkeypatch.setattr(cognito, "CognitoAuthService", AvailableAuthority)
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: authority_events.append("client") or client,
+    )
     monkeypatch.setattr(
         "plexus.dashboard.api.models.account.Account.get_by_id",
         lambda _account_id, _client: SimpleNamespace(settings={}),
@@ -2961,14 +3126,95 @@ def test_default_portfolio_runtime_builds_chat_message_authority_from_the_authen
         },
     )
 
-    result = module.optimization.portfolio_run({"run_key": "authenticated-authority"})
+    result = module.optimization.portfolio_run({
+        "run_key": "authenticated-authority",
+        "max_semantic_cost_usd": "1",
+    })
 
     assert result["actions"][0]["message_id"] == "chat-action-1"
     assert action_clients == [client]
+    assert authority_events[:2] == ["access_token", "client"]
+
+
+@pytest.mark.parametrize(
+    ("failure_type", "guidance"),
+    [
+        ("MissingApplicationSession", "plexus login"),
+        ("RefreshCredentialRejected", "plexus login"),
+        ("RefreshTransportFailure", "Retry the request"),
+    ],
+)
+def test_default_portfolio_runtime_proves_application_authority_before_any_stakeholder_state(
+    monkeypatch,
+    failure_type,
+    guidance,
+):
+    """An unavailable application session must stop before Task/Report access."""
+    from plexus.auth import cognito
+
+    failure = getattr(cognito, failure_type)(
+        f"Actionable guidance: {guidance}"
+    )
+    token_requests = []
+    client_requests = []
+    account_reads = []
+
+    class UnavailableAuthority:
+        def get_access_token(self):
+            token_requests.append(True)
+            raise failure
+
+    monkeypatch.setattr(cognito, "CognitoAuthService", UnavailableAuthority)
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: client_requests.append(True),
+    )
+    monkeypatch.setattr(
+        "plexus.dashboard.api.models.account.Account.get_by_id",
+        lambda *_args: account_reads.append(True),
+    )
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-portfolio-authority-preflight"),
+        runtime_context={"account_id": "account-opaque"},
+    )
+
+    with pytest.raises(type(failure), match=guidance):
+        module.optimization.portfolio_run({"run_key": "authority-preflight"})
+
+    assert token_requests == [True]
+    assert client_requests == []
+    assert account_reads == []
+
+
+def test_application_authority_preflight_does_not_broaden_to_read_only_optimization_operations(
+    monkeypatch,
+):
+    """The keychain check is exclusive to the stateful portfolio coordinator."""
+    from plexus.auth import cognito
+
+    token_requests = []
+
+    class UnavailableAuthority:
+        def get_access_token(self):
+            token_requests.append(True)
+            raise cognito.MissingApplicationSession("Run `plexus login`.")
+
+    monkeypatch.setattr(cognito, "CognitoAuthService", UnavailableAuthority)
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-portfolio-preflight-scope"),
+        optimization_handlers={"rank": lambda _args: {"ranked": []}},
+    )
+
+    assert module.optimization.rank({"account_id": "account-opaque"}) == {"ranked": []}
+    assert token_requests == []
 
 
 def test_default_portfolio_runtime_persists_and_resolves_nonblocking_findings_with_existing_chat_messages():
     class ReportService:
+        def __init__(self):
+            self.semantic_ledger = None
+
         def start_or_resume(self, _spec):
             return type("State", (), {"report": type("Report", (), {"id": "report-opaque"})()})()
 
@@ -2977,6 +3223,12 @@ def test_default_portfolio_runtime_persists_and_resolves_nonblocking_findings_wi
 
         def publish_progress(self, **_kwargs):
             return None
+
+        def load_semantic_budget_ledger(self):
+            return self.semantic_ledger
+
+        def persist_semantic_budget_ledger(self, value):
+            self.semantic_ledger = dict(value)
 
         def finalize(self, **_kwargs):
             return None
@@ -3040,8 +3292,14 @@ def test_default_portfolio_runtime_persists_and_resolves_nonblocking_findings_wi
         },
     )
 
-    first = module.optimization.portfolio_run({"run_key": "report-run-opaque"})
-    replay = module.optimization.portfolio_run({"run_key": "report-run-opaque"})
+    first = module.optimization.portfolio_run({
+        "run_key": "report-run-opaque",
+        "max_semantic_cost_usd": "1",
+    })
+    replay = module.optimization.portfolio_run({
+        "run_key": "report-run-opaque",
+        "max_semantic_cost_usd": "1",
+    })
 
     assert first["actions"][0]["message_id"] == "chat-action-1"
     assert first["actions"][0]["response_status"] == "PENDING"
@@ -3058,7 +3316,7 @@ def test_default_portfolio_runtime_persists_and_resolves_nonblocking_findings_wi
     assert mutation_calls == []
 
 
-def test_default_optimization_run_dispatches_only_exact_approved_targets() -> None:
+def test_default_optimization_run_validates_exact_targets_but_requires_report_authority() -> None:
     optimizer_calls: list[dict] = []
 
     module = execute.PlexusRuntimeModule(
@@ -3073,6 +3331,7 @@ def test_default_optimization_run_dispatches_only_exact_approved_targets() -> No
     assert optimizer_calls == []
 
     result = module.optimization.run({
+        "run_key": "frozen-run-exact-targets",
         "approved": True,
         "targets": [_ready_optimization_target(
             "sc-1", "s-1", "v-1", "2026-01-01T00:00:00Z"
@@ -3080,14 +3339,72 @@ def test_default_optimization_run_dispatches_only_exact_approved_targets() -> No
         "max_iterations": 2, "max_samples": 20, "max_cost_usd": 1.0, "max_concurrency": 1,
     })
 
-    assert result["rejected"] == []
-    assert result["dispatches"][0]["target"] == {"scorecard_id": "sc-1", "score_id": "s-1"}
-    assert result["dispatches"][0]["status"] == "dispatched"
-    assert result["dispatch_coverage"]["complete"] is True
-    assert optimizer_calls == [{
-        "scorecard": "sc-1", "score": "s-1", "max_iterations": 2,
-        "max_samples": 20, "max_cost_usd": 1.0,
-    }]
+    assert result["accepted_targets"] == []
+    assert result["dispatches"] == []
+    assert result["rejected"][0]["target"]["scorecard_id"] == "sc-1"
+    assert result["rejected"][0]["target"]["score_id"] == "s-1"
+    assert result["rejected"][0]["reason"] == "durable_publication_authority_required"
+    assert optimizer_calls == []
+
+
+def test_standalone_optimization_run_requires_living_report_publication_authority_and_never_spawns() -> None:
+    optimizer_calls: list[dict] = []
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-standalone-optimization-run-fails-closed"),
+        score_info=lambda _args: _old_live_score_info("v-1"),
+        feedback_latest_update=lambda _args: {
+            "latest_feedback_updated_at": "2026-01-01T00:00:00Z"
+        },
+        procedure_optimize=lambda args: optimizer_calls.append(args) or {
+            "procedure_id": "must-not-exist"
+        },
+    )
+
+    result = module.optimization.run({
+        "run_key": "standalone-run",
+        "approved": True,
+        "targets": [_ready_optimization_target(
+            "sc-1", "s-1", "v-1", "2026-01-01T00:00:00Z"
+        )],
+        "max_iterations": 2,
+        "max_samples": 20,
+        "max_cost_usd": 1.0,
+        "max_concurrency": 1,
+    })
+
+    assert result["accepted"] is False
+    assert result["accepted_targets"] == []
+    assert result["dispatches"] == []
+    assert result["rejected"][0]["reason"] == "durable_publication_authority_required"
+    assert optimizer_calls == []
+
+
+def test_default_optimization_run_rejects_launch_without_the_frozen_parent_run_key() -> None:
+    optimizer_calls: list[dict] = []
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-optimizer-run-key-required"),
+        score_info=lambda _args: _old_live_score_info("v-1"),
+        feedback_latest_update=lambda _args: {
+            "latest_feedback_updated_at": "2026-01-01T00:00:00Z"
+        },
+        procedure_optimize=lambda args: optimizer_calls.append(args),
+    )
+
+    result = module.optimization.run({
+        "approved": True,
+        "targets": [_ready_optimization_target(
+            "sc-1", "s-1", "v-1", "2026-01-01T00:00:00Z"
+        )],
+        "max_iterations": 2,
+        "max_samples": 20,
+        "max_cost_usd": 1.0,
+        "max_concurrency": 1,
+    })
+
+    assert result["accepted_targets"] == []
+    assert result["dispatches"] == []
+    assert result["rejected"][0]["reason"] == "missing_frozen_run_key"
+    assert optimizer_calls == []
 
 
 def test_default_optimization_run_rejects_recent_score_activity_before_launch() -> None:
@@ -3120,7 +3437,7 @@ def test_default_optimization_run_rejects_recent_score_activity_before_launch() 
     assert result["rejected"][0]["reason"] == "recent_score_activity"
 
 
-def test_default_optimization_run_reports_each_dispatch_failure_without_losing_success() -> None:
+def test_private_portfolio_run_validator_preserves_each_exact_target_without_launching() -> None:
     calls: list[str] = []
     targets = [
         _ready_optimization_target("card", score_id, "champion", "watermark")
@@ -3136,20 +3453,17 @@ def test_default_optimization_run_reports_each_dispatch_failure_without_losing_s
         ),
     )
 
-    result = module.optimization.run({
-        "approved": True, "targets": targets, "max_cost_usd": 2.0,
+    result = module._optimization_run_validator({
+        "run_key": "frozen-run-dispatch-coverage", "approved": True,
+        "targets": targets, "max_cost_usd": 2.0,
         "max_samples": 40, "max_iterations": 2, "max_concurrency": 2,
         "current_fingerprints": {f"card:{target['score_id']}": target["assessment_fingerprint"] for target in targets},
     })
 
-    assert calls == ["good", "broken"]
-    assert [row["status"] for row in result["dispatches"]] == ["dispatched", "failed"]
-    assert result["dispatch_coverage"] == {
-        "target_count": 2,
-        "dispatched_count": 1,
-        "failed_count": 1,
-        "complete": False,
-    }
+    assert result["accepted_targets"] == targets
+    assert result["rejected"] == []
+    assert result["dispatches"] == []
+    assert calls == []
 
 
 def test_default_optimization_rank_paginates_with_one_retry_and_one_frozen_alignment_read() -> None:
@@ -3207,6 +3521,165 @@ def test_default_optimization_rank_paginates_with_one_retry_and_one_frozen_align
     assert alignment_calls[0]["account_id"] is None
     assert result["exact"] is True
     assert [row["score_id"] for row in result["ranked"]] == ["s-1", "s-2"]
+
+
+def test_default_optimization_rank_emits_aggregate_live_progress_without_identifiers() -> None:
+    """Ranking reports its long-running phases without leaking opaque IDs."""
+    progress: list[dict] = []
+    first_page_attempts = 0
+
+    def list_cards(args: dict) -> dict:
+        nonlocal first_page_attempts
+        if args.get("next_token") is None:
+            first_page_attempts += 1
+            if first_page_attempts == 1:
+                raise RuntimeError("temporary inventory interruption")
+            return {
+                "items": [_rank_inventory_card("opaque-card-a", "opaque-score-a", "v-1")],
+                "nextToken": "second-page",
+            }
+        return {
+            "items": [_rank_inventory_card("opaque-card-b", "opaque-score-b", "v-2")],
+            "nextToken": None,
+        }
+
+    def alignment(args: dict) -> dict:
+        callback = args.get("_optimization_rank_progress")
+        assert callable(callback)
+        callback({
+            "phase": "ranking",
+            "subphase": "feedback_analysis",
+            "state": "active",
+            "current": 1,
+            "total": 2,
+            "unit": "scorecards",
+            "message": "Feedback analysis completed for 1 of 2 scorecards.",
+            "next_checkpoint": "Feedback analysis continues.",
+        })
+        return {
+            "coverage": {
+                "complete": True,
+                "target_count": 2,
+                "completed_count": 2,
+                "failed_count": 0,
+            },
+            "scorecards": [
+                {"scorecard_id": "opaque-card-a", "scorecard_name": "One", "scores": [
+                    {"score_id": "opaque-score-a", "score_name": "A", "champion_version": "v-1", "total_items": 10, "disagreements": 4}
+                ]},
+                {"scorecard_id": "opaque-card-b", "scorecard_name": "Two", "scores": [
+                    {"score_id": "opaque-score-b", "score_name": "B", "champion_version": "v-2", "total_items": 20, "disagreements": 2}
+                ]},
+            ],
+        }
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-rank-live-progress"), scorecards_lister=list_cards,
+    )
+    module._feedback_aligner_batch = alignment
+
+    result = module.optimization.rank({"_optimization_rank_progress": progress.append})
+
+    assert result["exact"] is True
+    assert any(
+        event["subphase"] == "inventory"
+        and event["state"] == "retrying"
+        and event["current"] == 0
+        and event["total"] is None
+        for event in progress
+    )
+    assert any(
+        event["subphase"] == "activity_evidence"
+        and event["current"] == event["total"] == 2
+        and event["unit"] == "scorecards"
+        for event in progress
+    )
+    assert any(
+        event["subphase"] == "feedback_analysis"
+        and event["current"] == event["total"] == 2
+        for event in progress
+    )
+    rendered_progress = "\n".join(str(event) for event in progress)
+    assert "opaque-card" not in rendered_progress
+    assert "opaque-score" not in rendered_progress
+
+
+@pytest.mark.parametrize(
+    ("coverage", "scorecards", "expected_completed"),
+    [
+        (
+            {
+                "complete": False,
+                "target_count": 2,
+                "completed_count": 1,
+                "failed_count": 1,
+                "failures": [{"error": "one scorecard analysis failed"}],
+            },
+            [
+                {"scorecard_id": "card-a", "scores": []},
+                {"scorecard_id": "card-b", "error": "analysis failed", "scores": []},
+            ],
+            1,
+        ),
+        (
+            "malformed coverage",
+            [
+                {"scorecard_id": "card-a", "scores": []},
+                {"scorecard_id": "card-b", "scores": []},
+            ],
+            2,
+        ),
+        (
+            {
+                "complete": True,
+                "target_count": 2,
+                "completed_count": 2,
+                "failed_count": 0,
+            },
+            [
+                {"scorecard_id": "card-a", "scores": []},
+                {"scorecard_id": "card-b", "error": "analysis failed", "scores": []},
+            ],
+            1,
+        ),
+    ],
+    ids=("reported-incomplete", "malformed-coverage", "scorecard-failure"),
+)
+def test_optimization_rank_never_reports_complete_feedback_progress_before_coverage_is_validated(
+    coverage, scorecards, expected_completed,
+) -> None:
+    """The live report must not claim N/N feedback completion from untrusted data."""
+    progress: list[dict] = []
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-rank-progress-coverage"),
+        scorecards_lister=lambda _args: {
+            "items": [
+                _rank_inventory_card("card-a", "score-a", "version-a"),
+                _rank_inventory_card("card-b", "score-b", "version-b"),
+            ],
+            "nextToken": None,
+        },
+    )
+    module._feedback_aligner_batch = lambda _args: {
+        "coverage": coverage,
+        "scorecards": scorecards,
+    }
+
+    result = module.optimization.rank({"_optimization_rank_progress": progress.append})
+
+    feedback_events = [
+        event for event in progress
+        if event.get("subphase") == "feedback_analysis"
+    ]
+    assert feedback_events[-1]["state"] == "incomplete"
+    assert feedback_events[-1]["current"] == expected_completed
+    assert feedback_events[-1]["total"] == 2
+    assert not any(
+        event["state"] == "active"
+        and event["current"] == event["total"] == 2
+        for event in feedback_events
+    )
+    assert result["exact"] is False
 
 
 def test_optimization_persist_uses_one_exact_packet_handler(monkeypatch) -> None:
@@ -3414,6 +3887,312 @@ def test_default_optimization_assess_composes_score_guidelines_classes_and_rank_
     assert result["feedback_watermark"] == "2026-07-01T00:00:00Z"
 
 
+def test_portfolio_assessment_reads_each_exact_score_configuration_directly_once(
+    monkeypatch,
+) -> None:
+    """A portfolio must not re-resolve or reload a whole scorecard per score."""
+    create_client_calls: list[object] = []
+    queries: list[tuple[str, dict[str, object] | None]] = []
+
+    class Client:
+        def execute(self, query: str, variables: dict[str, object] | None = None) -> dict:
+            queries.append((query, variables))
+            if "GetPortfolioAssessmentScore" not in query:
+                raise AssertionError(
+                    "portfolio assessment must use the exact-ID configuration read; "
+                    f"got {query!r}"
+                )
+            score_id = str((variables or {}).get("score_id"))
+            return {
+                "getScore": {
+                    "id": score_id,
+                    "championVersionId": f"version-{score_id}",
+                    "updatedAt": "2026-01-01T00:00:00Z",
+                    "isDisabled": False,
+                    "scorecard": {
+                        "id": "scorecard-opaque",
+                        "accountId": "account-opaque",
+                    },
+                    "championVersion": {
+                        "id": f"version-{score_id}",
+                        "scoreId": score_id,
+                        "configuration": "classifier",
+                        "guidelines": "# Guidelines",
+                    },
+                }
+            }
+
+    client = Client()
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: create_client_calls.append(object()) or client,
+    )
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-portfolio-assessment-direct-config"),
+        guidelines_validator=lambda _text: {"is_valid": True},
+        terminal_class_resolver=lambda _code: {"classes": ["Yes", "No"]},
+    )
+    rank_evidence = {
+        "coverage": {"complete": True},
+        "window": {
+            "start": "2026-04-01T00:00:00Z",
+            "end": "2026-06-30T00:00:00Z",
+            "timezone": "UTC",
+            "complete_days": 90,
+        },
+        "ranked": [
+            {
+                "scorecard_id": "scorecard-opaque",
+                "score_id": score_id,
+                "champion_version": f"version-{score_id}",
+                "valid_feedback_count": 250,
+                "reviewed_disagreements": 100,
+                "class_distribution": [{"label": "Yes", "count": 200}],
+                "weekly_disagreement_rates": [0.4] * 4,
+                "weekly_ac1_values": [0.7] * 4,
+                "weekly_bucket_counts": [1] * 4,
+            }
+            for score_id in ("score-a", "score-b")
+        ],
+    }
+    # The runtime creates this private, non-serializable context for one
+    # portfolio invocation; public JSON callers cannot manufacture it.
+    context = module._new_portfolio_assessment_context()
+
+    assessments = [
+        module.optimization.assess({
+            "account_id": "account-opaque",
+            "scorecard_id": "scorecard-opaque",
+            "score_id": score_id,
+            "rank_evidence": rank_evidence,
+            "_portfolio_assessment_context": context,
+        })
+        for score_id in ("score-a", "score-b")
+    ]
+
+    assert [row["champion_version"] for row in assessments] == [
+        "version-score-a", "version-score-b",
+    ]
+    assert len(create_client_calls) == 1
+    assert len(queries) == 2
+    assert all("GetPortfolioAssessmentScore" in query for query, _ in queries)
+    assert [variables for _, variables in queries] == [
+        {"score_id": "score-a"}, {"score_id": "score-b"},
+    ]
+
+
+def test_standalone_optimization_assess_keeps_the_existing_score_information_adapter() -> None:
+    """The portfolio fast path is private and cannot change public assess semantics."""
+    score_info_calls: list[dict] = []
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-standalone-assessment-fallback"),
+        score_info=lambda args: score_info_calls.append(dict(args)) or {
+            "championVersionId": "version-1",
+            "code": "classifier",
+            "guidelines": "# Guidelines",
+        },
+        guidelines_validator=lambda _text: {"is_valid": True},
+        terminal_class_resolver=lambda _code: {"classes": ["Yes", "No"]},
+    )
+
+    module.optimization.assess({
+        "scorecard_id": "scorecard-opaque",
+        "score_id": "score-opaque",
+        "rank_evidence": {
+            "coverage": {"complete": True},
+            "scope": {"scorecard_id": "scorecard-opaque", "score_id": "score-opaque"},
+            "window": {"start": "2026-04-01T00:00:00Z", "end": "2026-06-30T00:00:00Z"},
+            "valid_feedback_count": 250,
+        },
+    })
+
+    assert score_info_calls == [{
+        "scorecard_identifier": "scorecard-opaque",
+        "score_identifier": "score-opaque",
+    }]
+
+
+def test_portfolio_assessment_marks_only_a_mismatched_exact_target_incomplete(
+    monkeypatch,
+) -> None:
+    """A malformed direct read cannot silently become optimization evidence."""
+    queries: list[str] = []
+
+    class Client:
+        def execute(self, query: str, _variables: dict[str, object] | None = None) -> dict:
+            queries.append(query)
+            assert "GetPortfolioAssessmentScore" in query
+            return {
+                "getScore": {
+                    "id": "score-opaque",
+                    "championVersionId": "version-opaque",
+                    "scorecard": {
+                        "id": "other-scorecard",
+                        "accountId": "account-opaque",
+                    },
+                    "championVersion": {
+                        "id": "version-opaque",
+                        "scoreId": "score-opaque",
+                        "configuration": "classifier",
+                        "guidelines": "# Guidelines",
+                    },
+                }
+            }
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: Client(),
+    )
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-portfolio-assessment-target-mismatch"),
+    )
+
+    result = module.optimization.assess({
+        "account_id": "account-opaque",
+        "scorecard_id": "scorecard-opaque",
+        "score_id": "score-opaque",
+        "rank_evidence": {
+            "coverage": {"complete": True},
+            "scope": {"scorecard_id": "scorecard-opaque", "score_id": "score-opaque"},
+            "window": {"start": "2026-04-01T00:00:00Z", "end": "2026-06-30T00:00:00Z"},
+            "valid_feedback_count": 250,
+            "champion_version": "version-opaque",
+        },
+        "_portfolio_assessment_context": module._new_portfolio_assessment_context(),
+    })
+
+    assert result["coverage"]["complete"] is False
+    assert "does not belong to the requested scorecard" in result["coverage"]["failures"][0]
+    assert len(queries) == 1
+
+
+def test_portfolio_assessment_rejects_a_scorecard_from_another_account(
+    monkeypatch,
+) -> None:
+    class Client:
+        def execute(self, query: str, _variables: dict[str, object] | None = None) -> dict:
+            assert "accountId" in query
+            return {
+                "getScore": {
+                    "id": "score-opaque",
+                    "championVersionId": "version-opaque",
+                    "scorecard": {
+                        "id": "scorecard-opaque",
+                        "accountId": "other-account",
+                    },
+                    "championVersion": {
+                        "id": "version-opaque",
+                        "scoreId": "score-opaque",
+                        "configuration": "classifier",
+                        "guidelines": "# Guidelines",
+                    },
+                }
+            }
+
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: Client())
+    module = execute.PlexusRuntimeModule(FastMCP("test-portfolio-assessment-account"))
+    result = module.optimization.assess({
+        "account_id": "account-opaque",
+        "scorecard_id": "scorecard-opaque",
+        "score_id": "score-opaque",
+        "rank_evidence": {
+            "coverage": {"complete": True},
+            "scope": {"scorecard_id": "scorecard-opaque", "score_id": "score-opaque"},
+            "window": {"start": "2026-04-01T00:00:00Z", "end": "2026-06-30T00:00:00Z"},
+            "valid_feedback_count": 250,
+            "champion_version": "version-opaque",
+        },
+        "_portfolio_assessment_context": module._new_portfolio_assessment_context(),
+    })
+
+    assert result["coverage"]["complete"] is False
+    assert "does not belong to the active account" in result["coverage"]["failures"][0]
+
+
+def test_portfolio_assessment_rejects_a_champion_changed_since_frozen_ranking(
+    monkeypatch,
+) -> None:
+    class Client:
+        def execute(self, _query: str, _variables: dict[str, object] | None = None) -> dict:
+            return {
+                "getScore": {
+                    "id": "score-opaque",
+                    "championVersionId": "live-version",
+                    "scorecard": {
+                        "id": "scorecard-opaque",
+                        "accountId": "account-opaque",
+                    },
+                    "championVersion": {
+                        "id": "live-version",
+                        "scoreId": "score-opaque",
+                        "configuration": "classifier",
+                        "guidelines": "# Guidelines",
+                    },
+                }
+            }
+
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: Client())
+    module = execute.PlexusRuntimeModule(FastMCP("test-portfolio-assessment-stale-champion"))
+    result = module.optimization.assess({
+        "account_id": "account-opaque",
+        "scorecard_id": "scorecard-opaque",
+        "score_id": "score-opaque",
+        "rank_evidence": {
+            "coverage": {"complete": True},
+            "scope": {"scorecard_id": "scorecard-opaque", "score_id": "score-opaque"},
+            "window": {"start": "2026-04-01T00:00:00Z", "end": "2026-06-30T00:00:00Z"},
+            "valid_feedback_count": 250,
+            "champion_version": "frozen-version",
+        },
+        "_portfolio_assessment_context": module._new_portfolio_assessment_context(),
+    })
+
+    assert result["coverage"]["complete"] is False
+    assert "changed since frozen ranking" in result["coverage"]["failures"][0]
+    assert result.get("champion_version") != "live-version"
+
+
+def test_portfolio_assessment_rejects_a_champion_relation_without_its_id(
+    monkeypatch,
+) -> None:
+    class Client:
+        def execute(self, _query: str, _variables: dict[str, object] | None = None) -> dict:
+            return {
+                "getScore": {
+                    "id": "score-opaque",
+                    "championVersionId": None,
+                    "scorecard": {
+                        "id": "scorecard-opaque",
+                        "accountId": "account-opaque",
+                    },
+                    "championVersion": {
+                        "id": "orphan-version",
+                        "scoreId": "score-opaque",
+                        "configuration": "classifier",
+                        "guidelines": "# Guidelines",
+                    },
+                }
+            }
+
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: Client())
+    module = execute.PlexusRuntimeModule(FastMCP("test-portfolio-assessment-champion-relation"))
+    result = module.optimization.assess({
+        "account_id": "account-opaque",
+        "scorecard_id": "scorecard-opaque",
+        "score_id": "score-opaque",
+        "rank_evidence": {
+            "coverage": {"complete": True},
+            "scope": {"scorecard_id": "scorecard-opaque", "score_id": "score-opaque"},
+            "window": {"start": "2026-04-01T00:00:00Z", "end": "2026-06-30T00:00:00Z"},
+            "valid_feedback_count": 250,
+            "champion_version": "frozen-version",
+        },
+        "_portfolio_assessment_context": module._new_portfolio_assessment_context(),
+    })
+
+    assert result["coverage"]["complete"] is False
+    assert "champion relationship is incomplete" in result["coverage"]["failures"][0]
+
+
 def test_optimization_assess_exact_ids_compose_canonical_frozen_rank_evidence() -> None:
     alignment_calls: list[dict] = []
     module = execute.PlexusRuntimeModule(
@@ -3471,6 +4250,39 @@ def test_default_optimization_diagnose_marks_dependency_failure_incomplete_witho
     assert result["states"]["readiness"] == "incomplete"
     assert "semantic service unavailable" in str(result["coverage"]["failures"])
     assert calls == ["recent", "pack", "sme"]
+
+
+@pytest.mark.parametrize(
+    "error_factory",
+    [
+        pytest.param(
+            lambda: __import__(
+                "plexus.optimization.semantic_authority", fromlist=["SemanticAuthorityError"]
+            ).SemanticAuthorityError("reservation publication failed"),
+            id="precontact-publication",
+        ),
+        pytest.param(
+            lambda: __import__(
+                "plexus.optimization.semantic_authority", fromlist=["SemanticOutcomeUnknown"]
+            ).SemanticOutcomeUnknown("provider outcome unknown"),
+            id="postcontact-unknown",
+        ),
+    ],
+)
+def test_optimization_diagnose_fail_closed_error_stops_all_later_semantic_calls(error_factory) -> None:
+    later_calls = []
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-diagnose-fail-closed"),
+        score_info=lambda _args: {"championVersionId": "v-1"},
+        score_contradictions=lambda _args: (_ for _ in ()).throw(error_factory()),
+        rubric_memory_recent_entries=lambda _args: later_calls.append("recent") or {},
+        rubric_memory_evidence_pack=lambda _args: later_calls.append("pack") or {},
+        rubric_memory_sme_question_gate=lambda _args: later_calls.append("sme") or {},
+    )
+
+    with pytest.raises(Exception, match="publication failed|outcome unknown"):
+        module.optimization.diagnose({"scorecard_id": "sc-1", "score_id": "s-1"})
+    assert later_calls == []
 
 
 def test_default_optimization_diagnose_preserves_ready_assessment_when_semantics_are_clear() -> None:
@@ -3585,17 +4397,19 @@ def test_optimization_run_accepts_actual_assessment_packet_fingerprint_when_live
     target = _ready_optimization_target(
         "sc-1", "s-1", "v-1", "2026-07-01T00:00:00Z"
     )
-    result = module.optimization.run({
-        "approved": True, "targets": [target], "max_cost_usd": 1.0,
+    result = module._optimization_run_validator({
+        "run_key": "frozen-run-fingerprint", "approved": True,
+        "targets": [target], "max_cost_usd": 1.0,
         "max_samples": 20, "max_iterations": 2, "max_concurrency": 1,
     })
 
     assert result["accepted_targets"] == [target]
-    assert len(dispatched) == 1
+    assert dispatched == []
 
     changed = {**target, "champion_version": "v-old"}
     rejected = module.optimization.run({
-        "approved": True, "targets": [changed], "max_cost_usd": 1.0,
+        "run_key": "frozen-run-fingerprint", "approved": True,
+        "targets": [changed], "max_cost_usd": 1.0,
         "max_samples": 20, "max_iterations": 2, "max_concurrency": 1,
     })
     assert rejected["accepted_targets"] == []
@@ -9533,3 +10347,79 @@ def test_feedback_alignment_batch_reports_incomplete_coverage_without_losing_res
         "failed_count": 1,
         "complete": False,
     }
+
+
+def test_default_feedback_batch_never_counts_a_failed_scorecard_as_completed_live_progress(
+    monkeypatch,
+) -> None:
+    """The real batch reports processed and successful counts separately.
+
+    This exercises the default batch through ``optimization.rank`` rather
+    than an injected alignment result.  A failed first scorecard must not
+    allow the five-scorecard checkpoint to say that five analyses completed.
+    """
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    identifiers = [f"card-{index}" for index in range(1, 8)]
+    progress: list[dict] = []
+
+    class FakeClient:
+        def execute(self, query, _variables=None):
+            if "ListFeedbackItemsByEditedTime" in query:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [],
+                        "nextToken": None,
+                    }
+                }
+            identifier = next(
+                identifier
+                for identifier in identifiers
+                if f'id: "{identifier}"' in query
+            )
+            return {
+                "getScorecard": {
+                    "id": identifier,
+                    "name": identifier,
+                    "sections": {"items": []},
+                }
+            }
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: None if identifier == identifiers[0] else identifier,
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-default-batch-progress-coverage"),
+        scorecards_lister=lambda _args: {
+            "items": [
+                _rank_inventory_card(identifier, f"score-{index}", f"version-{index}")
+                for index, identifier in enumerate(identifiers, start=1)
+            ],
+            "nextToken": None,
+        },
+    )
+
+    result = module.optimization.rank({"_optimization_rank_progress": progress.append})
+
+    feedback_events = [
+        event for event in progress if event.get("subphase") == "feedback_analysis"
+    ]
+    five_scorecard_checkpoint = next(
+        event
+        for event in feedback_events
+        if event["state"] == "incomplete" and "processed 5 of 7" in event["message"]
+    )
+    assert five_scorecard_checkpoint["current"] == 4
+    assert five_scorecard_checkpoint["total"] == 7
+    assert "4 completed and 1 failed" in five_scorecard_checkpoint["message"]
+    assert feedback_events[-1]["state"] == "incomplete"
+    assert feedback_events[-1]["current"] == 6
+    assert not any(
+        event["state"] == "active" and event["current"] == event["total"] == 7
+        for event in feedback_events
+    )
+    assert result["exact"] is False

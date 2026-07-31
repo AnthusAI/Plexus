@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bcd06373-c3c5-442d-8a8f-f669a330ee45",
+  "issue_id": "plx-dc3eb599-10b8-4ba6-a448-93f7da76eb8e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T16:50:38.252Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Publish actionable score briefs in living optimization reports",
+    "description": "As an optimization stakeholder, I want each score drill-down to show its actual questions and provide a revision-pinned shareable brief, so that I can act without opening raw evidence.\n\nOut of scope:\n- New GraphQL models, schema changes, or infrastructure resources.\n- Raw feedback, transcripts, prompts, or opaque IDs in stakeholder artifacts.\n- Automatic score, guideline, feedback-setting, or champion mutations.\n\nFeature: Actionable score-level reporting\n\nScenario: Publish one stakeholder-safe brief per score\nGiven a living optimization Report publishes a milestone with score findings\nWhen score-level artifacts are generated\nThen each score receives one revision-pinned Markdown brief\nAnd the brief explains its state, evidence counts, rationale, next action, and related questions or issues\nAnd the artifact remains discoverable through the revision manifest without being attached directly to the Task\n\nScenario: Show actual questions in the score drill-down\nGiven a score has stakeholder questions or structural issues\nWhen an operator expands that score in the Report\nThen the actual stakeholder-safe finding and next action are visible\nAnd the score brief can be opened from the same expanded section\n\nScenario: Preserve stakeholder safety\nGiven score findings contain spreadsheet-like text or internal references\nWhen a score brief and presentation are published\nThen only allowlisted stakeholder fields appear\nAnd no raw evidence or opaque identifier is exposed.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

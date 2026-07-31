@@ -1,0 +1,43 @@
+{
+  "id": "plx-bd9dcac9-dc5a-49ee-a610-353fbe2c09ed",
+  "title": "Integrate durable child waiting into portfolio execution",
+  "description": "Implement story plx-e91e03 using the supported Tactus external-child wait contract and existing Plexus Procedure and Task records. Checkpoint child references, suspend without holding compute, resume through the procedure recovery path, review only terminal indexed evidence, and never impose a fixed evaluation timeout or premature cancellation.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-78b7597b-9390-408b-9a5c-6799b70c2ab2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a2fafe28-56ae-4615-aa43-1d142b47d2d6",
+      "author": "ryan.porter",
+      "text": "Beginning parent child-wait lifecycle implementation. Scope: procedure child-await loop, WAITING_FOR_CHILDREN propagation, recovery eligibility, and resume_once Task dispatch policy. No polling thread, timeout, cancellation, ChatMessage, schema/resource, or production changes.",
+      "created_at": "2026-07-31T00:15:03.150893Z"
+    },
+    {
+      "id": "9cc9c6d7-0048-4aff-9a55-ebfa62331c72",
+      "author": "ryan.porter",
+      "text": "Beginning runtime dependency and external-child resolver slice. I will use exact GraphQL Procedure/Task reads only, validate immutable launch identity and artifacts fail-closed, and wire the supported Tactus child_wait_resolver constructor gate. No schema/resources or production operations.",
+      "created_at": "2026-07-31T00:15:54.343047Z"
+    },
+    {
+      "id": "073ef626-7709-4fa2-a263-396f69026fee",
+      "author": "ryan.porter",
+      "text": "Runtime child-resolution slice implemented and validated. Added exact-read-only resolver for persisted optimizer Procedure/Task pairs; verifies account, target/link, score IDs, immutable launch identity, source attachment pointer, and indexed optimizer artifacts. Completed children require both records terminal plus indexed evidence; failed/cancelled children are terminal but never successful; malformed/mismatched records fail closed. Default portfolio runtime lazily binds GraphQLOptimizerDispatchBackend and OptimizerTaskDispatchService to the checked-in optimizer YAML plus SHA-256. Procedure executor injects the supported Tactus child_wait_resolver only for await_children and errors explicitly if unavailable. Evidence: 261 MCP runtime tests passed; 124 procedure/resolver/dispatch tests passed; invoke lint passed; diff check passed. Tooling note: local Poetry environment is Python 3.12.13, Tactus 0.51.4 reporting child_wait_resolver; pyproject requests 0.51.5.",
+      "created_at": "2026-07-31T00:20:25.963710Z"
+    },
+    {
+      "id": "3346b69f-8be3-4ae0-8b02-38db791668b5",
+      "author": "ryan.porter",
+      "text": "Review correction applied: optimizer_artifacts is now read only from Procedure.metadata, matching the existing optimizer indexer. Resolver verifies pointer.task_id equals the exact Task, schema/index timestamp, canonical three artifact keys, and per-artifact S3 key, positive size, SHA-256 shape, and content type. Added outside-in completed-child production-shape and mismatched-pointer-task tests. Red: Procedure-owned pointer initially did not terminalize. Green: resolver 8 passed; MCP runtime 261 passed; procedure/resolver/dispatch set 125 passed; invoke lint and diff check passed.",
+      "created_at": "2026-07-31T00:28:08.994875Z"
+    }
+  ],
+  "created_at": "2026-07-30T22:44:49.627349Z",
+  "updated_at": "2026-07-31T00:28:08.994875Z",
+  "closed_at": null,
+  "custom": {}
+}

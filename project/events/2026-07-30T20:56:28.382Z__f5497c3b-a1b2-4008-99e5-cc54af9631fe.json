@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f5497c3b-a1b2-4008-99e5-cc54af9631fe",
+  "issue_id": "plx-3a43d519-9d31-40fb-9df2-11858d0fdd6b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T20:56:28.382Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Separate complete inventory from incomplete semantic analysis",
+    "description": "Observed behavior: a portfolio run can enumerate its entire score inventory while selected semantic diagnoses return incomplete evidence. The living Report currently labels this as complete coverage, which overstates the completed analysis and obscures why the run is incomplete.\n\nFeature: Distinct inventory and analysis completeness\n\nScenario: Complete inventory with incomplete diagnosis results\nGiven exhaustive score inventory coverage is complete\nAnd a scheduled semantic diagnosis returns an incomplete result\nWhen the living Report publishes the terminal milestone\nThen the Report identifies portfolio inventory coverage as complete\nAnd identifies semantic analysis as incomplete\nAnd reports the count of returned incomplete diagnoses separately from execution failures and safety-cap deferrals\n\nScenario: Complete semantic analysis\nGiven exhaustive score inventory coverage is complete\nAnd every policy-selected semantic diagnosis completes without an incomplete result or deferral\nWhen the living Report publishes the milestone\nThen semantic analysis is labeled complete\n\nScenario: Analysis still in progress\nGiven policy-selected semantic diagnoses have not yet reached a terminal result\nWhen the living Report publishes an intermediate milestone\nThen semantic analysis is labeled pending rather than complete.\n\nOut of scope: changing ranking, diagnosis selection, safety caps, or optimizer authorization.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

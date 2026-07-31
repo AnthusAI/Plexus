@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c5d53f7a-85cf-4494-b2e7-4403606e8448",
+  "issue_id": "plx-1137d3d4-d5d3-4bbb-b12b-8251fe43761b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T16:33:04.039Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Render aggregate living-report presentation on the Report cover",
+    "description": "The living-report service publishes a specialized aggregate status block, but the Report cover omits the block reference, so operators see only the legacy prose projection.\n\nFeature: Living-report aggregate presentation\n\nScenario: Open a published living optimization Report\n  Given the Report has a published OptimizationRunStatus block\n  And that block points to a verified stakeholder-presentation artifact\n  When an operator opens the Report detail view\n  Then the Report cover renders the aggregate optimization presentation\n  And the compact prose remains available as supporting context\n\nScenario: Open the Report before aggregate evidence exists\n  Given the Report status block exists but its first presentation revision is not yet available\n  When an operator opens the Report detail view\n  Then the cover presents an honest loading or unavailable state\n  And it does not invent aggregate findings\n\nOut of scope:\n- New GraphQL models or infrastructure resources.\n- Changing the immutable artifact contract.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": "ryan.porter",
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

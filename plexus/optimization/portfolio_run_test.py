@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
+
+import pytest
 
 
 def _assessment(scorecard_id: str, score_id: str) -> dict[str, Any]:
@@ -33,6 +36,9 @@ class _ReportService:
     terminal: list[str] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
     progress_updates: list[dict[str, Any]] = field(default_factory=list)
+    latest_checkpoint: dict[str, Any] | None = None
+    semantic_ledger: dict[str, Any] | None = None
+    semantic_commits: list[dict[str, Any]] = field(default_factory=list)
     report: Any = field(default_factory=lambda: type("Report", (), {"id": "report-1"})())
 
     def start_or_resume(self, run_spec):
@@ -40,8 +46,22 @@ class _ReportService:
         return type("State", (), {"report": self.report})()
 
     def publish_milestone(self, milestone, evidence, *, stakeholder_view):
-        self.milestones.append((milestone, dict(evidence), dict(stakeholder_view)))
+        self.milestones.append((
+            milestone,
+            deepcopy(dict(evidence)),
+            deepcopy(dict(stakeholder_view)),
+        ))
         return object()
+
+    def load_latest_checkpoint(self):
+        return self.latest_checkpoint
+
+    def load_semantic_budget_ledger(self):
+        return deepcopy(self.semantic_ledger)
+
+    def persist_semantic_budget_ledger(self, value):
+        self.semantic_ledger = deepcopy(dict(value))
+        self.semantic_commits.append(deepcopy(dict(value)))
 
     def publish_progress(self, **progress):
         self.progress_updates.append(dict(progress))
@@ -55,7 +75,8 @@ class _ReportService:
 
 def _dependencies(
     *, rank, assess, diagnose, summary, dispatch, review, report, human_review,
-    create_action=None, publish_update=None,
+    create_action=None, publish_update=None, optimizer_child_step=None,
+    optimizer_child_request=None, diagnosis_preflight=None,
 ):
     from plexus.optimization.portfolio_run import PortfolioRunDependencies
 
@@ -70,7 +91,76 @@ def _dependencies(
         human_review=human_review,
         create_action=create_action,
         publish_update=publish_update,
+        optimizer_child_step=optimizer_child_step,
+        optimizer_child_request=optimizer_child_request,
+        diagnosis_preflight=diagnosis_preflight,
     )
+
+
+def test_required_diagnosis_evidence_preflight_blocks_semantic_spend_and_optimizer_dispatch():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    calls: list[str] = []
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": [
+            {"scorecard_id": "card", "score_id": "score"},
+        ]},
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnosis_preflight=lambda _request: calls.append("preflight") or {
+            "complete": False,
+            "failure_category": "required_evidence_unavailable",
+            "message": "Required rubric-memory evidence is unavailable; refresh worker authorization and resume.",
+        },
+        diagnose=lambda _request: calls.append("diagnose") or {},
+        summary=lambda _request: {"coverage": {"complete": False}},
+        dispatch=lambda _request: calls.append("dispatch") or {},
+        review=lambda _request: {}, report=report, human_review=lambda _request: {},
+    ))
+
+    result = runner.run({
+        "account_id": "account-1", "run_key": "preflight-failure",
+        "max_semantic_diagnoses": 1, "max_semantic_cost_usd": "1",
+        "execution_mode": "automatic",
+    })
+
+    assert result["status"] == "INCOMPLETE", result.get("error")
+    assert calls == ["preflight"]
+    assert result["diagnosis_coverage"]["prerequisite_failure_count"] == 1
+    assert result["diagnosis_coverage"]["failure_category"] == "required_evidence_unavailable"
+    assert any("rubric-memory evidence" in blocker for blocker in result["diagnosis_coverage"]["blockers"])
+    assert [milestone for milestone, _evidence, _view in report.milestones] == [
+        "started", "ranking", "assessment", "diagnosis", "finalization",
+    ]
+    final_view = report.milestones[-1][2]
+    assert final_view["overview"]["analysis_coverage_status"] == "incomplete"
+    assert final_view["overview"]["diagnosis_prerequisite_failure_count"] == 1
+    assert final_view["portfolio"][0]["next_action"] == "refresh_worker_authorization_and_resume"
+    assert final_view["portfolio"][0]["semantic_diagnosis_status"] == "required_evidence_unavailable"
+    assert any(
+        issue.get("issue_flag") == "required_evidence_unavailable"
+        for issue in final_view["questions_and_issues"]
+    )
+
+
+def test_diagnosis_evidence_preflight_is_not_called_without_a_semantic_target():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    calls: list[str] = []
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": []},
+        assess=lambda _request: {}, diagnose=lambda _request: {},
+        diagnosis_preflight=lambda _request: calls.append("preflight") or {"complete": True},
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda _request: {}, review=lambda _request: {},
+        report=report, human_review=lambda _request: {},
+    ))
+
+    result = runner.run({"account_id": "account-1", "run_key": "no-semantic-target"})
+
+    assert result["status"] == "COMPLETED"
+    assert calls == []
 
 
 def test_portfolio_run_publishes_idempotent_operator_milestones_after_report_updates():
@@ -92,6 +182,7 @@ def test_portfolio_run_publishes_idempotent_operator_milestones_after_report_upd
 
     result = runner.run({"account_id": "account-1", "run_key": "daily-run"})
 
+    assert result.get("error") is None
     assert result["status"] == "COMPLETED"
     assert [update["event_key"] for update in updates] == [
         "optimization:daily-run:started",
@@ -105,10 +196,435 @@ def test_portfolio_run_publishes_idempotent_operator_milestones_after_report_upd
     assert terminal_view["overview"]["lifecycle_status"] == "completed"
     assert "complete" in terminal_view["overview"]["current_activity"].lower()
     assert "Finalizing" not in terminal_view["overview"]["current_activity"]
+    assert [milestone for milestone, _evidence, _view in report.milestones] == [
+        "started", "ranking", "assessment", "diagnosis", "approval", "finalization",
+    ]
     assert all(update["resource_refs"] == [{
         "system": "plexus", "kind": "report", "id": "report-1",
         "relation": "optimization_run",
     }] for update in updates)
+
+
+def test_portfolio_run_routes_private_ranking_progress_to_the_existing_report_path():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+
+    def rank(request):
+        callback = request.get("_optimization_rank_progress")
+        assert callable(callback)
+        callback({
+            "phase": "ranking",
+            "subphase": "inventory",
+            "state": "retrying",
+            "current": 12,
+            "total": None,
+            "unit": "scorecards",
+            "elapsed_seconds": 63,
+            "next_checkpoint": "Retrying the inventory page.",
+            "message": "Inventory has inspected 12 scorecards; retrying a page.",
+        })
+        callback({
+            "phase": "ranking",
+            "subphase": "activity_evidence",
+            "state": "active",
+            "current": 12,
+            "total": 12,
+            "unit": "scorecards",
+            "message": "Score activity evidence is complete.",
+        })
+        callback({
+            "phase": "ranking",
+            "subphase": "feedback_analysis",
+            "state": "active",
+            "current": 5,
+            "total": 12,
+            "unit": "scorecards",
+            "message": "Feedback analysis is running.",
+        })
+        return {"coverage": {"complete": True}, "ranked": []}
+
+    result = OptimizationPortfolioRunner(_dependencies(
+        rank=rank,
+        assess=lambda _request: {},
+        diagnose=lambda _request: {},
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda _request: {},
+        review=lambda _request: {},
+        report=report,
+        human_review=lambda _request: {},
+    )).run({"account_id": "account-1", "run_key": "ranking-progress-run"})
+
+    assert result["status"] == "COMPLETED"
+    assert [update["subphase"] for update in report.progress_updates[:3]] == [
+        "inventory", "activity_evidence", "feedback_analysis",
+    ]
+    assert report.progress_updates[0] == {
+        "phase": "ranking",
+        "subphase": "inventory",
+        "current": 12,
+        "total": None,
+        "message": "Inventory has inspected 12 scorecards; retrying a page.",
+        "unit": "scorecards",
+        "state": "retrying",
+        "elapsed_seconds": 63,
+        "next_checkpoint": "Retrying the inventory page.",
+        "heartbeat_interval_seconds": None,
+    }
+
+
+@pytest.mark.parametrize("task_terminal", [False, True])
+def test_finalization_recovery_uses_durable_state_and_replays_one_terminal_update(
+    task_terminal,
+):
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService(latest_checkpoint={
+        "milestone": "finalization",
+        "task_terminal": task_terminal,
+        "evidence": {
+            "run_key": "recovery-run",
+            "run_spec": {"account_id": "account-1", "run_key": "recovery-run"},
+            "terminal_status": "INCOMPLETE",
+            "coverage": {"complete": True},
+            "rank": {"coverage": {"complete": True}, "ranked": []},
+            "assessments": [],
+            "diagnoses": [],
+            "diagnosis_coverage": {"selected_scope_complete": False},
+            "actions": [],
+            "approval_requests": [],
+            "approved_targets": [],
+            "dispatch": None,
+            "reviews": [],
+            "summary": {"coverage": {"complete": False}},
+        },
+    })
+    calls = {"rank": 0, "assess": 0, "diagnose": 0}
+
+    def unexpected(name):
+        def call(_request):
+            calls[name] += 1
+            raise AssertionError(f"{name} must not run after a durable finalization checkpoint")
+        return call
+
+    updates: list[dict[str, Any]] = []
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=unexpected("rank"), assess=unexpected("assess"), diagnose=unexpected("diagnose"),
+        summary=lambda _request: {"coverage": {"complete": False}},
+        dispatch=lambda _request: (_ for _ in ()).throw(AssertionError("dispatch must not run")),
+        review=lambda _request: (_ for _ in ()).throw(AssertionError("review must not run")),
+        report=report, human_review=lambda _request: {},
+        publish_update=lambda update: updates.append(update) or {"created": len(updates) == 1},
+    ))
+
+    result = runner.run({"account_id": "account-1", "run_key": "recovery-run"})
+
+    assert result["status"] == "INCOMPLETE"
+    assert calls == {"rank": 0, "assess": 0, "diagnose": 0}
+    assert report.milestones == []
+    assert report.terminal == ([] if task_terminal else ["INCOMPLETE"])
+    assert [update["event_key"] for update in updates] == [
+        "optimization:recovery-run:completed"
+    ]
+
+
+def test_finalization_recovery_write_interruption_defers_the_current_attempt():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+    from plexus.optimization.run_report import OptimizationRunRetryablePublicationError
+
+    report = _ReportService(latest_checkpoint={
+        "milestone": "finalization", "task_terminal": False,
+        "evidence": {
+            "run_key": "finalize-retry", "terminal_status": "COMPLETED",
+            "coverage": {"complete": True}, "rank": {"coverage": {"complete": True}, "ranked": []},
+            "assessments": [], "diagnoses": [], "diagnosis_coverage": {},
+            "actions": [], "approval_requests": [], "approved_targets": [],
+            "dispatch": None, "reviews": [], "promotion_candidates": [], "summary": {},
+        },
+    })
+    report.finalize = lambda **_kwargs: (_ for _ in ()).throw(
+        OptimizationRunRetryablePublicationError("temporary finalization interruption")
+    )
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: (_ for _ in ()).throw(AssertionError("rank must not run")),
+        assess=lambda _request: {}, diagnose=lambda _request: {}, summary=lambda _request: {},
+        dispatch=lambda _request: (_ for _ in ()).throw(AssertionError("dispatch must not run")),
+        review=lambda _request: (_ for _ in ()).throw(AssertionError("review must not run")),
+        report=report, human_review=lambda _request: {},
+    ))
+
+    result = runner.run({"account_id": "account-1", "run_key": "finalize-retry"})
+
+    assert result["status"] == "RETRYABLE_PUBLICATION"
+    assert result["retry"]["reason"] == "retryable_report_publication"
+    assert report.failures == []
+
+
+def test_assessment_recovery_continues_with_diagnosis_without_repeating_rank_or_assess():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    rank_packet = {
+        "coverage": {"complete": True},
+        "window": {"start": "2026-04-01T00:00:00Z", "end": "2026-07-01T00:00:00Z"},
+        "ranked": [{
+            "scorecard_id": "opaque-card", "score_id": "opaque-score",
+            "scorecard_name": "Example Portfolio", "score_name": "Example Score",
+        }],
+    }
+    assessment = _assessment("opaque-card", "opaque-score")
+    assessment["scorecard_name"] = "Example Portfolio"
+    assessment["score_name"] = "Example Score"
+    report = _ReportService(latest_checkpoint={
+        "milestone": "assessment",
+        "task_terminal": False,
+        "evidence": {
+            "run_key": "assessment-recovery",
+            "coverage": {"complete": True},
+            "rank": rank_packet,
+            "assessments": [assessment],
+            "diagnoses": [],
+            "diagnosis_coverage": {
+                "scheduled_count": 1, "completed_count": 0, "failed_count": 0,
+                "deferred_by_cap_count": 0, "blockers": [],
+            },
+            "actions": [], "approval_requests": [], "approved_targets": [],
+            "dispatch": None, "reviews": [], "summary": None,
+        },
+    })
+    calls = {"rank": 0, "assess": 0, "diagnose": 0}
+
+    def diagnose(request):
+        calls["diagnose"] += 1
+        return {**request["assessment"], "states": {"optimization": "monitoring_candidate"}}
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: calls.__setitem__("rank", calls["rank"] + 1),
+        assess=lambda _request: calls.__setitem__("assess", calls["assess"] + 1),
+        diagnose=diagnose,
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda _request: (_ for _ in ()).throw(AssertionError("dispatch must not run")),
+        review=lambda _request: (_ for _ in ()).throw(AssertionError("review must not run")),
+        report=report, human_review=lambda _request: {"decisions": []},
+    ))
+
+    result = runner.run({
+        "account_id": "account-1",
+        "run_key": "assessment-recovery",
+        "max_semantic_cost_usd": "1",
+    })
+
+    assert result["status"] in {"COMPLETED", "COMPLETED_WITH_UNRESOLVED_ACTIONS"}
+    assert calls == {"rank": 0, "assess": 0, "diagnose": 1}
+    assert report.milestones[0][0] == "diagnosis"
+
+
+def test_review_checkpoint_recovery_only_publishes_the_missing_finalization():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    rank_packet = {
+        "coverage": {"complete": True},
+        "ranked": [{
+            "scorecard_id": "opaque-card", "score_id": "opaque-score",
+            "scorecard_name": "Example Portfolio", "score_name": "Example Score",
+        }],
+    }
+    assessment = _assessment("opaque-card", "opaque-score")
+    diagnosis = {**assessment, "states": {"optimization": "ready_to_optimize"}}
+    report = _ReportService(latest_checkpoint={
+        "milestone": "optimization_review",
+        "task_terminal": False,
+        "evidence": {
+            "run_key": "review-recovery", "coverage": {"complete": True},
+            "rank": rank_packet, "assessments": [assessment], "diagnoses": [diagnosis],
+            "diagnosis_coverage": {
+                "scheduled_count": 1, "completed_count": 1, "failed_count": 0,
+                "deferred_by_cap_count": 0, "blockers": [],
+                "scheduled_scope_complete": True, "selected_scope_complete": True,
+            },
+            "actions": [], "approval_requests": [],
+            "approved_targets": [{"scorecard_id": "opaque-card", "score_id": "opaque-score"}],
+            "dispatch": {
+                "batches": [{
+                    "dispatches": [{"status": "dispatched", "procedure_id": "procedure-1"}],
+                    "rejected": [],
+                }],
+                "rejected": [],
+            },
+            "reviews": [{"procedure_id": "procedure-1", "promotion_ready": False}],
+            "promotion_candidates": [],
+            "summary": {"coverage": {"complete": True}},
+        },
+    })
+
+    def must_not_run(name):
+        return lambda _request: (_ for _ in ()).throw(
+            AssertionError(f"{name} must not repeat after the review checkpoint")
+        )
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=must_not_run("rank"), assess=must_not_run("assess"),
+        diagnose=must_not_run("diagnose"), summary=must_not_run("summary"),
+        dispatch=must_not_run("dispatch"), review=must_not_run("review"),
+        report=report, human_review=must_not_run("human review"),
+    ))
+
+    result = runner.run({
+        "account_id": "account-1",
+        "run_key": "review-recovery",
+        "max_semantic_cost_usd": "1",
+    })
+
+    assert result.get("error") is None
+    assert result["status"] == "COMPLETED"
+    assert [milestone for milestone, _evidence, _view in report.milestones] == ["finalization"]
+    assert report.terminal == ["COMPLETED"]
+
+
+def test_retryable_publication_interruption_emits_a_sanitized_scheduled_retry():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+    from plexus.optimization.run_report import OptimizationRunRetryablePublicationError
+
+    report = _ReportService()
+    def interrupted(*_args, **_kwargs):
+        raise OptimizationRunRetryablePublicationError("temporary publication interruption")
+    report.publish_milestone = interrupted
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": []},
+        assess=lambda _request: {}, diagnose=lambda _request: {},
+        summary=lambda _request: {}, dispatch=lambda _request: {}, review=lambda _request: {},
+        report=report, human_review=lambda _request: {},
+    ))
+
+    result = runner.run({"account_id": "account-1", "run_key": "retryable-publication"})
+
+    assert result["status"] == "RETRYABLE_PUBLICATION"
+    assert "error" not in result
+    assert result["retry"] == {
+        "key": "optimization-report-publication",
+        "reason": "retryable_report_publication",
+        "resume_at": result["retry"]["resume_at"],
+    }
+    assert result["retry"]["resume_at"].endswith("Z")
+    assert "temporary publication interruption" not in str(result)
+    assert report.failures == []
+    assert report.terminal == []
+
+
+def test_retryable_milestone_publication_failure_is_nonterminal_at_the_portfolio_boundary():
+    """A caller must defer a behind-Report attempt rather than complete it."""
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+    from plexus.optimization.run_report import OptimizationRunRetryablePublicationError
+
+    report = _ReportService()
+
+    def interrupted(*_args, **_kwargs):
+        raise OptimizationRunRetryablePublicationError(
+            "temporary publication interruption"
+        )
+
+    report.publish_milestone = interrupted
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": []},
+        assess=lambda _request: {}, diagnose=lambda _request: {},
+        summary=lambda _request: {}, dispatch=lambda _request: {}, review=lambda _request: {},
+        report=report, human_review=lambda _request: {},
+    ))
+
+    result = runner.run({"account_id": "account-1", "run_key": "fatal-publication"})
+
+    assert result["status"] == "RETRYABLE_PUBLICATION"
+    assert result["retry"]["reason"] == "retryable_report_publication"
+    assert "error" not in result
+    assert report.failures == []
+    assert report.terminal == []
+
+
+def test_retryable_initialization_interruption_defers_without_analysis():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+    from plexus.optimization.run_report import OptimizationRunRetryablePublicationError
+
+    report = _ReportService()
+    report.start_or_resume = lambda _spec: (_ for _ in ()).throw(
+        OptimizationRunRetryablePublicationError("temporary initialization interruption")
+    )
+    rank_calls = 0
+
+    def rank(_request):
+        nonlocal rank_calls
+        rank_calls += 1
+        raise AssertionError("rank must not run before initialization is durable")
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=rank, assess=lambda _request: {}, diagnose=lambda _request: {},
+        summary=lambda _request: {}, dispatch=lambda _request: {}, review=lambda _request: {},
+        report=report, human_review=lambda _request: {},
+    ))
+
+    result = runner.run({"account_id": "account-1", "run_key": "init-retry"})
+
+    assert result["status"] == "RETRYABLE_PUBLICATION"
+    assert result["retry"]["key"] == "optimization-report-publication"
+    assert rank_calls == 0
+    assert report.failures == []
+
+
+@pytest.mark.parametrize(
+    "error_type_name",
+    ["ArtifactTicketError", "ArtifactAuthorizationError", "ArtifactTransferError"],
+)
+def test_retryable_checkpoint_read_defers_current_attempt_and_later_replay_uses_checkpoint(
+    error_type_name,
+):
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+    from plexus.storage import graphql_artifact_store
+
+    checkpoint = {
+        "milestone": "finalization", "task_terminal": True,
+        "evidence": {
+            "run_key": "read-retry", "terminal_status": "COMPLETED",
+            "coverage": {"complete": True},
+            "rank": {"coverage": {"complete": True}, "ranked": []},
+            "assessments": [], "diagnoses": [], "diagnosis_coverage": {},
+            "actions": [], "approval_requests": [], "approved_targets": [],
+            "dispatch": None, "reviews": [], "promotion_candidates": [], "summary": {},
+        },
+    }
+    report = _ReportService()
+    reads = [getattr(graphql_artifact_store, error_type_name)("temporary read interruption"), checkpoint]
+
+    def load_latest_checkpoint():
+        result = reads.pop(0)
+        if isinstance(result, Exception):
+            from plexus.optimization.run_report import OptimizationRunRetryablePublicationError
+
+            raise OptimizationRunRetryablePublicationError(
+                "mapped retryable checkpoint read"
+            ) from result
+        return result
+
+    report.load_latest_checkpoint = load_latest_checkpoint
+    analysis_calls = 0
+
+    def analysis_must_not_run(_request):
+        nonlocal analysis_calls
+        analysis_calls += 1
+        raise AssertionError("analysis must not run while replaying a committed finalization")
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=analysis_must_not_run, assess=analysis_must_not_run,
+        diagnose=analysis_must_not_run, summary=analysis_must_not_run,
+        dispatch=analysis_must_not_run, review=analysis_must_not_run,
+        report=report, human_review=lambda _request: {},
+    ))
+
+    first = runner.run({"account_id": "account-1", "run_key": "read-retry"})
+    second = runner.run({"account_id": "account-1", "run_key": "read-retry"})
+
+    assert first["status"] == "RETRYABLE_PUBLICATION"
+    assert first["retry"]["reason"] == "retryable_report_publication"
+    assert second["status"] == "COMPLETED"
+    assert analysis_calls == 0
+    assert report.failures == []
 
 
 def test_long_analysis_exposes_incremental_progress_without_extra_report_revisions(monkeypatch):
@@ -152,6 +668,7 @@ def test_long_analysis_exposes_incremental_progress_without_extra_report_revisio
         "account_id": "account-1",
         "run_key": "progress-run",
         "max_semantic_diagnoses": 2,
+        "max_semantic_cost_usd": "1",
     })
 
     assert result["status"] == "COMPLETED"
@@ -169,15 +686,17 @@ def test_long_analysis_exposes_incremental_progress_without_extra_report_revisio
     assert "Example Score 9" in report.progress_updates[1]["message"]
     assert "semantic diagnosis" in report.progress_updates[-1]["message"].lower()
     assert [milestone for milestone, _, _ in report.milestones] == [
-        "started", "ranking", "assessment", "diagnosis", "approval",
-        "optimization", "optimization", "optimization_review", "finalization",
+        "started", "ranking", "assessment", "diagnosis", "approval", "finalization",
     ]
 
 
 def test_portfolio_run_creates_the_living_report_before_analysis_and_only_launches_independently_approved_exact_targets():
     from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+    from plexus.optimization.optimizer_dispatch import OptimizerTaskDispatchService
 
     report = _ReportService()
+    backend = _OptimizerChildBackend()
+    child_service = OptimizerTaskDispatchService(backend)
     dispatches: list[dict[str, Any]] = []
     review_requests: list[dict[str, Any]] = []
     rank_packet = {
@@ -196,8 +715,8 @@ def test_portfolio_run_creates_the_living_report_before_analysis_and_only_launch
         summary=lambda request: {"coverage": {"complete": True}, "per_score_outcomes": []},
         dispatch=lambda request: dispatches.append(request) or {
             "accepted": True,
-            "dispatches": [{"status": "dispatched", "procedure_id": "procedure-one"}],
-            "dispatch_coverage": {"complete": True},
+            "accepted_targets": list(request["targets"]),
+            "rejected": [],
         },
         review=lambda request: {"coverage": {"complete": True}, "post_run_state": "promotion_ready", "promotion_ready": True},
         report=report,
@@ -206,6 +725,12 @@ def test_portfolio_run_creates_the_living_report_before_analysis_and_only_launch
                 {"scorecard_id": "opaque-card", "score_id": "opaque-one", "decision": "approve", "comment": "go"},
                 {"scorecard_id": "opaque-card", "score_id": "opaque-two", "decision": "reject", "comment": "not today"},
             ]
+        },
+        optimizer_child_step=child_service.step,
+        optimizer_child_request=lambda request: {
+            **request,
+            "optimizer_yaml": "name: optimizer\n",
+            "stages": [{"name": "Optimize", "order": 1, "status": "PENDING"}],
         },
     ))
 
@@ -217,13 +742,13 @@ def test_portfolio_run_creates_the_living_report_before_analysis_and_only_launch
         "max_samples": 50,
         "max_iterations": 2,
         "max_concurrency": 1,
+        "max_semantic_cost_usd": "1",
     })
 
     assert len(report.started) == 1
     assert report.milestones[0][0] == "started"
-    assert [milestone[0] for milestone in report.milestones] == [
-        "started", "ranking", "assessment", "diagnosis", "approval",
-        "optimization", "optimization", "optimization_review", "finalization",
+    assert [milestone[0] for milestone in report.milestones[:6]] == [
+        "started", "ranking", "assessment", "diagnosis", "approval", "optimization",
     ]
     assert review_requests[0]["action_key"] == "optimization-approval:daily-account-1-2026-07-01:1"
     assert review_requests[0]["response_schema"]["type"] == "object"
@@ -231,12 +756,945 @@ def test_portfolio_run_creates_the_living_report_before_analysis_and_only_launch
     assert len(review_requests[0]["targets"]) == 2
     assert review_requests[0]["preconditions"]["targets"][0]["scorecard_name"] == "Example"
     assert review_requests[0]["preconditions"]["targets"][0]["score_name"] == "One"
+    assert review_requests[0]["preconditions"]["limits"] == {
+        "max_cost_usd": 5.0,
+        "max_samples": 50,
+        "max_iterations": 2,
+        "max_concurrency": 1,
+    }
     assert review_requests[0]["resource_refs"][0]["kind"] == "report"
     assert dispatches[0]["approved"] is True
     assert [(row["scorecard_id"], row["score_id"]) for row in dispatches[0]["targets"]] == [("opaque-card", "opaque-one")]
     assert dispatches[0]["max_samples"] == 50
-    assert result["promotion_candidates"] == [{"scorecard_id": "opaque-card", "score_id": "opaque-one"}]
+    assert dispatches[0]["run_key"] == "daily-account-1-2026-07-01"
+    assert result["status"] == "WAITING_FOR_CHILDREN"
+    assert result["dispatch"]["children"][0]["target"] == {
+        "scorecard_id": "opaque-card", "score_id": "opaque-one",
+    }
+    assert result["promotion_candidates"] == []
+    assert report.terminal == []
+
+
+class _OptimizerChildBackend:
+    """In-memory contract double for the pure optimizer child coordinator."""
+
+    def __init__(self) -> None:
+        self.procedures: list[dict[str, Any]] = []
+        self.tasks: list[dict[str, Any]] = []
+        self.artifacts: dict[str, bytes] = {}
+        self.stages: dict[str, list[dict[str, Any]]] = {}
+        self.create_procedure_calls = 0
+        self.create_task_calls = 0
+        self.release_calls = 0
+
+    def procedure_pages_for_account(self, _account_id):
+        return iter([{"items": [dict(row) for row in self.procedures], "next_token": None}])
+
+    def create_procedure(self, record):
+        self.create_procedure_calls += 1
+        row = {"id": f"procedure-{len(self.procedures) + 1}", **dict(record)}
+        self.procedures.append(row)
+        return dict(row)
+
+    def get_procedure(self, procedure_id):
+        return next(dict(row) for row in self.procedures if row["id"] == procedure_id)
+
+    def upload_and_verify_procedure_yaml(self, procedure, optimizer_yaml, metadata):
+        key = f"procedures/{procedure['id']}/code.tac"
+        self.artifacts[key] = optimizer_yaml.encode("utf-8")
+        for row in self.procedures:
+            if row["id"] == procedure["id"]:
+                row["metadata"] = {
+                    **dict(metadata),
+                    "code_artifact": {
+                        "key": key,
+                        "sha256": metadata["optimizer_yaml_sha256"],
+                    },
+                }
+                return dict(row)
+        raise AssertionError("procedure must exist before attachment upload")
+
+    def read_procedure_artifact(self, key):
+        return self.artifacts[key]
+
+    def task_pages_for_account(self, _account_id):
+        return iter([{"items": [dict(row) for row in self.tasks], "next_token": None}])
+
+    def create_task(self, record):
+        self.create_task_calls += 1
+        assert record["dispatchStatus"] == "HELD"
+        row = {"id": f"task-{len(self.tasks) + 1}", **dict(record)}
+        self.tasks.append(row)
+        return dict(row)
+
+    def get_task(self, task_id):
+        return next(dict(row) for row in self.tasks if row["id"] == task_id)
+
+    def task_stage_pages_for_task(self, task_id):
+        return iter([{
+            "items": [dict(row) for row in self.stages.get(task_id, [])],
+            "next_token": None,
+        }])
+
+    def reconcile_task_stages(self, task_id, stages):
+        existing = self.stages.setdefault(task_id, [])
+        for stage in stages:
+            if not any(
+                row["name"] == stage["name"] and row["order"] == stage["order"]
+                for row in existing
+            ):
+                existing.append({
+                    "id": f"stage-{len(existing) + 1}",
+                    "taskId": task_id,
+                    **dict(stage),
+                })
+        return [dict(row) for row in existing]
+
+    def release_held_task(self, task_id):
+        self.release_calls += 1
+        task = next(row for row in self.tasks if row["id"] == task_id)
+        assert task["dispatchStatus"] == "HELD"
+        task["dispatchStatus"] = "PENDING"
+
+
+def _optimizer_child_dependencies(report, backend, *, review, dispatch=None, rank=None):
+    from plexus.optimization.optimizer_dispatch import OptimizerTaskDispatchService
+
+    service = OptimizerTaskDispatchService(backend)
+    return _dependencies(
+        rank=rank or (lambda _request: {
+            "coverage": {"complete": True},
+            "ranked": [{"scorecard_id": "card", "score_id": "score"}],
+        }),
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: request["assessment"],
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=dispatch or (lambda request: {
+            "accepted": True,
+            "accepted_targets": list(request["targets"]),
+            "rejected": [],
+        }),
+        review=review,
+        report=report,
+        human_review=lambda _request: {
+            "decisions": [{
+                "scorecard_id": "card",
+                "score_id": "score",
+                "decision": "approve",
+            }],
+        },
+        optimizer_child_step=service.step,
+        optimizer_child_request=lambda request: {
+            **request,
+            "optimizer_yaml": "name: optimizer\n",
+            "stages": [{"name": "Optimize", "order": 1, "status": "PENDING"}],
+        },
+    )
+
+
+def test_approved_optimizer_child_is_reported_phase_by_phase_then_waits_without_review():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    backend = _OptimizerChildBackend()
+    reviews: list[dict[str, Any]] = []
+    runner = OptimizationPortfolioRunner(_optimizer_child_dependencies(
+        report,
+        backend,
+        review=lambda request: reviews.append(request) or {},
+    ))
+
+    result = runner.run({
+        "account_id": "account-1",
+        "run_key": "durable-child-run",
+        "max_semantic_cost_usd": "1",
+        "limits": {
+            "max_cost_usd": 1.0,
+            "max_samples": 20,
+            "max_iterations": 2,
+            "max_concurrency": 1,
+        },
+    })
+
+    assert result["status"] == "WAITING_FOR_CHILDREN"
+    assert reviews == []
+    assert report.terminal == []
+    assert "finalization" not in [
+        milestone for milestone, _evidence, _view in report.milestones
+    ]
+    child = result["dispatch"]["children"][0]
+    assert child["procedure_id"] == "procedure-1"
+    assert child["task_id"] == "task-1"
+    assert child["launch_state"]["phase"] == "waiting"
+    assert child["launch_state"]["launch_spec"]["run_key"] == "durable-child-run"
+    assert child["launch_state"]["launch_spec"]["scorecard_id"] == "card"
+    assert child["launch_state"]["launch_spec"]["score_id"] == "score"
+    assert child["launch_state"]["launch_spec"]["assessment_fingerprint"] == "fingerprint-score"
+    assert child["launch_state"]["launch_spec"]["limits"] == {
+        "max_cost_usd": 1.0,
+        "max_samples": 20,
+        "max_iterations": 2,
+        "max_concurrency": 1,
+    }
+    assert result["execution_decisions"]["launched_count"] == 1
+    assert result["execution_decisions"]["selected_targets"][0]["launch_status"] == "launched"
+    optimization_states = [
+        evidence["dispatch"]["children"][0]["launch_state"]["phase"]
+        for milestone, evidence, _view in report.milestones
+        if milestone == "optimization"
+        and isinstance(evidence.get("dispatch"), dict)
+        and evidence["dispatch"].get("children")
+        and evidence["dispatch"]["children"][0].get("launch_state")
+    ]
+    assert optimization_states[:9] == [
+        "planned",
+        "procedure_create_attempted",
+        "procedure_record_observed",
+        "procedure_provisioned",
+        "task_create_attempted",
+        "task_record_observed",
+        "task_held",
+        "release_attempted",
+        "waiting",
+    ]
+    assert optimization_states[-1] == "waiting"
+    assert backend.create_procedure_calls == 1
+    assert backend.create_task_calls == 1
+    assert backend.release_calls == 1
+
+
+def test_approved_zero_cost_limit_is_reported_incomplete_without_dispatching_or_creating_children():
+    import csv
+    from datetime import datetime, timezone
+    from io import BytesIO
+    import json
+
+    from openpyxl import load_workbook
+
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+    from plexus.optimization.run_report import (
+        build_scorecard_artifacts,
+        build_stakeholder_presentation,
+        build_stakeholder_workbook,
+    )
+
+    report = _ReportService()
+    backend = _OptimizerChildBackend()
+    runner = OptimizationPortfolioRunner(_optimizer_child_dependencies(
+        report,
+        backend,
+        dispatch=lambda _request: (_ for _ in ()).throw(
+            AssertionError("invalid limits must not reach dispatch")
+        ),
+        review=lambda _request: (_ for _ in ()).throw(
+            AssertionError("no child may be reviewed")
+        ),
+        rank=lambda _request: {
+            "coverage": {"complete": True},
+            "ranked": [{
+                "scorecard_id": "card",
+                "score_id": "score",
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Priority Score",
+                "valid_feedback_count": 240,
+                "disagreement_rate": 0.25,
+            }],
+        },
+    ))
+
+    result = runner.run({
+        "account_id": "account-1",
+        "run_key": "zero-cost-approved-run",
+        "max_semantic_cost_usd": "1",
+        "limits": {
+            "max_cost_usd": 0,
+            "max_samples": 1,
+            "max_iterations": 1,
+            "max_concurrency": 1,
+        },
+    })
+
+    assert result["status"] == "INCOMPLETE"
+    assert result["dispatch"]["phase"] == "incomplete"
+    assert result["dispatch"]["rejected"] == [{
+        "reason": "invalid_run_limits",
+        "invalid_fields": ["max_cost_usd"],
+    }]
+    assert result["dispatch"]["children"] == []
+    assert result["dispatch"]["processed_child_keys"] == []
+    assert backend.create_procedure_calls == 0
+    assert backend.create_task_calls == 0
+    assert backend.release_calls == 0
+    assert report.terminal == ["INCOMPLETE"]
+
+    final_view = next(
+        view
+        for milestone, _evidence, view in reversed(report.milestones)
+        if milestone == "finalization"
+    )
+    issue = final_view["questions_and_issues"][0]
+    assert issue["affected_disagreement_rate"] == 0.25
+    assert "disagreement_rate" not in issue
+
+    workbook = build_stakeholder_workbook(
+        final_view,
+        revision_number=1,
+        generated_at=datetime(2026, 7, 30, tzinfo=timezone.utc),
+    )
+    reopened = load_workbook(BytesIO(workbook.content), data_only=True)
+    portfolio_headers = [cell.value for cell in reopened["Portfolio"][1]]
+    portfolio_values = [cell.value for cell in reopened["Portfolio"][2]]
+    portfolio_record = dict(zip(portfolio_headers, portfolio_values))
+    assert portfolio_record["Primary Disposition"] == "failed_or_incomplete"
+    assert portfolio_record["Coverage"] == "incomplete"
+    assert portfolio_record["Next Action"] == "provide_valid_run_limits"
+    assert "invalid_run_limits" in portfolio_record["Dispatch Rejection"]
+    issue_headers = [cell.value for cell in reopened["Questions and Issues"][1]]
+    issue_values = [cell.value for cell in reopened["Questions and Issues"][2]]
+    issue_record = dict(zip(issue_headers, issue_values))
+    assert issue_record["Affected Disagreement Rate"] == 0.25
+
+    uploaded: dict[str, bytes] = {}
+
+    def upload(_task_id, filename, content):
+        uploaded[filename] = content
+        return f"tasks/task-1/{filename}"
+
+    artifacts = build_scorecard_artifacts(
+        final_view,
+        revision_number=1,
+        task_id="task-1",
+        uploader=upload,
+    )
+    brief = next(
+        content.decode("utf-8")
+        for filename, content in uploaded.items()
+        if "-brief-" in filename
+    )
+    summary = next(
+        content.decode("utf-8")
+        for filename, content in uploaded.items()
+        if "-summary-" in filename
+    )
+    portfolio_csv = next(
+        content.decode("utf-8-sig")
+        for filename, content in uploaded.items()
+        if "-portfolio-" in filename
+    )
+    scorecard_presentation = json.loads(next(
+        content
+        for filename, content in uploaded.items()
+        if "-presentation-" in filename
+    ))
+    assert "Primary disposition: failed_or_incomplete" in brief
+    assert "Next action: provide_valid_run_limits" in brief
+    assert "not launched because its run limits are invalid" in brief
+    assert "failed_or_incomplete" in summary
+    assert "provide_valid_run_limits" in summary
+    csv_row = next(csv.DictReader(portfolio_csv.splitlines()))
+    assert csv_row["Primary Disposition"] == "failed_or_incomplete"
+    assert csv_row["Coverage"] == "incomplete"
+    assert csv_row["Next Action"] == "provide_valid_run_limits"
+    assert "invalid_run_limits" in csv_row["Dispatch Rejection"]
+    score_row = scorecard_presentation["scores"][0]
+    assert score_row["primary_disposition"] == "failed_or_incomplete"
+    assert score_row["next_action"] == "provide_valid_run_limits"
+    assert score_row["dispatch_rejection"]["reason"] == "invalid_run_limits"
+    assert scorecard_presentation["questions_and_issues"][0] == issue
+
+    presentation = build_stakeholder_presentation(
+        final_view,
+        scorecard_artifacts=artifacts,
+    )
+    assert presentation["primary_disposition_counts"] == {
+        "failed_or_incomplete": 1,
+    }
+    assert presentation["optimization_outcomes"][0]["dispatch_rejection"] == {
+        "reason": "invalid_run_limits",
+        "invalid_fields": ["max_cost_usd"],
+    }
+
+
+def test_optimizer_child_replay_adopts_reported_refs_and_never_recreates_or_rereleases():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    backend = _OptimizerChildBackend()
+    runner = OptimizationPortfolioRunner(_optimizer_child_dependencies(
+        report, backend, review=lambda _request: {},
+    ))
+    request = {
+        "account_id": "account-1",
+        "run_key": "durable-child-replay",
+        "max_semantic_cost_usd": "1",
+        "limits": {
+            "max_cost_usd": 1.0,
+            "max_samples": 20,
+            "max_iterations": 2,
+            "max_concurrency": 1,
+        },
+    }
+
+    first = runner.run(request)
+    final_optimization = next(
+        row for row in reversed(report.milestones) if row[0] == "optimization"
+    )
+    report.latest_checkpoint = {
+        "milestone": "optimization",
+        "evidence": final_optimization[1],
+    }
+    before = (
+        backend.create_procedure_calls,
+        backend.create_task_calls,
+        backend.release_calls,
+    )
+
+    replay = runner.run(request)
+
+    assert first["status"] == replay["status"] == "WAITING_FOR_CHILDREN"
+    assert first["execution_decisions"]["launched_count"] == 1
+    assert replay["execution_decisions"]["launched_count"] == 1
+    assert first["execution_decisions"]["selected_targets"][0]["launch_status"] == "launched"
+    assert replay["execution_decisions"]["selected_targets"][0]["launch_status"] == "launched"
+    assert replay["dispatch"]["children"][0]["procedure_id"] == "procedure-1"
+    assert replay["dispatch"]["children"][0]["task_id"] == "task-1"
+    assert (
+        backend.create_procedure_calls,
+        backend.create_task_calls,
+        backend.release_calls,
+    ) == before
+
+
+def test_optimizer_child_resume_records_exact_wait_snapshot_but_uses_backend_terminal_readback():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    backend = _OptimizerChildBackend()
+    reviews = []
+    runner = OptimizationPortfolioRunner(_optimizer_child_dependencies(
+        report,
+        backend,
+        review=lambda request: reviews.append(request) or {
+            "coverage": {"complete": True},
+            "promotion_ready": False,
+        },
+    ))
+    request = {
+        "account_id": "account-1",
+        "run_key": "durable-child-snapshot",
+        "max_semantic_cost_usd": "1",
+        "limits": {
+            "max_cost_usd": 1.0,
+            "max_samples": 20,
+            "max_iterations": 2,
+            "max_concurrency": 1,
+        },
+    }
+    first = runner.run(request)
+    report.latest_checkpoint = {
+        "milestone": report.milestones[-1][0],
+        "evidence": report.milestones[-1][1],
+    }
+    backend.tasks[0]["status"] = "COMPLETED"
+    snapshot = [{
+        "id": first["dispatch"]["children"][0]["launch_state"]["launch_spec"]["identity"],
+        "task_id": "task-1",
+        "procedure_id": "procedure-1",
+        "scorecard_id": "card",
+        "score_id": "score",
+        "terminal": True,
+        "status": "COMPLETED",
+    }]
+
+    resumed = runner.run({**request, "optimizer_child_snapshots": snapshot})
+
+    assert first["status"] == "WAITING_FOR_CHILDREN"
+    assert resumed["dispatch"]["last_wait_snapshot"] == snapshot
+    assert reviews == [{
+        "account_id": "account-1",
+        "procedure_id": "procedure-1",
+        "persist": False,
+    }]
+
+
+def test_optimizer_child_resume_fails_closed_for_mismatched_wait_snapshot():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    backend = _OptimizerChildBackend()
+    runner = OptimizationPortfolioRunner(_optimizer_child_dependencies(
+        report, backend, review=lambda _request: {},
+    ))
+    request = {
+        "account_id": "account-1",
+        "run_key": "durable-child-mismatched-snapshot",
+        "max_semantic_cost_usd": "1",
+        "limits": {
+            "max_cost_usd": 1.0,
+            "max_samples": 20,
+            "max_iterations": 2,
+            "max_concurrency": 1,
+        },
+    }
+    runner.run(request)
+    report.latest_checkpoint = {
+        "milestone": report.milestones[-1][0],
+        "evidence": report.milestones[-1][1],
+    }
+
+    resumed = runner.run({
+        **request,
+        "optimizer_child_snapshots": [{
+            "id": "different-task",
+            "task_id": "different-task",
+            "procedure_id": "procedure-1",
+            "scorecard_id": "card",
+            "score_id": "score",
+            "terminal": True,
+        }],
+    })
+
+    assert resumed["status"] == "FAILED"
+    assert "does not match durable optimizer children" in resumed["error"]
+    assert report.failures
+
+
+def test_optimizer_child_replay_rejects_changed_limits_before_another_mutation():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    backend = _OptimizerChildBackend()
+    runner = OptimizationPortfolioRunner(_optimizer_child_dependencies(
+        report, backend, review=lambda _request: {},
+    ))
+    request = {
+        "account_id": "account-1",
+        "run_key": "durable-child-frozen-limits",
+        "max_semantic_cost_usd": "1",
+        "limits": {
+            "max_cost_usd": 1.0,
+            "max_samples": 20,
+            "max_iterations": 2,
+            "max_concurrency": 1,
+        },
+    }
+
+    first = runner.run(request)
+    assert first["status"] == "WAITING_FOR_CHILDREN"
+    final_optimization = next(
+        row for row in reversed(report.milestones) if row[0] == "optimization"
+    )
+    report.latest_checkpoint = {
+        "milestone": "optimization",
+        "evidence": final_optimization[1],
+    }
+    before = (
+        backend.create_procedure_calls,
+        backend.create_task_calls,
+        backend.release_calls,
+    )
+
+    changed = runner.run({
+        **request,
+        "limits": {**request["limits"], "max_samples": 21},
+    })
+
+    assert changed["status"] == "FAILED"
+    assert "frozen request" in changed["error"]
+    assert (
+        backend.create_procedure_calls,
+        backend.create_task_calls,
+        backend.release_calls,
+    ) == before
+
+
+def test_terminal_child_is_reviewed_only_after_a_later_report_resume():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    backend = _OptimizerChildBackend()
+    reviews: list[dict[str, Any]] = []
+    runner = OptimizationPortfolioRunner(_optimizer_child_dependencies(
+        report,
+        backend,
+        review=lambda request: reviews.append(request) or {
+            "coverage": {"complete": True},
+            "promotion_ready": False,
+        },
+    ))
+    request = {
+        "account_id": "account-1",
+        "run_key": "terminal-child-review",
+        "max_semantic_cost_usd": "1",
+        "limits": {
+            "max_cost_usd": 1.0,
+            "max_samples": 20,
+            "max_iterations": 2,
+            "max_concurrency": 1,
+        },
+    }
+
+    first = runner.run(request)
+    assert first["status"] == "WAITING_FOR_CHILDREN"
+    assert reviews == []
+    final_optimization = next(
+        row for row in reversed(report.milestones) if row[0] == "optimization"
+    )
+    report.latest_checkpoint = {
+        "milestone": "optimization",
+        "evidence": final_optimization[1],
+    }
+    backend.tasks[0]["status"] = "COMPLETED"
+    backend.tasks[0]["dispatchStatus"] = "DISPATCHED"
+
+    completed = runner.run(request)
+
+    assert completed["status"] == "COMPLETED"
+    assert completed["execution_decisions"]["launched_count"] == 1
+    assert completed["execution_decisions"]["selected_targets"][0]["launch_status"] == "launched"
+    assert reviews == [{
+        "account_id": "account-1",
+        "procedure_id": "procedure-1",
+        "persist": False,
+    }]
     assert report.terminal == ["COMPLETED"]
+
+
+@pytest.mark.parametrize("dispatch", [
+    {
+        "phase": "incomplete",
+        "children": [],
+        "rejected": [{"reason": "stale_assessment"}],
+    },
+    {
+        "phase": "incomplete",
+        "children": [{"target": {"scorecard_id": "card", "score_id": "score"}}],
+        "rejected": [],
+    },
+    {
+        "phase": "incomplete",
+        "children": [{
+            "target": {"scorecard_id": "card", "score_id": "score"},
+            "procedure_id": "procedure-1",
+            "task_id": "task-1",
+            "launch_state": {
+                "phase": "dispatch_outcome_unknown",
+                "task": {"status": "RUNNING"},
+            },
+        }],
+        "rejected": [],
+    },
+    {
+        "phase": "children_terminal",
+        "children": [{
+            "target": {"scorecard_id": "card", "score_id": "score"},
+            "procedure_id": "procedure-1",
+            "task_id": "task-1",
+            "launch_state": {
+                "phase": "terminal",
+                "task": {"status": "FAILED"},
+            },
+        }],
+        "rejected": [],
+    },
+])
+def test_terminal_status_fails_closed_for_incomplete_unknown_malformed_or_failed_dispatch(
+    dispatch,
+):
+    from plexus.optimization.portfolio_run import _terminal_status
+
+    state = {
+        "rank": {"coverage": {"complete": True}},
+        "diagnosis_coverage": {"selected_count": 0},
+        "approved_targets": [{"scorecard_id": "card", "score_id": "score"}],
+        "dispatch": dispatch,
+    }
+
+    assert _terminal_status(state, has_unresolved_actions=False) == "INCOMPLETE"
+
+
+def test_blocked_dispatch_without_a_child_skips_optimizer_and_review_revisions():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {
+            "coverage": {"complete": True},
+            "ranked": [{"scorecard_id": "card", "score_id": "score"}],
+        },
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: request["assessment"],
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda _request: {
+            "accepted": False,
+            "accepted_targets": [],
+            "rejected": [{"reason": "stale_assessment"}],
+        },
+        review=lambda _request: (_ for _ in ()).throw(
+            AssertionError("blocked target must not be reviewed")
+        ),
+        report=report,
+        human_review=lambda _request: {
+            "decisions": [{
+                "scorecard_id": "card",
+                "score_id": "score",
+                "decision": "approve",
+            }],
+        },
+    ))
+
+    result = runner.run({"account_id": "account-1", "run_key": "blocked-child"})
+
+    assert result["status"] == "INCOMPLETE"
+    milestones = [milestone for milestone, _evidence, _view in report.milestones]
+    assert "optimization" not in milestones
+    assert "optimization_review" not in milestones
+    assert milestones[-1] == "finalization"
+
+
+def test_mixed_children_persist_each_terminal_review_once_while_other_children_run():
+    from plexus.optimization.optimizer_dispatch import OptimizerTaskDispatchService
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    backend = _OptimizerChildBackend()
+    child_service = OptimizerTaskDispatchService(backend)
+    review_calls: list[str] = []
+    targets = [
+        {"scorecard_id": "card", "score_id": "one"},
+        {"scorecard_id": "card", "score_id": "two"},
+        {"scorecard_id": "card", "score_id": "rejected"},
+    ]
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {
+            "coverage": {"complete": True},
+            "ranked": [
+                {**target, "scorecard_name": "Example", "score_name": target["score_id"]}
+                for target in targets
+            ],
+        },
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: request["assessment"],
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda request: {
+            "accepted": True,
+            "accepted_targets": list(request["targets"][:2]),
+            "rejected": [{
+                "target": dict(request["targets"][2]),
+                "reason": "stale_assessment",
+            }],
+        },
+        review=lambda request: review_calls.append(request["procedure_id"]) or {
+            "coverage": {"complete": True},
+            "promotion_ready": False,
+        },
+        report=report,
+        human_review=lambda _request: {
+            "decisions": [
+                {**target, "decision": "approve"}
+                for target in targets
+            ],
+        },
+        optimizer_child_step=child_service.step,
+        optimizer_child_request=lambda request: {
+            **request,
+            "optimizer_yaml": "name: optimizer\n",
+            "stages": [{"name": "Optimize", "order": 1, "status": "PENDING"}],
+        },
+    ))
+    request = {
+        "account_id": "account-1",
+        "run_key": "mixed-child-review",
+        "max_semantic_cost_usd": "1",
+        "limits": {
+            "max_cost_usd": 1.0,
+            "max_samples": 20,
+            "max_iterations": 2,
+            "max_concurrency": 1,
+        },
+    }
+
+    first = runner.run(request)
+    assert first["status"] == "WAITING_FOR_CHILDREN"
+    assert report.terminal == []
+    report.latest_checkpoint = {
+        "milestone": report.milestones[-1][0],
+        "evidence": report.milestones[-1][1],
+    }
+    backend.tasks[0]["status"] = "COMPLETED"
+    backend.tasks[0]["dispatchStatus"] = "DISPATCHED"
+    backend.tasks[1]["status"] = "RUNNING"
+    backend.tasks[1]["dispatchStatus"] = "DISPATCHED"
+
+    first_wait_snapshot = [
+        {
+            "id": child["launch_state"]["launch_spec"]["identity"],
+            "task_id": child["task_id"],
+            "procedure_id": child["procedure_id"],
+            "scorecard_id": child["target"]["scorecard_id"],
+            "score_id": child["target"]["score_id"],
+            "terminal": child["task_id"] == "task-1",
+            "status": "COMPLETED" if child["task_id"] == "task-1" else "RUNNING",
+        }
+        for child in first["dispatch"]["children"]
+    ]
+    partially_complete = runner.run({
+        **request,
+        "optimizer_child_snapshots": first_wait_snapshot,
+    })
+
+    assert partially_complete["status"] == "WAITING_FOR_CHILDREN"
+    assert review_calls == ["procedure-1"]
+    assert len(partially_complete["reviews"]) == 1
+    assert len(partially_complete["dispatch"]["processed_child_keys"]) == 1
+    assert partially_complete["dispatch"]["last_wait_snapshot"] == first_wait_snapshot
+    assert partially_complete["execution_decisions"]["launched_count"] == 2
+    assert {
+        row["score_id"]: row["launch_status"]
+        for row in partially_complete["execution_decisions"]["selected_targets"]
+    } == {"one": "launched", "two": "launched", "rejected": "selected"}
+    assert report.milestones[-1][0] == "optimization_review"
+    assert report.terminal == []
+
+    report.latest_checkpoint = {
+        "milestone": report.milestones[-1][0],
+        "evidence": report.milestones[-1][1],
+    }
+    unchanged = runner.run(request)
+    assert unchanged["status"] == "WAITING_FOR_CHILDREN"
+    assert review_calls == ["procedure-1"]
+
+    report.latest_checkpoint = {
+        "milestone": report.milestones[-1][0],
+        "evidence": report.milestones[-1][1],
+    }
+    backend.tasks[1]["status"] = "COMPLETED"
+    second_wait_snapshot = [{
+        "id": first["dispatch"]["children"][1]["launch_state"]["launch_spec"]["identity"],
+        "task_id": "task-2",
+        "procedure_id": "procedure-2",
+        "scorecard_id": "card",
+        "score_id": "two",
+        "terminal": True,
+        "status": "COMPLETED",
+    }]
+    completed = runner.run({
+        **request,
+        "optimizer_child_snapshots": second_wait_snapshot,
+    })
+
+    assert completed["status"] == "INCOMPLETE"
+    assert review_calls == ["procedure-1", "procedure-2"]
+    assert len(completed["reviews"]) == 2
+    assert len(completed["dispatch"]["processed_child_keys"]) == 2
+    assert completed["dispatch"]["last_wait_snapshot"] == second_wait_snapshot
+    assert report.terminal == ["INCOMPLETE"]
+
+
+def test_failed_child_does_not_suppress_review_of_successful_terminal_sibling():
+    from plexus.optimization.optimizer_dispatch import OptimizerTaskDispatchService
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    backend = _OptimizerChildBackend()
+    child_service = OptimizerTaskDispatchService(backend)
+    review_calls: list[str] = []
+    targets = [
+        {"scorecard_id": "card", "score_id": "success"},
+        {"scorecard_id": "card", "score_id": "failure"},
+    ]
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {
+            "coverage": {"complete": True},
+            "ranked": targets,
+        },
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: request["assessment"],
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda request: {
+            "accepted": True,
+            "accepted_targets": list(request["targets"]),
+            "rejected": [],
+        },
+        review=lambda request: review_calls.append(request["procedure_id"]) or {
+            "coverage": {"complete": True},
+            "promotion_ready": False,
+        },
+        report=report,
+        human_review=lambda _request: {
+            "decisions": [{**target, "decision": "approve"} for target in targets],
+        },
+        optimizer_child_step=child_service.step,
+        optimizer_child_request=lambda request: {
+            **request,
+            "optimizer_yaml": "name: optimizer\n",
+            "stages": [{"name": "Optimize", "order": 1, "status": "PENDING"}],
+        },
+    ))
+    request = {
+        "account_id": "account-1",
+        "run_key": "failed-sibling-review",
+        "max_semantic_cost_usd": "1",
+        "limits": {
+            "max_cost_usd": 1.0,
+            "max_samples": 20,
+            "max_iterations": 2,
+            "max_concurrency": 1,
+        },
+    }
+    first = runner.run(request)
+    report.latest_checkpoint = {
+        "milestone": report.milestones[-1][0],
+        "evidence": report.milestones[-1][1],
+    }
+    backend.tasks[0]["status"] = "COMPLETED"
+    backend.tasks[0]["dispatchStatus"] = "DISPATCHED"
+    backend.tasks[1]["status"] = "FAILED"
+    backend.tasks[1]["dispatchStatus"] = "DISPATCHED"
+
+    completed = runner.run(request)
+
+    assert first["status"] == "WAITING_FOR_CHILDREN"
+    assert completed["status"] == "INCOMPLETE"
+    assert review_calls == ["procedure-1"]
+    assert len(completed["reviews"]) == 1
+
+
+def test_report_publication_failure_before_optimizer_mutation_prevents_child_creation():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+    from plexus.optimization.run_report import OptimizationRunPublicationError
+
+    class FailingReport(_ReportService):
+        def publish_milestone(self, milestone, evidence, *, stakeholder_view):
+            child = ((evidence.get("dispatch") or {}).get("children") or [{}])[0]
+            phase = (child.get("launch_state") or {}).get("phase")
+            if milestone == "optimization" and phase == "procedure_create_attempted":
+                raise OptimizationRunPublicationError("phase publication failed")
+            return super().publish_milestone(
+                milestone, evidence, stakeholder_view=stakeholder_view,
+            )
+
+    report = FailingReport()
+    backend = _OptimizerChildBackend()
+    result = OptimizationPortfolioRunner(_optimizer_child_dependencies(
+        report, backend, review=lambda _request: {},
+    )).run({
+        "account_id": "account-1",
+        "run_key": "durable-child-publication-failure",
+        "max_semantic_cost_usd": "1",
+        "limits": {
+            "max_cost_usd": 1.0,
+            "max_samples": 20,
+            "max_iterations": 2,
+            "max_concurrency": 1,
+        },
+    })
+
+    assert result["status"] == "FAILED"
+    assert backend.create_procedure_calls == 0
+    assert backend.create_task_calls == 0
+    assert backend.release_calls == 0
 
 
 def test_incomplete_ranking_is_published_and_finalized_incomplete_without_assessment_or_optimizer_dispatch():
@@ -308,12 +1766,178 @@ def test_ranking_and_all_assessments_are_published_as_distinct_milestones_before
         human_review=lambda _request: (_ for _ in ()).throw(AssertionError("must not request approval")),
     ))
 
-    result = runner.run({"account_id": "account-1", "run_key": "assessment-first"})
+    result = runner.run({
+        "account_id": "account-1",
+        "run_key": "assessment-first",
+        "max_semantic_cost_usd": "1",
+    })
 
     assert result["status"] == "COMPLETED"
     assert [row[0] for row in report.milestones[:4]] == [
         "started", "ranking", "assessment", "diagnosis"
     ]
+
+
+def test_semantic_diagnosis_skips_incomplete_assessments_but_preserves_them_in_report():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    ranked = [
+        {
+            "scorecard_id": "card",
+            "score_id": score_id,
+            "scorecard_name": "Example Portfolio",
+            "score_name": score_name,
+        }
+        for score_id, score_name in (
+            ("stale", "Stale Score"),
+            ("complete", "Complete Score"),
+        )
+    ]
+    diagnosed: list[str] = []
+
+    def assess(request):
+        packet = _assessment(request["scorecard_id"], request["score_id"])
+        packet["states"] = {"optimization": "monitoring_candidate"}
+        if request["score_id"] == "stale":
+            packet["coverage"] = {
+                "complete": False,
+                "failures": ["champion changed since frozen ranking"],
+            }
+        return packet
+
+    def diagnose(request):
+        diagnosed.append(request["score_id"])
+        return dict(request["assessment"])
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": ranked},
+        assess=assess,
+        diagnose=diagnose,
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda _request: (_ for _ in ()).throw(
+            AssertionError("monitoring candidates must not dispatch")
+        ),
+        review=lambda _request: {},
+        report=report,
+        human_review=lambda _request: {},
+    ))
+
+    runner.run({
+        "account_id": "account-1",
+        "run_key": "skip-incomplete-diagnosis",
+        "max_semantic_diagnoses": 2,
+        "max_semantic_cost_usd": "1",
+    })
+
+    assert diagnosed == ["complete"]
+    diagnosis_evidence, diagnosis_view = next(
+        (evidence, view)
+        for milestone, evidence, view in report.milestones
+        if milestone == "diagnosis"
+    )
+    assert len(diagnosis_evidence["assessments"]) == 2
+    assert diagnosis_evidence["diagnosis_coverage"]["selected_count"] == 1
+    assert diagnosis_evidence["diagnosis_coverage"]["scheduled_count"] == 1
+    assert diagnosis_evidence["diagnosis_coverage"]["incomplete_assessment_count"] == 1
+    assert {row["score_name"] for row in diagnosis_view["portfolio"]} == {
+        "Stale Score", "Complete Score",
+    }
+
+
+def test_one_slot_semantic_diagnosis_prefers_an_actionable_score_over_known_repair():
+    """A deterministic repair case stays visible without spending the one model slot."""
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    diagnosed: list[str] = []
+    ranked = [
+        {
+            "scorecard_id": "card", "score_id": "blocked", "evidence_rank": 1,
+            "scorecard_name": "Example Portfolio", "score_name": "Known Repair",
+        },
+        {
+            "scorecard_id": "card", "score_id": "actionable", "evidence_rank": 2,
+            "scorecard_name": "Example Portfolio", "score_name": "Actionable Score",
+        },
+    ]
+
+    def assess(request):
+        packet = _assessment(request["scorecard_id"], request["score_id"])
+        if request["score_id"] == "blocked":
+            packet["states"] = {
+                "optimization": "repair_required",
+                "guideline_health": "missing",
+            }
+            packet["primary_next_action"] = "repair_guidelines"
+        return packet
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": ranked},
+        assess=assess,
+        diagnose=lambda request: diagnosed.append(request["score_id"]) or request["assessment"],
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda _request: (_ for _ in ()).throw(AssertionError("must wait for approval")),
+        review=lambda _request: {}, report=report,
+        human_review=lambda _request: {"decisions": []},
+    ))
+
+    result = runner.run({
+        "account_id": "account-1", "run_key": "one-slot-actionable-diagnosis",
+        "wait_for_human": True, "max_semantic_diagnoses": 1,
+        "max_semantic_cost_usd": "1",
+    })
+
+    assert diagnosed == ["actionable"]
+    assert result["diagnosis_coverage"]["scheduled_count"] == 1
+    assert result["diagnosis_coverage"]["deterministic_repair_blocker_count"] == 1
+    diagnosis_view = next(
+        view for milestone, _evidence, view in report.milestones if milestone == "diagnosis"
+    )
+    rows = {row["score_name"]: row for row in diagnosis_view["portfolio"]}
+    assert rows["Known Repair"]["evidence_rank"] == 1
+    assert rows["Known Repair"]["readiness"] == "repair_required"
+    assert rows["Known Repair"]["next_action"] == "repair_guidelines"
+    assert rows["Known Repair"]["semantic_diagnosis_status"] == "not_selected"
+
+
+def test_semantic_diagnosis_keeps_actionable_candidates_in_evidence_order():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    diagnosed: list[str] = []
+    ranked = [
+        {"scorecard_id": "card", "score_id": "blocked", "evidence_rank": 1},
+        {"scorecard_id": "card", "score_id": "first", "evidence_rank": 2},
+        {"scorecard_id": "card", "score_id": "second", "evidence_rank": 3},
+    ]
+
+    def assess(request):
+        packet = _assessment(request["scorecard_id"], request["score_id"])
+        if request["score_id"] == "blocked":
+            packet["states"] = {
+                "optimization": "repair_required",
+                "guideline_health": "invalid",
+            }
+        return packet
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": ranked},
+        assess=assess,
+        diagnose=lambda request: diagnosed.append(request["score_id"]) or request["assessment"],
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda _request: (_ for _ in ()).throw(AssertionError("must wait for approval")),
+        review=lambda _request: {}, report=report,
+        human_review=lambda _request: {"decisions": []},
+    ))
+
+    runner.run({
+        "account_id": "account-1", "run_key": "actionable-evidence-order",
+        "wait_for_human": True, "max_semantic_diagnoses": 2,
+        "max_semantic_cost_usd": "1",
+    })
+
+    assert diagnosed == ["first", "second"]
 
 
 def test_semantic_diagnosis_is_bounded_to_top_ten_plus_monitoring_candidates_in_rank_order():
@@ -357,6 +1981,7 @@ def test_semantic_diagnosis_is_bounded_to_top_ten_plus_monitoring_candidates_in_
         "run_key": "bounded-diagnosis",
         "wait_for_human": True,
         "max_semantic_diagnoses": 12,
+        "max_semantic_cost_usd": "1",
     })
 
     assert diagnosed == [
@@ -369,16 +1994,23 @@ def test_semantic_diagnosis_is_bounded_to_top_ten_plus_monitoring_candidates_in_
         if milestone == "diagnosis"
     )
     assert diagnosis_evidence["diagnosis_coverage"] == {
-        "policy_version": "portfolio-diagnosis-scope-v1",
+        "policy_version": "portfolio-diagnosis-scope-v2",
         "ranked_count": 14,
         "top_priority_count": 10,
         "monitoring_candidate_count": 2,
         "overlap_count": 1,
-        "selected_count": 11,
-        "scheduled_count": 11,
+            "selected_count": 11,
+            "incomplete_assessment_count": 0,
+            "deterministic_repair_blocker_count": 0,
+            "scheduled_count": 11,
         "deferred_by_cap_count": 0,
+        "deferred_by_budget_count": 0,
+        "deferred_after_failure_count": 0,
         "completed_count": 11,
         "failed_count": 0,
+        "budget_exhausted_count": 0,
+        "outcome_unknown_count": 0,
+        "authority_publication_failure_count": 0,
         "skipped_count": 3,
         "max_semantic_diagnoses": 12,
         "scheduled_scope_complete": True,
@@ -399,8 +2031,9 @@ def test_semantic_diagnosis_is_bounded_to_top_ten_plus_monitoring_candidates_in_
         view for milestone, _evidence, view in report.milestones
         if milestone == "diagnosis"
     )
-    assert diagnosis_view["portfolio"][10]["readiness"] == "incomplete"
-    assert diagnosis_view["portfolio"][10]["next_action"] == "await_semantic_diagnosis"
+    assert diagnosis_view["portfolio"][10]["semantic_diagnosis_status"] == "not_selected"
+    assert diagnosis_view["portfolio"][10]["readiness"] == "ready_to_optimize"
+    assert diagnosis_view["portfolio"][10]["next_action"] == "review"
 
 
 def test_semantic_diagnosis_limit_runs_the_highest_priority_subset_and_reports_deferred_coverage():
@@ -430,6 +2063,7 @@ def test_semantic_diagnosis_limit_runs_the_highest_priority_subset_and_reports_d
         "account_id": "account-1",
         "run_key": "semantic-limit",
         "max_semantic_diagnoses": 2,
+        "max_semantic_cost_usd": "1",
     })
 
     assert result["status"] == "INCOMPLETE"
@@ -479,6 +2113,7 @@ def test_zero_semantic_diagnosis_limit_defers_selected_work_without_invoking_a_m
         "account_id": "account-1",
         "run_key": "zero-semantic-limit",
         "max_semantic_diagnoses": 0,
+        "max_semantic_cost_usd": "0",
     })
 
     assert result["status"] == "INCOMPLETE"
@@ -486,6 +2121,179 @@ def test_zero_semantic_diagnosis_limit_defers_selected_work_without_invoking_a_m
     assert result["diagnosis_coverage"]["scheduled_count"] == 0
     assert result["diagnosis_coverage"]["deferred_by_cap_count"] == 1
     assert result["diagnosis_coverage"]["failed_count"] == 0
+
+
+def test_positive_semantic_scope_with_missing_budget_fails_before_any_diagnosis_call():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    calls = []
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {
+            "coverage": {"complete": True},
+            "ranked": [{"scorecard_id": "card", "score_id": "score"}],
+        },
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: calls.append(request) or request["assessment"],
+        summary=lambda _request: {"coverage": {"complete": False}},
+        dispatch=lambda _request: {}, review=lambda _request: {},
+        report=report, human_review=lambda _request: {},
+    ))
+
+    result = runner.run({
+        "account_id": "account-1", "run_key": "missing-semantic-budget",
+        "max_semantic_diagnoses": 1,
+    })
+
+    assert result["status"] == "INCOMPLETE"
+    assert calls == []
+    assert "positive semantic diagnosis scope" in result["diagnosis_coverage"]["blockers"][0]
+
+
+def test_run_spec_records_loaded_toolchain_versions_when_caller_omits_identity():
+    from plexus.optimization.portfolio_run import _run_spec
+
+    spec = _run_spec({}, account_id="account-1", run_key="daily-run")
+
+    assert spec["toolchain_version"] != "unknown"
+    assert "plexus/" in spec["toolchain_version"]
+    assert "tactus/" in spec["toolchain_version"]
+
+
+def test_run_spec_includes_immutable_build_revision_when_available(monkeypatch):
+    from plexus.optimization.portfolio_run import _run_spec
+
+    monkeypatch.setenv("AWS_COMMIT_ID", "0123456789abcdef")
+
+    spec = _run_spec({}, account_id="account-1", run_key="daily-run")
+
+    assert "build/0123456789abcdef" in spec["toolchain_version"]
+
+
+def test_default_positive_semantic_scope_with_omitted_cap_and_budget_never_calls_diagnose():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    calls = []
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {
+            "coverage": {"complete": True},
+            "ranked": [{"scorecard_id": "card", "score_id": "score"}],
+        },
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: calls.append(request) or request["assessment"],
+        summary=lambda _request: {"coverage": {"complete": False}},
+        dispatch=lambda _request: {}, review=lambda _request: {},
+        report=report, human_review=lambda _request: {},
+    ))
+
+    result = runner.run({
+        "account_id": "account-1", "run_key": "default-missing-semantic-budget",
+    })
+
+    assert result["status"] == "INCOMPLETE"
+    assert calls == []
+    assert result["diagnosis_coverage"]["scheduled_count"] == 1
+    assert "positive semantic diagnosis scope" in result["diagnosis_coverage"]["blockers"][0]
+
+
+def test_returned_incomplete_diagnosis_is_not_counted_successful_or_ready():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    updates = []
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {
+            "coverage": {"complete": True},
+            "ranked": [{"scorecard_id": "card", "score_id": "score"}],
+        },
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: {
+            **request["assessment"],
+            "status": "incomplete",
+            "coverage": {"complete": False, "failures": ["semantic outcome unknown"]},
+            "states": {"readiness": "incomplete", "optimization": "incomplete"},
+        },
+        summary=lambda _request: {"coverage": {"complete": False}},
+        dispatch=lambda _request: {}, review=lambda _request: {},
+        report=report, human_review=lambda _request: {},
+        publish_update=lambda update: updates.append(update) or {"created": True},
+    ))
+
+    result = runner.run({
+        "account_id": "account-1", "run_key": "returned-incomplete-diagnosis",
+        "max_semantic_diagnoses": 1,
+        "max_semantic_cost_usd": "1",
+    })
+
+    assert result["status"] == "INCOMPLETE"
+    assert result["diagnosis_coverage"]["completed_count"] == 0
+    assert result["diagnosis_coverage"]["incomplete_count"] == 1
+    assert result["diagnosis_coverage"]["selected_scope_complete"] is False
+    assert result["diagnoses"][0]["status"] == "incomplete"
+    assert result["approval_requests"] == []
+    assert not any(update["event_key"].endswith(":analysis_ready") for update in updates)
+
+
+def test_budget_exhaustion_preserves_partial_evidence_and_never_emits_analysis_ready():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+    from plexus.optimization.semantic_budget import SemanticUsage
+
+    report = _ReportService()
+    updates = []
+    contacted_targets = []
+
+    def diagnose(request):
+        contacted_targets.append(request["score_id"])
+        coordinator = request["_semantic_budget_coordinator"]
+        view = coordinator.view(
+            target_id=f"card:{request['score_id']}", call_site="test-call", max_attempts=1
+        )
+        plan = view.direct_plan(
+            attempt=1, max_input_tokens=200, max_output_tokens=20,
+            request_payload={"target": request["score_id"]},
+        )
+        decision = view.reserve_direct(plan)
+        view.settle_direct(
+            decision.reservation_id,
+            SemanticUsage(input_tokens=200, output_tokens=20),
+            output_text="{}",
+        )
+        return request["assessment"]
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {
+            "coverage": {"complete": True},
+            "ranked": [
+                {"scorecard_id": "card", "score_id": "one"},
+                {"scorecard_id": "card", "score_id": "two"},
+            ],
+        },
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=diagnose,
+        summary=lambda _request: {"coverage": {"complete": False}},
+        dispatch=lambda _request: {}, review=lambda _request: {},
+        report=report, human_review=lambda _request: {},
+        publish_update=lambda update: updates.append(update) or {"created": True},
+    ))
+
+    result = runner.run({
+        "account_id": "account-1", "run_key": "semantic-exhaustion",
+        "max_semantic_diagnoses": 2,
+        "max_semantic_cost_usd": "0.00009",
+    })
+
+    assert result["status"] == "INCOMPLETE"
+    assert contacted_targets == ["one", "two"]
+    assert result["diagnosis_coverage"]["completed_count"] == 1
+    assert result["diagnosis_coverage"]["failed_count"] == 1
+    assert result["diagnosis_coverage"]["budget_exhausted_count"] == 1
+    assert result["diagnosis_coverage"]["outcome_unknown_count"] == 0
+    assert result["diagnosis_coverage"]["deferred_by_budget_count"] == 0
+    assert result["diagnoses"][0]["scope"]["score_id"] == "one"
+    assert result["diagnoses"][1]["status"] == "budget_exhausted"
+    assert not any(update["event_key"].endswith(":analysis_ready") for update in updates)
+    assert result["approval_requests"] == []
 
 
 def test_diagnosis_failure_preserves_the_published_assessment_milestone():
@@ -511,14 +2319,21 @@ def test_diagnosis_failure_preserves_the_published_assessment_milestone():
         human_review=lambda _request: (_ for _ in ()).throw(AssertionError("must not request approval")),
     ))
 
-    result = runner.run({"account_id": "account-1", "run_key": "diagnosis-failure"})
+    result = runner.run({
+        "account_id": "account-1",
+        "run_key": "diagnosis-failure",
+        "max_semantic_cost_usd": "1",
+    })
 
-    assert result["status"] == "FAILED"
-    assert result["error"] == "diagnosis unavailable"
-    assert [row[0] for row in report.milestones] == ["started", "ranking", "assessment"]
-    assert report.milestones[-1][1]["assessments"]
-    assert report.milestones[-1][1]["diagnoses"] == []
-    assert report.failures == ["Optimization portfolio run failed: diagnosis unavailable"]
+    assert result["status"] == "INCOMPLETE"
+    assert result.get("error") is None
+    assert [row[0] for row in report.milestones] == [
+        "started", "ranking", "assessment", "diagnosis", "approval", "finalization"
+    ]
+    assert report.milestones[2][1]["assessments"]
+    assert result["diagnoses"][0]["status"] == "incomplete"
+    assert result["diagnosis_coverage"]["failed_count"] == 1
+    assert report.failures == []
 
 
 def test_stale_or_rejected_targets_are_reported_and_never_receive_terminal_review_or_promotion():
@@ -560,11 +2375,479 @@ def test_tactus_checkpoint_mode_leaves_the_same_report_running_until_an_authorit
         human_review=lambda _request: {"decisions": []},
     ))
 
-    result = runner.run({"account_id": "account-1", "run_key": "wait", "wait_for_human": True, "limits": {"max_cost_usd": 1.0, "max_samples": 1, "max_iterations": 1, "max_concurrency": 1}})
+    result = runner.run({
+        "account_id": "account-1",
+        "run_key": "wait",
+        "wait_for_human": True,
+        "max_semantic_cost_usd": "1",
+        "limits": {"max_cost_usd": 1.0, "max_samples": 1, "max_iterations": 1, "max_concurrency": 1},
+    })
 
     assert result["status"] == "WAITING_FOR_APPROVAL"
     assert report.terminal == []
     assert result["approval_requests"][0]["action_key"] == "optimization-approval:wait:1"
+
+
+def test_automatic_mode_dispatches_a_complete_target_without_an_optimization_approval():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    dispatches: list[dict[str, Any]] = []
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": [
+            {"scorecard_id": "card", "score_id": "score"},
+        ]},
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: request["assessment"],
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda request: dispatches.append(request) or {
+            "accepted": True,
+            "accepted_targets": list(request["targets"]),
+            "rejected": [],
+        },
+        review=lambda _request: {}, report=report,
+        human_review=lambda _request: (_ for _ in ()).throw(
+            AssertionError("automatic mode must not request optimization approval")
+        ),
+    ))
+
+    result = runner.run({
+        "account_id": "account-1", "run_key": "automatic-dispatch",
+        "execution_mode": "automatic", "wait_for_human": True,
+        "max_semantic_cost_usd": "1",
+        "limits": {"max_cost_usd": 1.0, "max_samples": 1,
+                   "max_iterations": 1, "max_concurrency": 1},
+    })
+
+    assert len(dispatches) == 1
+    assert dispatches[0]["authorization"] == {
+        "mode": "automatic", "source": "deterministic_policy",
+    }
+    assert result["status"] != "WAITING_FOR_APPROVAL"
+    assert result["approval_requests"] == []
+    decisions = result["execution_decisions"]
+    assert decisions["mode"] == "automatic"
+    assert decisions["selected_count"] == 1
+    assert decisions["launched_count"] == 0
+    assert decisions["selected_targets"][0]["launch_status"] == "selected"
+    assert decisions["rejected_count"] >= 1  # durable child authority is absent in this unit seam
+    assert decisions["selected_targets"][0]["scorecard_id"] == "card"
+    assert decisions["selected_targets"][0]["authorization_source"] == "deterministic_policy"
+    assert result["promotion_candidates"] == []
+    assert not any(action.get("kind") == "promotion_approval" for action in result["actions"])
+
+
+@pytest.mark.parametrize(("phase", "procedure_id", "task_id", "expected"), [
+    (None, None, None, 0),
+    ("dispatch_outcome_unknown", "procedure-1", "task-1", 0),
+    ("waiting", "procedure-1", "task-1", 1),
+    ("running", "procedure-1", "task-1", 1),
+    ("terminal", "procedure-1", "task-1", 1),
+    ("waiting", "procedure-1", None, 0),
+])
+def test_launched_count_requires_exact_owned_durable_child_evidence(
+    phase, procedure_id, task_id, expected,
+):
+    from plexus.optimization.portfolio_run import (
+        _empty_execution_decisions,
+        _reconcile_execution_launch_evidence,
+    )
+
+    child = {
+        "target": {"scorecard_id": "card", "score_id": "score"},
+        "procedure_id": procedure_id,
+        "task_id": task_id,
+        "launch_state": {"phase": phase} if phase is not None else None,
+    }
+
+    decisions = _empty_execution_decisions("automatic")
+    decisions["selected_targets"] = [{
+        "scorecard_id": "card", "score_id": "score",
+        "reason": "eligible_for_launch",
+        "authorization_source": "deterministic_policy",
+    }]
+    _reconcile_execution_launch_evidence(decisions, [child])
+
+    assert decisions["launched_count"] == expected
+    assert decisions["selected_targets"][0]["launch_status"] == (
+        "launched" if expected else "selected"
+    )
+
+
+@pytest.mark.parametrize("field", [
+    "procedure_id", "task_id", "scorecard_id", "score_id",
+])
+def test_whitespace_only_child_identity_is_not_durable_launch_authority(field):
+    from plexus.optimization.portfolio_run import (
+        _empty_execution_decisions,
+        _reconcile_execution_launch_evidence,
+    )
+
+    child = {
+        "target": {"scorecard_id": "card", "score_id": "score"},
+        "procedure_id": "procedure-1",
+        "task_id": "task-1",
+        "launch_state": {"phase": "waiting"},
+    }
+    if field in child["target"]:
+        child["target"][field] = " \t "
+    else:
+        child[field] = " \t "
+    decisions = _empty_execution_decisions("automatic")
+    decisions["selected_targets"] = [{
+        "scorecard_id": child["target"]["scorecard_id"],
+        "score_id": child["target"]["score_id"],
+        "launch_status": "selected",
+    }]
+
+    _reconcile_execution_launch_evidence(decisions, [child])
+
+    assert decisions["launched_count"] == 0
+    assert decisions["selected_targets"][0]["launch_status"] == "selected"
+
+
+@pytest.mark.parametrize(("phase", "include_ids"), [
+    ("dispatch_outcome_unknown", True),
+    ("waiting", False),
+])
+def test_runner_output_does_not_mark_uncertain_or_unowned_child_launched(
+    phase, include_ids,
+):
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+
+    def child_step(_request, _state, *, may_mutate):
+        return {
+            "phase": phase,
+            **({"procedure_id": "procedure-1", "task_id": "task-1"} if include_ids else {}),
+        }
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": [
+            {"scorecard_id": "card", "score_id": "score"},
+        ]},
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: request["assessment"], summary=lambda _request: {},
+        dispatch=lambda request: {
+            "accepted": True, "accepted_targets": list(request["targets"]), "rejected": [],
+        },
+        review=lambda _request: {}, report=report,
+        human_review=lambda _request: (_ for _ in ()).throw(AssertionError("no approval")),
+        optimizer_child_step=child_step,
+        optimizer_child_request=lambda request: request,
+    ))
+
+    result = runner.run({
+        "account_id": "account-1", "run_key": f"unlaunched-{phase}-{include_ids}",
+        "execution_mode": "automatic", "max_semantic_cost_usd": "1",
+        "limits": {"max_cost_usd": 1.0, "max_samples": 1,
+                   "max_iterations": 1, "max_concurrency": 1},
+    })
+
+    assert result["execution_decisions"]["launched_count"] == 0
+    assert result["execution_decisions"]["selected_targets"][0]["launch_status"] == "selected"
+
+
+def test_execution_selection_preserves_only_supplied_safe_target_names():
+    from plexus.optimization.portfolio_run import (
+        _execution_selection, _execution_target_row,
+    )
+
+    named = _assessment("card-named", "score-named")
+    named.update({"scorecard_name": "Safe Portfolio", "score_name": "Safe Score"})
+    unnamed = _assessment("card-unnamed", "score-unnamed")
+    unnamed["states"] = {"optimization": "incomplete"}
+    selected, decisions = _execution_selection(
+        "automatic", [named, unnamed], [named, unnamed],
+    )
+    decisions["selected_targets"] = [
+        _execution_target_row(row, reason="eligible_for_launch") for row in selected
+    ]
+
+    selected_row = decisions["selected_targets"][0]
+    assert selected_row["scorecard_name"] == "Safe Portfolio"
+    assert selected_row["score_name"] == "Safe Score"
+    rejected_row = decisions["rejected_targets"][0]
+    assert rejected_row["scorecard_id"] == "card-unnamed"
+    assert "scorecard_name" not in rejected_row
+    assert "score_name" not in rejected_row
+
+
+def test_automatic_mode_launches_complete_target_while_incomplete_sibling_is_rejected():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    dispatches: list[dict[str, Any]] = []
+
+    def diagnose(request):
+        if request["score_id"] == "deferred":
+            return {
+                "scope": {"scorecard_id": "card", "score_id": "deferred"},
+                "coverage": {"complete": False, "failures": ["semantic deferred"]},
+                "states": {"optimization": "incomplete"},
+            }
+        return request["assessment"]
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": [
+            {"scorecard_id": "card", "score_id": "complete"},
+            {"scorecard_id": "card", "score_id": "deferred"},
+        ]},
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=diagnose, summary=lambda _request: {},
+        dispatch=lambda request: dispatches.append(request) or {
+            "accepted": True, "accepted_targets": list(request["targets"]), "rejected": [],
+        },
+        review=lambda _request: {}, report=report,
+        human_review=lambda _request: (_ for _ in ()).throw(AssertionError("no approval")),
+    ))
+
+    result = runner.run({
+        "account_id": "account-1", "run_key": "automatic-sibling",
+        "execution_mode": "automatic", "max_semantic_cost_usd": "1",
+        "limits": {"max_cost_usd": 1.0, "max_samples": 1,
+                   "max_iterations": 1, "max_concurrency": 1},
+    })
+
+    assert [[target["score_id"] for target in call["targets"]] for call in dispatches] == [["complete"]]
+    rejected = result["execution_decisions"]["rejected_targets"]
+    assert any(row["score_id"] == "deferred" and row["reason"] == "incomplete_diagnosis" for row in rejected)
+
+
+def test_ordinary_incomplete_diagnosis_does_not_prevent_later_independent_target():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    diagnosed: list[str] = []
+    dispatches: list[dict[str, Any]] = []
+
+    def diagnose(request):
+        diagnosed.append(request["score_id"])
+        if request["score_id"] == "inconclusive-first":
+            return {
+                "scope": {
+                    "scorecard_id": request["scorecard_id"],
+                    "score_id": request["score_id"],
+                },
+                "coverage": {"complete": False, "failures": ["inconclusive evidence"]},
+                "states": {"optimization": "incomplete"},
+                "status": "incomplete",
+            }
+        return request["assessment"]
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": [
+            {"scorecard_id": "card", "score_id": "inconclusive-first"},
+            {"scorecard_id": "card", "score_id": "complete-second"},
+        ]},
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=diagnose,
+        summary=lambda _request: {},
+        dispatch=lambda request: dispatches.append(request) or {
+            "accepted": True,
+            "accepted_targets": list(request["targets"]),
+            "rejected": [],
+        },
+        review=lambda _request: {},
+        report=report,
+        human_review=lambda _request: (_ for _ in ()).throw(AssertionError("no approval")),
+    ))
+
+    result = runner.run({
+        "account_id": "account-1",
+        "run_key": "continue-after-inconclusive",
+        "execution_mode": "automatic",
+        "max_semantic_diagnoses": 2,
+        "max_semantic_cost_usd": "1",
+        "limits": {
+            "max_cost_usd": 1.0,
+            "max_samples": 1,
+            "max_iterations": 1,
+            "max_concurrency": 1,
+        },
+    })
+
+    assert diagnosed == ["inconclusive-first", "complete-second"]
+    assert [[row["score_id"] for row in call["targets"]] for call in dispatches] == [
+        ["complete-second"]
+    ]
+    assert result["diagnosis_coverage"]["incomplete_count"] == 1
+    assert result["diagnosis_coverage"]["completed_count"] == 1
+    assert result["diagnosis_coverage"]["scheduled_scope_complete"] is False
+
+
+def test_resume_from_partial_diagnosis_checkpoint_attempts_only_remaining_target():
+    from plexus.optimization.portfolio_run import (
+        OptimizationPortfolioRunner,
+        _run_spec,
+    )
+
+    request = {
+        "account_id": "account-1",
+        "run_key": "resume-partial-diagnosis",
+        "execution_mode": "automatic",
+        "max_semantic_diagnoses": 2,
+        "max_semantic_cost_usd": "1",
+        "limits": {
+            "max_cost_usd": 1.0,
+            "max_samples": 1,
+            "max_iterations": 1,
+            "max_concurrency": 1,
+        },
+    }
+    first = _assessment("card", "inconclusive-first")
+    second = _assessment("card", "complete-second")
+    incomplete = {
+        "scope": {"scorecard_id": "card", "score_id": "inconclusive-first"},
+        "coverage": {"complete": False, "failures": ["inconclusive evidence"]},
+        "states": {"optimization": "incomplete"},
+        "status": "incomplete",
+    }
+    run_spec = _run_spec(
+        request,
+        account_id="account-1",
+        run_key="resume-partial-diagnosis",
+    )
+    report = _ReportService(latest_checkpoint={
+        "milestone": "diagnosis",
+        "task_terminal": False,
+        "evidence": {
+            "run_key": "resume-partial-diagnosis",
+            "run_spec": run_spec,
+            "rank": {
+                "coverage": {"complete": True},
+                "ranked": [
+                    {"scorecard_id": "card", "score_id": "inconclusive-first"},
+                    {"scorecard_id": "card", "score_id": "complete-second"},
+                ],
+            },
+            "assessments": [first, second],
+            "diagnoses": [incomplete],
+            "diagnosis_coverage": {
+                "selected_count": 2,
+                "scheduled_count": 2,
+                "completed_count": 0,
+                "incomplete_count": 1,
+                "failed_count": 0,
+                "deferred_by_cap_count": 0,
+                "deferred_after_incomplete_count": 1,
+                "scheduled_scope_complete": False,
+                "selected_scope_complete": False,
+                "blockers": [],
+            },
+            "actions": [],
+            "approval_requests": [],
+            "approved_targets": [],
+            "execution_mode": "automatic",
+            "execution_decisions": {"mode": "automatic", "selected_targets": [], "rejected_targets": [], "selected_count": 0, "rejected_count": 0, "launched_count": 0},
+            "dispatch": None,
+            "reviews": [],
+            "promotion_candidates": [],
+            "summary": {},
+        },
+    })
+    diagnosed: list[str] = []
+    dispatches: list[dict[str, Any]] = []
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: (_ for _ in ()).throw(AssertionError("rank must not rerun")),
+        assess=lambda _request: (_ for _ in ()).throw(AssertionError("assess must not rerun")),
+        diagnose=lambda diagnosis_request: (
+            diagnosed.append(diagnosis_request["score_id"])
+            or diagnosis_request["assessment"]
+        ),
+        summary=lambda _request: {},
+        dispatch=lambda dispatch_request: dispatches.append(dispatch_request) or {
+            "accepted": True,
+            "accepted_targets": list(dispatch_request["targets"]),
+            "rejected": [],
+        },
+        review=lambda _request: {},
+        report=report,
+        human_review=lambda _request: (_ for _ in ()).throw(AssertionError("no approval")),
+    ))
+
+    result = runner.run(request)
+
+    assert diagnosed == ["complete-second"]
+    assert [[row["score_id"] for row in call["targets"]] for call in dispatches] == [
+        ["complete-second"]
+    ]
+    assert [row["scope"]["score_id"] for row in result["diagnoses"]] == [
+        "inconclusive-first",
+        "complete-second",
+    ]
+
+
+def test_execution_mode_is_frozen_in_run_identity_fingerprint_and_recovery():
+    from plexus.optimization.portfolio_run import (
+        OptimizationPortfolioRunner, OptimizationRunPublicationError,
+        _portfolio_evidence_fingerprint, _run_key, _run_spec,
+    )
+
+    base = {"account_id": "account-1", "max_semantic_cost_usd": "1"}
+    assert _run_key({**base, "execution_mode": "automatic"}) != _run_key({
+        **base, "execution_mode": "approval_required",
+    })
+    automatic = _run_spec({**base, "execution_mode": "automatic"}, account_id="account-1", run_key="same")
+    approval = _run_spec({**base, "execution_mode": "approval_required"}, account_id="account-1", run_key="same")
+    assert automatic["execution_mode"] == "automatic"
+    assert _run_spec(base, account_id="account-1", run_key="same")["execution_mode"] == "approval_required"
+    assert _portfolio_evidence_fingerprint({"run_key": "same", "run_spec": automatic}) != _portfolio_evidence_fingerprint({"run_key": "same", "run_spec": approval})
+
+    report = _ReportService(latest_checkpoint={
+        "milestone": "ranking", "evidence": {
+            "run_key": "same", "run_spec": automatic, "rank": {"coverage": {"complete": True}, "ranked": []},
+            "assessments": [], "diagnoses": [], "diagnosis_coverage": {}, "actions": [],
+            "approval_requests": [], "approved_targets": [], "dispatch": None, "reviews": [],
+            "promotion_candidates": [], "summary": {},
+        },
+    })
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {}, assess=lambda _request: {}, diagnose=lambda _request: {},
+        summary=lambda _request: {}, dispatch=lambda _request: {}, review=lambda _request: {},
+        report=report, human_review=lambda _request: {},
+    ))
+    result = runner.run({**base, "run_key": "same", "execution_mode": "approval_required"})
+    assert result["status"] == "FAILED"
+    assert "execution mode" in result["error"].lower()
+
+
+def test_automatic_mode_keeps_validator_freshness_rejection_visible_and_non_launching():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    report = _ReportService()
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": [
+            {"scorecard_id": "card", "score_id": "stale"},
+        ]},
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: request["assessment"], summary=lambda _request: {},
+        dispatch=lambda _request: {"accepted": False, "accepted_targets": [], "rejected": [{
+            "target": {"scorecard_id": "card", "score_id": "stale"},
+            "reason": "stale_assessment",
+        }]},
+        review=lambda _request: (_ for _ in ()).throw(AssertionError("must not review")),
+        report=report,
+        human_review=lambda _request: (_ for _ in ()).throw(AssertionError("must not ask")),
+    ))
+
+    result = runner.run({
+        "account_id": "account-1", "run_key": "automatic-stale",
+        "execution_mode": "automatic", "max_semantic_cost_usd": "1",
+        "limits": {"max_cost_usd": 1.0, "max_samples": 1,
+                   "max_iterations": 1, "max_concurrency": 1},
+    })
+
+    assert result["approval_requests"] == []
+    assert result["dispatch"]["children"] == []
+    assert result["execution_decisions"]["launched_count"] == 0
+    assert result["execution_decisions"]["rejected_targets"] == [{
+        "scorecard_id": "card", "score_id": "stale",
+        "assessment_fingerprint": "fingerprint-stale", "reason": "stale_assessment",
+        "authorization_source": "deterministic_policy",
+    }]
 
 
 def test_tactus_suspension_happens_only_after_pending_approval_is_durable_in_the_report():
@@ -595,7 +2878,11 @@ def test_tactus_suspension_happens_only_after_pending_approval_is_durable_in_the
     ))
 
     with pytest.raises(ProcedureWaitingForHuman):
-        runner.run({"account_id": "account-1", "run_key": "suspend"})
+        runner.run({
+            "account_id": "account-1",
+            "run_key": "suspend",
+            "max_semantic_cost_usd": "1",
+        })
 
     assert report.milestones[-1][0] == "approval"
     approval_evidence = report.milestones[-1][1]
@@ -635,6 +2922,7 @@ def test_saved_approval_cannot_authorize_recomputed_evidence():
         "account_id": "account-1",
         "run_key": "frozen-approval",
         "wait_for_human": True,
+        "max_semantic_cost_usd": "1",
     })
     original_request = prepared["approval_requests"][0]
     fingerprint["value"] = "fingerprint-after-review"
@@ -648,6 +2936,7 @@ def test_saved_approval_cannot_authorize_recomputed_evidence():
         "account_id": "account-1",
         "run_key": "frozen-approval",
         "wait_for_human": True,
+        "max_semantic_cost_usd": "1",
         "approval_responses": {
             original_request["action_key"]: {
                 "request": original_request,
@@ -694,6 +2983,7 @@ def test_every_five_target_approval_batch_is_resolved_before_any_dispatch():
         "account_id": "account-1",
         "run_key": "two-batches",
         "wait_for_human": True,
+        "max_semantic_cost_usd": "1",
     })
     first, second = prepared["approval_requests"]
     first_response = {
@@ -714,6 +3004,7 @@ def test_every_five_target_approval_batch_is_resolved_before_any_dispatch():
         "account_id": "account-1",
         "run_key": "two-batches",
         "wait_for_human": True,
+        "max_semantic_cost_usd": "1",
         "approval_responses": approvals,
     })
 
@@ -740,12 +3031,24 @@ def test_every_five_target_approval_batch_is_resolved_before_any_dispatch():
         "account_id": "account-1",
         "run_key": "two-batches",
         "wait_for_human": True,
+        "max_semantic_cost_usd": "1",
         "approval_responses": approvals,
     })
 
-    assert completed["status"] == "COMPLETED"
-    assert len(dispatches) == 1
-    assert [row["score_id"] for row in dispatches[0]["targets"]] == ["score-0"]
+    assert completed["status"] == "INCOMPLETE"
+    assert dispatches == []
+    assert completed["dispatch"]["rejected"] == [{
+        "reason": "invalid_run_limits",
+        "invalid_fields": [
+            "max_cost_usd",
+            "max_samples",
+            "max_iterations",
+            "max_concurrency",
+        ],
+    }]
+    milestones = [milestone for milestone, _evidence, _view in report.milestones]
+    assert "optimization" not in milestones
+    assert "optimization_review" not in milestones
 
 
 def test_report_publication_failure_stops_the_run_before_any_optimizer_dispatch():
@@ -808,7 +3111,11 @@ def test_nonblocking_findings_are_persisted_as_existing_chat_messages_and_report
         },
     ))
 
-    result = runner.run({"account_id": "account-1", "run_key": "questions"})
+    result = runner.run({
+        "account_id": "account-1",
+        "run_key": "questions",
+        "max_semantic_cost_usd": "1",
+    })
 
     assert action_inputs[0]["action_key"].startswith("stakeholder_clarification:questions:")
     assert action_inputs[0]["title"] == "Clarify policy for Priority Score"
@@ -954,6 +3261,68 @@ def test_stakeholder_overview_does_not_imply_optimizer_work_when_no_targets_were
     assert "reviewing completed optimizer" not in review["current_activity"].lower()
 
 
+def test_automatic_stakeholder_narrative_describes_policy_selection_without_human_approval():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    state = {
+        "execution_mode": "automatic",
+        "run_spec": {"execution_mode": "automatic"},
+        "rank": {"coverage": {"complete": True}, "ranked": []},
+        "assessments": [],
+        "diagnoses": [],
+        "reviews": [],
+        "approved_targets": [],
+        "dispatch": {"batches": [], "rejected": []},
+        "approval_requests": [],
+        "diagnosis_coverage": {
+            "selected_count": 0,
+            "scheduled_count": 0,
+            "completed_count": 0,
+            "failed_count": 0,
+            "deferred_by_cap_count": 0,
+        },
+    }
+
+    diagnosis = _stakeholder_view(state, milestone="diagnosis")["overview"]
+    assert "automatic execution policy" in diagnosis["current_activity"].lower()
+    assert "human decisions" not in diagnosis["current_activity"].lower()
+    assert "explicit decision" not in diagnosis["next_checkpoint"].lower()
+
+    optimization = _stakeholder_view(state, milestone="optimization")["overview"]
+    assert "passed the automatic execution policy" in optimization["current_activity"].lower()
+    assert "approved" not in optimization["current_activity"].lower()
+
+
+def test_approval_required_stakeholder_narrative_retains_explicit_human_decisions():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    state = {
+        "execution_mode": "approval_required",
+        "run_spec": {"execution_mode": "approval_required"},
+        "rank": {"coverage": {"complete": True}, "ranked": []},
+        "assessments": [],
+        "diagnoses": [],
+        "reviews": [],
+        "approved_targets": [],
+        "dispatch": {"batches": [], "rejected": []},
+        "approval_requests": [],
+        "diagnosis_coverage": {
+            "selected_count": 0,
+            "scheduled_count": 0,
+            "completed_count": 0,
+            "failed_count": 0,
+            "deferred_by_cap_count": 0,
+        },
+    }
+
+    diagnosis = _stakeholder_view(state, milestone="diagnosis")["overview"]
+    assert "human decisions" in diagnosis["current_activity"].lower()
+    assert "explicit decision" in diagnosis["next_checkpoint"].lower()
+
+    optimization = _stakeholder_view(state, milestone="optimization")["overview"]
+    assert "no targets were approved" in optimization["current_activity"].lower()
+
+
 def test_stakeholder_overview_retains_active_narration_for_dispatched_optimizer_work():
     from plexus.optimization.portfolio_run import _stakeholder_view
 
@@ -983,6 +3352,175 @@ def test_stakeholder_overview_retains_active_narration_for_dispatched_optimizer_
     assert "approved optimization" in optimization["current_activity"].lower()
     review = _stakeholder_view(state, milestone="optimization_review")["overview"]
     assert "optimizer and evaluation evidence" in review["current_activity"].lower()
+
+
+def test_stakeholder_view_reports_waiting_optimizer_child_as_active_work():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    state = {
+        "rank": {
+            "coverage": {"complete": True},
+            "ranked": [{
+                "scorecard_id": "card",
+                "score_id": "score",
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Priority Score",
+                "valid_feedback_count": 240,
+            }, {
+                "scorecard_id": "card",
+                "score_id": "other-score",
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Other Score",
+                "valid_feedback_count": 200,
+            }],
+        },
+        "assessments": [],
+        "diagnoses": [],
+        "reviews": [],
+        "approved_targets": [{"scorecard_id": "card", "score_id": "score"}],
+        "dispatch": {
+            "phase": "waiting_for_children",
+            "batches": [],
+            "rejected": [],
+            "children": [{
+                "target": {"scorecard_id": "card", "score_id": "score"},
+                "procedure_id": "procedure-1",
+                "task_id": "task-1",
+                "launch_state": {"phase": "waiting"},
+            }],
+        },
+        "approval_requests": [],
+        "diagnosis_coverage": {
+            "selected_count": 0,
+            "scheduled_count": 0,
+            "completed_count": 0,
+            "failed_count": 0,
+            "deferred_by_cap_count": 0,
+        },
+    }
+
+    view = _stakeholder_view(state, milestone="optimization")
+
+    assert view["overview"]["dispatched_optimizer_count"] == 1
+    assert "approved optimization" in view["overview"]["current_activity"].lower()
+    assert view["optimization_outcomes"][0]["outcome"] == "optimization_in_progress"
+    assert view["optimization_outcomes"][0]["next_action"] == "wait_for_optimizer_completion"
+    assert view["optimization_outcomes"][1]["outcome"] == "not_run"
+    assert "procedure-1" not in str(view)
+    assert "task-1" not in str(view)
+
+
+def test_stakeholder_view_surfaces_invalid_run_limits_for_approved_unlaunched_target():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    assessment = _assessment("card", "score")
+    rejection = {
+        "reason": "invalid_run_limits",
+        "invalid_fields": ["max_cost_usd"],
+    }
+    view = _stakeholder_view({
+        "rank": {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "card",
+            "score_id": "score",
+            "scorecard_name": "Example Portfolio",
+            "score_name": "Priority Score",
+            "valid_feedback_count": 240,
+        }]},
+        "assessments": [assessment],
+        "diagnoses": [assessment],
+        "reviews": [],
+        "approved_targets": [{"scorecard_id": "card", "score_id": "score"}],
+        "dispatch": {
+            "phase": "incomplete",
+            "batches": [{"rejected": [rejection]}],
+            "rejected": [rejection],
+            "children": [],
+        },
+        "terminal_status": "INCOMPLETE",
+    }, milestone="finalization")
+
+    portfolio = view["portfolio"][0]
+    outcome = view["optimization_outcomes"][0]
+    assert portfolio["primary_disposition"] == "failed_or_incomplete"
+    assert portfolio["next_action"] == "provide_valid_run_limits"
+    assert portfolio["dispatch_rejection"] == rejection
+    assert outcome["outcome"] == "failed_or_incomplete"
+    assert outcome["next_action"] == "provide_valid_run_limits"
+    assert outcome["dispatch_rejection"] == rejection
+    assert view["overview"]["invalid_run_limit_target_count"] == 1
+    assert "run limits" in view["overview"]["current_activity"].lower()
+    assert "valid run limits" in view["overview"]["next_checkpoint"].lower()
+
+
+@pytest.mark.parametrize("phase", [
+    "planned",
+    "procedure_create_attempted",
+    "procedure_record_observed",
+    "procedure_provisioned",
+    "task_create_attempted",
+    "task_record_observed",
+    "task_stage_reconcile_attempted",
+    "task_held",
+    "release_attempted",
+])
+def test_stakeholder_view_treats_every_durable_pre_observation_child_phase_as_launching(phase):
+    """A persisted launch boundary is active work, never an unselected score."""
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    state = {
+        "rank": {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "card", "score_id": "score",
+            "scorecard_name": "Example Portfolio", "score_name": "Priority Score",
+            "valid_feedback_count": 240,
+        }]},
+        "assessments": [],
+        "diagnoses": [],
+        "reviews": [],
+        "dispatch": {"children": [{
+            "target": {"scorecard_id": "card", "score_id": "score"},
+            "launch_state": {"phase": phase},
+        }]},
+    }
+
+    view = _stakeholder_view(state, milestone="optimization")
+
+    assert view["portfolio"][0]["primary_disposition"] == "optimizer_launching"
+    assert view["optimization_outcomes"][0]["outcome"] == "optimizer_launching"
+
+
+def test_stakeholder_view_projects_outcomes_for_the_entire_evidence_row_universe():
+    """Policy-deferred evidence stays visible as a not-run optimization outcome."""
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    state = {
+        "rank": {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "card", "score_id": "eligible",
+            "scorecard_name": "Example Portfolio", "score_name": "Eligible Score",
+            "valid_feedback_count": 100, "evidence_rank": 2,
+        }], "unranked": [{
+            "scorecard_id": "card", "score_id": "cooldown",
+            "scorecard_name": "Example Portfolio", "score_name": "Cooldown Score",
+            "valid_feedback_count": 150, "evidence_rank": 1,
+            "policy_disposition": "cooldown", "policy_reason": "recent_score_activity",
+            "eligible_for_optimization": False,
+        }, {
+            "scorecard_id": "card", "score_id": "policy",
+            "scorecard_name": "Example Portfolio", "score_name": "Policy Deferred Score",
+            "valid_feedback_count": 50, "evidence_rank": 3,
+            "policy_disposition": "blocked", "policy_reason": "disabled",
+            "eligible_for_optimization": False,
+        }]},
+        "assessments": [], "diagnoses": [], "reviews": [],
+    }
+
+    view = _stakeholder_view(state, milestone="optimization")
+
+    assert [row["score_name"] for row in view["optimization_outcomes"]] == [
+        row["score_name"] for row in view["portfolio"]
+    ] == ["Cooldown Score", "Eligible Score", "Policy Deferred Score"]
+    outcomes = {row["score_name"]: row for row in view["optimization_outcomes"]}
+    assert outcomes["Cooldown Score"]["outcome"] == "not_run"
+    assert outcomes["Policy Deferred Score"]["outcome"] == "not_run"
 
 
 def test_stakeholder_overview_separates_complete_inventory_from_incomplete_diagnosis_results():
@@ -1054,6 +3592,854 @@ def test_stakeholder_overview_separates_complete_inventory_from_incomplete_diagn
     assert complete["overview"]["diagnosis_incomplete_count"] == 0
 
 
+def test_stakeholder_view_and_workbook_publish_reconciled_semantic_budget_evidence():
+    from datetime import datetime, timezone
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from plexus.optimization.portfolio_run import _stakeholder_view
+    from plexus.optimization.run_report import build_stakeholder_workbook
+
+    view = _stakeholder_view({
+        "rank": {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "private-card", "score_id": "private-score",
+            "scorecard_name": "Example Portfolio", "score_name": "Priority Score",
+            "valid_feedback_count": 240, "reviewed_disagreements": 48,
+            "disagreement_rate": 0.2, "reviewed_error_opportunity": 48,
+        }]},
+        "assessments": [{
+            "scope": {"scorecard_id": "private-card", "score_id": "private-score"},
+            "coverage": {"complete": True},
+            "states": {"optimization": "ready_to_optimize"},
+        }],
+        "diagnoses": [{
+            "scope": {"scorecard_id": "private-card", "score_id": "private-score"},
+            "coverage": {"complete": True},
+            "states": {"optimization": "ready_to_optimize"},
+        }],
+        "diagnosis_coverage": {"selected_count": 1, "scheduled_count": 1, "completed_count": 1},
+        "semantic_budget_evidence": {
+            "policy_version": "semantic-budget-policy-v1",
+            "budget_spec_schema_version": "semantic-budget-v1",
+            "ledger_schema_version": "semantic-budget-ledger-v1",
+            "provider": "openai", "model": "gpt-5-mini-2025-08-07",
+            "pricing_version": "openai-2025-08-07-v1",
+            "authorized_max_usd": "1", "settled_actual_usd": "0.000045",
+            "held_reserved_usd": "0.0009", "available_usd": "0.999055",
+            "reservation_count": 4, "reserved_count": 1, "settled_count": 1,
+            "unknown_count": 1, "cancelled_count": 1, "target_count": 3,
+            "call_site_coverage": [{"call_site": "rubric_consistency", "count": 3}],
+            "ledger_revision": 7, "evidence_reference": "semantic-budget-ledger:r000007",
+            "evidence_digest": "a" * 64,
+        },
+    }, milestone="diagnosis")
+
+    assert view["overview"]["semantic_budget_authorized_usd"] == "1"
+    assert view["overview"]["semantic_budget_available_usd"] == "0.999055"
+    assert view["overview"]["semantic_budget_spec_schema_version"] == "semantic-budget-v1"
+    assert view["overview"]["semantic_budget_ledger_schema_version"] == "semantic-budget-ledger-v1"
+    assert view["overview"]["semantic_budget_model"] == "gpt-5-mini-2025-08-07"
+    assert view["overview"]["semantic_budget_reserved_count"] == 1
+    assert view["overview"]["semantic_budget_unknown_count"] == 1
+    assert view["portfolio"][0]["semantic_diagnosis_status"] == "complete"
+    assert view["portfolio"][0]["semantic_budget_evidence_reference"] == "semantic-budget-ledger:r000007"
+
+    artifact = build_stakeholder_workbook(
+        view, revision_number=7, generated_at=datetime(2026, 7, 30, tzinfo=timezone.utc),
+    )
+    workbook = load_workbook(BytesIO(artifact.content), data_only=False)
+    overview_values = [cell.value for row in workbook["Overview"].iter_rows() for cell in row]
+    portfolio_headers = [cell.value for cell in workbook["Portfolio"][1]]
+    portfolio_values = [cell.value for row in workbook["Portfolio"].iter_rows() for cell in row]
+    priorities_headers = [cell.value for cell in workbook["Priorities"][1]]
+    issues_headers = [cell.value for cell in workbook["Questions and Issues"][1]]
+    run_log_headers = [cell.value for cell in workbook["Run Log"][1]]
+    run_log_values = [cell.value for cell in workbook["Run Log"][2]]
+    definition_terms = [row[0].value for row in workbook["Definitions"].iter_rows(min_row=2)]
+    assert "Semantic Budget Authorized Usd" in overview_values
+    assert "Semantic Diagnosis Status" in portfolio_headers
+    assert "Semantic Budget Evidence" in priorities_headers
+    assert "Semantic Diagnosis Status" in issues_headers
+    assert "Semantic Evidence" in run_log_headers
+    assert "Semantic Calls" in run_log_headers
+    assert "semantic-budget-ledger:r000007" in portfolio_values
+    assert "semantic-budget-ledger:r000007" in run_log_values
+    assert any(
+        "total 4; reserved 1; settled 1; unknown 1; cancelled 1" in str(value)
+        for value in run_log_values
+    )
+    assert "Semantic budget" in definition_terms
+    assert "private-card" not in str(overview_values + portfolio_values)
+    assert not any(cell.data_type == "f" for sheet in workbook for row in sheet.iter_rows() for cell in row)
+
+
+def test_per_score_semantic_status_uses_actual_selection_and_result_coverage():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    def row(index):
+        return {
+            "scorecard_id": "card", "score_id": f"score-{index}",
+            "scorecard_name": "Example Portfolio", "score_name": f"Score {index}",
+            "valid_feedback_count": 100, "reviewed_disagreements": 10,
+            "disagreement_rate": 0.1, "reviewed_error_opportunity": 10,
+        }
+
+    ranked = [row(index) for index in range(11)]
+    assessments = [{
+        "scope": {"scorecard_id": "card", "score_id": f"score-{index}"},
+        "coverage": {"complete": True},
+        "states": {"optimization": "ready_to_optimize"},
+    } for index in range(11)]
+    view = _stakeholder_view({
+        "rank": {"coverage": {"complete": True}, "ranked": ranked},
+        "assessments": assessments,
+        "diagnoses": [{
+            "scope": {"scorecard_id": "card", "score_id": "score-0"},
+            "coverage": {"complete": True},
+            "states": {"optimization": "ready_to_optimize"},
+        }],
+        "diagnosis_coverage": {
+            "selected_count": 10, "scheduled_count": 10, "completed_count": 1,
+            "max_semantic_diagnoses": 10,
+        },
+    }, milestone="diagnosis")
+
+    statuses = {row["score_name"]: row["semantic_diagnosis_status"] for row in view["portfolio"]}
+    assert statuses["Score 0"] == "complete"
+    assert statuses["Score 1"] == "incomplete"
+    assert statuses["Score 10"] == "not_selected"
+
+
+def test_outcome_unknown_overrides_generic_rationale_with_safe_budget_ambiguity():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    view = _stakeholder_view({
+        "rank": {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "card", "score_id": "score",
+            "scorecard_name": "Example Portfolio", "score_name": "Unknown Score",
+            "valid_feedback_count": 100, "reviewed_disagreements": 10,
+            "disagreement_rate": 0.1, "reviewed_error_opportunity": 10,
+        }]},
+        "assessments": [{
+            "scope": {"scorecard_id": "card", "score_id": "score"},
+            "coverage": {"complete": True}, "states": {"optimization": "ready_to_optimize"},
+            "rationale": "=FORMULA_SENTINEL",
+        }],
+        "diagnoses": [{
+            "scope": {"scorecard_id": "card", "score_id": "score"},
+            "coverage": {"complete": False}, "states": {"optimization": "incomplete"},
+            "semantic_failure_category": "outcome_unknown",
+            "status": "outcome_unknown", "failures": ["contradictory budget exhausted prose"],
+            "rationale": "=FORMULA_SENTINEL",
+        }],
+        "diagnosis_coverage": {"selected_count": 1, "scheduled_count": 1, "failed_count": 1},
+    }, milestone="finalization")
+
+    row = view["portfolio"][0]
+    assert row["semantic_diagnosis_status"] == "outcome_unknown"
+    assert row["next_action"] == "review_semantic_budget"
+    assert "provider outcome is unknown" in row["rationale"].lower()
+    assert "FORMULA_SENTINEL" not in row["rationale"]
+
+
+def test_legacy_nested_unknown_failure_text_fails_closed_without_typed_category():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    view = _stakeholder_view({
+        "rank": {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "card", "score_id": "score",
+            "scorecard_name": "Example Portfolio", "score_name": "Unknown Score",
+            "valid_feedback_count": 100, "reviewed_disagreements": 10,
+            "disagreement_rate": 0.1, "reviewed_error_opportunity": 10,
+        }]},
+        "assessments": [{
+            "scope": {"scorecard_id": "card", "score_id": "score"},
+            "coverage": {"complete": True}, "states": {"optimization": "ready_to_optimize"},
+            "rationale": "+GENERIC_SENTINEL",
+        }],
+        "diagnoses": [{
+            "scope": {"scorecard_id": "card", "score_id": "score"},
+            "coverage": {"complete": False, "failures": ["provider outcome unknown"]},
+            "states": {"optimization": "incomplete"}, "rationale": "+GENERIC_SENTINEL",
+        }],
+        "diagnosis_coverage": {
+            "selected_count": 1, "scheduled_count": 1, "failed_count": 1,
+            "outcome_unknown_count": 1, "deferred_by_budget_count": 0,
+        },
+        "semantic_budget_evidence": {
+            "policy_version": "semantic-budget-policy-v1",
+            "budget_spec_schema_version": "semantic-budget-v1",
+            "ledger_schema_version": "semantic-budget-ledger-v1",
+            "provider": "openai", "model": "gpt-5-mini-2025-08-07",
+            "pricing_version": "openai-2025-08-07-v1",
+            "authorized_max_usd": "1", "settled_actual_usd": "0",
+            "held_reserved_usd": "0.00045", "available_usd": "0.99955",
+            "reservation_count": 1, "reserved_count": 0, "settled_count": 0,
+            "unknown_count": 1, "cancelled_count": 0, "target_count": 1,
+            "call_site_coverage": [], "ledger_revision": 2,
+            "evidence_reference": "semantic-budget-ledger:r000002",
+            "evidence_digest": "b" * 64,
+        },
+    }, milestone="finalization")
+
+    row = view["portfolio"][0]
+    assert row["semantic_diagnosis_status"] == "incomplete"
+    assert row["next_action"] == "review"
+    assert "GENERIC_SENTINEL" not in row["rationale"]
+    assert view["overview"]["semantic_budget_deferred_count"] == 0
+
+
+def test_provider_outcome_unknown_defers_remaining_work_without_counting_budget_exhaustion():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+    from plexus.optimization.semantic_authority import SemanticOutcomeUnknown
+
+    report = _ReportService()
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": [
+            {"scorecard_id": "card", "score_id": "one"},
+            {"scorecard_id": "card", "score_id": "two"},
+        ]},
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda _request: (_ for _ in ()).throw(
+            SemanticOutcomeUnknown("provider outcome unknown")
+        ),
+        summary=lambda _request: {"coverage": {"complete": False}},
+        dispatch=lambda _request: {}, review=lambda _request: {},
+        report=report, human_review=lambda _request: {},
+    ))
+
+    result = runner.run({
+        "account_id": "account-1", "run_key": "unknown-outcome",
+        "max_semantic_diagnoses": 2, "max_semantic_cost_usd": "1",
+    })
+
+    assert result["status"] == "INCOMPLETE"
+    assert result["diagnosis_coverage"]["outcome_unknown_count"] == 1
+    assert result["diagnosis_coverage"]["deferred_after_failure_count"] == 1
+    assert result["diagnosis_coverage"]["deferred_by_budget_count"] == 0
+
+
+@pytest.mark.parametrize(
+    ("failure_category", "expected_action", "rationale_fragment"),
+    [
+        ("budget_exhausted", "review_semantic_budget", "frozen semantic budget"),
+        ("outcome_unknown", "review_semantic_budget", "provider outcome is unknown"),
+        (
+            "authority_publication_failure",
+            "repair_semantic_authority_publication",
+            "semantic authority evidence could not be published",
+        ),
+    ],
+)
+def test_actual_runner_semantic_failure_state_reaches_stakeholder_and_workbook_without_collapse(
+    failure_category, expected_action, rationale_fragment,
+):
+    from datetime import datetime, timezone
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from plexus.optimization.operator_identity import optimization_operator_identity
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+    from plexus.optimization.run_report import (
+        OptimizationRunReportService,
+        build_stakeholder_workbook,
+    )
+    from plexus.optimization.semantic_authority import (
+        SemanticAuthorityPublicationError,
+        SemanticOutcomeUnknown,
+    )
+    from plexus.optimization.semantic_budget import SemanticBudgetExceeded
+
+    exception_type = {
+        "budget_exhausted": SemanticBudgetExceeded,
+        "outcome_unknown": SemanticOutcomeUnknown,
+        "authority_publication_failure": SemanticAuthorityPublicationError,
+    }[failure_category]
+    report = _ReportService()
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "card", "score_id": "score",
+            "scorecard_name": "Example Portfolio", "score_name": "Priority Score",
+            "valid_feedback_count": 100, "reviewed_disagreements": 10,
+            "disagreement_rate": 0.1, "reviewed_error_opportunity": 10,
+        }]},
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda _request: (_ for _ in ()).throw(
+            exception_type(f"safe {failure_category} sentinel")
+        ),
+        summary=lambda _request: {"coverage": {"complete": False}},
+        dispatch=lambda _request: {}, review=lambda _request: {},
+        report=report, human_review=lambda _request: {},
+    ))
+
+    result = runner.run({
+        "account_id": "account-1", "run_key": f"projection-{failure_category}",
+        "max_semantic_diagnoses": 1, "max_semantic_cost_usd": "1",
+    })
+
+    final_view = report.milestones[-1][2]
+    final_evidence = report.milestones[-1][1]
+    portfolio_row = final_view["portfolio"][0]
+    outcome_row = final_view["optimization_outcomes"][0]
+    assert result["diagnoses"][0]["status"] == failure_category
+    assert result["diagnoses"][0]["semantic_failure_category"] == failure_category
+    assert (
+        result["diagnoses"][0]["coverage"]["semantic_failure_category"]
+        == failure_category
+    )
+    assert result["diagnosis_coverage"]["semantic_failure_category"] == failure_category
+    assert (
+        final_evidence["diagnoses"][0]["semantic_failure_category"]
+        == failure_category
+    )
+    assert (
+        final_evidence["diagnosis_coverage"]["semantic_failure_category"]
+        == failure_category
+    )
+    assert portfolio_row["semantic_diagnosis_status"] == failure_category
+    assert portfolio_row["next_action"] == expected_action
+    assert rationale_fragment in portfolio_row["rationale"].lower()
+    assert "sentinel" not in portfolio_row["rationale"].lower()
+    assert outcome_row["semantic_diagnosis_status"] == failure_category
+    assert outcome_row["next_action"] == expected_action
+    assert rationale_fragment in outcome_row["rationale"].lower()
+    assert result["summary"]["semantic_budget_next_action"] == expected_action
+
+    artifact = build_stakeholder_workbook(
+        final_view, revision_number=1,
+        generated_at=datetime(2026, 7, 31, tzinfo=timezone.utc),
+    )
+    workbook = load_workbook(BytesIO(artifact.content), data_only=False)
+    headers = [cell.value for cell in workbook["Portfolio"][1]]
+    values = [cell.value for cell in workbook["Portfolio"][2]]
+    workbook_row = dict(zip(headers, values))
+    assert workbook_row["Semantic Diagnosis Status"] == failure_category
+    assert workbook_row["Next Action"] == expected_action
+    assert rationale_fragment in workbook_row["Rationale"].lower()
+
+    cover = OptimizationRunReportService._render_report_manifest(
+        "incomplete",
+        {"number": 1, "milestone": "finalization", **final_view},
+        identity=optimization_operator_identity(scope={}),
+    )
+    assert "Semantic diagnosis issues" in cover
+    assert failure_category in cover
+    assert expected_action in cover
+    assert rationale_fragment in cover.lower()
+
+
+def test_incomplete_only_semantic_result_has_safe_summary_and_cover_issue():
+    from plexus.optimization.operator_identity import optimization_operator_identity
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+    from plexus.optimization.run_report import OptimizationRunReportService
+
+    report = _ReportService()
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "opaque-card-id", "score_id": "opaque-score-id",
+            "scorecard_name": "Example Portfolio", "score_name": "Priority Score",
+        }]},
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: {
+            **request["assessment"],
+            "coverage": {"complete": False, "failures": ["private raw error"]},
+            "states": {"optimization": "incomplete"},
+            "rationale": "private raw rationale",
+        },
+        summary=lambda _request: {"coverage": {"complete": False}},
+        dispatch=lambda _request: {}, review=lambda _request: {},
+        report=report, human_review=lambda _request: {},
+    ))
+
+    result = runner.run({
+        "account_id": "account-1", "run_key": "generic-incomplete-cover",
+        "max_semantic_diagnoses": 1, "max_semantic_cost_usd": "1",
+    })
+    final_view = report.milestones[-1][2]
+    assert result["diagnosis_coverage"]["incomplete_count"] == 1
+    assert result["diagnosis_coverage"]["failed_count"] == 0
+    assert result["summary"]["semantic_budget_next_action"] == "review"
+    assert "without a recognized structured failure category" in (
+        result["summary"]["semantic_budget_failure"]
+    )
+
+    cover = OptimizationRunReportService._render_report_manifest(
+        "incomplete",
+        {"number": 1, "milestone": "finalization", **final_view},
+        identity=optimization_operator_identity(scope={}),
+    )
+    assert "Semantic diagnosis issues" in cover
+    assert "Priority Score" in cover
+    assert "Status: incomplete" in cover
+    assert "Next action: review" in cover
+    assert "without a recognized structured failure category" in cover
+    assert "opaque-card-id" not in cover
+    assert "opaque-score-id" not in cover
+    assert "private raw" not in cover
+
+
+@pytest.mark.parametrize(
+    ("failure_category", "expected_action"),
+    [
+        ("budget_exhausted", "review_semantic_budget"),
+        ("outcome_unknown", "review_semantic_budget"),
+        ("authority_publication_failure", "repair_semantic_authority_publication"),
+    ],
+)
+def test_nested_diagnosis_coverage_preserves_exact_semantic_failure_state(
+    failure_category, expected_action,
+):
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    view = _stakeholder_view({
+        "rank": {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "card", "score_id": "score",
+            "scorecard_name": "Example Portfolio", "score_name": "Priority Score",
+            "valid_feedback_count": 100, "reviewed_disagreements": 10,
+            "disagreement_rate": 0.1, "reviewed_error_opportunity": 10,
+        }]},
+        "assessments": [_assessment("card", "score")],
+        "diagnoses": [{
+            "scope": {"scorecard_id": "card", "score_id": "score"},
+            "coverage": {
+                "complete": False,
+                "semantic_failure_category": failure_category,
+            },
+            "states": {"optimization": "incomplete"},
+            "rationale": "generic rationale must not survive",
+        }],
+        "diagnosis_coverage": {
+            "selected_count": 1, "scheduled_count": 1, "failed_count": 1,
+        },
+    }, milestone="finalization")
+
+    assert view["portfolio"][0]["semantic_diagnosis_status"] == failure_category
+    assert view["portfolio"][0]["next_action"] == expected_action
+    assert "generic rationale" not in view["portfolio"][0]["rationale"]
+    assert view["optimization_outcomes"][0]["semantic_diagnosis_status"] == failure_category
+    assert view["optimization_outcomes"][0]["next_action"] == expected_action
+
+
+@pytest.mark.parametrize("failure_text", [
+    "semantic reservation could not be durably published before provider contact",
+    "semantic reservation could not be persisted before provider contact",
+    "semantic ledger commit failed before provider contact",
+    "semantic durable-write failed before provider contact",
+])
+def test_legacy_failure_prose_never_selects_authority_publication_category(
+    failure_text,
+):
+    from datetime import datetime, timezone
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from plexus.optimization.portfolio_run import (
+        OptimizationPortfolioRunner,
+        _stakeholder_view,
+    )
+    from plexus.optimization.run_report import build_stakeholder_workbook
+
+    diagnosis = {
+        "scope": {"scorecard_id": "card", "score_id": "score"},
+        "coverage": {"complete": False, "failures": [failure_text]},
+        "states": {"optimization": "incomplete"},
+        "rationale": "generic rationale must not survive",
+    }
+    state = {
+        "rank": {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "card", "score_id": "score",
+            "scorecard_name": "Example Portfolio", "score_name": "Priority Score",
+            "valid_feedback_count": 100, "reviewed_disagreements": 10,
+            "disagreement_rate": 0.1, "reviewed_error_opportunity": 10,
+        }]},
+        "assessments": [_assessment("card", "score")],
+        "diagnoses": [diagnosis],
+        "diagnosis_coverage": {
+            "selected_count": 1, "scheduled_count": 1, "failed_count": 1,
+        },
+        "semantic_budget_evidence": {"unknown_count": 0},
+    }
+    view = _stakeholder_view(state, milestone="finalization")
+
+    row = view["portfolio"][0]
+    assert row["semantic_diagnosis_status"] == "incomplete"
+    assert row["next_action"] == "review"
+    assert "generic rationale" not in row["rationale"]
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {}, assess=lambda _request: {}, diagnose=lambda _request: {},
+        summary=lambda _request: {"coverage": {"complete": False}},
+        dispatch=lambda _request: {}, review=lambda _request: {},
+        report=_ReportService(), human_review=lambda _request: {},
+    ))
+    summary = runner._summary(state)
+    assert summary["semantic_budget_next_action"] == "review"
+    assert "incomplete" in summary["semantic_budget_failure"].lower()
+
+    artifact = build_stakeholder_workbook(
+        view, revision_number=1,
+        generated_at=datetime(2026, 7, 31, tzinfo=timezone.utc),
+    )
+    workbook = load_workbook(BytesIO(artifact.content), data_only=False)
+    headers = [cell.value for cell in workbook["Portfolio"][1]]
+    values = [cell.value for cell in workbook["Portfolio"][2]]
+    workbook_row = dict(zip(headers, values))
+    assert workbook_row["Semantic Diagnosis Status"] == "incomplete"
+    assert workbook_row["Next Action"] == "review"
+
+
+@pytest.mark.parametrize("failure_text", [
+    "semantic reservation requires operator review",
+    "semantic remaining cost requires operator review",
+    "semantic reservation requires an exceedingly careful review",
+    "semantic cost requires operator review",
+    "semantic remaining evidence requires operator review",
+])
+def test_generic_budget_vocabulary_is_not_misclassified_as_budget_exhaustion(
+    failure_text,
+):
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    view = _stakeholder_view({
+        "rank": {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "card", "score_id": "score",
+            "scorecard_name": "Example Portfolio", "score_name": "Priority Score",
+        }]},
+        "assessments": [_assessment("card", "score")],
+        "diagnoses": [{
+            "scope": {"scorecard_id": "card", "score_id": "score"},
+            "coverage": {
+                "complete": False,
+                "failures": [failure_text],
+            },
+            "states": {"optimization": "incomplete"},
+        }],
+        "diagnosis_coverage": {
+            "selected_count": 1, "scheduled_count": 1, "failed_count": 1,
+        },
+    }, milestone="finalization")
+
+    row = view["portfolio"][0]
+    assert row["semantic_diagnosis_status"] == "incomplete"
+    assert row["next_action"] == "review"
+    assert "frozen semantic budget" not in row["rationale"].lower()
+
+
+@pytest.mark.parametrize(
+    ("failure_category", "contradictory_failure_text", "expected_action"),
+    [
+        ("budget_exhausted", "authority publication failed", "review_semantic_budget"),
+        ("outcome_unknown", "budget exhausted", "review_semantic_budget"),
+        (
+            "authority_publication_failure", "no remaining budget",
+            "repair_semantic_authority_publication",
+        ),
+    ],
+)
+def test_structured_semantic_category_wins_over_arbitrary_contradictory_prose(
+    failure_category, contradictory_failure_text, expected_action,
+):
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    view = _stakeholder_view({
+        "rank": {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "card", "score_id": "score",
+            "scorecard_name": "Example Portfolio", "score_name": "Priority Score",
+        }]},
+        "assessments": [_assessment("card", "score")],
+        "diagnoses": [{
+            "scope": {"scorecard_id": "card", "score_id": "score"},
+            "coverage": {
+                "complete": False,
+                "semantic_failure_category": failure_category,
+                "failures": [contradictory_failure_text],
+            },
+            "states": {"optimization": "incomplete"},
+        }],
+        "diagnosis_coverage": {
+            "selected_count": 1, "scheduled_count": 1, "failed_count": 1,
+        },
+    }, milestone="finalization")
+
+    row = view["portfolio"][0]
+    assert row["semantic_diagnosis_status"] == failure_category
+    assert row["next_action"] == expected_action
+    assert contradictory_failure_text not in row["rationale"].lower()
+
+
+@pytest.mark.parametrize("invalid_category", [None, "", "unknown", "budget_exhausted_typo"])
+def test_missing_or_unknown_structured_semantic_category_fails_closed(invalid_category):
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    coverage = {
+        "complete": False,
+        "failures": ["budget exhausted; authority publication failed; outcome unknown"],
+    }
+    if invalid_category is not None:
+        coverage["semantic_failure_category"] = invalid_category
+    view = _stakeholder_view({
+        "rank": {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "card", "score_id": "score",
+            "scorecard_name": "Example Portfolio", "score_name": "Priority Score",
+        }]},
+        "assessments": [_assessment("card", "score")],
+        "diagnoses": [{
+            "scope": {"scorecard_id": "card", "score_id": "score"},
+            "coverage": coverage,
+            "states": {"optimization": "incomplete"},
+        }],
+        "diagnosis_coverage": {
+            "selected_count": 1, "scheduled_count": 1, "failed_count": 1,
+        },
+    }, milestone="finalization")
+
+    assert view["portfolio"][0]["semantic_diagnosis_status"] == "incomplete"
+    assert view["portfolio"][0]["next_action"] == "review"
+
+
+@pytest.mark.parametrize(
+    ("top_category", "nested_category", "expected_status", "expected_action"),
+    [
+        ("budget_exhausted", "outcome_unknown", "incomplete", "review"),
+        ("invalid_category", "outcome_unknown", "incomplete", "review"),
+        (
+            "authority_publication_failure", "authority_publication_failure",
+            "authority_publication_failure", "repair_semantic_authority_publication",
+        ),
+    ],
+)
+def test_conflicting_or_invalid_typed_categories_fail_closed_without_precedence(
+    top_category, nested_category, expected_status, expected_action,
+):
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    view = _stakeholder_view({
+        "rank": {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "card", "score_id": "score",
+            "scorecard_name": "Example Portfolio", "score_name": "Priority Score",
+        }]},
+        "assessments": [_assessment("card", "score")],
+        "diagnoses": [{
+            "scope": {"scorecard_id": "card", "score_id": "score"},
+            "semantic_failure_category": top_category,
+            "coverage": {
+                "complete": False,
+                "semantic_failure_category": nested_category,
+            },
+            "states": {"optimization": "incomplete"},
+        }],
+        "diagnosis_coverage": {
+            "selected_count": 1, "scheduled_count": 1, "failed_count": 1,
+        },
+    }, milestone="finalization")
+
+    assert view["portfolio"][0]["semantic_diagnosis_status"] == expected_status
+    assert view["portfolio"][0]["next_action"] == expected_action
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ({}, "incomplete"),
+        ({"semantic_failure_category": "invalid"}, "incomplete"),
+        ({
+            "diagnoses": [{
+                "semantic_failure_category": "budget_exhausted",
+                "coverage": {"semantic_failure_category": "outcome_unknown"},
+            }],
+            "diagnosis_coverage": {
+                "semantic_failure_category": "budget_exhausted",
+            },
+        }, "incomplete"),
+        ({
+            "diagnoses": [{
+                "semantic_failure_category": "outcome_unknown",
+                "coverage": {"semantic_failure_category": "outcome_unknown"},
+            }],
+            "diagnosis_coverage": {
+                "semantic_failure_category": "outcome_unknown",
+            },
+        }, "outcome_unknown"),
+    ],
+)
+def test_one_normalizer_collects_all_nested_and_aggregate_typed_categories(value, expected):
+    from plexus.optimization.portfolio_run import _normalize_semantic_failure_category
+
+    assert _normalize_semantic_failure_category(value) == expected
+
+
+def test_summary_conflicting_aggregate_category_counts_fail_closed_generic():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {}, assess=lambda _request: {}, diagnose=lambda _request: {},
+        summary=lambda _request: {"coverage": {"complete": False}},
+        dispatch=lambda _request: {}, review=lambda _request: {},
+        report=_ReportService(), human_review=lambda _request: {},
+    ))
+    summary = runner._summary({
+        "semantic_budget_evidence": {"unknown_count": 0},
+        "diagnoses": [], "assessments": [], "reviews": [],
+        "diagnosis_coverage": {
+            "failed_count": 2,
+            "budget_exhausted_count": 1,
+            "authority_publication_failure_count": 1,
+        },
+    })
+
+    assert summary["semantic_budget_next_action"] == "review"
+    assert "without a recognized structured failure category" in (
+        summary["semantic_budget_failure"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("exception_kind", "expected_category"),
+    [
+        ("semantic_budget", "budget_exhausted"),
+        ("semantic_unknown", "outcome_unknown"),
+        ("tactus_unknown", "outcome_unknown"),
+        ("semantic_authority", "authority_publication_failure"),
+        ("semantic_authority_generic", "incomplete"),
+        ("report_publication", "authority_publication_failure"),
+        ("report_integrity", "authority_publication_failure"),
+        ("generic", "incomplete"),
+    ],
+)
+def test_semantic_failure_category_is_derived_from_exception_type_not_message(
+    exception_kind, expected_category,
+):
+    from plexus.optimization.portfolio_run import _semantic_exception_category
+    from plexus.optimization.run_report import (
+        OptimizationRunIntegrityError,
+        OptimizationRunPublicationError,
+    )
+    from plexus.optimization.semantic_authority import (
+        SemanticAuthorityError,
+        SemanticAuthorityPublicationError,
+        SemanticOutcomeUnknown,
+    )
+    from plexus.optimization.semantic_budget import SemanticBudgetExceeded
+    from tactus.protocols.model_attempt import ModelAttemptOutcomeUnknown
+
+    exception_type = {
+        "semantic_budget": SemanticBudgetExceeded,
+        "semantic_unknown": SemanticOutcomeUnknown,
+        "tactus_unknown": ModelAttemptOutcomeUnknown,
+        "semantic_authority": SemanticAuthorityPublicationError,
+        "semantic_authority_generic": SemanticAuthorityError,
+        "report_publication": OptimizationRunPublicationError,
+        "report_integrity": OptimizationRunIntegrityError,
+        "generic": RuntimeError,
+    }[exception_kind]
+    contradictory_message = (
+        "budget exhausted; outcome unknown; authority publication failed"
+    )
+
+    assert _semantic_exception_category(
+        exception_type(contradictory_message)
+    ) == expected_category
+
+
+def test_budget_deferred_semantic_diagnosis_is_never_presented_as_optimization_ready():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    view = _stakeholder_view({
+        "rank": {"coverage": {"complete": True}, "ranked": [{
+            "scorecard_id": "card", "score_id": "score",
+            "scorecard_name": "Example Portfolio", "score_name": "Deferred Score",
+            "valid_feedback_count": 200, "reviewed_disagreements": 20,
+            "disagreement_rate": 0.1, "reviewed_error_opportunity": 20,
+        }]},
+        "assessments": [{
+            "scope": {"scorecard_id": "card", "score_id": "score"},
+            "coverage": {"complete": True},
+            "states": {"optimization": "ready_to_optimize"},
+        }],
+        "diagnoses": [{
+            "scope": {"scorecard_id": "card", "score_id": "score"},
+            "coverage": {
+                "complete": False,
+                "semantic_failure_category": "budget_exhausted",
+            },
+            "semantic_failure_category": "budget_exhausted",
+            "states": {"optimization": "incomplete"},
+            "failures": ["semantic call worst-case reservation exceeds the frozen run budget"],
+        }],
+        "diagnosis_coverage": {
+            "selected_count": 1, "scheduled_count": 1, "completed_count": 0,
+            "failed_count": 1, "deferred_by_budget_count": 1,
+        },
+    }, milestone="finalization")
+
+    row = view["portfolio"][0]
+    assert row["readiness"] == "incomplete"
+    assert row["next_action"] == "review_semantic_budget"
+    assert "not an optimization-ready target" in row["rationale"]
+    assert row["primary_disposition"] == "insufficient_evidence"
+
+
+def test_portfolio_fingerprint_binds_frozen_semantic_policy_and_ledger_proof_without_changing_target_identity():
+    from plexus.optimization.portfolio_run import (
+        OptimizationPortfolioRunner,
+        _approval_request,
+        _evidence_snapshot,
+        _portfolio_evidence_fingerprint,
+    )
+
+    state = {
+        "run_key": "run-1",
+        "run_spec": {"semantic_budget": {
+            "schema_version": "semantic-budget-v1", "max_cost_usd": "1",
+            "pricing_version": "openai-2025-08-07-v1",
+        }},
+        "semantic_budget_evidence": {
+            "ledger_revision": 7, "evidence_digest": "a" * 64,
+            "authorized_max_usd": "1", "settled_actual_usd": "0",
+        },
+    }
+    first = _portfolio_evidence_fingerprint(state)
+    second = _portfolio_evidence_fingerprint({
+        **state,
+        "semantic_budget_evidence": {
+            **state["semantic_budget_evidence"], "ledger_revision": 8,
+            "evidence_digest": "b" * 64, "settled_actual_usd": "0.1",
+        },
+    })
+    snapshot = _evidence_snapshot(state)
+    target = {
+        "scorecard_id": "card", "score_id": "score", "score_name": "Score",
+        "assessment_fingerprint": "assessment-fingerprint",
+        "champion_version": "champion", "feedback_watermark": "watermark",
+    }
+    request = _approval_request(
+        run_key="run-1", account_id="account-1", batch_number=1,
+        targets=[target], report_ref={"kind": "report", "id": "report-1"},
+        limits={}, portfolio_evidence_fingerprint=first,
+    )
+
+    assert first != second
+    assert snapshot["portfolio_evidence_fingerprint"] == first
+    assert snapshot["semantic_budget_evidence"]["ledger_revision"] == 7
+    assert request["preconditions"]["portfolio_evidence_fingerprint"] == first
+    assert request["targets"][0]["assessment_fingerprint"] == "assessment-fingerprint"
+
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {}, assess=lambda _request: {}, diagnose=lambda _request: {},
+        summary=lambda _request: {"coverage": {"complete": False}}, dispatch=lambda _request: {},
+        review=lambda _request: {}, report=_ReportService(), human_review=lambda _request: {},
+    ))
+    summary = runner._summary({
+        **state,
+        "diagnosis_coverage": {"failed_count": 0, "deferred_by_budget_count": 2},
+    })
+    assert summary["semantic_budget_next_action"] == "review_semantic_budget"
+    assert "2 deferred diagnoses" in summary["semantic_budget_failure"]
+
+
 def test_stakeholder_overview_explains_ranking_and_semantic_diagnosis_cutoffs():
     from plexus.optimization.portfolio_run import _stakeholder_view
     from plexus.optimization.run_report import _validate_view
@@ -1104,6 +4490,9 @@ def test_stakeholder_overview_explains_ranking_and_semantic_diagnosis_cutoffs():
     assert overview["ranked_below_priority_cutoff"] == 2
     assert overview["diagnosis_selected_count"] == 11
     assert overview["diagnosis_scheduled_count"] == 5
+    assert overview["assessed_score_count"] == 0
+    assert overview["diagnosis_completed_count"] == 0
+    assert overview["optimizer_review_count"] == 0
     assert overview["diagnosis_deferred_count"] == 6
     assert overview["diagnosis_skipped_count"] == 1
     assert overview["diagnosis_max_count"] == 5
@@ -1196,3 +4585,97 @@ def test_stakeholder_view_preserves_pre_policy_rank_and_visible_cooldown_disposi
     assert cooldown["eligibility_timestamp"] == "2026-08-05T00:00:00Z"
     assert view["overview"]["evidence_ranked_score_count"] == 2
     assert view["overview"]["ranked_score_count"] == 1
+
+
+def test_stakeholder_projection_uses_explicit_outcome_precedence_and_overlapping_issue_flags():
+    """Terminal results win over active work and secondary issues remain visible."""
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    def ranked(score_id, name, rank):
+        return {
+            "scorecard_id": "card", "score_id": score_id,
+            "scorecard_name": "Example Portfolio", "score_name": name,
+            "valid_feedback_count": 100, "reviewed_disagreements": 25,
+            "disagreement_rate": 0.25, "reviewed_error_opportunity": 25,
+            "evidence_rank": rank,
+        }
+
+    view = _stakeholder_view({
+        "rank": {"coverage": {"complete": True}, "ranked": [
+            ranked("terminal", "Reviewed Score", 1),
+            ranked("active", "Running Score", 2),
+            ranked("question", "Question Score", 3),
+        ]},
+        "assessments": [
+            {"scope": {"scorecard_id": "card", "score_id": "terminal"}, "coverage": {"complete": True},
+             "states": {"optimization": "feedback_curation_review", "guideline_health": "missing", "feedback_rubric_health": "inconsistent"}},
+            {"scope": {"scorecard_id": "card", "score_id": "active"}, "coverage": {"complete": True},
+             "states": {"optimization": "ready_to_optimize"}},
+            {"scope": {"scorecard_id": "card", "score_id": "question"}, "coverage": {"complete": True},
+             "states": {"optimization": "stakeholder_clarification_required"}},
+        ],
+        "diagnoses": [{
+            "scope": {"scorecard_id": "card", "score_id": "question"}, "coverage": {"complete": True},
+            "states": {"optimization": "stakeholder_clarification_required", "guideline_health": "potential_code_conflict"},
+            "stakeholder_questions": ["Which documented policy applies?"],
+        }],
+        "reviews": [{
+            "scope": {"scorecard_id": "card", "score_id": "terminal"}, "coverage": {"complete": True},
+            "states": {"post_run": "promotion_ready"}, "post_run_state": "promotion_ready",
+        }],
+        "dispatch": {"children": [{
+            "target": {"scorecard_id": "card", "score_id": "active"},
+            "launch_state": {"phase": "running"},
+        }]},
+    }, milestone="optimization")
+
+    rows = {row["score_name"]: row for row in view["portfolio"]}
+    assert rows["Reviewed Score"]["primary_disposition"] == "promotion_ready"
+    assert rows["Running Score"]["primary_disposition"] == "optimization_in_progress"
+    assert rows["Question Score"]["primary_disposition"] == "stakeholder_clarification_required"
+    assert rows["Reviewed Score"]["secondary_issue_flags"] == [
+        "missing_guidelines", "feedback_rubric_contradiction",
+    ]
+    assert rows["Question Score"]["secondary_issue_flags"] == [
+        "potential_code_conflict", "stakeholder_question",
+    ]
+    assert view["overview"]["primary_disposition_counts"]["promotion_ready"] == 1
+    assert view["overview"]["secondary_issue_counts"]["stakeholder_question"] == 1
+
+
+def test_stakeholder_projection_orders_questions_by_severity_then_evidence_then_rank():
+    from plexus.optimization.portfolio_run import _stakeholder_view
+
+    def packet(score_id, name, rank, evidence, guideline, questions=()):
+        return {
+            "rank": {"coverage": {"complete": True}, "ranked": [{
+                "scorecard_id": "card", "score_id": score_id,
+                "scorecard_name": "Example Portfolio", "score_name": name,
+                "valid_feedback_count": evidence, "reviewed_disagreements": evidence // 2,
+                "disagreement_rate": 0.5, "reviewed_error_opportunity": evidence // 2,
+                "evidence_rank": rank,
+            }]},
+            "assessment": {"scope": {"scorecard_id": "card", "score_id": score_id}, "coverage": {"complete": True},
+                           "states": {"optimization": "repair_required", "guideline_health": guideline}},
+            "diagnosis": {"scope": {"scorecard_id": "card", "score_id": score_id}, "coverage": {"complete": True},
+                          "states": {"optimization": "repair_required", "guideline_health": guideline},
+                          "stakeholder_questions": list(questions)},
+        }
+
+    first = packet("missing", "Missing", 2, 20, "missing")
+    second = packet("conflict", "Conflict", 3, 200, "potential_code_conflict", ["Resolve policy."])
+    state = {
+        "rank": {"coverage": {"complete": True}, "ranked": first["rank"]["ranked"] + second["rank"]["ranked"]},
+        "assessments": [first["assessment"], second["assessment"]],
+        "diagnoses": [first["diagnosis"], second["diagnosis"]],
+        "reviews": [],
+    }
+    issues = _stakeholder_view(state, milestone="diagnosis")["questions_and_issues"]
+
+    assert [row["issue_flag"] for row in issues] == [
+        "missing_guidelines", "potential_code_conflict", "stakeholder_question",
+    ]
+    assert issues[0]["affected_evidence_count"] == 20
+    assert issues[1]["affected_evidence_count"] == 200
+    assert issues[2]["finding"] == "Resolve policy."
+    assert all(row["scorecard_ref"] != "card" for row in issues)

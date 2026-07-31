@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f6454c5c-efa6-4841-bb14-531adb3b8cac",
+  "issue_id": "plx-3974eae5-3540-4cf3-9b87-81f37843d755",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T13:32:59.611Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Describe automatic portfolio runs without implying blocking human decisions",
+    "description": "The living Report introduction currently says every portfolio run follows analysis through human decisions, even when execution_mode is automatic and optimization launch does not wait for human approval. This misstates the active workflow at the most visible point of the Report.\n\nFeature: Mode-accurate portfolio report introduction\n\nScenario: Automatic execution introduction\n  Given a portfolio run uses automatic execution mode\n  When its living Report is rendered\n  Then the introduction explains that policy-selected safe targets may launch automatically\n  And it states that champion promotion remains manual\n  And it does not imply a blocking optimization-approval decision\n\nScenario: Approval-required introduction\n  Given a portfolio run uses approval-required mode\n  When its living Report is rendered\n  Then the introduction explains the human optimization-approval checkpoint\n\nNo client information is included. No execution semantics change is in scope.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+    "labels": []
+  }
+}

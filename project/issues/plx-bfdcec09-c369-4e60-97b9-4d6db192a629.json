@@ -1,0 +1,31 @@
+{
+  "id": "plx-bfdcec09-c369-4e60-97b9-4d6db192a629",
+  "title": "Recover failed dispatcher claims before external dispatch",
+  "description": "As an operator, I want a dispatcher claim whose broker publication becomes ambiguous to fail closed, so that a durable Procedure continuation cannot execute twice or remain indefinitely stranded in DISPATCHING.\n\nObserved behavior: the dispatcher claimed a pending continuation, then its broker transport raised. The Task remained PENDING/DISPATCHING and could not be safely classified or reclaimed.\n\nFeature: Fail closed after ambiguous broker publication\n\nScenario: Broker publication raises before acknowledgement\nGiven a pending Task has been atomically claimed by a dispatcher\nWhen broker publication raises before returning an external dispatch identity\nThen the Task becomes FAILED with dispatchStatus ERROR using a conditional update\nAnd the failed dispatcher identity is cleared\nAnd continuation metadata and sanitized failure evidence are retained\nAnd the Task is not automatically requeued\n\nScenario: A delayed broker message arrives\nGiven a Task is already terminal after an ambiguous publication failure\nWhen a delayed worker message for that Task arrives\nThen the worker rejects it before invoking the Plexus command\nAnd no duplicate Procedure execution occurs\n\nScenario: Dispatch was acknowledged\nGiven broker publication returns an external dispatch identity\nWhen a later persistence update fails\nThen the dispatcher does not rearm the Task automatically\nAnd duplicate execution is prevented\n\nOut of scope: GraphQL schema or resource changes; bypassing durable continuation checks; changing optimization policy.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8a45b11e-27b0-4d4a-a989-216627e4e8e0",
+      "author": "ryan.porter",
+      "text": "Safety review refined the behavior: a broker exception may be publish-ambiguous, so automatic requeue is unsafe. The implementation will terminalize the claim with sanitized evidence and add a worker-side terminal-state guard. The currently interrupted local test run is recoverable separately because its captured error occurred during URL parsing before any broker connection.",
+      "created_at": "2026-07-31T15:58:36.794010Z"
+    },
+    {
+      "id": "68506bcf-f202-45fb-b567-67ad499103f0",
+      "author": "ryan.porter",
+      "text": "Outside-in evidence: the broker-publication regression failed because the claimed Task was left without a compensating mutation. The delayed-worker regression failed because a terminal Task still proceeded toward CLI execution. The smallest fix now conditionally terminalizes ambiguous broker sends as FAILED/ERROR with sanitized evidence, never automatically rearms after acknowledgement, and returns a skipped result before command execution for terminal Tasks or unavailable claim authority. Focused validation: 25 dispatcher and worker tests pass.",
+      "created_at": "2026-07-31T16:01:55.628327Z"
+    }
+  ],
+  "created_at": "2026-07-31T15:55:43.752521Z",
+  "updated_at": "2026-07-31T16:01:55.628327Z",
+  "closed_at": null,
+  "custom": {}
+}

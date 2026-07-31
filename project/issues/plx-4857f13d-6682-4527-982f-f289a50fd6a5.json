@@ -1,0 +1,25 @@
+{
+  "id": "plx-4857f13d-6682-4527-982f-f289a50fd6a5",
+  "title": "Allow deterministic tool-only procedures to run without agents",
+  "description": "As an optimization operator, I want deterministic portfolio procedures that invoke only trusted tools to execute without a synthetic language-model agent, so that read-only ranking and reporting can start safely and predictably.\n\nOut of scope: changing optimizer approval gates, adding model work, or changing score data.\n\nFeature: Tool-only procedure compatibility\n\nScenario: Run a valid deterministic procedure with no agents\nGiven a valid Tactus procedure declares no agents and its code uses only registered deterministic tools\nWhen the procedure is executed through the Plexus procedure runtime\nThen configuration validation accepts the procedure\nAnd execution reaches the procedure code\nAnd no synthetic agent or model call is required\n\nScenario: Reject an agent reference without an agent definition\nGiven a procedure declares no agents\nAnd its code references an agent primitive\nWhen the procedure is validated\nThen validation fails with an actionable missing-agent error",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ab97904c-1261-497e-ade0-8e33bc1edd0f",
+      "author": "ryan.porter",
+      "text": "Live acceptance reproduced the defect on the combined integration branch. A valid deterministic portfolio procedure passed Plexus-side validation, created and reused one Procedure Task, then failed before executing its code with: Configuration error: At least one agent must be defined. Procedure and Task reached FAILED; no optimization or evaluation work began. Next: add an outside-in runtime specification, fix the upstream Tactus compatibility boundary, and rerun the same zero-match acceptance.",
+      "created_at": "2026-07-30T17:13:13.229891Z"
+    }
+  ],
+  "created_at": "2026-07-30T17:13:07.194503Z",
+  "updated_at": "2026-07-30T17:13:13.229891Z",
+  "closed_at": null,
+  "custom": {}
+}

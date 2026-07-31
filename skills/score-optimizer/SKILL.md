@@ -231,6 +231,18 @@ questions, and "cannot improve" conclusions.
 
 ## Operating Rules
 
+### Semantic-budget release and pilot gate
+
+Follow **Tactus release/main -> Plexus pin/lock -> local/sandbox -> production read-only**.
+The semantic model and pricing policy are frozen by Plexus and
+must not be caller-overridden. Before any dogfood or provider run, explicitly
+verify identity and budget: authenticated operator/account scope, optimizer
+`max_cost_usd`, decimal-string `max_semantic_cost_usd`, maximum diagnoses, and
+the exact model/pricing version. A production pilot is read-only until a
+separate mutation authorization exists. Unknown, exhausted, deferred, or
+otherwise incomplete semantic evidence is a failure/next action, never an
+optimization-ready result.
+
 Read [references/feedback-cohorts.md](references/feedback-cohorts.md) before
 building or accepting optimizer evaluation cohorts.
 

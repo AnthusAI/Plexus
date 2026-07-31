@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "69fa0df7-46ee-4bb1-a53f-9e839989c440",
+  "issue_id": "plx-5d71f361-a0d7-4fba-b5ae-9ce0459a0093",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T20:49:52.320Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Visualize ranking signals within priority rows",
+    "description": "As an optimization operator, I want every ranked priority row to show comparable visual signals for opportunity, feedback volume, and disagreement, so that I can judge relative scale without opening a chart tooltip.\n\nOut of scope: changing ranking calculations or policy gates.\n\nFeature: Ranked priority signal visualization\n\nScenario: Compare ranking opportunity in the priority list\nGiven a report contains multiple ranked score opportunities\nWhen the operator views the priority list\nThen each row shows a ranking-opportunity bar scaled consistently across the visible list\nAnd the exact reviewed-disagreement count remains readable\n\nScenario: Compare feedback evidence in the priority list\nGiven ranked scores have different valid feedback volumes and disagreement rates\nWhen the operator views the priority list\nThen each row shows a feedback-volume bar scaled consistently across the visible list\nAnd the exact valid-feedback count and disagreement percentage remain readable\n\nScenario: Handle missing or zero evidence\nGiven a ranked row has missing or zero signal evidence\nWhen the operator views the priority list\nThen the row remains readable without implying positive evidence\nAnd the list layout remains stable.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

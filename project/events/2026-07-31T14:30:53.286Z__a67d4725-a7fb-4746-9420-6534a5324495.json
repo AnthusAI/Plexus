@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a67d4725-a7fb-4746-9420-6534a5324495",
+  "issue_id": "plx-f97d6595-87ed-4354-9342-3470d0cb7e09",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T14:30:53.286Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Preserve living-report attachments when storing terminal output",
+    "description": "As an operator, I want terminal procedure output persistence to preserve every previously attached living-report artifact, so that completing a procedure cannot erase the Task's durable evidence index.\n\nFeature: Merge terminal output attachments\nScenario: Final output is added to an existing living-report task\n  Given a running Task already references immutable report evidence and workbook attachments\n  When the procedure stores its terminal output artifact\n  Then the output artifact is appended exactly once\n  And every existing attachment remains present\n  And concurrent or stale Task objects cannot replace the authoritative attachment list\n\nOut of scope: new storage resources, inline artifact fallbacks, retention policy, and client-specific evidence.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

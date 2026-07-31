@@ -7,17 +7,22 @@ Tactus change has been released and Plexus is locked to that release.
 
 ## Required release order
 
-1. Merge the structured-HITL Tactus change to `develop` through its normal pull
-   request.
-2. Promote the Tactus change to `main` and allow the semantic-release workflow
-   to publish a new Tactus package and tag.
-3. Verify that the published package contains the structured HITL contract.
-4. Update the exact Tactus version in Plexus `pyproject.toml` and regenerate
-   `poetry.lock` from the combined manifest.
-5. Install and validate Plexus without `PYTHONPATH`, editable installs, path
-   dependencies, or source-tree substitutions.
-6. Repeat the model-backed sandbox acceptance run with the released package.
-7. Merge and deploy Plexus only after the sandbox evidence is complete.
+Follow this order exactly: **Tactus release/main -> Plexus pin/lock ->
+local/sandbox -> production read-only**.
+
+1. Merge the structured-HITL Tactus change through its normal pull request,
+   promote it to `main`, and allow semantic-release to publish and tag the
+   package.
+2. Verify the published package contains the structured HITL contract, then
+   update the exact dependency in Plexus and regenerate `poetry.lock` from the
+   complete manifest.
+3. Install Plexus without `PYTHONPATH`, editable installs, path dependencies,
+   or source-tree substitutions; complete local/sandbox acceptance against the
+   released package.
+4. Only then perform a bounded **production read-only** pilot. Do not start a
+   dogfood or provider run until the operator has explicitly verified identity and budget:
+   account/session identity, optimizer `max_cost_usd`, decimal
+   `max_semantic_cost_usd`, diagnosis count, exact model, and pricing version.
 
 Do not reverse steps 2 and 4, deploy Plexus with a path dependency, or copy the
 Tactus behavior into Plexus. A local Tactus source override is a pre-release
@@ -78,13 +83,15 @@ poetry run plexus procedure run \
   --set run_key='<unique-test-run-key>' \
   --set max_cost_usd=0 \
   --set max_semantic_diagnoses=25 \
+  --set max_semantic_cost_usd='0.25' \
   --set max_samples=1 \
   --set max_iterations=1 \
   --set max_concurrency=1 \
   --output json
 ```
 
-Use the locally running dashboard with its normal production API configuration
+Before any provider contact, record the authenticated identity and the exact
+optimizer and semantic budgets. Use the locally running dashboard with its normal production API configuration
 to inspect the Report and ChatMessage action. Do not run a general task
 dispatcher: the procedure is executed directly so the local process cannot
 claim unrelated work. An initial safety run uses zero optimizer cost and must
@@ -97,6 +104,12 @@ The source override must be removed before release validation:
 ```bash
 unset PYTHONPATH
 ```
+
+Results obtained with the local Tactus source override are
+**pre-release cross-repo source tests only**. They are not packaged dependency or release
+evidence. The production/full release validation is blocked until the Tactus
+release is published and verified, followed by the Plexus pin/lock update and
+installation with no source override.
 
 ## Plexus validation gate
 
@@ -115,6 +128,10 @@ ChatMessage response and terminal workbook publication. Reconcile the workbook
 row counts with the frozen packets and confirm that no score, score version,
 guideline, feedback setting, or champion changed unless a separately approved
 test explicitly requires that mutation.
+
+Report evidence is persisted as existing Task/Report artifact attachments. Do
+not describe this as a ReportBlock/S3 output path and do not introduce a new
+GraphQL resource for semantic-ledger, Report, or workbook evidence.
 
 ## Deployment verification
 

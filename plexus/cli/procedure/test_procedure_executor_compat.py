@@ -114,6 +114,27 @@ class _RuntimeCapturingPythonModules(_FakeRuntime):
         _RuntimeCapturingPythonModules.registered_modules[name] = module
 
 
+class _RuntimeCapturingChildWaitResolver(_FakeRuntime):
+    child_wait_resolver = None
+
+    def __init__(self, *, child_wait_resolver=None, **kwargs):
+        super().__init__(**kwargs)
+        _RuntimeCapturingChildWaitResolver.child_wait_resolver = child_wait_resolver
+
+
+class _LegacyRuntimeWithoutChildWaitResolver(_FakeRuntime):
+    def __init__(
+        self,
+        procedure_id,
+        storage_backend,
+        hitl_handler,
+        chat_recorder=None,
+        mcp_server=None,
+        openai_api_key=None,
+    ):
+        super().__init__()
+
+
 class _LegacyRuntimeNoTraceSink:
     last_context = None
 
@@ -688,6 +709,60 @@ async def test_execute_tactus_forwards_procedure_task_context_to_plexus_runtime_
     assert captured["runtime_context"]["task_id"] == "task-123"
     assert captured["runtime_context"]["account_id"] == "account-456"
     assert captured["runtime_context"] is _RuntimeCapturingPythonModules.last_context
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_wires_the_supported_external_child_resolver_for_a_portfolio_wait(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeCapturingChildWaitResolver)
+    for target in (
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+    ):
+        monkeypatch.setattr(target, lambda *_args, **_kwargs: SimpleNamespace())
+
+    result = await _execute_tactus(
+        procedure_id="portfolio-parent-opaque",
+        procedure_source=(
+            "name: Portfolio\nclass: Tactus\ncode: |\n"
+            "  return Procedure.await_children({ children = {} })\n"
+        ),
+        client=SimpleNamespace(execute=lambda *_args, **_kwargs: {}),
+        mcp_server=None,
+        context={"account_id": "account-opaque"},
+    )
+
+    assert result["success"] is True
+    assert _RuntimeCapturingChildWaitResolver.child_wait_resolver is not None
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_fails_explicitly_when_a_portfolio_wait_requires_an_unavailable_tactus_api(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr("tactus.core.TactusRuntime", _LegacyRuntimeWithoutChildWaitResolver)
+    for target in (
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+    ):
+        monkeypatch.setattr(target, lambda *_args, **_kwargs: SimpleNamespace())
+
+    result = await _execute_tactus(
+        procedure_id="portfolio-parent-opaque",
+        procedure_source=(
+            "name: Portfolio\nclass: Tactus\ncode: |\n"
+            "  return Procedure.await_children({ children = {} })\n"
+        ),
+        client=SimpleNamespace(execute=lambda *_args, **_kwargs: {}),
+        mcp_server=None,
+        context={"account_id": "account-opaque"},
+    )
+
+    assert result["success"] is False
+    assert "requires TactusRuntime child_wait_resolver" in result["error"]
 
 
 @pytest.mark.asyncio
@@ -2236,6 +2311,139 @@ async def test_execute_tactus_preserves_persisted_human_wait_without_failing_sta
     assert result["status"] == "WAITING_FOR_HUMAN"
     assert result["waiting_on_message_id"] == "pending-message-1"
     assert "error" not in result
+    assert completed == []
+    assert failed == []
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_preserves_native_time_wait_without_failing_stages(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    completed = []
+    failed = []
+
+    class _RuntimeWithTimeWait(_RuntimeWithFailureResult):
+        captured_run_id = None
+
+        def __init__(self, procedure_id, storage_backend, hitl_handler, run_id=None, **_kwargs):
+            assert procedure_id
+            self.toolset_registry = {}
+            self.tool_primitive = None
+            self.log_handler = None
+            type(self).captured_run_id = run_id
+
+        async def execute(self, _source, _context, format="yaml"):
+            assert format == "yaml"
+            return {
+                "success": False,
+                "status": "WAITING_FOR_TIME",
+                "request": {
+                    "key": "optimization-report-publication",
+                    "resume_at": "2026-07-31T12:00:00Z",
+                    "reason": "retryable_report_publication",
+                },
+            }
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeWithTimeWait)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._advance_task_to_running_stage",
+        lambda *_a, **_k: None,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._complete_all_task_stages",
+        lambda _client, task_id: completed.append(task_id),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._fail_all_task_stages",
+        lambda _client, task_id, error_message="": failed.append((task_id, error_message)),
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-stage-time-wait",
+        procedure_source="name: Test\nclass: Tactus\ncode: |\n  return { success = false }\n",
+        client=SimpleNamespace(), mcp_server=None, context={},
+        _task_id_for_stage_tracking="task-time-wait",
+        _tactus_run_id="stable-run-identity",
+    )
+
+    assert result["success"] is False
+    assert result["status"] == "WAITING_FOR_TIME"
+    assert _RuntimeWithTimeWait.captured_run_id == "stable-run-identity"
+    assert completed == []
+    assert failed == []
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_preserves_native_child_wait_without_failing_stages(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    completed = []
+    failed = []
+
+    class _RuntimeWithChildWait(_RuntimeWithFailureResult):
+        async def execute(self, _source, _context, format="yaml"):
+            assert format == "yaml"
+            return {
+                "success": False,
+                "status": "WAITING_FOR_CHILDREN",
+                "request": {"mode": "any", "children": [{"id": "child-1"}]},
+            }
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeWithChildWait)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._advance_task_to_running_stage",
+        lambda *_a, **_k: None,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._complete_all_task_stages",
+        lambda _client, task_id: completed.append(task_id),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._fail_all_task_stages",
+        lambda _client, task_id, error_message="": failed.append((task_id, error_message)),
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-stage-child-wait",
+        procedure_source="name: Test\nclass: Tactus\ncode: |\n  return { success = false }\n",
+        client=SimpleNamespace(), mcp_server=None, context={},
+        _task_id_for_stage_tracking="task-child-wait",
+    )
+
+    assert result["success"] is False
+    assert result["status"] == "WAITING_FOR_CHILDREN"
     assert completed == []
     assert failed == []
 

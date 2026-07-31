@@ -53,6 +53,20 @@ def _restore_env_value(name: str, previous_value: Optional[str]) -> None:
         os.environ[name] = previous_value
 
 
+def _skipped_command_result(command_string: str, target: str, reason: str) -> dict:
+    now = datetime.now(timezone.utc).timestamp()
+    return {
+        "status": "skipped",
+        "reason": reason,
+        "command": command_string,
+        "target": target,
+        "stdout": "",
+        "stderr": "",
+        "started_at": now,
+        "completed_at": now,
+    }
+
+
 def register_tasks(app):
     """Register Celery tasks with the application."""
     
@@ -92,6 +106,25 @@ def register_tasks(app):
                     
                     try:
                         task = Task.get_by_id(task_id, client)
+                        task_status = str(getattr(task, "status", None) or "").upper()
+                        dispatch_status = str(
+                            getattr(task, "dispatchStatus", None) or ""
+                        ).upper()
+                        if (
+                            task_status in {"COMPLETE", "COMPLETED", "FAILED", "ERROR", "CANCELED", "CANCELLED"}
+                            or dispatch_status == "ERROR"
+                        ):
+                            logging.warning(
+                                "Skipping delayed command for terminal task %s (status=%s, dispatchStatus=%s)",
+                                task_id,
+                                task_status,
+                                dispatch_status,
+                            )
+                            return _skipped_command_result(
+                                command_string,
+                                target,
+                                "task_terminal",
+                            )
                         # First update - claim the task
                         task.update(
                             celeryTaskId=self.request.id,
@@ -123,8 +156,18 @@ def register_tasks(app):
                         logging.info(f"Started processing task {task_id}")
                     except Exception as e:
                         logging.error(f"Failed to claim task {task_id}: {str(e)}")
+                        return _skipped_command_result(
+                            command_string,
+                            target,
+                            "task_claim_failed",
+                        )
                 except Exception as e:
                     logging.error(f"Could not create a dashboard client to claim task {task_id}: {str(e)}")
+                    return _skipped_command_result(
+                        command_string,
+                        target,
+                        "task_authority_unavailable",
+                    )
             
             logging.info(f"Received command: '{command_string}' with target: '{target}' and task_id: '{task_id}'")
             

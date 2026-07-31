@@ -15,6 +15,7 @@ include = [
     "plexus/__main__.py",
     "plexus/py.typed",
     "plexus/scores/*.py",
+    "plexus/optimization/semantic_pricing/*.json",
     "plexus/rubric_memory/procedures/*.tac",
 ]
 

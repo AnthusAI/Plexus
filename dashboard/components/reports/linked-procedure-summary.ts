@@ -29,6 +29,18 @@ type LinkedProcedureSummaryInput = {
   optimizationFinalStatus?: string | null
 }
 
+type OptimizationReportIdentityInput = {
+  id: string
+  taskId?: string | null
+  updatedAt?: string | null
+  parameters?: unknown
+}
+
+export type OptimizationReportSupersession = {
+  reportId: string
+  latestRevision: number
+}
+
 const record = (value: unknown): Record<string, any> => {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return value as Record<string, any>
@@ -40,6 +52,56 @@ const record = (value: unknown): Record<string, any> => {
   } catch {
     return {}
   }
+}
+
+export const optimizationReportSupersessionMap = (
+  reports: OptimizationReportIdentityInput[],
+): Map<string, OptimizationReportSupersession> => {
+  const groups = new Map<string, Array<{
+    id: string
+    latestRevision: number
+    updatedAt: number
+  }>>()
+
+  for (const report of reports) {
+    const taskId = typeof report.taskId === 'string' ? report.taskId.trim() : ''
+    const optimizationRun = record(record(report.parameters).optimization_run)
+    const runKey = typeof optimizationRun.run_key === 'string'
+      ? optimizationRun.run_key.trim()
+      : ''
+    if (!taskId || !runKey) continue
+    const revisionValue = record(optimizationRun.latest_revision).number
+    const latestRevision = typeof revisionValue === 'number' && Number.isFinite(revisionValue)
+      ? Math.max(0, Math.trunc(revisionValue))
+      : 0
+    const parsedUpdatedAt = Date.parse(String(report.updatedAt || ''))
+    const groupKey = `${taskId}\u0000${runKey}`
+    const group = groups.get(groupKey) || []
+    group.push({
+      id: report.id,
+      latestRevision,
+      updatedAt: Number.isFinite(parsedUpdatedAt) ? parsedUpdatedAt : 0,
+    })
+    groups.set(groupKey, group)
+  }
+
+  const result = new Map<string, OptimizationReportSupersession>()
+  for (const group of groups.values()) {
+    if (group.length < 2) continue
+    const ordered = [...group].sort((left, right) => (
+      right.latestRevision - left.latestRevision
+      || right.updatedAt - left.updatedAt
+      || right.id.localeCompare(left.id)
+    ))
+    const canonical = ordered[0]
+    for (const duplicate of ordered.slice(1)) {
+      result.set(duplicate.id, {
+        reportId: canonical.id,
+        latestRevision: canonical.latestRevision,
+      })
+    }
+  }
+  return result
 }
 
 const procedureId = (task: LinkedTask, metadata: Record<string, any>): string | null => {
@@ -112,11 +174,17 @@ export const buildLinkedProcedureSummary = ({
   if (!id) return null
 
   const identity = record(metadata.operator_identity)
-  const procedureType = (
+  const storedProcedureType = (
     typeof metadata.procedure_type === 'string' && metadata.procedure_type.trim()
       ? metadata.procedure_type.trim()
       : String(task.type || 'Procedure')
   )
+  const procedureType = (
+    /portfolio/i.test(storedProcedureType)
+    || /portfolio/i.test(String(identity.kind || ''))
+  )
+    ? 'Optimization opportunity survey'
+    : storedProcedureType
   const displayTitle = (
     typeof identity.display_title === 'string' && identity.display_title.trim()
       ? identity.display_title.trim()

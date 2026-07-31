@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a9dc493e-28d6-402f-b633-fbc696f51137",
+  "issue_id": "plx-147d2d37-283d-4f25-9a13-ceee5754ab8a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T21:11:39.403Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Accept query-bound artifact checksums from older ticket issuers",
+    "description": "Artifact uploads fail when an older deployed ticket issuer returns x-amz-checksum-sha256 as a required header even though the presigned URL already binds that checksum in its query and does not include the header in X-Amz-SignedHeaders. The shared client must normalize only this provably duplicated checksum representation and retain fail-closed behavior for every other unsigned or contradictory header.\n\nFeature: Compatible artifact transfer tickets\n\nScenario: Query-bound checksum is redundantly returned as an unsigned header\n  Given a PUT ticket whose URL contains X-Amz-Checksum-Sha256\n  And X-Amz-SignedHeaders does not contain x-amz-checksum-sha256\n  And requiredHeaders contains the identical x-amz-checksum-sha256 value\n  When the shared artifact client transfers the authorized bytes\n  Then it omits only the redundant checksum header\n  And preserves every signed and ordinary required header\n\nScenario: Checksum evidence is inconsistent\n  Given a checksum header that is signed, absent from the URL, or differs from the URL value\n  When the shared artifact client validates the ticket\n  Then it does not silently discard the header\n  And the transfer continues to fail closed if authorization rejects it",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

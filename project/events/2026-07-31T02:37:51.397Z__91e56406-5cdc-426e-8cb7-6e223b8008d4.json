@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "91e56406-5cdc-426e-8cb7-6e223b8008d4",
+  "issue_id": "plx-98acc650-e143-49f9-a158-3df93c66975b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T02:37:51.397Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Implement semantic pricing and Decimal ledger",
+    "description": "Add a checked-in versioned price snapshot, frozen run-level semantic budget spec, canonical Decimal reservation ledger, usage reconciliation, unknown-outcome handling, and exhaustive unit specifications.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

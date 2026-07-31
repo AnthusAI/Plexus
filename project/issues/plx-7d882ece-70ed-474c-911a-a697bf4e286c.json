@@ -1,0 +1,18 @@
+{
+  "id": "plx-7d882ece-70ed-474c-911a-a697bf4e286c",
+  "title": "Validate phase-two optimization reporting end to end",
+  "description": "Run focused outside-in specifications, complete Python and dashboard gates, workbook reconciliation and visual checks, zero-resource diff proof, and a model-backed sandbox lifecycle from approval through terminal child review. Production mutation, deployment, push, and champion promotion remain out of scope.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-07-30T22:44:50.487464Z",
+  "updated_at": "2026-07-30T22:44:50.487464Z",
+  "closed_at": null,
+  "custom": {}
+}

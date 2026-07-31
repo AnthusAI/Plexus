@@ -1,0 +1,31 @@
+{
+  "id": "plx-a62e4958-ea6f-418f-90ee-5df24c950588",
+  "title": "Publish portfolio milestones to the Action Inbox",
+  "description": "Living optimization Reports publish durable milestones, but the existing Action Inbox receives no corresponding Updates. Operators looking at the sidebar cannot tell that a long-running analysis started, became ready for review, needs action, or ended.\n\nFeature: Project key portfolio milestones into the existing ChatMessage feed\n\nScenario: A portfolio run advances through analysis\nGiven a living Report has durably published a run milestone\nWhen the portfolio coordinator announces that milestone\nThen it creates or reuses one idempotent NOTIFICATION ChatMessage for the account and procedure\nAnd the notification links to the same Report\nAnd the Action Inbox shows only the key started, analysis-ready, action-required, work-started, and terminal updates\n\nScenario: A procedure replays after checkpoint or retry\nGiven the milestone notification was already created\nWhen the same run and event key are published again\nThen no duplicate update is created\n\nScenario: Sidebar publication fails\nGiven the authoritative Report milestone is already durable\nWhen notification publication fails\nThen the Report remains authoritative\nAnd the failure is retained as run evidence rather than silently converting the Report milestone into failure\n\nExclusions: No new data model, index, function, storage, or association is introduced.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "29315cb1-0a79-484b-87bb-c12281b7c84c",
+      "author": "ryan.porter",
+      "text": "Production dogfood confirmed nine durable Report revisions and zero Action Inbox updates. Existing internal tool-call messages are correctly ignored by the Updates view, but the coordinator emits no NOTIFICATION messages. Next: specify idempotent ChatMessage notification persistence and wire key post-publication milestones.",
+      "created_at": "2026-07-30T15:26:06.011673Z"
+    },
+    {
+      "id": "10450d1b-6e68-42e0-ae01-f6c04805f4de",
+      "author": "ryan.porter",
+      "text": "Initial repair complete in the integration worktree. The existing ChatMessage service now publishes deterministic idempotent NOTIFICATION updates for portfolio events, and the runner announces a durable start, analysis readiness, action required, normal completion, and failure without adding resources. Production dogfood visibly confirmed the started update linked to the living Report. Focused Python/runtime tests, dashboard tests, and dashboard typecheck pass. Follow-up found that early fail-closed terminal paths still need explicit terminal notification coverage.",
+      "created_at": "2026-07-30T15:38:19.776879Z"
+    }
+  ],
+  "created_at": "2026-07-30T15:25:59.319659Z",
+  "updated_at": "2026-07-30T15:38:19.776879Z",
+  "closed_at": null,
+  "custom": {}
+}

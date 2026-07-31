@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "dc994a08-ee87-4b02-a803-3a118fe9aa72",
+  "issue_id": "plx-15aed3d8-49dc-4014-ac56-1b665a5f5075",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T14:33:49.335Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Prioritize actionable candidates under semantic diagnosis caps",
+    "description": "As an operator, I want a bounded semantic-diagnosis budget to prioritize actionable optimization candidates, so that known structural blockers do not consume the only model-backed slot while launchable candidates remain unreviewed.\n\nFeature: Actionable semantic diagnosis ordering\nScenario: A structurally blocked evidence leader does not consume a scarce diagnosis slot\n  Given the highest evidence-ranked score has a deterministic missing or invalid rubric blocker\n  And a lower evidence-ranked score is structurally ready for semantic diagnosis and possible optimization\n  And the run permits one semantic diagnosis\n  When the portfolio selects its semantic diagnosis scope\n  Then it selects the structurally ready score\n  And it keeps the blocked score visible with its original evidence rank and repair action\n  And it does not spend semantic budget re-proving the known mechanical blocker\n\nScenario: Actionable candidates retain evidence order\n  Given multiple structurally ready candidates\n  When a bounded semantic diagnosis scope is selected\n  Then selected candidates retain their original evidence ranking order\n\nOut of scope: changing the evidence ranking metric, hiding blocked scores, automatic promotion, or increasing caller budgets.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "id": "plx-a83ea9d6-e6f9-4ab2-9ef0-b4fa5ed7e4fe",
+  "title": "Finish fail-closed living Report recovery",
+  "description": "Complete the existing recovery work under bug plx-420460. Verify committed checkpoint manifests and evidence descriptors exactly, reject missing or malformed frozen run specifications, keep transient publication failures resumable from the last committed revision, reconcile advisory ChatMessage responses, and publish terminal inbox state idempotently. Preserve the existing Task attachment route and zero backend-resource diff.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a25062e9-fda5-44b7-8dfc-b77c43dcdc76",
+      "author": "ryan.porter",
+      "text": "Coding started: inspecting existing recovery implementation and running focused outside-in specifications. Scope is limited to recovery, request authentication, and their focused tests; no production data or deployment activity.",
+      "created_at": "2026-07-30T22:46:39.300992Z"
+    },
+    {
+      "id": "236729bc-677f-475b-be31-635ae35d7028",
+      "author": "ryan.porter",
+      "text": "Recovery implementation and validation complete. Retryable report-publication/auth interruptions now keep the active Task/attempt running; checkpoint corruption fails closed after attachment-backed verification. Focused suite: 99 passed; optimization suite: 133 passed; diff check clean. Escalation: Report and Task update APIs accept only unconstrained field updates (no conditional version/claim primitive), so concurrent publication cannot be made atomic without schema/resource/API support; no weak lock was added.",
+      "created_at": "2026-07-30T22:49:21.166019Z"
+    },
+    {
+      "id": "1d76d71a-7331-4aea-860d-2f1e90a2f89a",
+      "author": "ryan.porter",
+      "text": "Corrective implementation started after independent review. Adding outside-in coverage for existing-attempt frozen identity, terminal update replay, and retryable initialization/finalization. Concurrent revision publication remains single-authority because current model updates expose no atomic conditional commit; a backend conditional-commit capability is required before multi-writer support.",
+      "created_at": "2026-07-30T22:52:06.518437Z"
+    },
+    {
+      "id": "0b001ca8-9e73-47e3-9e64-7362a8f07f84",
+      "author": "ryan.porter",
+      "text": "Corrective review findings addressed. Existing attempts now require exact frozen run specifications in both Task and Report metadata before recovery; finalization replay republishes the idempotent terminal update; initialization and finalization transport/auth interruptions remain active and replayable while verified integrity corruption remains terminal. Validation: 109 focused tests passed, 143 optimization tests passed, and diff check is clean. Concurrent publication remains a documented single-authority limitation pending an atomic conditional revision commit API.",
+      "created_at": "2026-07-30T22:55:55.220029Z"
+    },
+    {
+      "id": "643bdd84-14b6-455e-8094-860db04d4198",
+      "author": "ryan.porter",
+      "text": "Remaining recovery exception-classification finding corrected. Authorized attachment ticket, authorization, and transfer interruptions are retryable and leave the active attempt running; a subsequent successful read replays the committed checkpoint without repeating analysis. Artifact integrity, malformed content, descriptor/checksum, milestone, and frozen-identity corruption remain terminal. Validation: 120 focused/client tests passed, 154 optimization tests passed, and diff check is clean.",
+      "created_at": "2026-07-30T23:02:25.368841Z"
+    }
+  ],
+  "created_at": "2026-07-30T22:44:49.038671Z",
+  "updated_at": "2026-07-30T23:02:25.368841Z",
+  "closed_at": null,
+  "custom": {}
+}

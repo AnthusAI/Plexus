@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c3cbee4a-a8c2-40ed-8209-1319c68683b9",
+  "issue_id": "plx-ba9c0f2d-81a6-447c-9d4f-eedd9ba896cb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T16:09:12.901Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Keep scheduled procedure continuations nonterminal",
+    "description": "A scheduled portfolio continuation can be returned by the procedure runtime as WAITING_FOR_TIME while the local task dispatcher records the Task as COMPLETED. This can make unfinished child optimization work appear terminal.\n\nFeature: Preserve scheduled continuation state at dispatch boundaries\n\nScenario: A procedure schedules its next continuation\n  Given a procedure execution returns WAITING_FOR_TIME with a future wake time\n  When the task dispatcher records the execution result\n  Then the Task remains in a durable waiting state\n  And the worker releases without marking the Task completed\n\nScenario: A scheduled continuation becomes due\n  Given a Task is durably waiting for a future wake time\n  When the continuation becomes due and the procedure resumes\n  Then the procedure reloads its persisted state\n  And it may complete only after the resumed execution returns a terminal outcome\n\nScenario: Unsupported or missing persistence fails closed\n  Given scheduled continuation state cannot be persisted or restored\n  When the dispatcher handles the result\n  Then it does not claim successful completion\n  And the failure remains observable to the operator",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-78b7597b-9390-408b-9a5c-6799b70c2ab2",
+    "labels": []
+  }
+}

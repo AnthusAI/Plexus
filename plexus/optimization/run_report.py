@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
@@ -35,7 +36,14 @@ from plexus.dashboard.api.models.report_block import ReportBlock
 from plexus.dashboard.api.models.task import Task
 from plexus.dashboard.api.models.task_stage import TaskStage
 from plexus.reports.service import _compact_output_json_for_storage, _get_programmatic_config_id
-from plexus.storage.graphql_artifact_store import ArtifactTransferRequest, GraphQLArtifactStore
+from plexus.storage.graphql_artifact_store import (
+    ArtifactAuthorizationError,
+    ArtifactIntegrityError,
+    ArtifactTicketError,
+    ArtifactTransferError,
+    ArtifactTransferRequest,
+    GraphQLArtifactStore,
+)
 
 
 LIFECYCLE_VERSION = "optimization-run-report-v1"
@@ -68,6 +76,9 @@ _MILESTONE_STAGE = {
     "optimization_review": "review",
     "finalization": "finalization",
 }
+_RANKING_PROGRESS_SUPERSEDED_MILESTONES = frozenset(
+    milestone for milestone in _MILESTONE_STAGE if milestone != "started"
+)
 _FINAL_STATES = {
     "complete",
     "completed",
@@ -77,6 +88,20 @@ _FINAL_STATES = {
     "blocked",
     "failed",
 }
+
+# These are presentation labels, deliberately separate from attachment names,
+# logical IDs, and object keys.  Live progress is stakeholder-facing and must
+# never reveal storage or resource identities.
+_ARTIFACT_PUBLICATION_KINDS = (
+    "decision_evidence",
+    "stakeholder_workbook",
+    "score_briefs",
+    "scorecard_summaries",
+    "scorecard_spreadsheets",
+    "scorecard_presentations",
+    "stakeholder_presentation",
+    "revision_manifest",
+)
 
 _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
     "portfolio": (
@@ -92,7 +117,13 @@ _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("Collection State", "collection_state"), ("Guideline State", "guideline_state"),
         ("Feedback/Rubric State", "feedback_rubric_state"), ("Readiness", "readiness"),
         ("Promotion Readiness", "promotion_readiness"), ("Rationale", "rationale"),
+        ("Primary Disposition", "primary_disposition"), ("Secondary Issues", "secondary_issue_summary"),
+        ("Dispatch Rejection", "dispatch_rejection"),
+        ("Automatic Execution", "execution_status"), ("Execution Reason", "execution_reason"),
+        ("Execution Authorization", "execution_authorization_source"),
         ("Next Action", "next_action"), ("Dashboard Link", "dashboard_url"),
+        ("Semantic Diagnosis Status", "semantic_diagnosis_status"),
+        ("Semantic Budget Evidence", "semantic_budget_evidence_reference"),
     ),
     "priorities": (
         ("Evidence Rank", "evidence_rank"), ("Eligible Candidate Rank", "candidate_rank"),
@@ -104,7 +135,12 @@ _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("State", "state"), ("Coverage", "coverage_status"), ("Recent Trend", "trend"),
         ("Collection State", "collection_state"), ("Readiness", "readiness"),
         ("Promotion Readiness", "promotion_readiness"), ("Rationale", "rationale"),
+        ("Primary Disposition", "primary_disposition"), ("Secondary Issues", "secondary_issue_summary"),
+        ("Automatic Execution", "execution_status"), ("Execution Reason", "execution_reason"),
+        ("Execution Authorization", "execution_authorization_source"),
         ("Next Action", "next_action"), ("Dashboard Link", "dashboard_url"),
+        ("Semantic Diagnosis Status", "semantic_diagnosis_status"),
+        ("Semantic Budget Evidence", "semantic_budget_evidence_reference"),
     ),
     "feedback_investment": (
         ("Rank", "rank"), ("Scorecard", "scorecard_name"), ("Score", "score_name"),
@@ -113,14 +149,21 @@ _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("Recommendation", "recommendation"), ("Readiness", "readiness"),
         ("Rationale", "rationale"), ("Next Action", "next_action"),
         ("Dashboard Link", "dashboard_url"),
+        ("Semantic Diagnosis Status", "semantic_diagnosis_status"),
+        ("Semantic Budget Evidence", "semantic_budget_evidence_reference"),
     ),
     "questions_and_issues": (
         ("Rank", "rank"), ("Type", "kind"), ("Scorecard", "scorecard_name"), ("Score", "score_name"),
         ("Evidence Count", "evidence_count"), ("State", "state"),
         ("Coverage", "coverage_status"), ("Guideline State", "guideline_state"),
         ("Feedback/Rubric State", "feedback_rubric_state"),
+        ("Issue Flag", "issue_flag"), ("Affected Feedback", "affected_evidence_count"),
+        ("Affected Disagreement Rate", "affected_disagreement_rate"),
+        ("Evidence References", "evidence_references"),
         ("Question or Issue", "finding"), ("Rationale", "rationale"),
         ("Next Action", "next_action"), ("Dashboard Link", "dashboard_url"),
+        ("Semantic Diagnosis Status", "semantic_diagnosis_status"),
+        ("Semantic Budget Evidence", "semantic_budget_evidence_reference"),
     ),
     "optimization_outcomes": (
         ("Rank", "rank"), ("Scorecard", "scorecard_name"), ("Score", "score_name"),
@@ -128,8 +171,12 @@ _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("Evidence Status", "evidence_status"), ("Coverage", "coverage_status"),
         ("Recent Trend", "trend"), ("Collection State", "collection_state"),
         ("Readiness", "readiness"), ("Promotion Readiness", "promotion_readiness"),
-        ("Rationale", "rationale"), ("Next Action", "next_action"),
+        ("Primary Disposition", "primary_disposition"), ("Secondary Issues", "secondary_issue_summary"),
+        ("Rationale", "rationale"), ("Dispatch Rejection", "dispatch_rejection"),
+        ("Next Action", "next_action"),
         ("Dashboard Link", "dashboard_url"),
+        ("Semantic Diagnosis Status", "semantic_diagnosis_status"),
+        ("Semantic Budget Evidence", "semantic_budget_evidence_reference"),
     ),
 }
 _OVERVIEW_KEYS = {
@@ -138,23 +185,62 @@ _OVERVIEW_KEYS = {
     "ranking_window", "scorecards_inspected",
     "scorecards_in_scope", "evidence_ranked_score_count",
     "ranked_score_count", "unranked_score_count", "cooldown_excluded_count",
-    "assessment_progress", "diagnosis_coverage", "pending_approval_count", "notes",
+    "assessed_score_count", "assessment_progress", "diagnosis_coverage", "pending_approval_count", "notes",
+    "execution_mode", "execution_selected_count", "execution_launched_count", "execution_rejected_count",
+    "execution_named_selected_count", "execution_named_launched_count", "execution_named_rejected_count",
+    "execution_detail_coverage", "execution_detail_limitation",
     "ranking_cutoff", "ranking_policy", "priority_display_limit",
     "priority_displayed_count", "priority_cutoff_rank", "priority_cutoff_opportunity",
     "ranked_below_priority_cutoff", "diagnosis_selection_policy",
     "diagnosis_top_priority_count", "diagnosis_monitoring_candidate_count",
     "diagnosis_selected_count", "diagnosis_scheduled_count", "diagnosis_deferred_count",
-    "diagnosis_skipped_count", "diagnosis_incomplete_count", "diagnosis_max_count",
+    "diagnosis_skipped_count", "diagnosis_incomplete_count", "diagnosis_completed_count", "diagnosis_max_count",
+    "diagnosis_prerequisite_failure_count", "diagnosis_failure_category",
+    "diagnosis_blockers",
     "approved_target_count", "dispatched_optimizer_count", "optimizer_review_count",
+    "invalid_run_limit_target_count",
+    "primary_disposition_counts", "secondary_issue_counts",
+    "semantic_budget_policy_version", "semantic_budget_spec_schema_version",
+    "semantic_budget_ledger_schema_version", "semantic_budget_pricing_version",
+    "semantic_budget_provider", "semantic_budget_model",
+    "semantic_budget_authorized_usd",
+    "semantic_budget_settled_actual_usd", "semantic_budget_held_reserved_usd",
+    "semantic_budget_available_usd", "semantic_budget_reservation_count",
+    "semantic_budget_reserved_count", "semantic_budget_settled_count",
+    "semantic_budget_unknown_count",
+    "semantic_budget_cancelled_count", "semantic_budget_target_count",
+    "semantic_budget_call_site_coverage", "semantic_budget_ledger_revision",
+    "semantic_budget_evidence_reference", "semantic_budget_evidence_digest",
+    "semantic_budget_deferred_count", "semantic_budget_failure_count",
+    "semantic_diagnosis_deferred_after_failure_count",
+    "semantic_budget_exhausted_count", "semantic_diagnosis_outcome_unknown_count",
+    "semantic_authority_publication_failure_count",
+    "semantic_diagnosis_issue_count", "semantic_diagnosis_issue_counts",
+    "semantic_diagnosis_issues",
 }
 _ROW_METADATA_KEYS = {
     "scorecard_ref", "rank", "evidence_rank", "candidate_rank", "policy_disposition",
     "policy_reason", "review_disposition", "eligibility_timestamp",
+    "primary_disposition", "secondary_issue_flags", "secondary_issue_summary",
+    "issue_flag", "issue_severity", "affected_evidence_count", "affected_disagreement_rate",
+    "evidence_references",
+    "execution_status", "execution_reason", "execution_authorization_source",
 }
 
 
 class OptimizationRunPublicationError(RuntimeError):
     """A milestone could not be made durable, so the run must stop."""
+
+
+class OptimizationRunRetryablePublicationError(OptimizationRunPublicationError):
+    """A credential or publication interruption left no new committed revision.
+
+    Callers must keep the Task active and replay from ``latest_revision``.
+    """
+
+
+class OptimizationRunIntegrityError(OptimizationRunPublicationError):
+    """Committed recovery evidence is corrupt or does not identify this run."""
 
 
 @dataclass
@@ -286,6 +372,16 @@ def _validate_view(view: Mapping[str, Any]) -> None:
     overview = view.get("overview", {})
     if not isinstance(overview, Mapping) or set(overview) - _OVERVIEW_KEYS:
         raise ValueError("overview contains keys that are not allowed")
+    semantic_issues = overview.get("semantic_diagnosis_issues", [])
+    semantic_issue_keys = {
+        "scorecard_name", "score_name", "semantic_diagnosis_status",
+        "next_action", "rationale",
+    }
+    if not isinstance(semantic_issues, list) or any(
+        not isinstance(issue, Mapping) or set(issue) != semantic_issue_keys
+        for issue in semantic_issues
+    ):
+        raise ValueError("semantic diagnosis issues have an invalid safe projection")
     definitions = view.get("definitions", {})
     if not isinstance(definitions, Mapping):
         raise ValueError("definitions must be a mapping")
@@ -376,6 +472,212 @@ def _validate_workbook_bytes(content: bytes, expected_row_counts: Mapping[str, i
             raise ValueError(f"workbook row count mismatch for {key}: {actual} != {expected}")
 
 
+def _stakeholder_execution_projection(
+    stakeholder_view: Mapping[str, Any],
+    decision_evidence: Mapping[str, Any],
+    *,
+    expected_execution_mode: str,
+) -> dict[str, Any]:
+    """Add an automatic-execution projection without copying opaque identities.
+
+    The raw decision evidence is intentionally retained only in the restricted
+    evidence artifact.  Stakeholder artifacts receive an explicit mode,
+    reconciled aggregate counts, and safe score names/reasons when supplied.
+    The frozen run specification is the single authority for execution mode.
+    Contradictory decision evidence is an integrity failure, not a display
+    preference.  Legacy evidence without a mode is projected under the frozen
+    mode but cannot supply automatic target detail.
+    """
+    if expected_execution_mode not in {"automatic", "approval_required"}:
+        raise OptimizationRunIntegrityError("frozen run specification has an invalid execution mode")
+    evidence_execution_mode = decision_evidence.get("execution_mode")
+    if (
+        evidence_execution_mode is not None
+        and evidence_execution_mode != expected_execution_mode
+    ):
+        raise OptimizationRunIntegrityError(
+            "decision evidence execution mode conflicts with the frozen run specification"
+        )
+    decisions = decision_evidence.get("execution_decisions")
+    decision_mode = decisions.get("mode") if isinstance(decisions, Mapping) else None
+    if decision_mode is not None and decision_mode != expected_execution_mode:
+        raise OptimizationRunIntegrityError(
+            "execution mode in decisions conflicts with the frozen run specification"
+        )
+    projected = {
+        key: ([dict(row) for row in value] if isinstance(value, list) else dict(value)
+              if isinstance(value, Mapping) else value)
+        for key, value in stakeholder_view.items()
+    }
+    execution_mode = expected_execution_mode
+    if execution_mode == "approval_required":
+        overview = dict(projected.get("overview") or {})
+        overview["execution_mode"] = "approval_required"
+        projected["overview"] = overview
+        return projected
+    if not isinstance(decisions, Mapping):
+        overview = dict(projected.get("overview") or {})
+        overview["execution_mode"] = "automatic"
+        projected["overview"] = overview
+        return projected
+
+    selected = decisions.get("selected_targets")
+    rejected = decisions.get("rejected_targets")
+    selected_rows = selected if isinstance(selected, list) else []
+    rejected_rows = rejected if isinstance(rejected, list) else []
+
+    def target_identity(row: Any) -> Optional[tuple[str, str]]:
+        if not isinstance(row, Mapping):
+            return None
+        scorecard_id = row.get("scorecard_id")
+        score_id = row.get("score_id")
+        if (
+            not isinstance(scorecard_id, str) or not scorecard_id.strip()
+            or not isinstance(score_id, str) or not score_id.strip()
+        ):
+            return None
+        return scorecard_id, score_id
+
+    durable_launched_targets: set[tuple[str, str]] = set()
+    dispatch = decision_evidence.get("dispatch")
+    children = dispatch.get("children") if isinstance(dispatch, Mapping) else None
+    for child in children if isinstance(children, list) else []:
+        if not isinstance(child, Mapping):
+            continue
+        launch_state = child.get("launch_state")
+        identity = target_identity(child.get("target"))
+        if (
+            identity is not None
+            and isinstance(child.get("procedure_id"), str) and bool(child.get("procedure_id").strip())
+            and isinstance(child.get("task_id"), str) and bool(child.get("task_id").strip())
+            and isinstance(launch_state, Mapping)
+            and launch_state.get("phase") in {"waiting", "running", "terminal"}
+        ):
+            durable_launched_targets.add(identity)
+
+    def count(name: str, fallback: int) -> int:
+        value = decisions.get(name)
+        return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else fallback
+
+    selected_count = count("selected_count", len(selected_rows))
+    launched_count = count("launched_count", 0)
+    rejected_count = count("rejected_count", len(rejected_rows))
+    named_selected_count = sum(
+        1 for row in selected_rows
+        if isinstance(row, Mapping)
+        and isinstance(row.get("scorecard_name"), str) and bool(row.get("scorecard_name"))
+        and isinstance(row.get("score_name"), str) and bool(row.get("score_name"))
+    )
+    named_rejected_count = sum(
+        1 for row in rejected_rows
+        if isinstance(row, Mapping)
+        and isinstance(row.get("scorecard_name"), str) and bool(row.get("scorecard_name"))
+        and isinstance(row.get("score_name"), str) and bool(row.get("score_name"))
+    )
+    derived_launched_count = sum(
+        1 for row in selected_rows if target_identity(row) in durable_launched_targets
+    )
+    named_launched_count = sum(
+        1 for row in selected_rows
+        if target_identity(row) in durable_launched_targets
+        and isinstance(row, Mapping)
+        and isinstance(row.get("scorecard_name"), str) and bool(row.get("scorecard_name"))
+        and isinstance(row.get("score_name"), str) and bool(row.get("score_name"))
+    )
+    coverage_complete = (
+        named_selected_count == selected_count
+        and named_rejected_count == rejected_count
+        and derived_launched_count == launched_count
+        and named_launched_count == launched_count
+    )
+    limitations: list[str] = []
+    if named_selected_count != selected_count:
+        limitations.append(f"named detail is available for {named_selected_count} of {selected_count} selected targets")
+    if named_rejected_count != rejected_count:
+        limitations.append(
+            f"named detail is available for {named_rejected_count} of "
+            f"{rejected_count} targets not selected by policy"
+        )
+    if derived_launched_count != launched_count:
+        limitations.append(
+            f"durable launch evidence reconciles {derived_launched_count} of {launched_count} reported launches"
+        )
+    elif named_launched_count != launched_count:
+        limitations.append(f"named detail is available for {named_launched_count} of {launched_count} launched targets")
+
+    overview = dict(projected.get("overview") or {})
+    overview.update({
+        "execution_mode": execution_mode,
+        "execution_selected_count": selected_count,
+        "execution_launched_count": launched_count,
+        "execution_rejected_count": rejected_count,
+        "execution_named_selected_count": named_selected_count,
+        "execution_named_launched_count": named_launched_count,
+        "execution_named_rejected_count": named_rejected_count,
+        "execution_detail_coverage": "complete" if coverage_complete else "incomplete",
+        "execution_detail_limitation": "; ".join(limitations).capitalize() + ("." if limitations else ""),
+    })
+    projected["overview"] = overview
+
+    execution_by_score: dict[tuple[str, str], dict[str, str]] = {}
+
+    def decision_text(row: Mapping[str, Any], *keys: str) -> str:
+        for key in keys:
+            value = row.get(key)
+            if isinstance(value, str) and value:
+                return value
+        return ""
+
+    def register(rows: list[Any], status: str) -> None:
+        for raw_row in rows:
+            if not isinstance(raw_row, Mapping):
+                continue
+            scorecard_name = raw_row.get("scorecard_name")
+            score_name = raw_row.get("score_name")
+            if not isinstance(scorecard_name, str) or not scorecard_name or not isinstance(score_name, str) or not score_name:
+                continue
+            execution_by_score[(scorecard_name, score_name)] = {
+                "execution_status": (
+                    "automatic_launched"
+                    if status == "automatic_selected" and target_identity(raw_row) in durable_launched_targets
+                    else status
+                ),
+                "execution_reason": decision_text(raw_row, "reason", "decision_reason", "rejection_reason"),
+                "execution_authorization_source": decision_text(raw_row, "authorization_source", "authorization"),
+            }
+
+    register(selected_rows, "automatic_selected")
+    register(rejected_rows, "automatic_rejected")
+    for group in ("portfolio", "priorities", "optimization_outcomes"):
+        rows = projected.get(group, [])
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            decision = execution_by_score.get((row.get("scorecard_name"), row.get("score_name")))
+            if decision:
+                row.update(decision)
+
+    # A policy-rejected target can legitimately have no portfolio row. Keep
+    # its safe name and deterministic reason visible in Optimization Outcomes,
+    # never its opaque target identity.
+    outcomes = projected.setdefault("optimization_outcomes", [])
+    if isinstance(outcomes, list):
+        existing = {
+            (row.get("scorecard_name"), row.get("score_name"))
+            for row in outcomes if isinstance(row, Mapping)
+        }
+        for score_key, decision in execution_by_score.items():
+            if decision["execution_status"] == "automatic_rejected" and score_key not in existing:
+                outcomes.append({
+                    "scorecard_name": score_key[0], "score_name": score_key[1],
+                    "outcome": "automatic_rejected", "rationale": decision["execution_reason"],
+                    "next_action": "review_execution_decision", **decision,
+                })
+    return projected
+
+
 def build_stakeholder_workbook(
     stakeholder_view: Mapping[str, Any], *, revision_number: int, generated_at: datetime
 ) -> WorkbookArtifact:
@@ -423,8 +725,23 @@ def build_stakeholder_workbook(
     run_log = workbook.create_sheet("Run Log")
     _write_table(
         run_log,
-        (("Revision", "revision"), ("Published At", "published_at"), ("Coverage", "coverage"), ("Status", "status")),
-        [{"revision": revision_number, "published_at": _iso(generated_at), "coverage": stakeholder_view.get("overview", {}).get("coverage_status", "not provided"), "status": "published"}],
+        (
+            ("Revision", "revision"), ("Published At", "published_at"),
+            ("Coverage", "coverage"), ("Status", "status"),
+            ("Execution", "execution"),
+            ("Semantic Spend", "semantic_spend"),
+            ("Semantic Calls", "semantic_calls"),
+            ("Semantic Evidence", "semantic_evidence"),
+        ),
+        [{
+            "revision": revision_number, "published_at": _iso(generated_at),
+            "coverage": stakeholder_view.get("overview", {}).get("coverage_status", "not provided"),
+            "status": "published",
+            "execution": _execution_summary_text(stakeholder_view.get("overview", {})),
+            "semantic_spend": _semantic_spend_text(stakeholder_view.get("overview", {})),
+            "semantic_calls": _semantic_call_text(stakeholder_view.get("overview", {})),
+            "semantic_evidence": stakeholder_view.get("overview", {}).get("semantic_budget_evidence_reference"),
+        }],
     )
     row_counts["run_log"] = 1
 
@@ -443,6 +760,55 @@ def build_stakeholder_workbook(
 
 def _markdown_text(value: Any) -> str:
     return str(value or "").replace("\r", " ").replace("\n", " ").replace("|", "\\|").strip()
+
+
+def _semantic_spend_text(overview: Any) -> str:
+    if not isinstance(overview, Mapping) or not overview.get("semantic_budget_authorized_usd"):
+        return "Not configured"
+    return (
+        f"authorized {overview.get('semantic_budget_authorized_usd')}; "
+        f"spent {overview.get('semantic_budget_settled_actual_usd')}; "
+        f"held {overview.get('semantic_budget_held_reserved_usd')}; "
+        f"remaining {overview.get('semantic_budget_available_usd')}"
+    )
+
+
+def _execution_summary_text(overview: Any) -> str:
+    if not isinstance(overview, Mapping) or overview.get("execution_mode") is None:
+        return "Not reported"
+    if overview.get("execution_mode") != "automatic":
+        return "Approval required"
+    summary = (
+        f"selected {overview.get('execution_selected_count', 0)}; "
+        f"launched {overview.get('execution_launched_count', 0)}; "
+        f"not selected {overview.get('execution_rejected_count', 0)}; "
+        f"detail {overview.get('execution_detail_coverage', 'not reported')}"
+    )
+    limitation = overview.get("execution_detail_limitation")
+    return f"{summary}; {limitation}" if limitation else summary
+
+
+def _stakeholder_execution_status_text(value: Any) -> str:
+    """Translate the execution contract into plain stakeholder language."""
+    return {
+        "automatic_selected": "selected automatically",
+        "automatic_launched": "launched automatically",
+        "automatic_rejected": "not selected automatically",
+    }.get(str(value or ""), str(value or "not applicable"))
+
+
+def _semantic_call_text(overview: Any) -> str:
+    if not isinstance(overview, Mapping) or overview.get("semantic_budget_reservation_count") is None:
+        return "Not configured"
+    return (
+        f"total {overview.get('semantic_budget_reservation_count')}; "
+        f"reserved {overview.get('semantic_budget_reserved_count')}; "
+        f"settled {overview.get('semantic_budget_settled_count')}; "
+        f"unknown {overview.get('semantic_budget_unknown_count')}; "
+        f"cancelled {overview.get('semantic_budget_cancelled_count')}; "
+        f"deferred {overview.get('semantic_budget_deferred_count')}; "
+        f"failed {overview.get('semantic_budget_failure_count')}"
+    )
 
 
 def _artifact_descriptor(
@@ -498,6 +864,14 @@ def _score_issues(
     ]
 
 
+def _secondary_issue_flags_text(row: Mapping[str, Any]) -> str:
+    """Render the canonical flag list while retaining older summary-only rows."""
+    flags = row.get("secondary_issue_flags")
+    if isinstance(flags, (list, tuple)):
+        return ", ".join(str(flag) for flag in flags if str(flag)) or "none"
+    return str(row.get("secondary_issue_summary") or "none")
+
+
 def _score_brief_markdown(
     scorecard_name: str,
     scorecard_ref: str,
@@ -516,6 +890,10 @@ def _score_brief_markdown(
         f"- Feedback collection: {_markdown_text(row.get('collection_state') or 'inconclusive')}",
         f"- Valid feedback: {_markdown_text(row.get('valid_feedback_count') or 0)}",
         f"- Reviewed disagreements: {_markdown_text(row.get('reviewed_disagreements') or 0)}",
+        f"- Primary disposition: {_markdown_text(row.get('primary_disposition') or 'not_selected')}",
+        f"- Secondary issue flags: {_markdown_text(_secondary_issue_flags_text(row))}",
+        f"- Automatic execution: {_markdown_text(_stakeholder_execution_status_text(row.get('execution_status')))}",
+        f"- Execution reason: {_markdown_text(row.get('execution_reason') or 'not provided')}",
         f"- Next action: {_markdown_text(row.get('next_action') or 'review')}",
         "",
         _markdown_text(row.get("rationale") or "No stakeholder-safe rationale is available yet."),
@@ -576,8 +954,8 @@ def _scorecard_summary_markdown(
         "",
         "## Score details",
         "",
-        "| Score | Valid feedback | Reviewed disagreements | Readiness | Next action |",
-        "|---|---:|---:|---|---|",
+        "| Score | Valid feedback | Reviewed disagreements | Readiness | Primary disposition | Automatic execution | Execution reason | Secondary issue flags | Next action |",
+        "|---|---:|---:|---|---|---|---|---|---|",
     ]
     for row in priority_rows:
         lines.append(
@@ -586,6 +964,10 @@ def _scorecard_summary_markdown(
                 _markdown_text(row.get("valid_feedback_count")),
                 _markdown_text(row.get("reviewed_disagreements")),
                 _markdown_text(row.get("readiness") or "inconclusive"),
+                _markdown_text(row.get("primary_disposition") or "not_selected"),
+                _markdown_text(_stakeholder_execution_status_text(row.get("execution_status"))),
+                _markdown_text(row.get("execution_reason") or "not provided"),
+                _markdown_text(_secondary_issue_flags_text(row)),
                 _markdown_text(row.get("next_action") or "review"),
             ]) + " |"
         )
@@ -658,6 +1040,14 @@ def build_scorecard_artifacts(
     revision_number: int,
     task_id: str,
     uploader: Callable[[str, str, bytes], str],
+    publication_id: Optional[str] = None,
+    on_artifact_upload: Optional[Callable[[str, bool], None]] = None,
+    reuse_artifact: Optional[
+        Callable[[str, str, str, bytes, str], Optional[Mapping[str, Any]]]
+    ] = None,
+    on_artifact_resolved: Optional[
+        Callable[[str, Mapping[str, Any]], None]
+    ] = None,
 ) -> list[dict[str, Any]]:
     """Publish one safe Markdown summary and quantitative CSV per scorecard."""
     _validate_view(stakeholder_view)
@@ -668,6 +1058,38 @@ def build_scorecard_artifacts(
         grouped.setdefault((stable_key, scorecard_name), []).append(row)
 
     descriptors: list[dict[str, Any]] = []
+    publication_suffix = f"-{publication_id}" if publication_id else ""
+
+    def resolve_artifact(
+        *,
+        progress_kind: str,
+        logical_id: str,
+        kind: str,
+        content_type: str,
+        filename: str,
+        content: bytes,
+    ) -> tuple[str, int]:
+        if on_artifact_upload is not None:
+            on_artifact_upload(progress_kind, False)
+        reusable = (
+            reuse_artifact(logical_id, kind, content_type, content, filename)
+            if reuse_artifact is not None
+            else None
+        )
+        if isinstance(reusable, Mapping):
+            object_key = str(reusable.get("object_key") or "")
+            source_revision = int(reusable.get("source_revision") or 0)
+            if not object_key or source_revision < 1:
+                raise OptimizationRunIntegrityError(
+                    "reusable artifact descriptor is incomplete"
+                )
+        else:
+            object_key = uploader(task_id, filename, content)
+            source_revision = revision_number
+        if on_artifact_upload is not None:
+            on_artifact_upload(progress_kind, True)
+        return object_key, source_revision
+
     for (stable_key, scorecard_name), rows in sorted(grouped.items(), key=lambda item: item[0][1].casefold()):
         scope_hash = sha256(stable_key.encode("utf-8")).hexdigest()[:16]
         score_artifacts: list[list[Mapping[str, Any]]] = []
@@ -682,10 +1104,21 @@ def build_scorecard_artifacts(
                 row,
                 stakeholder_view,
             )
-            filename = f"score-{score_hash}-brief-r{revision_number:04d}.md"
-            object_key = uploader(task_id, filename, content)
+            filename = (
+                f"score-{score_hash}-brief-r{revision_number:04d}"
+                f"{publication_suffix}.md"
+            )
+            logical_id = f"score_brief:{score_hash}"
+            object_key, source_revision = resolve_artifact(
+                progress_kind="score_briefs",
+                logical_id=logical_id,
+                kind="score_brief",
+                content_type="text/markdown",
+                filename=filename,
+                content=content,
+            )
             descriptor = _artifact_descriptor(
-                logical_id=f"score_brief:{score_hash}",
+                logical_id=logical_id,
                 kind="score_brief",
                 display_name="Score brief",
                 scope="score",
@@ -693,18 +1126,20 @@ def build_scorecard_artifacts(
                 content=content,
                 object_key=object_key,
                 task_id=task_id,
-                source_revision=revision_number,
+                source_revision=source_revision,
                 scorecard_name=scorecard_name,
                 score_name=score_name,
             )
             descriptors.append(descriptor)
+            if on_artifact_resolved is not None:
+                on_artifact_resolved("score_briefs", descriptor)
             score_artifacts.append([descriptor])
         artifacts = (
             (
                 "scorecard_summary",
                 "Summary",
                 "text/markdown",
-                f"scorecard-{scope_hash}-summary-r{revision_number:04d}.md",
+                f"scorecard-{scope_hash}-summary-r{revision_number:04d}{publication_suffix}.md",
                 _scorecard_summary_markdown(
                     scorecard_name,
                     stable_key,
@@ -716,14 +1151,14 @@ def build_scorecard_artifacts(
                 "scorecard_portfolio_csv",
                 "Quantitative results",
                 "text/csv",
-                f"scorecard-{scope_hash}-portfolio-r{revision_number:04d}.csv",
+                f"scorecard-{scope_hash}-portfolio-r{revision_number:04d}{publication_suffix}.csv",
                 _scorecard_csv(rows),
             ),
             (
                 "scorecard_presentation",
                 "Interactive score details",
                 "application/json",
-                f"scorecard-{scope_hash}-presentation-r{revision_number:04d}.json",
+                f"scorecard-{scope_hash}-presentation-r{revision_number:04d}{publication_suffix}.json",
                 _scorecard_presentation(
                     scorecard_name,
                     stable_key,
@@ -734,9 +1169,22 @@ def build_scorecard_artifacts(
             ),
         )
         for kind, display_name, content_type, filename, content in artifacts:
-            object_key = uploader(task_id, filename, content)
-            descriptors.append(_artifact_descriptor(
-                logical_id=f"{kind}:{scope_hash}",
+            progress_kind = {
+                "scorecard_summary": "scorecard_summaries",
+                "scorecard_portfolio_csv": "scorecard_spreadsheets",
+                "scorecard_presentation": "scorecard_presentations",
+            }[kind]
+            logical_id = f"{kind}:{scope_hash}"
+            object_key, source_revision = resolve_artifact(
+                progress_kind=progress_kind,
+                logical_id=logical_id,
+                kind=kind,
+                content_type=content_type,
+                filename=filename,
+                content=content,
+            )
+            descriptor = _artifact_descriptor(
+                logical_id=logical_id,
                 kind=kind,
                 display_name=display_name,
                 scope="scorecard",
@@ -744,29 +1192,74 @@ def build_scorecard_artifacts(
                 content=content,
                 object_key=object_key,
                 task_id=task_id,
-                source_revision=revision_number,
+                source_revision=source_revision,
                 scorecard_name=scorecard_name,
-            ))
+            )
+            descriptors.append(descriptor)
+            if on_artifact_resolved is not None:
+                on_artifact_resolved(progress_kind, descriptor)
     return descriptors
 
 
+def _artifact_publication_plan(
+    stakeholder_view: Mapping[str, Any],
+) -> dict[str, dict[str, int]]:
+    """Return safe aggregate artifact counts before a milestone is uploaded.
+
+    The plan intentionally uses only public presentation categories.  It is
+    never an artifact index: callers must not add filenames, attachment
+    pointers, scorecard references, or any other opaque identifiers here.
+    """
+    _validate_view(stakeholder_view)
+    rows = list(stakeholder_view.get("portfolio") or [])
+    scorecard_count = len({
+        (
+            str(row.get("scorecard_ref") or row.get("scorecard_name") or ""),
+            str(row.get("scorecard_name") or ""),
+        )
+        for row in rows
+        if isinstance(row, Mapping)
+    })
+    totals = {
+        "decision_evidence": 1,
+        "stakeholder_workbook": 1,
+        "score_briefs": len(rows),
+        "scorecard_summaries": scorecard_count,
+        "scorecard_spreadsheets": scorecard_count,
+        "scorecard_presentations": scorecard_count,
+        "stakeholder_presentation": 1,
+        "revision_manifest": 1,
+    }
+    return {
+        kind: {"completed": 0, "total": int(totals[kind])}
+        for kind in _ARTIFACT_PUBLICATION_KINDS
+    }
+
+
 def _primary_decision_category(row: Mapping[str, Any]) -> str:
-    action = str(row.get("next_action") or "").strip().lower()
-    if "optimiz" in action:
-        return "optimize"
-    if "promot" in action:
-        return "promotion_review"
-    if "question" in action or "clarif" in action or "stakeholder" in action:
-        return "stakeholder_clarification"
-    if "repair" in action or "guideline" in action or "rubric" in action:
-        return "repair"
-    if "collect" in action or "feedback" in action:
-        return "targeted_feedback"
-    if "cooldown" in action or action.startswith("wait"):
-        return "cooldown"
-    if "monitor" in action:
-        return "monitoring"
-    return "review_or_insufficient_evidence"
+    """Return the backend's exact disposition; never infer it from prose."""
+    value = row.get("primary_disposition")
+    return str(value) if isinstance(value, str) and value else "not_selected"
+
+
+_ATTENTION_SEVERITY = {
+    "promotion_ready": 0,
+    "stakeholder_decision_required": 1,
+    "failed_or_incomplete": 2,
+    "awaiting_optimizer_review": 3,
+    "awaiting_optimization_approval": 4,
+    "stakeholder_clarification_required": 5,
+    "guideline_or_code_repair": 6,
+    "feedback_curation_review": 7,
+    "optimization_in_progress": 8,
+    "optimizer_launching": 9,
+    "continue_optimization": 10,
+    "targeted_feedback_collection": 11,
+    "monitoring_or_diminishing_returns": 12,
+    "cooldown": 13,
+    "insufficient_evidence": 14,
+    "not_selected": 15,
+}
 
 
 def build_stakeholder_presentation(
@@ -787,9 +1280,10 @@ def build_stakeholder_presentation(
         grouped.setdefault((scorecard_ref, scorecard_name), []).append(row)
 
     secondary_issue_counts: dict[str, int] = {}
-    for issue in stakeholder_view.get("questions_and_issues", []):
-        kind = str(issue.get("kind") or "other issue")
-        secondary_issue_counts[kind] = secondary_issue_counts.get(kind, 0) + 1
+    for row in rows:
+        for flag in row.get("secondary_issue_flags") or []:
+            flag = str(flag)
+            secondary_issue_counts[flag] = secondary_issue_counts.get(flag, 0) + 1
 
     artifacts_by_ref: dict[str, list[Mapping[str, Any]]] = {}
     for artifact in scorecard_artifacts:
@@ -810,6 +1304,8 @@ def build_stakeholder_presentation(
             "scorecard_ref": scorecard_ref,
             "scorecard_name": scorecard_name,
             "score_count": len(score_rows),
+            "primary_disposition_counts": decision_mix,
+            # Compatibility alias for the first report presentation revision.
             "primary_decision_mix": decision_mix,
             "reviewed_error_opportunity": sum(
                 float(row.get("reviewed_error_opportunity") or 0)
@@ -843,20 +1339,56 @@ def build_stakeholder_presentation(
             "policy_disposition": row.get("policy_disposition", "eligible"),
             "policy_reason": row.get("policy_reason", "meets_rank_policy"),
             "eligibility_timestamp": row.get("eligibility_timestamp"),
+            "primary_disposition": _primary_decision_category(row),
+            "secondary_issue_flags": list(row.get("secondary_issue_flags") or []),
             "next_action": row.get("next_action"),
             "dashboard_url": row.get("dashboard_url"),
         } for row in rows),
         key=lambda row: int(row.get("evidence_rank") or 10**9),
     )
+    attention_queue = sorted(
+        ({
+            "scorecard_name": row.get("scorecard_name"),
+            "score_name": row.get("score_name"),
+            "primary_disposition": _primary_decision_category(row),
+            "evidence_count": row.get("valid_feedback_count"),
+            "severity": _ATTENTION_SEVERITY.get(_primary_decision_category(row), 99),
+            "rationale": row.get("rationale"),
+            "next_action": row.get("next_action"),
+            "dashboard_url": row.get("dashboard_url"),
+        } for row in rows),
+        key=lambda row: (
+            int(row["severity"]),
+            -int(row.get("evidence_count") or 0),
+            str(row.get("scorecard_name") or "").casefold(),
+            str(row.get("score_name") or "").casefold(),
+        ),
+    )
     return {
         "overview": overview,
         "score_count": len(rows),
         "scorecard_count": len(scorecards),
+        "primary_disposition_counts": primary_decision_mix,
+        # Compatibility alias for report views published before dispositions.
         "primary_decision_mix": primary_decision_mix,
         "secondary_issue_counts": secondary_issue_counts,
+        "attention_queue": attention_queue,
         "opportunity_distribution": opportunity_distribution,
         "top_priorities": [dict(row) for row in priorities],
         "scorecards": scorecards,
+        # Keep the operational presentation self-contained: the dashboard
+        # reads this artifact directly rather than joining it back to the
+        # workbook projection. ``contradictions`` remains a compatibility
+        # alias for consumers that adopted the earlier terminology.
+        "questions_and_issues": [
+            dict(row) for row in stakeholder_view.get("questions_and_issues", [])
+        ],
+        "contradictions": [
+            dict(row) for row in stakeholder_view.get("questions_and_issues", [])
+        ],
+        "optimization_outcomes": [
+            dict(row) for row in stakeholder_view.get("optimization_outcomes", [])
+        ],
     }
 
 
@@ -881,6 +1413,7 @@ class OptimizationRunReportService:
         artifact_store: Optional[Any] = None,
         verify_uploaded_artifacts: bool = True,
         attempt_id_factory: Callable[[], str] = lambda: str(uuid4()),
+        publication_id_factory: Callable[[], str] = lambda: uuid4().hex,
     ) -> None:
         if not account_id or not run_key:
             raise ValueError("account_id and run_key are required")
@@ -901,20 +1434,48 @@ class OptimizationRunReportService:
             self._artifact_store = GraphQLArtifactStore(client)
         self._verify_uploaded_artifacts = bool(verify_uploaded_artifacts)
         self._attempt_id_factory = attempt_id_factory
+        self._publication_id_factory = publication_id_factory
         self._artifact_uploader = artifact_uploader or self._upload_task_attachment
         self._state: Optional[OptimizationRunReportState] = None
+        self._verified_artifact_reads: set[tuple[str, str, int, str]] = set()
+        self._committed_artifact_index_cache: Optional[
+            tuple[int, dict[str, dict[str, Any]]]
+        ] = None
 
     def start_or_resume(self, run_spec: Mapping[str, Any]) -> OptimizationRunReportState:
+        if not isinstance(run_spec, Mapping):
+            raise ValueError("run_spec must be a mapping")
+        # The run specification, not later decision evidence, defines the
+        # execution contract.  Older direct callers did not supply a mode, so
+        # freeze the conservative contract rather than infer it downstream.
+        run_spec = dict(run_spec)
+        execution_mode = run_spec.setdefault("execution_mode", "approval_required")
+        if execution_mode not in {"automatic", "approval_required"}:
+            raise ValueError(
+                "run_spec.execution_mode must be 'automatic' or 'approval_required'"
+            )
         if self._state is not None:
             if not _same_run_spec(self._state.run_spec, run_spec):
-                raise ValueError("a run key cannot be reused with a different frozen run specification")
+                raise OptimizationRunIntegrityError(
+                    "a run key cannot be reused with a different frozen run specification"
+                )
             return self._state
         operator_identity = optimization_operator_identity(
             scope=run_spec.get("scope") if isinstance(run_spec, Mapping) else None,
         )
-        task = self._existing_task if self._uses_existing_task else self._task_lookup(self.run_key)
+        try:
+            task = (
+                self._existing_task
+                if self._uses_existing_task
+                else self._task_lookup(self.run_key)
+            )
+        except Exception as exc:
+            raise OptimizationRunRetryablePublicationError(
+                "Could not look up the optimization run Task"
+            ) from exc
         created_new_attempt = False
         predecessor: dict[str, Any] = {}
+        recovered_linked_report: Any = None
         if task is not None:
             existing_metadata = _metadata(getattr(task, "metadata", {}))
             existing_run_key = str(existing_metadata.get("optimization_run_key") or "")
@@ -923,32 +1484,85 @@ class OptimizationRunReportService:
             if self._uses_existing_task and not existing_metadata.get("optimization_run_key"):
                 if str(getattr(task, "accountId", self.account_id)) != self.account_id:
                     raise ValueError("existing Procedure Task belongs to a different account")
-                attempt_id = self._attempt_id_factory()
-                if not isinstance(attempt_id, str) or not attempt_id:
-                    raise ValueError("attempt_id_factory must return a nonempty string")
-                existing_metadata.update({
-                    "optimization_run_key": self.run_key,
-                    "attempt_id": attempt_id,
-                    "lifecycle_version": LIFECYCLE_VERSION,
-                    "run_spec": dict(run_spec),
-                    "operator_identity": operator_identity.as_dict(),
-                })
-                task.update(
-                    metadata=json.dumps(existing_metadata),
-                    description=(
-                        f"{operator_identity.display_title} — "
-                        f"{operator_identity.display_scope}"
-                    ),
+                try:
+                    recovered_linked_report = self._report_lookup(task)
+                except Exception as exc:
+                    raise OptimizationRunRetryablePublicationError(
+                        "Could not look up the Task-linked optimization Report"
+                    ) from exc
+                linked_run = (
+                    _metadata(getattr(recovered_linked_report, "parameters", {}))
+                    .get("optimization_run")
+                    if recovered_linked_report is not None
+                    else None
                 )
-                created_new_attempt = True
+                if recovered_linked_report is not None:
+                    if not isinstance(linked_run, Mapping):
+                        raise OptimizationRunIntegrityError(
+                            "Task-linked Report is missing optimization run identity"
+                        )
+                    linked_spec = linked_run.get("run_spec")
+                    linked_attempt_id = linked_run.get("attempt_id")
+                    if (
+                        linked_run.get("run_key") != self.run_key
+                        or not isinstance(linked_attempt_id, str)
+                        or not linked_attempt_id
+                        or not isinstance(linked_spec, Mapping)
+                        or not _same_run_spec(linked_spec, run_spec)
+                    ):
+                        raise OptimizationRunIntegrityError(
+                            "Task-linked Report conflicts with the requested run identity"
+                        )
+                    attempt_id = linked_attempt_id
+                    existing_metadata.update({
+                        "optimization_run_key": self.run_key,
+                        "attempt_id": attempt_id,
+                        "lifecycle_version": linked_run.get("lifecycle_version") or LIFECYCLE_VERSION,
+                        "run_spec": dict(linked_spec),
+                        "operator_identity": linked_run.get("operator_identity") or operator_identity.as_dict(),
+                    })
+                else:
+                    attempt_id = self._attempt_id_factory()
+                    if not isinstance(attempt_id, str) or not attempt_id:
+                        raise ValueError("attempt_id_factory must return a nonempty string")
+                    existing_metadata.update({
+                        "optimization_run_key": self.run_key,
+                        "attempt_id": attempt_id,
+                        "lifecycle_version": LIFECYCLE_VERSION,
+                        "run_spec": dict(run_spec),
+                        "operator_identity": operator_identity.as_dict(),
+                    })
+                    created_new_attempt = True
+                try:
+                    task.update(
+                        metadata=json.dumps(existing_metadata),
+                        description=(
+                            f"{operator_identity.display_title} — "
+                            f"{operator_identity.display_scope}"
+                        ),
+                    )
+                except Exception as exc:
+                    raise OptimizationRunRetryablePublicationError(
+                        "Could not claim the existing Procedure Task"
+                    ) from exc
             existing_spec = existing_metadata.get("run_spec")
-            if isinstance(existing_spec, Mapping) and not _same_run_spec(existing_spec, run_spec):
-                raise ValueError("a run key cannot be reused with a different frozen run specification")
+            if not created_new_attempt and (
+                not isinstance(existing_spec, Mapping)
+                or not _same_run_spec(existing_spec, run_spec)
+            ):
+                message = "existing Task does not preserve the exact frozen run specification"
+                self._fail_uninitialized_integrity(task, message)
+                raise OptimizationRunIntegrityError(message)
             final_status = str(existing_metadata.get("optimization_run_final_status") or "").lower()
             if str(getattr(task, "status", "")).upper() == "FAILED" or final_status in {"failed", "blocked"}:
                 if self._uses_existing_task:
                     raise ValueError("a terminal Procedure Task cannot be reused for another optimization attempt")
-                previous_report = self._report_lookup(task)
+                try:
+                    previous_report = self._report_lookup(task)
+                except Exception as exc:
+                    raise OptimizationRunRetryablePublicationError(
+                        "Could not look up the previous optimization Report"
+                    ) from exc
                 predecessor = {
                     "previous_attempt_id": existing_metadata.get("attempt_id"),
                     "previous_task_id": task.id,
@@ -967,15 +1581,20 @@ class OptimizationRunReportService:
                 "operator_identity": operator_identity.as_dict(),
                 **{key: value for key, value in predecessor.items() if value},
             }
-            task = Task.create(
-                client=self.client, accountId=self.account_id, type="OptimizationRunReport",
-                target=f"optimization/run/{self.run_key}", command="optimization portfolio run",
-                description=(
-                    f"{operator_identity.display_title} — {operator_identity.display_scope}"
-                ),
-                status="RUNNING", dispatchStatus="LOCAL",
-                startedAt=_iso(self.now()), metadata=json.dumps(task_metadata),
-            )
+            try:
+                task = Task.create(
+                    client=self.client, accountId=self.account_id, type="OptimizationRunReport",
+                    target=f"optimization/run/{self.run_key}", command="optimization portfolio run",
+                    description=(
+                        f"{operator_identity.display_title} — {operator_identity.display_scope}"
+                    ),
+                    status="RUNNING", dispatchStatus="LOCAL",
+                    startedAt=_iso(self.now()), metadata=json.dumps(task_metadata),
+                )
+            except Exception as exc:
+                raise OptimizationRunRetryablePublicationError(
+                    "Could not create the optimization run Task"
+                ) from exc
             created_new_attempt = True
         else:
             task_metadata = _metadata(getattr(task, "metadata", {}))
@@ -986,7 +1605,9 @@ class OptimizationRunReportService:
         try:
             # Publish the operator-facing cover before the fixed TaskStages and
             # ReportBlocks incur their sequential remote setup cost.
-            report = None if created_new_attempt else self._report_lookup(task)
+            report = recovered_linked_report or (
+                None if created_new_attempt else self._report_lookup(task)
+            )
             if report is None:
                 config_id = self.report_configuration_id or _get_programmatic_config_id(self.account_id, self.client)
                 parameters = {
@@ -1009,8 +1630,20 @@ class OptimizationRunReportService:
                     parameters=parameters,
                     output=self._render_report_manifest(
                         "running", None, identity=operator_identity,
+                        execution_mode=run_spec.get("execution_mode"),
                     ),
                 )
+            elif not created_new_attempt:
+                report_spec = (
+                    (_metadata(getattr(report, "parameters", {})).get("optimization_run") or {})
+                    .get("run_spec")
+                )
+                if not isinstance(report_spec, Mapping) or not _same_run_spec(
+                    report_spec, run_spec
+                ):
+                    message = "existing Report does not preserve the exact frozen run specification"
+                    self._fail_uninitialized_integrity(task, message)
+                    raise OptimizationRunIntegrityError(message)
             stages = (
                 list(self._stage_lookup(task))
                 if self._uses_existing_task
@@ -1037,31 +1670,331 @@ class OptimizationRunReportService:
             ):
                 task.update(currentStageId=running_stage.id)
             self._ensure_initial_envelopes(self._state)
+        except OptimizationRunIntegrityError as exc:
+            try:
+                if self._state is not None:
+                    self.fail(f"Optimization run integrity failure: {exc}")
+                else:
+                    self._fail_uninitialized_integrity(task, str(exc))
+            except Exception:
+                pass
+            raise
         except Exception as exc:
-            message = f"Failed to durably initialize report: {exc}"
-            if self._state is not None:
-                self.fail(message)
-            else:
-                failed_metadata = _metadata(getattr(task, "metadata", {}))
-                failed_metadata["optimization_run_final_status"] = "failed"
-                failed_metadata["failure"] = message
-                try:
-                    task.update(
-                        status="FAILED",
-                        completedAt=_iso(self.now()),
-                        metadata=json.dumps(failed_metadata),
-                    )
-                except Exception:
-                    pass
-                if report is not None:
-                    try:
-                        report.update(output=self._render_report_manifest(
-                            "failed", None, message, identity=operator_identity,
-                        ))
-                    except Exception:
-                        pass
-            raise OptimizationRunPublicationError("Could not initialize optimization run report") from exc
+            # Remote auth and write failures can occur after the Task/Report
+            # identity has been allocated.  No committed revision exists yet,
+            # so preserve that attempt for request replay.
+            raise OptimizationRunRetryablePublicationError(
+                "Could not initialize optimization run report"
+            ) from exc
         return self._state
+
+    def _latest_committed_artifact_index(
+        self,
+    ) -> dict[str, dict[str, Any]]:
+        """Load the last committed manifest as the only artifact-reuse authority."""
+        state = self._require_state()
+        latest = self._latest_revision(state.report)
+        if latest is None:
+            return {}
+        if not isinstance(latest, Mapping):
+            raise OptimizationRunIntegrityError(
+                "Latest optimization revision metadata is malformed"
+            )
+        revision_number = int(latest.get("number") or 0)
+        if (
+            self._committed_artifact_index_cache is not None
+            and self._committed_artifact_index_cache[0] == revision_number
+        ):
+            return dict(self._committed_artifact_index_cache[1])
+        if self._artifact_store is None:
+            return {}
+
+        manifest_descriptor = latest.get("manifest")
+        if not isinstance(manifest_descriptor, Mapping):
+            raise OptimizationRunIntegrityError(
+                "Latest optimization revision is missing its manifest descriptor"
+            )
+        try:
+            manifest_bytes = self._download_task_attachment(
+                state.task.id, manifest_descriptor,
+            )
+            manifest = json.loads(manifest_bytes.decode("utf-8"))
+        except OptimizationRunIntegrityError:
+            raise
+        except Exception as exc:
+            raise OptimizationRunRetryablePublicationError(
+                "Could not load the latest committed artifact manifest"
+            ) from exc
+        if not isinstance(manifest, Mapping):
+            raise OptimizationRunIntegrityError(
+                "Latest optimization artifact manifest is malformed"
+            )
+        if int(manifest.get("revision") or 0) != revision_number:
+            raise OptimizationRunIntegrityError(
+                "Latest optimization artifact manifest has the wrong revision"
+            )
+        if str(manifest.get("milestone") or "") != str(latest.get("milestone") or ""):
+            raise OptimizationRunIntegrityError(
+                "Latest optimization artifact manifest has the wrong milestone"
+            )
+
+        index: dict[str, dict[str, Any]] = {}
+        for descriptor in manifest.get("artifacts") or []:
+            if not isinstance(descriptor, Mapping):
+                raise OptimizationRunIntegrityError(
+                    "Latest optimization artifact manifest contains an invalid descriptor"
+                )
+            logical_id = str(descriptor.get("logical_id") or "")
+            if not logical_id or logical_id in index:
+                raise OptimizationRunIntegrityError(
+                    "Latest optimization artifact manifest has invalid logical identities"
+                )
+            index[logical_id] = dict(descriptor)
+        self._committed_artifact_index_cache = (revision_number, index)
+        return dict(index)
+
+    def _reuse_committed_artifact(
+        self,
+        artifact_index: Mapping[str, Mapping[str, Any]],
+        *,
+        logical_id: str,
+        kind: str,
+        content_type: str,
+        content: bytes,
+    ) -> Optional[dict[str, Any]]:
+        """Return a checksum-identical committed artifact after safe verification."""
+        state = self._require_state()
+        candidate = artifact_index.get(logical_id)
+        if not isinstance(candidate, Mapping):
+            return None
+        digest = sha256(content).hexdigest()
+        expected = {
+            "logical_id": logical_id,
+            "kind": kind,
+            "content_type": content_type,
+            "size_bytes": len(content),
+            "sha256": digest,
+            "task_id": state.task.id,
+        }
+        if any(candidate.get(field) != value for field, value in expected.items()):
+            return None
+        object_key = str(candidate.get("object_key") or "")
+        source_revision = int(candidate.get("source_revision") or 0)
+        if not object_key or source_revision < 1:
+            return None
+        verification_key = (object_key, digest, len(content), content_type)
+        if verification_key not in self._verified_artifact_reads:
+            try:
+                downloaded = self._download_task_attachment(state.task.id, candidate)
+            except Exception:
+                return None
+            if downloaded != content:
+                return None
+        return dict(candidate)
+
+    def _reuse_uncommitted_task_attachment(
+        self,
+        *,
+        logical_id: str,
+        kind: str,
+        content_type: str,
+        content: bytes,
+        filename: str,
+        publication_id: str,
+        source_revision: int,
+    ) -> Optional[dict[str, Any]]:
+        """Recover a verified artifact left by an interrupted publication."""
+        state = self._require_state()
+        stem, separator, extension = filename.rpartition(".")
+        marker = f"-{publication_id}"
+        if not separator or not stem.endswith(marker):
+            return None
+        stable_prefix = stem[: -len(marker)] + "-"
+        stable_suffix = f".{extension}"
+        digest = sha256(content).hexdigest()
+        for attachment in reversed(list(getattr(state.task, "attachedFiles", None) or [])):
+            object_key = str(attachment or "")
+            candidate_name = object_key.rsplit("/", 1)[-1]
+            if not (
+                candidate_name.startswith(stable_prefix)
+                and candidate_name.endswith(stable_suffix)
+            ):
+                continue
+            candidate = {
+                "logical_id": logical_id,
+                "kind": kind,
+                "content_type": content_type,
+                "size_bytes": len(content),
+                "sha256": digest,
+                "task_id": state.task.id,
+                "object_key": object_key,
+                "source_revision": source_revision,
+            }
+            try:
+                downloaded = self._download_task_attachment(state.task.id, candidate)
+            except Exception:
+                continue
+            if downloaded == content:
+                return candidate
+        return None
+
+    def _publication_generated_at(
+        self,
+        *,
+        revision_number: int,
+        milestone: str,
+        evidence_checksum: str,
+        stakeholder_view_checksum: str,
+    ) -> datetime:
+        """Freeze workbook time so an interrupted revision is byte-replayable."""
+        state = self._require_state()
+        task_metadata = _metadata(getattr(state.task, "metadata", {}))
+        draft = task_metadata.get("optimization_publication_draft")
+        expected = {
+            "revision": revision_number,
+            "milestone": milestone,
+            "evidence_checksum": evidence_checksum,
+            "stakeholder_view_checksum": stakeholder_view_checksum,
+        }
+        if isinstance(draft, Mapping) and all(
+            draft.get(field) == value for field, value in expected.items()
+        ):
+            frozen_value = str(draft.get("generated_at") or "")
+            try:
+                frozen = datetime.fromisoformat(frozen_value.replace("Z", "+00:00"))
+                if frozen.tzinfo is not None:
+                    return frozen.astimezone(timezone.utc)
+            except ValueError:
+                pass
+
+        generated_at = self.now().astimezone(timezone.utc)
+        task_metadata["optimization_publication_draft"] = {
+            **expected,
+            "generated_at": _iso(generated_at),
+        }
+        state.task.update(metadata=json.dumps(task_metadata))
+        return generated_at
+
+    def _load_publication_draft_artifacts(
+        self,
+        *,
+        revision_number: int,
+        milestone: str,
+        evidence_checksum: str,
+        stakeholder_view_checksum: str,
+        generated_at: datetime,
+    ) -> dict[str, dict[str, Any]]:
+        """Recover the newest checksum-valid partial score-artifact checkpoint."""
+        state = self._require_state()
+        if self._artifact_store is None:
+            return {}
+        pattern = re.compile(
+            rf"^optimization-publication-draft-r{revision_number:04d}-.+"
+            r"-c\d{6}-s(\d+)-h([0-9a-f]{64})\.json$"
+        )
+        for attachment in reversed(list(getattr(state.task, "attachedFiles", None) or [])):
+            object_key = str(attachment or "")
+            filename = object_key.rsplit("/", 1)[-1]
+            match = pattern.fullmatch(filename)
+            if match is None:
+                continue
+            descriptor = {
+                "task_id": state.task.id,
+                "object_key": object_key,
+                "content_type": "application/json",
+                "size_bytes": int(match.group(1)),
+                "sha256": match.group(2),
+            }
+            try:
+                payload = json.loads(
+                    self._download_task_attachment(state.task.id, descriptor).decode("utf-8")
+                )
+            except Exception:
+                continue
+            if not isinstance(payload, Mapping):
+                continue
+            if (
+                int(payload.get("revision") or 0) != revision_number
+                or str(payload.get("milestone") or "") != milestone
+                or str(payload.get("evidence_checksum") or "") != evidence_checksum
+                or str(payload.get("stakeholder_view_checksum") or "")
+                != stakeholder_view_checksum
+                or str(payload.get("generated_at") or "") != _iso(generated_at)
+            ):
+                continue
+            index: dict[str, dict[str, Any]] = {}
+            valid = True
+            for artifact in payload.get("artifacts") or []:
+                if not isinstance(artifact, Mapping):
+                    valid = False
+                    break
+                logical_id = str(artifact.get("logical_id") or "")
+                if not logical_id or logical_id in index:
+                    valid = False
+                    break
+                object_key = str(artifact.get("object_key") or "")
+                digest = str(artifact.get("sha256") or "")
+                content_type = str(artifact.get("content_type") or "")
+                size_bytes = artifact.get("size_bytes")
+                if (
+                    not object_key
+                    or artifact.get("task_id") != state.task.id
+                    or not isinstance(size_bytes, int)
+                    or size_bytes < 0
+                    or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+                    or not content_type
+                ):
+                    valid = False
+                    break
+                index[logical_id] = dict(artifact)
+            if valid:
+                # Every draft descriptor is added only after upload read-back
+                # or checksum-identical reuse, and this draft manifest has just
+                # passed its own size/checksum verification. Preserve that
+                # durable proof across process replay instead of issuing one
+                # GraphQL ticket and HTTPS read per already-verified artifact.
+                for artifact in index.values():
+                    self._verified_artifact_reads.add((
+                        str(artifact["object_key"]),
+                        str(artifact["sha256"]),
+                        int(artifact["size_bytes"]),
+                        str(artifact["content_type"]),
+                    ))
+                return index
+        return {}
+
+    def _persist_publication_draft_artifacts(
+        self,
+        *,
+        revision_number: int,
+        milestone: str,
+        publication_id: str,
+        evidence_checksum: str,
+        stakeholder_view_checksum: str,
+        generated_at: datetime,
+        artifacts: Mapping[str, Mapping[str, Any]],
+    ) -> None:
+        """Durably index partial score artifacts without attaching every child."""
+        state = self._require_state()
+        payload = {
+            "schema_version": "optimization-publication-draft-v1",
+            "revision": revision_number,
+            "milestone": milestone,
+            "evidence_checksum": evidence_checksum,
+            "stakeholder_view_checksum": stakeholder_view_checksum,
+            "generated_at": _iso(generated_at),
+            "artifacts": [
+                dict(artifacts[logical_id]) for logical_id in sorted(artifacts)
+            ],
+        }
+        content = _json(payload)
+        digest = sha256(content).hexdigest()
+        filename = (
+            f"optimization-publication-draft-r{revision_number:04d}-{publication_id}"
+            f"-c{len(artifacts):06d}-s{len(content)}-h{digest}.json"
+        )
+        path = self._artifact_uploader(state.task.id, filename, content)
+        self._attach_task_file(state.task, path)
 
     def publish_milestone(
         self, milestone: str, decision_evidence: Mapping[str, Any], *, stakeholder_view: Mapping[str, Any]
@@ -1070,17 +2003,211 @@ class OptimizationRunReportService:
         if not milestone or not isinstance(decision_evidence, Mapping):
             raise ValueError("milestone and decision_evidence mapping are required")
         revision_number = self._latest_revision_number(state.report) + 1
+        publication_counts: dict[str, dict[str, int]] = {}
+        active_artifact_kind = "revision_manifest"
+        publication_started_at: Optional[datetime] = None
+
+        def _publication_label(kind: str) -> str:
+            return kind.replace("_", " ")
+
+        def _set_active_artifact_kind(kind: str) -> None:
+            nonlocal active_artifact_kind
+            if kind not in _ARTIFACT_PUBLICATION_KINDS:
+                raise ValueError("unsupported artifact publication kind")
+            active_artifact_kind = kind
+
+        def _publish_artifact_progress(
+            kind: str,
+            *,
+            completed: bool = False,
+            progress_state: str = "active",
+            failure_class: str | None = None,
+        ) -> None:
+            """Publish one compact, safe live status without an evidence revision."""
+            if kind not in publication_counts:
+                raise ValueError("unsupported artifact publication kind")
+            if completed:
+                publication_counts[kind]["completed"] = publication_counts[kind]["total"]
+            elapsed = 0
+            if publication_started_at is not None:
+                elapsed = max(0, int((self.now() - publication_started_at).total_seconds()))
+            incomplete = progress_state in {"failed", "incomplete"}
+            message = (
+                f"Could not publish the {milestone} milestone's {_publication_label(kind)}; "
+                "the milestone is incomplete."
+                if incomplete
+                else f"Publishing {milestone} milestone artifacts: {_publication_label(kind)}."
+            )
+            current_count = sum(item["completed"] for item in publication_counts.values())
+            total_count = sum(item["total"] for item in publication_counts.values())
+            failure = None
+            if failure_class is not None:
+                safe_failure_class = (
+                    failure_class
+                    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", failure_class)
+                    else "Exception"
+                )
+                failure = {
+                    "exception_class": safe_failure_class,
+                    "operation_category": kind,
+                    "retry_classification": "retryable",
+                    "completed": current_count,
+                    "total": total_count,
+                }
+            self.publish_progress(
+                phase="publication",
+                current=current_count,
+                total=total_count,
+                unit="artifacts",
+                state=progress_state,
+                elapsed_seconds=elapsed,
+                next_checkpoint=f"Publishing the {milestone} milestone.",
+                message=message,
+                artifact_counts={
+                    safe_kind: {"completed": count["completed"], "total": count["total"]}
+                    for safe_kind, count in publication_counts.items()
+                },
+                failure=failure,
+            )
+
+        def _record_artifact_upload(kind: str, completed: bool) -> None:
+            _set_active_artifact_kind(kind)
+            if not completed:
+                return
+            count = publication_counts[kind]
+            count["completed"] += 1
+            if (
+                count["completed"] % 25 == 0
+                or count["completed"] == count["total"]
+            ):
+                _publish_artifact_progress(kind)
+
         try:
-            generated_at = self.now()
+            publication_id = self._publication_id_factory()
+            if (
+                not isinstance(publication_id, str)
+                or not publication_id
+                or any(not (character.isalnum() or character in "-_.") for character in publication_id)
+            ):
+                raise ValueError(
+                    "publication_id_factory must return a filesystem-safe nonempty string"
+                )
+            stakeholder_view = _stakeholder_execution_projection(
+                stakeholder_view,
+                decision_evidence,
+                expected_execution_mode=str(state.run_spec.get("execution_mode") or ""),
+            )
             _validate_view(stakeholder_view)
+            committed_artifacts = self._latest_committed_artifact_index()
+            draft_artifacts: dict[str, dict[str, Any]] = {}
+
+            def _reuse_artifact(
+                logical_id: str,
+                kind: str,
+                content_type: str,
+                content: bytes,
+                filename: str,
+            ) -> Optional[Mapping[str, Any]]:
+                committed = self._reuse_committed_artifact(
+                    committed_artifacts,
+                    logical_id=logical_id,
+                    kind=kind,
+                    content_type=content_type,
+                    content=content,
+                )
+                if committed is not None:
+                    return committed
+                draft = self._reuse_committed_artifact(
+                    draft_artifacts,
+                    logical_id=logical_id,
+                    kind=kind,
+                    content_type=content_type,
+                    content=content,
+                )
+                if draft is not None:
+                    return draft
+                return self._reuse_uncommitted_task_attachment(
+                    logical_id=logical_id,
+                    kind=kind,
+                    content_type=content_type,
+                    content=content,
+                    filename=filename,
+                    publication_id=publication_id,
+                    source_revision=revision_number,
+                )
+
+            publication_counts = _artifact_publication_plan(stakeholder_view)
+            publication_started_at = self.now()
             safe_overview = dict(stakeholder_view.get("overview") or {})
             raw_evidence = _json(decision_evidence)
             evidence_checksum = sha256(raw_evidence).hexdigest()
+            stakeholder_view_checksum = sha256(_json(stakeholder_view)).hexdigest()
+            generated_at = self._publication_generated_at(
+                revision_number=revision_number,
+                milestone=milestone,
+                evidence_checksum=evidence_checksum,
+                stakeholder_view_checksum=stakeholder_view_checksum,
+            )
+            draft_artifacts = self._load_publication_draft_artifacts(
+                revision_number=revision_number,
+                milestone=milestone,
+                evidence_checksum=evidence_checksum,
+                stakeholder_view_checksum=stakeholder_view_checksum,
+                generated_at=generated_at,
+            )
+            active_artifact_kind = "stakeholder_workbook"
+            _publish_artifact_progress("stakeholder_workbook")
             workbook = build_stakeholder_workbook(stakeholder_view, revision_number=revision_number, generated_at=generated_at)
-            raw_path = self._artifact_uploader(state.task.id, f"optimization-evidence-r{revision_number:04d}.json", raw_evidence)
+            active_artifact_kind = "decision_evidence"
+            _publish_artifact_progress("decision_evidence")
+            raw_filename = (
+                f"optimization-evidence-r{revision_number:04d}-{publication_id}.json"
+            )
+            reusable_raw = _reuse_artifact(
+                "run_evidence", "run_evidence", "application/json",
+                raw_evidence, raw_filename,
+            )
+            if isinstance(reusable_raw, Mapping):
+                raw_path = str(reusable_raw.get("object_key") or "")
+                raw_source_revision = int(reusable_raw.get("source_revision") or 0)
+            else:
+                raw_path = self._artifact_uploader(
+                    state.task.id, raw_filename, raw_evidence,
+                )
+                raw_source_revision = revision_number
+            if not raw_path or raw_source_revision < 1:
+                raise OptimizationRunIntegrityError(
+                    "decision evidence artifact descriptor is incomplete"
+                )
             self._attach_task_file(state.task, raw_path)
-            workbook_path = self._artifact_uploader(state.task.id, f"optimization-workbook-r{revision_number:04d}.xlsx", workbook.content)
+            _publish_artifact_progress("decision_evidence", completed=True)
+            active_artifact_kind = "stakeholder_workbook"
+            workbook_filename = (
+                f"optimization-workbook-r{revision_number:04d}-{publication_id}.xlsx"
+            )
+            reusable_workbook = _reuse_artifact(
+                "stakeholder_workbook",
+                "stakeholder_workbook",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                workbook.content,
+                workbook_filename,
+            )
+            if isinstance(reusable_workbook, Mapping):
+                workbook_path = str(reusable_workbook.get("object_key") or "")
+                workbook_source_revision = int(
+                    reusable_workbook.get("source_revision") or 0
+                )
+            else:
+                workbook_path = self._artifact_uploader(
+                    state.task.id, workbook_filename, workbook.content,
+                )
+                workbook_source_revision = revision_number
+            if not workbook_path or workbook_source_revision < 1:
+                raise OptimizationRunIntegrityError(
+                    "stakeholder workbook artifact descriptor is incomplete"
+                )
             self._attach_task_file(state.task, workbook_path)
+            _publish_artifact_progress("stakeholder_workbook", completed=True)
             artifacts = [
                 _artifact_descriptor(
                     logical_id="run_evidence",
@@ -1091,7 +2218,7 @@ class OptimizationRunReportService:
                     content=raw_evidence,
                     object_key=raw_path,
                     task_id=state.task.id,
-                    source_revision=revision_number,
+                    source_revision=raw_source_revision,
                 ),
                 _artifact_descriptor(
                     logical_id="stakeholder_workbook",
@@ -1102,27 +2229,101 @@ class OptimizationRunReportService:
                     content=workbook.content,
                     object_key=workbook_path,
                     task_id=state.task.id,
-                    source_revision=revision_number,
+                    source_revision=workbook_source_revision,
                 ),
             ]
+            resolved_draft_artifacts = dict(draft_artifacts)
+            draft_dirty_count = 0
+
+            def _record_resolved_score_artifact(
+                _kind: str, descriptor: Mapping[str, Any]
+            ) -> None:
+                nonlocal draft_dirty_count
+                logical_id = str(descriptor.get("logical_id") or "")
+                object_key = str(descriptor.get("object_key") or "")
+                if not logical_id or not object_key:
+                    raise OptimizationRunIntegrityError(
+                        "resolved score artifact descriptor is incomplete"
+                    )
+                normalized = dict(descriptor)
+                if resolved_draft_artifacts.get(logical_id) == normalized:
+                    return
+                resolved_draft_artifacts[logical_id] = normalized
+                draft_dirty_count += 1
+                if draft_dirty_count >= 25:
+                    self._persist_publication_draft_artifacts(
+                        revision_number=revision_number,
+                        milestone=milestone,
+                        publication_id=publication_id,
+                        evidence_checksum=evidence_checksum,
+                        stakeholder_view_checksum=stakeholder_view_checksum,
+                        generated_at=generated_at,
+                        artifacts=resolved_draft_artifacts,
+                    )
+                    draft_dirty_count = 0
+
+            active_artifact_kind = "score_briefs"
+            _publish_artifact_progress("score_briefs")
             scorecard_artifacts = build_scorecard_artifacts(
                 stakeholder_view,
                 revision_number=revision_number,
                 task_id=state.task.id,
                 uploader=self._artifact_uploader,
+                publication_id=publication_id,
+                on_artifact_upload=_record_artifact_upload,
+                reuse_artifact=_reuse_artifact,
+                on_artifact_resolved=_record_resolved_score_artifact,
             )
+            if draft_dirty_count:
+                self._persist_publication_draft_artifacts(
+                    revision_number=revision_number,
+                    milestone=milestone,
+                    publication_id=publication_id,
+                    evidence_checksum=evidence_checksum,
+                    stakeholder_view_checksum=stakeholder_view_checksum,
+                    generated_at=generated_at,
+                    artifacts=resolved_draft_artifacts,
+                )
+                draft_dirty_count = 0
             artifacts.extend(scorecard_artifacts)
+            for kind in ("score_briefs", "scorecard_summaries", "scorecard_spreadsheets", "scorecard_presentations"):
+                if publication_counts[kind]["completed"] != publication_counts[kind]["total"]:
+                    raise OptimizationRunIntegrityError(
+                        f"artifact publication count mismatch for {kind}"
+                    )
+            _publish_artifact_progress("scorecard_presentations")
+            active_artifact_kind = "stakeholder_presentation"
+            _publish_artifact_progress("stakeholder_presentation")
             presentation = build_stakeholder_presentation(
                 stakeholder_view,
                 scorecard_artifacts=scorecard_artifacts,
             )
             presentation_bytes = _json(presentation)
-            presentation_path = self._artifact_uploader(
-                state.task.id,
-                f"optimization-presentation-r{revision_number:04d}.json",
+            reusable_presentation = _reuse_artifact(
+                "stakeholder_presentation",
+                "stakeholder_presentation",
+                "application/json",
                 presentation_bytes,
+                f"optimization-presentation-r{revision_number:04d}-{publication_id}.json",
             )
+            if isinstance(reusable_presentation, Mapping):
+                presentation_path = str(reusable_presentation.get("object_key") or "")
+                presentation_source_revision = int(
+                    reusable_presentation.get("source_revision") or 0
+                )
+                if not presentation_path or presentation_source_revision < 1:
+                    raise OptimizationRunIntegrityError(
+                        "reusable stakeholder presentation descriptor is incomplete"
+                    )
+            else:
+                presentation_path = self._artifact_uploader(
+                    state.task.id,
+                    f"optimization-presentation-r{revision_number:04d}-{publication_id}.json",
+                    presentation_bytes,
+                )
+                presentation_source_revision = revision_number
             self._attach_task_file(state.task, presentation_path)
+            _publish_artifact_progress("stakeholder_presentation", completed=True)
             presentation_artifact = _artifact_descriptor(
                 logical_id="stakeholder_presentation",
                 kind="stakeholder_presentation",
@@ -1132,7 +2333,7 @@ class OptimizationRunReportService:
                 content=presentation_bytes,
                 object_key=presentation_path,
                 task_id=state.task.id,
-                source_revision=revision_number,
+                source_revision=presentation_source_revision,
             )
             artifacts.append(presentation_artifact)
             if self.dashboard_base_url:
@@ -1157,8 +2358,15 @@ class OptimizationRunReportService:
             }
             manifest_bytes = _json(manifest)
             manifest_checksum = sha256(manifest_bytes).hexdigest()
-            manifest_path = self._artifact_uploader(state.task.id, f"optimization-revision-r{revision_number:04d}.json", manifest_bytes)
+            active_artifact_kind = "revision_manifest"
+            _publish_artifact_progress("revision_manifest")
+            manifest_path = self._artifact_uploader(
+                state.task.id,
+                f"optimization-revision-r{revision_number:04d}-{publication_id}.json",
+                manifest_bytes,
+            )
             self._attach_task_file(state.task, manifest_path)
+            _publish_artifact_progress("revision_manifest", completed=True)
             self._update_block(state.blocks["evidence"], raw_path, {"revision": revision_number, "milestone": milestone, "checksum": evidence_checksum})
             self._update_block(state.blocks["workbook"], workbook_path, {"revision": revision_number, "milestone": milestone, "checksum": workbook.checksum, "row_counts": dict(workbook.row_counts)})
             self._update_block(state.blocks["status"], manifest_path, {
@@ -1187,17 +2395,383 @@ class OptimizationRunReportService:
                 artifacts=tuple(artifacts),
             )
             self._record_latest_revision(state, revision)
+            self._committed_artifact_index_cache = (
+                revision_number,
+                {
+                    str(artifact["logical_id"]): dict(artifact)
+                    for artifact in artifacts
+                },
+            )
             # TaskStage is the dashboard's lifecycle projection. Advance it
             # only after the immutable evidence, workbook, block pointers, and
             # Report cover page have all been made durable.
             self._advance_stage_for_milestone(milestone)
             return revision
+        except OptimizationRunIntegrityError as exc:
+            try:
+                self.fail(f"Optimization run integrity failure: {exc}")
+            except Exception:
+                pass
+            raise
         except Exception as exc:
-            self.fail(f"Failed to durably publish {milestone}: {exc}")
-            raise OptimizationRunPublicationError(f"Could not publish optimization milestone {milestone}") from exc
+            # A failed upload/update has not crossed the Report.latest_revision
+            # commit point.  Its partial attachments are intentionally ignored
+            # on replay, so marking this Task failed would destroy the only safe
+            # recovery path for ordinary auth/publication interruptions.
+            if publication_counts:
+                try:
+                    _publish_artifact_progress(
+                        active_artifact_kind,
+                        progress_state="failed",
+                        failure_class=type(exc).__name__,
+                    )
+                except Exception:
+                    # The original failure remains authoritative if the live
+                    # status write itself is unavailable.
+                    pass
+            raise OptimizationRunRetryablePublicationError(
+                f"Could not publish optimization milestone {milestone}"
+            ) from exc
+
+    def persist_semantic_budget_ledger(
+        self, ledger_value: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Commit one immutable semantic-ledger revision without a workbook.
+
+        Uploading and attaching the JSON may leave an orphan when publication is
+        interrupted.  The pointer under ``Report.parameters`` is the sole commit
+        point, so recovery deliberately ignores every unreferenced upload.
+        """
+        from plexus.optimization.semantic_budget import (
+            SemanticBudgetLedger,
+            SemanticBudgetSpec,
+            canonical_json_bytes,
+        )
+
+        state = self._require_state()
+        parameters = _metadata(getattr(state.report, "parameters", {}))
+        run = dict(parameters.get("optimization_run") or {})
+        report_spec = run.get("run_spec")
+        if not isinstance(report_spec, Mapping) or not _same_run_spec(
+            report_spec, state.run_spec
+        ):
+            raise OptimizationRunIntegrityError(
+                "Report does not preserve the frozen semantic budget run specification"
+            )
+        task_spec = _metadata(getattr(state.task, "metadata", {})).get("run_spec")
+        if not isinstance(task_spec, Mapping) or not _same_run_spec(
+            task_spec, state.run_spec
+        ):
+            raise OptimizationRunIntegrityError(
+                "Task does not preserve the frozen semantic budget run specification"
+            )
+        frozen_budget = state.run_spec.get("semantic_budget")
+        if not isinstance(frozen_budget, Mapping):
+            raise OptimizationRunIntegrityError(
+                "frozen run specification has no semantic budget"
+            )
+        try:
+            expected_spec = SemanticBudgetSpec.from_dict(frozen_budget)
+            ledger = SemanticBudgetLedger.from_dict(
+                ledger_value, expected_spec=expected_spec
+            )
+        except Exception as exc:
+            raise OptimizationRunIntegrityError(
+                "semantic budget ledger conflicts with the frozen run specification"
+            ) from exc
+        if ledger.run_key != self.run_key:
+            raise OptimizationRunIntegrityError(
+                "semantic budget ledger belongs to another run"
+            )
+
+        content = canonical_json_bytes(ledger.to_dict())
+        digest = sha256(content).hexdigest()
+        latest = run.get("semantic_budget_latest")
+        if latest is not None and not isinstance(latest, Mapping):
+            raise OptimizationRunIntegrityError(
+                "semantic budget commit pointer is malformed"
+            )
+        if isinstance(latest, Mapping) and latest.get("sha256") == digest:
+            if int(latest.get("ledger_revision") or -1) != ledger.revision:
+                raise OptimizationRunIntegrityError(
+                    "semantic budget commit pointer revision is inconsistent"
+                )
+            return dict(latest)
+        prior_revision = (
+            int(latest.get("ledger_revision") or 0)
+            if isinstance(latest, Mapping)
+            else 0
+        )
+        if ledger.revision != prior_revision + 1:
+            raise OptimizationRunIntegrityError(
+                "semantic budget ledger revisions must be committed in order"
+            )
+
+        try:
+            publication_id = self._publication_id_factory()
+            if (
+                not isinstance(publication_id, str)
+                or not publication_id
+                or any(
+                    not (character.isalnum() or character in "-_.")
+                    for character in publication_id
+                )
+            ):
+                raise ValueError(
+                    "publication_id_factory must return a filesystem-safe nonempty string"
+                )
+            filename = (
+                f"optimization-semantic-ledger-r{ledger.revision:06d}-"
+                f"{publication_id}.json"
+            )
+            object_key = self._artifact_uploader(
+                state.task.id, filename, content
+            )
+            self._attach_task_file(state.task, object_key)
+            pointer = _artifact_descriptor(
+                logical_id="semantic_budget_ledger",
+                kind="semantic_budget_ledger",
+                display_name="Semantic budget ledger",
+                scope="run",
+                content_type="application/json",
+                content=content,
+                object_key=object_key,
+                task_id=state.task.id,
+                source_revision=ledger.revision,
+            )
+            pointer.update({
+                "ledger_revision": ledger.revision,
+                "pricing_version": ledger.spec.pricing_version,
+            })
+            run["semantic_budget_latest"] = pointer
+            parameters["optimization_run"] = run
+            state.report.update(parameters=parameters)
+            return dict(pointer)
+        except OptimizationRunIntegrityError:
+            raise
+        except Exception as exc:
+            raise OptimizationRunRetryablePublicationError(
+                "Could not commit semantic budget ledger revision"
+            ) from exc
+
+    def load_semantic_budget_ledger(self) -> Optional[dict[str, Any]]:
+        """Load and checksum-verify the Report's committed semantic ledger."""
+        from plexus.optimization.semantic_budget import (
+            SemanticBudgetLedger,
+            SemanticBudgetSpec,
+            canonical_json_bytes,
+        )
+
+        state = self._require_state()
+        parameters = _metadata(getattr(state.report, "parameters", {}))
+        run = parameters.get("optimization_run")
+        if not isinstance(run, Mapping):
+            raise OptimizationRunIntegrityError(
+                "Report optimization run parameters are malformed"
+            )
+        report_spec = run.get("run_spec")
+        if not isinstance(report_spec, Mapping) or not _same_run_spec(
+            report_spec, state.run_spec
+        ):
+            raise OptimizationRunIntegrityError(
+                "Report does not preserve the frozen semantic budget run specification"
+            )
+        task_spec = _metadata(getattr(state.task, "metadata", {})).get("run_spec")
+        if not isinstance(task_spec, Mapping) or not _same_run_spec(
+            task_spec, state.run_spec
+        ):
+            raise OptimizationRunIntegrityError(
+                "Task does not preserve the frozen semantic budget run specification"
+            )
+        pointer = run.get("semantic_budget_latest")
+        if pointer is None:
+            return None
+        if not isinstance(pointer, Mapping):
+            raise OptimizationRunIntegrityError(
+                "semantic budget commit pointer is malformed"
+            )
+        frozen_budget = state.run_spec.get("semantic_budget")
+        try:
+            if (
+                pointer.get("kind") != "semantic_budget_ledger"
+                or pointer.get("logical_id") != "semantic_budget_ledger"
+                or pointer.get("task_id") != state.task.id
+                or pointer.get("content_type") != "application/json"
+                or pointer.get("source_revision")
+                != pointer.get("ledger_revision")
+            ):
+                raise ValueError("semantic budget descriptor is inconsistent")
+            if not isinstance(frozen_budget, Mapping):
+                raise ValueError("frozen run specification has no semantic budget")
+            content = self._download_task_attachment(state.task.id, pointer)
+            parsed = json.loads(content.decode("utf-8"))
+            if not isinstance(parsed, Mapping):
+                raise ValueError("semantic budget ledger must be an object")
+            if canonical_json_bytes(parsed) != content:
+                raise ValueError("semantic budget ledger JSON is not canonical")
+            expected_spec = SemanticBudgetSpec.from_dict(frozen_budget)
+            ledger = SemanticBudgetLedger.from_dict(
+                parsed, expected_spec=expected_spec
+            )
+            if (
+                ledger.run_key != self.run_key
+                or ledger.revision != int(pointer.get("ledger_revision") or -1)
+                or ledger.digest() != pointer.get("sha256")
+                or ledger.spec.pricing_version != pointer.get("pricing_version")
+            ):
+                raise ValueError("semantic budget ledger does not match its pointer")
+            return ledger.to_dict()
+        except (
+            ArtifactTicketError,
+            ArtifactAuthorizationError,
+            ArtifactTransferError,
+        ) as exc:
+            raise OptimizationRunRetryablePublicationError(
+                "Could not read the semantic budget checkpoint attachment"
+            ) from exc
+        except OptimizationRunIntegrityError:
+            raise
+        except Exception as exc:
+            raise OptimizationRunIntegrityError(
+                "Could not verify the semantic budget checkpoint"
+            ) from exc
+
+    def load_latest_checkpoint(self) -> Optional[dict[str, Any]]:
+        """Load and verify the last committed evidence revision for replay.
+
+        The Report parameter update performed by ``_record_latest_revision`` is
+        the publication commit point.  Unreferenced uploads from an interrupted
+        publication are deliberately ignored.  Reads use the same
+        GraphQL-authorized Task attachment route as every other artifact.
+        """
+        state = self._require_state()
+        latest = self._latest_revision(state.report)
+        if latest is None:
+            return None
+        if not isinstance(latest, Mapping):
+            error = OptimizationRunIntegrityError(
+                "Latest optimization revision metadata is malformed"
+            )
+            try:
+                self.fail(f"Optimization run integrity failure: {error}")
+            except Exception:
+                pass
+            raise error
+        try:
+            manifest_descriptor = latest.get("manifest")
+            if not isinstance(manifest_descriptor, Mapping):
+                raise ValueError("latest revision is missing its manifest descriptor")
+            manifest_bytes = self._download_task_attachment(
+                state.task.id, manifest_descriptor,
+            )
+            manifest = json.loads(manifest_bytes.decode("utf-8"))
+            if not isinstance(manifest, Mapping):
+                raise ValueError("latest revision manifest must be an object")
+            revision_number = int(latest.get("number") or -2)
+            if int(manifest.get("revision") or -1) != revision_number:
+                raise ValueError("latest revision manifest number does not match")
+            milestone = str(manifest.get("milestone") or "").strip()
+            if not milestone or milestone != str(latest.get("milestone") or "").strip():
+                raise ValueError("latest revision milestone does not match")
+
+            evidence_descriptor = latest.get("evidence")
+            if not isinstance(evidence_descriptor, Mapping):
+                evidence_descriptor = next(
+                    (
+                        item for item in (manifest.get("artifacts") or [])
+                        if isinstance(item, Mapping) and item.get("kind") == "run_evidence"
+                    ),
+                    None,
+                )
+            if not isinstance(evidence_descriptor, Mapping):
+                raise ValueError("latest revision is missing its evidence descriptor")
+            manifest_evidence = next(
+                (
+                    item for item in (manifest.get("artifacts") or [])
+                    if isinstance(item, Mapping) and item.get("kind") == "run_evidence"
+                ),
+                None,
+            )
+            if not isinstance(manifest_evidence, Mapping):
+                raise ValueError("latest revision manifest is missing run evidence")
+            self._verify_checkpoint_descriptor(
+                latest=evidence_descriptor,
+                manifest=manifest_evidence,
+                task_id=state.task.id,
+                revision_number=revision_number,
+            )
+            evidence_bytes = self._download_task_attachment(
+                state.task.id, evidence_descriptor,
+            )
+            evidence = json.loads(evidence_bytes.decode("utf-8"))
+            if not isinstance(evidence, Mapping):
+                raise ValueError("latest revision evidence must be an object")
+            if str(evidence.get("run_key") or "") != self.run_key:
+                raise ValueError("latest revision evidence belongs to a different run key")
+            evidence_spec = evidence.get("run_spec")
+            if not isinstance(evidence_spec, Mapping):
+                raise ValueError("latest revision evidence is missing a frozen run specification")
+            if not _same_run_spec(evidence_spec, state.run_spec):
+                raise ValueError("latest revision evidence has a different frozen run specification")
+
+            task_metadata = _metadata(getattr(state.task, "metadata", {}))
+            persisted_spec = task_metadata.get("run_spec")
+            if not isinstance(persisted_spec, Mapping) or not _same_run_spec(persisted_spec, state.run_spec):
+                raise ValueError("Task metadata does not preserve the frozen run specification")
+            report_spec = ((_metadata(getattr(state.report, "parameters", {})).get("optimization_run") or {}).get("run_spec"))
+            if not isinstance(report_spec, Mapping) or not _same_run_spec(report_spec, state.run_spec):
+                raise ValueError("Report metadata does not preserve the frozen run specification")
+            task_status = str(getattr(state.task, "status", "")).upper()
+            final_status = str(task_metadata.get("optimization_run_final_status") or "").upper()
+            return {
+                "milestone": milestone,
+                "evidence": dict(evidence),
+                "task_terminal": task_status in {"COMPLETED", "FAILED"} or bool(final_status),
+            }
+        except (ArtifactTicketError, ArtifactAuthorizationError, ArtifactTransferError) as exc:
+            raise OptimizationRunRetryablePublicationError(
+                "Could not read the latest optimization checkpoint attachment"
+            ) from exc
+        except ArtifactIntegrityError as exc:
+            error = OptimizationRunIntegrityError(
+                "Latest optimization checkpoint attachment failed integrity verification"
+            )
+            try:
+                self.fail(f"Optimization run integrity failure: {error}")
+            except Exception:
+                pass
+            raise error from exc
+        except OptimizationRunIntegrityError as exc:
+            try:
+                self.fail(f"Optimization run integrity failure: {exc}")
+            except Exception:
+                pass
+            raise
+        except Exception as exc:
+            error = OptimizationRunIntegrityError(
+                "Could not verify the latest optimization checkpoint"
+            )
+            try:
+                self.fail(f"Optimization run integrity failure: {error}")
+            except Exception:
+                pass
+            raise error from exc
 
     def publish_progress(
-        self, *, phase: str, current: int, total: int, message: str
+        self,
+        *,
+        phase: str,
+        subphase: str | None = None,
+        current: int,
+        total: int | None,
+        message: str,
+        unit: str | None = None,
+        state: str = "active",
+        elapsed_seconds: int | None = None,
+        next_checkpoint: str | None = None,
+        heartbeat_interval_seconds: int | None = None,
+        artifact_counts: Mapping[str, Mapping[str, int]] | None = None,
+        failure: Mapping[str, Any] | None = None,
     ) -> None:
         """Publish lightweight live progress without creating an evidence revision.
 
@@ -1205,19 +2779,115 @@ class OptimizationRunReportService:
         the existing analysis stage, compact status block, and Report cover so
         operators can see movement during long assessment and diagnosis loops.
         """
-        state = self._require_state()
+        report_state = self._require_state()
         normalized_phase = str(phase or "").strip().lower()
+        normalized_subphase = str(subphase or "").strip().lower()
         normalized_message = " ".join(str(message or "").split()).strip()
-        if normalized_phase not in {"assessment", "diagnosis"}:
-            raise ValueError("progress phase must be assessment or diagnosis")
+        normalized_unit = " ".join(str(unit or "").split()).strip().lower()
+        normalized_state = str(state or "active").strip().lower()
+        normalized_checkpoint = " ".join(str(next_checkpoint or "").split()).strip()
+        if normalized_phase not in {"ranking", "assessment", "diagnosis", "publication"}:
+            raise ValueError("progress phase must be ranking, assessment, diagnosis, or publication")
+        if normalized_subphase and (
+            normalized_phase != "ranking"
+            or normalized_subphase not in {
+                "inventory", "activity_evidence", "feedback_analysis",
+            }
+        ):
+            raise ValueError("ranking progress subphase is unsupported")
         if isinstance(current, bool) or isinstance(total, bool):
             raise ValueError("progress counts must be integers")
         current = int(current)
-        total = int(total)
-        if current < 0 or total < 0 or current > total:
-            raise ValueError("progress counts must satisfy 0 <= current <= total")
+        if total is not None:
+            total = int(total)
+        if current < 0 or (total is not None and (total < 0 or current > total)):
+            raise ValueError("progress counts must satisfy 0 <= current <= total when total is known")
         if not normalized_message:
             raise ValueError("progress message is required")
+        if normalized_state not in {"active", "retrying", "incomplete", "failed"}:
+            raise ValueError("progress state must be active, retrying, incomplete, or failed")
+        if normalized_unit and normalized_unit not in {
+            "scorecards", "scores", "analysis steps", "artifacts",
+        }:
+            raise ValueError("progress unit is unsupported")
+        normalized_artifact_counts: dict[str, dict[str, int]] | None = None
+        if artifact_counts is not None:
+            if normalized_phase != "publication" or not isinstance(artifact_counts, Mapping):
+                raise ValueError("artifact_counts are only supported for publication progress")
+            normalized_artifact_counts = {}
+            for kind in _ARTIFACT_PUBLICATION_KINDS:
+                value = artifact_counts.get(kind)
+                if value is None:
+                    continue
+                if not isinstance(value, Mapping):
+                    raise ValueError("artifact publication counts must be mappings")
+                completed = value.get("completed")
+                artifact_total = value.get("total")
+                if (
+                    isinstance(completed, bool)
+                    or isinstance(artifact_total, bool)
+                    or not isinstance(completed, int)
+                    or not isinstance(artifact_total, int)
+                    or completed < 0
+                    or artifact_total < 0
+                    or completed > artifact_total
+                ):
+                    raise ValueError("artifact publication counts must satisfy 0 <= completed <= total")
+                normalized_artifact_counts[kind] = {
+                    "completed": completed,
+                    "total": artifact_total,
+                }
+            if set(artifact_counts) != set(normalized_artifact_counts):
+                raise ValueError("artifact publication kinds are unsupported")
+            if sum(value["completed"] for value in normalized_artifact_counts.values()) != current:
+                raise ValueError("artifact publication completed counts must match current")
+            if sum(value["total"] for value in normalized_artifact_counts.values()) != total:
+                raise ValueError("artifact publication totals must match total")
+        normalized_failure: dict[str, Any] | None = None
+        if failure is not None:
+            if (
+                normalized_phase != "publication"
+                or normalized_state not in {"failed", "retrying"}
+                or not isinstance(failure, Mapping)
+                or set(failure) != {
+                    "exception_class",
+                    "operation_category",
+                    "retry_classification",
+                    "completed",
+                    "total",
+                }
+            ):
+                raise ValueError("failure telemetry is only supported for failed publication progress")
+            exception_class = failure.get("exception_class")
+            operation_category = failure.get("operation_category")
+            retry_classification = failure.get("retry_classification")
+            if (
+                not isinstance(exception_class, str)
+                or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", exception_class) is None
+                or operation_category not in _ARTIFACT_PUBLICATION_KINDS
+                or retry_classification != "retryable"
+                or failure.get("completed") != current
+                or failure.get("total") != total
+            ):
+                raise ValueError("publication failure telemetry is malformed")
+            normalized_failure = {
+                "exception_class": exception_class,
+                "operation_category": operation_category,
+                "retry_classification": retry_classification,
+                "completed": current,
+                "total": total,
+            }
+        if elapsed_seconds is not None:
+            if isinstance(elapsed_seconds, bool) or int(elapsed_seconds) < 0:
+                raise ValueError("elapsed_seconds must be a nonnegative integer")
+            elapsed_seconds = int(elapsed_seconds)
+        if heartbeat_interval_seconds is not None:
+            if (
+                isinstance(heartbeat_interval_seconds, bool)
+                or int(heartbeat_interval_seconds) <= 0
+            ):
+                raise ValueError("heartbeat_interval_seconds must be a positive integer")
+            heartbeat_interval_seconds = int(heartbeat_interval_seconds)
 
         progress = {
             "phase": normalized_phase,
@@ -1226,20 +2896,56 @@ class OptimizationRunReportService:
             "message": normalized_message,
             "updated_at": _iso(self.now()),
         }
+        if normalized_subphase:
+            progress["subphase"] = normalized_subphase
+        if normalized_unit:
+            progress["unit"] = normalized_unit
+        if normalized_state != "active":
+            progress["state"] = normalized_state
+        if elapsed_seconds is not None:
+            progress["elapsed_seconds"] = elapsed_seconds
+        if normalized_checkpoint:
+            progress["next_checkpoint"] = normalized_checkpoint
+        if heartbeat_interval_seconds is not None:
+            progress["heartbeat_interval_seconds"] = heartbeat_interval_seconds
+        if normalized_artifact_counts is not None:
+            progress["artifact_counts"] = normalized_artifact_counts
+        if normalized_failure is not None:
+            progress["failure"] = normalized_failure
         try:
+            # Ranking is synchronous today, but callbacks originate in
+            # bounded worker code and must remain safe if they arrive after a
+            # later durable milestone. Never let a stale live overlay move the
+            # operator view backwards over immutable ranking/assessment/etc.
+            latest_revision = self._latest_revision(report_state.report)
+            latest_milestone = (
+                str(latest_revision.get("milestone") or "").strip().lower()
+                if isinstance(latest_revision, Mapping)
+                else ""
+            )
+            if (
+                normalized_phase == "ranking"
+                and latest_milestone in _RANKING_PROGRESS_SUPERSEDED_MILESTONES
+            ):
+                return
             stage = (
-                state.stages.get(normalized_phase)
-                or state.stages.get("analysis")
+                report_state.stages.get(normalized_phase)
+                or report_state.stages.get("analysis")
             )
-            if stage is None:
-                raise RuntimeError("missing analysis TaskStage for live progress")
-            stage.update(
-                processedItems=current,
-                totalItems=total,
-                statusMessage=normalized_message[:1000],
-            )
+            # Some existing direct-run Tasks retain the fixed lifecycle stages
+            # but have no generic Analysis stage.  The Report remains the
+            # authoritative live publication surface in that case; do not turn
+            # an optional TaskStage projection into a publication failure.
+            if stage is not None:
+                stage_update = {
+                    "processedItems": current,
+                    "statusMessage": normalized_message[:1000],
+                }
+                if total is not None:
+                    stage_update["totalItems"] = total
+                stage.update(**stage_update)
 
-            status_block = state.blocks["status"]
+            status_block = report_state.blocks["status"]
             compact = _metadata(getattr(status_block, "output", {}))
             preview = dict(compact.get("preview") or {})
             summary = dict(preview.get("summary") or {})
@@ -1251,15 +2957,15 @@ class OptimizationRunReportService:
                 log="Live progress; see immutable revisions in attachedFiles.",
             )
 
-            state.report.update(output=self._render_report_manifest(
+            report_state.report.update(output=self._render_report_manifest(
                 "RUNNING",
-                self._latest_revision(state.report),
-                identity=state.operator_identity,
+                latest_revision,
+                identity=report_state.operator_identity,
                 live_progress=progress,
+                execution_mode=report_state.run_spec.get("execution_mode"),
             ))
         except Exception as exc:
-            self.fail(f"Failed to publish live {normalized_phase} progress: {exc}")
-            raise OptimizationRunPublicationError(
+            raise OptimizationRunRetryablePublicationError(
                 f"Could not publish live {normalized_phase} progress"
             ) from exc
 
@@ -1284,6 +2990,7 @@ class OptimizationRunReportService:
                 terminal_status,
                 self._latest_revision(state.report),
                 identity=state.operator_identity,
+                execution_mode=state.run_spec.get("execution_mode"),
             ))
             if self._uses_existing_task:
                 # The outer Tactus procedure remains the lifecycle authority
@@ -1297,9 +3004,18 @@ class OptimizationRunReportService:
                     metadata=json.dumps(task_metadata),
                 )
             return state
+        except OptimizationRunIntegrityError as exc:
+            try:
+                self.fail(f"Optimization run integrity failure: {exc}")
+            except Exception:
+                pass
+            raise
         except Exception as exc:
-            self.fail(f"Failed to finalize report: {exc}")
-            raise OptimizationRunPublicationError("Could not finalize optimization run report") from exc
+            # Finalization is replayed from the committed finalization revision.
+            # A transport/auth interruption must not replace that active attempt.
+            raise OptimizationRunRetryablePublicationError(
+                "Could not finalize optimization run report"
+            ) from exc
 
     def fail(self, message: str) -> OptimizationRunReportState:
         state = self._require_state()
@@ -1316,11 +3032,29 @@ class OptimizationRunReportService:
                 self._latest_revision(state.report),
                 message,
                 identity=state.operator_identity,
+                execution_mode=state.run_spec.get("execution_mode"),
             ))
         except Exception:
             # The Task failure is the canonical safety signal if the report view is unavailable.
             pass
         return state
+
+    def _fail_uninitialized_integrity(self, task: Any, message: str) -> None:
+        """Best-effort terminal signal for verified identity corruption."""
+        metadata = _metadata(getattr(task, "metadata", {}))
+        metadata["optimization_run_final_status"] = "failed"
+        metadata["failure"] = str(message)
+        try:
+            task.update(
+                status="FAILED",
+                errorMessage=str(message),
+                completedAt=_iso(self.now()),
+                metadata=json.dumps(metadata),
+            )
+        except Exception:
+            # The integrity exception remains authoritative if its terminal
+            # projection cannot itself be written.
+            pass
 
     def _advance_stage_for_milestone(self, milestone: str) -> None:
         if self._uses_existing_task:
@@ -1446,6 +3180,22 @@ class OptimizationRunReportService:
 
     def _ensure_initial_envelopes(self, state: OptimizationRunReportState) -> None:
         """Give every fixed block a real compact pointer before a run advances."""
+        execution_mode = state.run_spec.get("execution_mode")
+        automatic_execution = execution_mode == "automatic"
+        initial_execution_overview = {
+            "execution_mode": "automatic",
+            "execution_selected_count": 0,
+            "execution_launched_count": 0,
+            "execution_rejected_count": 0,
+            "execution_named_selected_count": 0,
+            "execution_named_launched_count": 0,
+            "execution_named_rejected_count": 0,
+            "execution_detail_coverage": "complete",
+            "execution_detail_limitation": "",
+        } if automatic_execution else (
+            {"execution_mode": "approval_required"}
+            if execution_mode == "approval_required" else {}
+        )
         for key, block in state.blocks.items():
             if list(getattr(block, "attachedFiles", None) or []):
                 continue
@@ -1455,6 +3205,7 @@ class OptimizationRunReportService:
                 "block": key,
                 "published_at": _iso(self.now()),
                 "status": "running",
+                **initial_execution_overview,
             }
             if key == "evidence":
                 name = "optimization-run-initial-evidence.json"
@@ -1478,6 +3229,7 @@ class OptimizationRunReportService:
                         "diagnosis_coverage": "Not started",
                         "pending_approval_count": 0,
                         "notes": "No score, guideline, champion, or feedback setting is changed automatically.",
+                        **initial_execution_overview,
                     },
                     "portfolio": [],
                     "priorities": [],
@@ -1521,6 +3273,15 @@ class OptimizationRunReportService:
             "row_counts": dict(revision.row_counts),
             "overview": dict(revision.overview),
         }
+        evidence_descriptor = next(
+            (
+                dict(item) for item in revision.artifacts
+                if isinstance(item, Mapping) and item.get("kind") == "run_evidence"
+            ),
+            None,
+        )
+        if evidence_descriptor is not None:
+            latest["evidence"] = evidence_descriptor
         revisions = list(run.get("revisions") or [])
         if any(int(item.get("number") or -1) == revision.number for item in revisions if isinstance(item, Mapping)):
             raise ValueError(f"revision {revision.number} already exists")
@@ -1537,12 +3298,64 @@ class OptimizationRunReportService:
             parameters=parameters,
             output=self._render_report_manifest(
                 "RUNNING", latest, identity=state.operator_identity,
+                execution_mode=state.run_spec.get("execution_mode"),
             ),
         )
         task_metadata = _metadata(getattr(state.task, "metadata", {}))
         task_metadata["optimization_run_key"] = self.run_key
         task_metadata["latest_revision"] = latest
+        task_metadata.pop("optimization_publication_draft", None)
         state.task.update(metadata=json.dumps(task_metadata))
+
+    def _download_task_attachment(
+        self, task_id: str, descriptor: Mapping[str, Any]
+    ) -> bytes:
+        if self._artifact_store is None:
+            raise OptimizationRunIntegrityError("GraphQL artifact store is unavailable")
+        if str(descriptor.get("task_id") or task_id) != task_id:
+            raise ValueError("artifact descriptor belongs to a different Task")
+        object_key = str(descriptor.get("object_key") or "")
+        filename = object_key.rsplit("/", 1)[-1]
+        content_type = str(descriptor.get("content_type") or "")
+        digest = str(descriptor.get("sha256") or "")
+        size_bytes = descriptor.get("size_bytes")
+        if not object_key or not filename or not content_type:
+            raise ValueError("artifact descriptor is incomplete")
+        request = ArtifactTransferRequest(
+            operation="READ",
+            resource_type="TASK",
+            resource_id=task_id,
+            artifact_type="TASK_ATTACHMENT",
+            filename=filename,
+            content_type=content_type,
+            size_bytes=int(size_bytes),
+            sha256=digest,
+        )
+        content = self._artifact_store.download_bytes(request)
+        if len(content) != request.size_bytes or sha256(content).hexdigest() != request.sha256:
+            raise OptimizationRunIntegrityError("downloaded checkpoint artifact failed integrity verification")
+        self._verified_artifact_reads.add(
+            (object_key, digest, int(size_bytes), content_type)
+        )
+        return content
+
+    @staticmethod
+    def _verify_checkpoint_descriptor(
+        *, latest: Mapping[str, Any], manifest: Mapping[str, Any], task_id: str,
+        revision_number: int,
+    ) -> None:
+        """Require the durable pointers to describe exactly the same artifact."""
+        fields = ("task_id", "object_key", "content_type", "size_bytes", "sha256", "kind", "source_revision")
+        for field in fields:
+            if latest.get(field) != manifest.get(field):
+                raise ValueError(f"latest and manifest evidence descriptors differ at {field}")
+        if latest.get("task_id") != task_id:
+            raise ValueError("checkpoint evidence belongs to another Task")
+        if latest.get("kind") != "run_evidence" or latest.get("source_revision") != revision_number:
+            raise ValueError("checkpoint evidence has an invalid kind or revision")
+        object_key = latest.get("object_key")
+        if not isinstance(object_key, str) or not object_key or not object_key.rsplit("/", 1)[-1]:
+            raise ValueError("checkpoint evidence has an invalid object key/filename")
 
     @staticmethod
     def _latest_revision_number(report: Any) -> int:
@@ -1560,9 +3373,10 @@ class OptimizationRunReportService:
         *,
         identity: OptimizationOperatorIdentity,
         live_progress: Optional[Mapping[str, Any]] = None,
+        execution_mode: Optional[str] = None,
     ) -> str:
         def safe(value: Any) -> str:
-            return " ".join(str(value or "").split()).strip()
+            return "" if value is None else " ".join(str(value).split()).strip()
 
         overview = revision.get("overview") if isinstance(revision, Mapping) else {}
         overview = overview if isinstance(overview, Mapping) else {}
@@ -1577,13 +3391,30 @@ class OptimizationRunReportService:
         unranked = overview.get("unranked_score_count", 0)
         evidence_ranked = overview.get("evidence_ranked_score_count", ranked + unranked)
         cooldown = overview.get("cooldown_excluded_count", 0)
+        # ``overview`` is a stakeholder projection.  It must never become an
+        # authority for the execution contract; callers pass the frozen mode.
+        mode = execution_mode
+        if mode == "automatic":
+            introduction = (
+                "This living report follows the linked procedure from portfolio analysis "
+                "through automatic optimization: safe, policy-selected targets may launch "
+                "automatically. Champion promotion remains a separate manual decision."
+            )
+        elif mode == "approval_required":
+            introduction = (
+                "This living report follows the linked procedure from portfolio analysis "
+                "through the human optimization-approval checkpoint and final outcomes. "
+                "Champion promotion remains a separate manual decision."
+            )
+        else:
+            introduction = (
+                "This living report follows the linked procedure from portfolio "
+                "analysis through human decisions and final outcomes."
+            )
         lines = [
             f"# {identity.display_title}",
             "",
-            (
-                "This living report follows the linked procedure from portfolio "
-                "analysis through human decisions and final outcomes."
-            ),
+            introduction,
         ]
         if revision:
             lines.extend([
@@ -1619,13 +3450,37 @@ class OptimizationRunReportService:
         ])
         if isinstance(live_progress, Mapping):
             phase = safe(live_progress.get("phase")).title()
+            subphase = safe(live_progress.get("subphase")).replace("_", " ").title()
+            phase_label = f"{phase} / {subphase}" if subphase else phase
             current = live_progress.get("current", 0)
-            total = live_progress.get("total", 0)
-            unit = "scores assessed" if phase.lower() == "assessment" else "analysis steps complete"
+            total = live_progress.get("total")
+            state_label = safe(live_progress.get("state"))
+            unit = safe(live_progress.get("unit"))
+            if not unit:
+                unit = "scores assessed" if phase.lower() == "assessment" else (
+                    "analysis steps complete" if phase.lower() == "diagnosis" else (
+                        "artifacts" if phase.lower() == "publication" else "scorecards"
+                    )
+                )
+            progress_text = (
+                f"{phase_label}: {current} {unit} inspected"
+                if total is None and phase.lower() == "ranking"
+                else f"{phase_label}: {current} {unit}"
+                if total is None
+                else f"{phase_label}: {current} of {total} {unit}"
+            )
             lines.extend([
-                f"{phase}: {current} of {total} {unit}",
+                progress_text,
                 safe(live_progress.get("message")),
             ])
+            if state_label and state_label.lower() != "active":
+                lines.append(f"Live status: {state_label.title()}")
+            elapsed_seconds = live_progress.get("elapsed_seconds")
+            if isinstance(elapsed_seconds, int) and not isinstance(elapsed_seconds, bool):
+                lines.append(f"Elapsed: {elapsed_seconds} seconds")
+            live_next_checkpoint = safe(live_progress.get("next_checkpoint"))
+            if live_next_checkpoint:
+                lines.append("Next live checkpoint: " + live_next_checkpoint)
         for label, key in (
             ("Assessment", "assessment_progress"),
             ("Diagnosis", "diagnosis_coverage"),
@@ -1634,6 +3489,73 @@ class OptimizationRunReportService:
             value = safe(overview.get(key))
             if value:
                 lines.append(f"{label}: {value}")
+        semantic_authorized = safe(overview.get("semantic_budget_authorized_usd"))
+        if semantic_authorized:
+            lines.extend([
+                "",
+                "## Semantic diagnosis budget",
+                "",
+                f"Budget policy: {safe(overview.get('semantic_budget_policy_version'))}.",
+                f"Budget spec schema: {safe(overview.get('semantic_budget_spec_schema_version'))}.",
+                f"Ledger schema: {safe(overview.get('semantic_budget_ledger_schema_version'))}.",
+                (
+                    f"Model: {safe(overview.get('semantic_budget_provider'))}:"
+                    f"{safe(overview.get('semantic_budget_model'))}; pricing: "
+                    f"{safe(overview.get('semantic_budget_pricing_version'))}."
+                ),
+                (
+                    f"Authorized: ${semantic_authorized}; spent: ${safe(overview.get('semantic_budget_settled_actual_usd'))}; "
+                    f"held: ${safe(overview.get('semantic_budget_held_reserved_usd'))}; "
+                    f"remaining: ${safe(overview.get('semantic_budget_available_usd'))}."
+                ),
+                (
+                    f"Reservations: {safe(overview.get('semantic_budget_reservation_count'))} total; "
+                    f"{safe(overview.get('semantic_budget_reserved_count'))} reserved; "
+                    f"{safe(overview.get('semantic_budget_settled_count'))} settled; "
+                    f"{safe(overview.get('semantic_budget_unknown_count'))} outcome unknown; "
+                    f"{safe(overview.get('semantic_budget_cancelled_count'))} cancelled."
+                ),
+                (
+                    f"Deferred: {safe(overview.get('semantic_budget_deferred_count'))}; "
+                    f"failed: {safe(overview.get('semantic_budget_failure_count'))}."
+                ),
+                (
+                    f"Evidence: {safe(overview.get('semantic_budget_evidence_reference'))} "
+                    f"digest {safe(overview.get('semantic_budget_evidence_digest'))}."
+                ),
+            ])
+        semantic_issues = overview.get("semantic_diagnosis_issues")
+        semantic_issues = semantic_issues if isinstance(semantic_issues, list) else []
+        if semantic_issues:
+            issue_counts = overview.get("semantic_diagnosis_issue_counts")
+            issue_counts = issue_counts if isinstance(issue_counts, Mapping) else {}
+            count_summary = ", ".join(
+                f"{safe(category)}: {int(count)}"
+                for category, count in sorted(issue_counts.items())
+                if isinstance(count, int) and count > 0
+            )
+            lines.extend([
+                "",
+                "## Semantic diagnosis issues",
+                "",
+                (
+                    f"Affected scores: {len(semantic_issues)}"
+                    + (f" ({count_summary})." if count_summary else ".")
+                ),
+            ])
+            for issue in semantic_issues:
+                if not isinstance(issue, Mapping):
+                    continue
+                lines.extend([
+                    "",
+                    (
+                        f"- {safe(issue.get('scorecard_name'))} — "
+                        f"{safe(issue.get('score_name'))}"
+                    ),
+                    f"  - Status: {safe(issue.get('semantic_diagnosis_status'))}",
+                    f"  - Next action: {safe(issue.get('next_action'))}",
+                    f"  - Rationale: {safe(issue.get('rationale'))}",
+                ])
         notes = safe(overview.get("notes"))
         if (
             notes
@@ -1689,10 +3611,41 @@ class OptimizationRunReportService:
                 return None
 
     def _find_report(self, task: Any) -> Any:
-        for report in Report.list_by_account_id(self.account_id, self.client, limit=100, max_items=500):
-            if getattr(report, "taskId", None) == task.id:
-                return report
-        return None
+        query = """
+        query GetTaskLinkedOptimizationReport($id: ID!) {
+          getTask(id: $id) {
+            id
+            report {
+              id
+              taskId
+            }
+          }
+        }
+        """
+        response = self.client.execute(query, {"id": task.id})
+        task_record = response.get("getTask") if isinstance(response, Mapping) else None
+        if not isinstance(task_record, Mapping) or task_record.get("id") != task.id:
+            raise OptimizationRunPublicationError(
+                "Task-linked Report authority could not be resolved"
+            )
+        report_ref = task_record.get("report")
+        if report_ref is None:
+            return None
+        if (
+            not isinstance(report_ref, Mapping)
+            or not isinstance(report_ref.get("id"), str)
+            or not report_ref.get("id")
+            or report_ref.get("taskId") != task.id
+        ):
+            raise OptimizationRunIntegrityError(
+                "Task-linked Report identity is malformed or conflicting"
+            )
+        report = Report.get_by_id(str(report_ref["id"]), self.client)
+        if report is None or getattr(report, "taskId", task.id) != task.id:
+            raise OptimizationRunIntegrityError(
+                "Task-linked Report could not be loaded with matching identity"
+            )
+        return report
 
     def _find_blocks(self, report: Any) -> list[Any]:
         return ReportBlock.list_by_report_id(report.id, self.client, limit=100, max_items=100)
@@ -1726,10 +3679,10 @@ class OptimizationRunReportService:
         )
         metadata = self._artifact_store.upload_bytes(write_request, content)
         if not isinstance(metadata, Mapping) or metadata.get("sha256") != digest:
-            raise OptimizationRunPublicationError("artifact upload did not preserve its checksum")
+            raise OptimizationRunIntegrityError("artifact upload did not preserve its checksum")
         object_key = metadata.get("_s3_key")
         if not isinstance(object_key, str) or not object_key:
-            raise OptimizationRunPublicationError("artifact upload omitted its object key")
+            raise OptimizationRunIntegrityError("artifact upload omitted its object key")
         reader = getattr(self._artifact_store, "download_bytes", None)
         if self._verify_uploaded_artifacts and callable(reader):
             read_request = ArtifactTransferRequest(
@@ -1744,5 +3697,8 @@ class OptimizationRunReportService:
             )
             downloaded = reader(read_request)
             if downloaded != content or sha256(downloaded).hexdigest() != digest:
-                raise OptimizationRunPublicationError("artifact read-back checksum did not match")
+                raise OptimizationRunIntegrityError("artifact read-back checksum did not match")
+            self._verified_artifact_reads.add(
+                (object_key, digest, len(content), content_type)
+            )
         return object_key

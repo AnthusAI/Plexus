@@ -3,7 +3,7 @@ import { TextDecoder } from 'util'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-import OptimizationRunStatus from '../OptimizationRunStatus'
+import OptimizationRunStatus, { OptimizationRunStatusPresentation } from '../OptimizationRunStatus'
 
 Object.assign(global, { TextDecoder })
 
@@ -80,6 +80,7 @@ const scoreBriefDescriptor = {
 describe('OptimizationRunStatus', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockReadTaskArtifact.mockReset()
     window.history.replaceState({}, '', '/lab/reports/report-1')
     mockReadTaskArtifact
       .mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({
@@ -191,6 +192,54 @@ describe('OptimizationRunStatus', () => {
           next_action: 'request_stakeholder_clarification',
         }],
       }))))
+  })
+
+  it('shows safe aggregate artifact publication progress without storage identifiers', async () => {
+    render(
+      <OptimizationRunStatus
+        id="block-1"
+        type="OptimizationRunStatus"
+        name="Run Status"
+        position={0}
+        config={{}}
+        output={{
+          output_compacted: true,
+          preview: {
+            type: 'optimization_run_status',
+            status: 'published',
+            summary: {
+              revision: 2,
+              milestone: 'assessment',
+              presentation: presentationDescriptor,
+              live_progress: {
+                phase: 'publication',
+                current: 3,
+                total: 8,
+                unit: 'artifacts',
+                message: 'Publishing assessment milestone artifacts: scorecard spreadsheets.',
+                next_checkpoint: 'Publishing the assessment milestone.',
+                artifact_counts: {
+                  decision_evidence: { completed: 1, total: 1 },
+                  stakeholder_workbook: { completed: 1, total: 1 },
+                  score_briefs: { completed: 1, total: 1 },
+                  scorecard_summaries: { completed: 0, total: 1 },
+                  scorecard_spreadsheets: { completed: 0, total: 1 },
+                  scorecard_presentations: { completed: 0, total: 1 },
+                  stakeholder_presentation: { completed: 0, total: 1 },
+                  revision_manifest: { completed: 0, total: 1 },
+                  object_key: { completed: 99, total: 99 },
+                },
+              },
+            },
+          },
+        }}
+      />,
+    )
+
+    expect(await screen.findByText('3 of 8 artifacts')).toBeInTheDocument()
+    expect(screen.getByText('Scorecard spreadsheets')).toBeInTheDocument()
+    expect(screen.getAllByText('1 / 1')).toHaveLength(3)
+    expect(screen.queryByText('Object key')).not.toBeInTheDocument()
   })
 
   it('shows reconciled aggregate visuals and loads score details only when expanded', async () => {
@@ -393,5 +442,763 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getByRole('heading', { name: 'Why this run is incomplete' })).toBeInTheDocument()
     expect(screen.getByText(/2 diagnosis results were incomplete/)).toBeInTheDocument()
     expect(screen.getByText(/8 selected diagnoses were deferred by the safety cap/)).toBeInTheDocument()
+  })
+
+  it('uses a newer live assessment count without rendering the stale durable count as current progress', async () => {
+    mockReadTaskArtifact.mockReset().mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({
+      overview: {
+        lifecycle_status: 'running',
+        coverage_status: 'complete',
+        assessment_progress: '0 of 100 eligible candidates assessed',
+      },
+      score_count: 0,
+      scorecard_count: 0,
+      primary_decision_mix: {},
+      secondary_issue_counts: {},
+      attention_queue: [],
+      questions_and_issues: [],
+      optimization_outcomes: [],
+      opportunity_distribution: [],
+      top_priorities: [],
+      scorecards: [],
+    }))))
+
+    render(
+      <OptimizationRunStatus
+        id="block-1"
+        type="OptimizationRunStatus"
+        name="Run Status"
+        position={0}
+        config={{}}
+        output={{
+          output_compacted: true,
+          preview: {
+            type: 'optimization_run_status',
+            status: 'published',
+            summary: {
+              revision: 2,
+              milestone: 'assessment',
+              presentation: presentationDescriptor,
+              live_progress: {
+                phase: 'assessment',
+                current: 37,
+                total: 100,
+                message: 'Assessing 37 of 100 candidates.',
+                updated_at: '2026-07-31T13:00:00Z',
+              },
+            },
+          },
+        }}
+      />,
+    )
+
+    expect(await screen.findByText('37 of 100 scores assessed')).toBeInTheDocument()
+    expect(screen.queryByText('0 of 100 eligible candidates assessed')).not.toBeInTheDocument()
+  })
+
+  it('keeps a newer durable assessment milestone visible when live progress is stale', async () => {
+    mockReadTaskArtifact.mockReset().mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({
+      overview: {
+        lifecycle_status: 'running',
+        coverage_status: 'complete',
+        assessment_progress: '72 of 100 eligible candidates assessed',
+      },
+      score_count: 0,
+      scorecard_count: 0,
+      primary_decision_mix: {},
+      secondary_issue_counts: {},
+      attention_queue: [],
+      questions_and_issues: [],
+      optimization_outcomes: [],
+      opportunity_distribution: [],
+      top_priorities: [],
+      scorecards: [],
+    }))))
+
+    render(
+      <OptimizationRunStatus
+        id="block-1"
+        type="OptimizationRunStatus"
+        name="Run Status"
+        position={0}
+        config={{}}
+        output={{
+          output_compacted: true,
+          preview: {
+            type: 'optimization_run_status',
+            status: 'published',
+            summary: {
+              revision: 3,
+              milestone: 'assessment',
+              presentation: presentationDescriptor,
+              live_progress: {
+                phase: 'assessment',
+                current: 71,
+                total: 100,
+                message: 'Assessing 71 of 100 candidates.',
+                updated_at: '2026-07-31T12:59:00Z',
+              },
+            },
+          },
+        }}
+      />,
+    )
+
+    expect(await screen.findByText('72 of 100 eligible candidates assessed')).toBeInTheDocument()
+    expect(screen.queryByText('71 of 100 scores assessed')).not.toBeInTheDocument()
+    expect(screen.queryByText('Assessing 71 of 100 candidates.')).not.toBeInTheDocument()
+  })
+
+  it('does not overlay live assessment progress from a different cohort total', async () => {
+    mockReadTaskArtifact.mockReset().mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({
+      overview: {
+        lifecycle_status: 'running',
+        coverage_status: 'complete',
+        assessment_progress: '72 of 100 eligible candidates assessed',
+      },
+      score_count: 0,
+      scorecard_count: 0,
+      primary_decision_mix: {},
+      secondary_issue_counts: {},
+      attention_queue: [],
+      questions_and_issues: [],
+      optimization_outcomes: [],
+      opportunity_distribution: [],
+      top_priorities: [],
+      scorecards: [],
+    }))))
+
+    render(
+      <OptimizationRunStatus
+        id="block-1"
+        type="OptimizationRunStatus"
+        name="Run Status"
+        position={0}
+        config={{}}
+        output={{
+          output_compacted: true,
+          preview: {
+            type: 'optimization_run_status',
+            status: 'published',
+            summary: {
+              revision: 3,
+              milestone: 'assessment',
+              presentation: presentationDescriptor,
+              live_progress: {
+                phase: 'assessment',
+                current: 73,
+                total: 101,
+                message: 'Assessing 73 of 101 candidates.',
+                updated_at: '2026-07-31T13:01:00Z',
+              },
+            },
+          },
+        }}
+      />,
+    )
+
+    expect(await screen.findByText('72 of 100 eligible candidates assessed')).toBeInTheDocument()
+    expect(screen.queryByText('73 of 101 scores assessed')).not.toBeInTheDocument()
+    expect(screen.queryByText('Assessing 73 of 101 candidates.')).not.toBeInTheDocument()
+  })
+
+  it('shows aggregate ranking progress, retry status, and an unknown inventory total', async () => {
+    render(
+      <OptimizationRunStatus
+        id="block-1"
+        type="OptimizationRunStatus"
+        name="Run Status"
+        position={0}
+        config={{}}
+        output={{
+          output_compacted: true,
+          preview: {
+            type: 'optimization_run_status',
+            status: 'published',
+            summary: {
+              revision: 2,
+              milestone: 'started',
+              presentation: presentationDescriptor,
+              live_progress: {
+                phase: 'ranking',
+                subphase: 'feedback_analysis',
+                current: 12,
+                total: null,
+                unit: 'scorecards',
+                state: 'retrying',
+                elapsed_seconds: 63,
+                next_checkpoint: 'Retrying the inventory page.',
+                message: 'Inventory has inspected 12 scorecards; retrying a page.',
+                updated_at: '2026-07-31T12:00:00Z',
+              },
+            },
+          },
+        }}
+      />,
+    )
+
+    expect(await screen.findByText('12 scorecards inspected')).toBeInTheDocument()
+    expect(screen.getByText('Ranking / Feedback analysis status')).toBeInTheDocument()
+    expect(screen.getByText('Retrying')).toBeInTheDocument()
+    expect(screen.getByText('Elapsed: 1m 3s')).toBeInTheDocument()
+    expect(screen.getByText('Next: Retrying the inventory page.')).toBeInTheDocument()
+    expect(screen.queryByRole('progressbar', { name: 'Ranking progress' })).not.toBeInTheDocument()
+  })
+
+  it('does not render stale ranking progress over a durable ranking milestone', async () => {
+    render(
+      <OptimizationRunStatus
+        id="block-1"
+        type="OptimizationRunStatus"
+        name="Run Status"
+        position={0}
+        config={{}}
+        output={{
+          output_compacted: true,
+          preview: {
+            type: 'optimization_run_status',
+            status: 'published',
+            summary: {
+              revision: 2,
+              milestone: 'assessment',
+              presentation: presentationDescriptor,
+              live_progress: {
+                phase: 'ranking',
+                subphase: 'inventory',
+                current: 12,
+                total: null,
+                unit: 'scorecards',
+                message: 'This delayed ranking callback must not overlay assessment.',
+                updated_at: '2026-07-31T12:00:00Z',
+              },
+            },
+          },
+        }}
+      />,
+    )
+
+    await screen.findByText('Optimization opportunity survey')
+    expect(screen.queryByText('12 scorecards inspected')).not.toBeInTheDocument()
+  })
+
+  it('presents the canonical optimizer lifecycle, attention, outcomes, and score detail contract', async () => {
+    const user = userEvent.setup()
+    mockReadTaskArtifact.mockReset()
+      .mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({
+        overview: {
+          lifecycle_status: 'running',
+          coverage_status: 'complete',
+          scorecards_inspected: 2,
+          scorecards_in_scope: 2,
+          evidence_ranked_score_count: 7,
+          ranked_score_count: 7,
+          pending_approval_count: 1,
+          current_activity: 'Approved optimizations are running and completed evidence is being reviewed.',
+        },
+        score_count: 7,
+        scorecard_count: 2,
+        primary_disposition_counts: {
+          awaiting_optimization_approval: 1,
+          optimizer_launching: 1,
+          optimization_in_progress: 1,
+          awaiting_optimizer_review: 1,
+          promotion_ready: 1,
+          continue_optimization: 1,
+          failed_or_incomplete: 1,
+        },
+        primary_decision_mix: { optimize: 7 },
+        secondary_issue_counts: {
+          feedback_rubric_contradiction: 2,
+          stakeholder_question: 1,
+        },
+        attention_queue: [{
+          scorecard_name: 'Example Portfolio',
+          score_name: 'Priority Score',
+          primary_disposition: 'optimization_in_progress',
+          secondary_issue_flags: ['feedback_rubric_contradiction', 'stakeholder_question'],
+          evidence_count: 120,
+          severity: 1,
+          rationale: 'Recent feedback conflicts with the current rubric on an important class.',
+          next_action: 'answer_stakeholder_question',
+          dashboard_url: 'https://dashboard.example.test/scores/priority',
+        }],
+        questions_and_issues: [{
+          issue_flag: 'feedback_rubric_contradiction',
+          issue_severity: 1,
+          scorecard_name: 'Example Portfolio',
+          score_name: 'Priority Score',
+          affected_evidence_count: 48,
+          finding: 'Recent feedback and the written rubric disagree.',
+          next_action: 'answer_stakeholder_question',
+          dashboard_url: 'https://dashboard.example.test/scores/priority',
+        }, {
+          issue_flag: 'stakeholder_question',
+          issue_severity: 2,
+          scorecard_name: 'Second Portfolio',
+          score_name: 'Policy Score',
+          affected_evidence_count: 12,
+          finding: 'Stakeholders need to decide how an exception should be handled.',
+          next_action: 'answer_question',
+        }],
+        optimization_outcomes: [{
+          scorecard_name: 'Example Portfolio',
+          score_name: 'Priority Score',
+          primary_disposition: 'optimization_in_progress',
+          secondary_issue_flags: ['feedback_rubric_contradiction'],
+          outcome: 'optimization_in_progress',
+          readiness: 'optimization_in_progress',
+          promotion_readiness: 'not_evaluated',
+          evidence_count: 120,
+          trend: 'Disagreement increased in the latest four complete weeks.',
+          rationale: 'The approved optimizer is running under the published limits.',
+          next_action: 'wait_for_optimizer_completion',
+          dashboard_url: 'https://dashboard.example.test/scores/priority',
+        }, {
+          scorecard_name: 'Second Portfolio',
+          score_name: 'Promotion Candidate',
+          primary_disposition: 'promotion_ready',
+          secondary_issue_flags: [],
+          outcome: 'promotion_ready',
+          readiness: 'promotion_ready',
+          promotion_readiness: 'promotion_ready',
+          evidence_count: 80,
+          trend: 'Stable across the latest complete weeks.',
+          rationale: 'The candidate improved safely across recent and historical evidence.',
+          next_action: 'request_promotion_approval',
+        }],
+        opportunity_distribution: [],
+        top_priorities: [],
+        scorecards: [{
+          scorecard_ref: 'safe-ref',
+          scorecard_name: 'Example Portfolio',
+          score_count: 1,
+          primary_disposition_counts: { optimization_in_progress: 1 },
+          primary_decision_mix: { optimize: 1 },
+          reviewed_error_opportunity: 42,
+          artifacts: [summaryDescriptor, detailDescriptor],
+        }, {
+          scorecard_ref: 'second-safe-ref',
+          scorecard_name: 'Second Portfolio',
+          score_count: 1,
+          primary_disposition_counts: { promotion_ready: 1 },
+          primary_decision_mix: { promotion_review: 1 },
+          reviewed_error_opportunity: 8,
+          artifacts: [],
+        }],
+      }))))
+      .mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({
+        scorecard_name: 'Example Portfolio',
+        scores: [{
+          score_name: 'Priority Score',
+          primary_disposition: 'optimization_in_progress',
+          secondary_issue_flags: ['feedback_rubric_contradiction', 'stakeholder_question'],
+          valid_feedback_count: 120,
+          reviewed_disagreements: 42,
+          disagreement_rate: 0.35,
+          readiness: 'optimization_in_progress',
+          outcome: 'optimization_in_progress',
+          promotion_readiness: 'not_evaluated',
+          trend: 'Disagreement increased in the latest four complete weeks.',
+          rationale: 'The approved optimizer is running under the published limits.',
+          next_action: 'wait_for_optimizer_completion',
+          dashboard_url: 'https://dashboard.example.test/scores/priority',
+          artifacts: [scoreBriefDescriptor],
+        }],
+        questions_and_issues: [],
+      }))))
+
+    render(
+      <OptimizationRunStatus
+        id="block-1"
+        type="OptimizationRunStatus"
+        name="Run Status"
+        position={0}
+        config={{}}
+        output={{
+          output_compacted: true,
+          preview: {
+            type: 'optimization_run_status',
+            status: 'published',
+            summary: {
+              revision: 4,
+              milestone: 'optimization',
+              presentation: presentationDescriptor,
+            },
+          },
+        }}
+      />,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Optimization lifecycle' })).toBeInTheDocument()
+    expect(screen.getByText('Awaiting approval')).toBeInTheDocument()
+    expect(screen.getByTestId('lifecycle-awaiting-approval')).toHaveTextContent('1')
+    expect(screen.getByTestId('lifecycle-launching-running')).toHaveTextContent('2')
+    expect(screen.getByTestId('lifecycle-review-pending')).toHaveTextContent('1')
+    expect(screen.getByTestId('lifecycle-promotion-ready')).toHaveTextContent('1')
+    expect(screen.getByTestId('lifecycle-continue-or-no-safe-improvement')).toHaveTextContent('1')
+    expect(screen.getByTestId('lifecycle-failed-incomplete')).toHaveTextContent('1')
+    expect(screen.getByLabelText('Primary disposition mix: 7 scores')).toBeInTheDocument()
+    expect(screen.getByText('Optimization in progress: 1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Contradictions and stakeholder questions' })).toBeInTheDocument()
+    expect(screen.getByText('Recent feedback and the written rubric disagree.')).toBeInTheDocument()
+    expect(screen.getByText('48 affected feedback items')).toBeInTheDocument()
+    expect(screen.getAllByText('Answer stakeholder question').length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: 'Optimization progress and outcomes' })).toBeInTheDocument()
+    expect(screen.getByText('The candidate improved safely across recent and historical evidence.')).toBeInTheDocument()
+    expect(screen.getByText('Request promotion approval')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Example Portfolio/ }))
+
+    expect(await screen.findByText('Primary disposition')).toBeInTheDocument()
+    expect(screen.getAllByText('Optimization in progress').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Feedback rubric contradiction').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Stakeholder question').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Disagreement increased in the latest four complete weeks.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('The approved optimizer is running under the published limits.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Wait for optimizer completion').length).toBeGreaterThan(0)
+    expect(screen.getByRole('link', { name: 'Open score in dashboard' })).toHaveAttribute(
+      'href',
+      'https://dashboard.example.test/scores/priority',
+    )
+    expect(screen.getByRole('link', { name: 'Open score brief' })).toBeInTheDocument()
+    expect(screen.queryByText('task-1')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Second Portfolio/ }))
+    expect(screen.getByRole('button', { name: /Example Portfolio/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: /Second Portfolio/ })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('renders canonical-only disposition counts, producer policy fields, and progressively disclosed report lists', async () => {
+    const user = userEvent.setup()
+    mockReadTaskArtifact.mockReset()
+      .mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({
+        overview: { lifecycle_status: 'running', coverage_status: 'complete' },
+        score_count: 17,
+        scorecard_count: 1,
+        primary_disposition_counts: {
+          promotion_ready: 1,
+          continue_optimization: 1,
+          stakeholder_decision_required: 1,
+          no_safe_improvement: 1,
+          failed_or_incomplete: 1,
+          awaiting_optimizer_review: 1,
+          optimization_in_progress: 1,
+          optimizer_launching: 1,
+          awaiting_optimization_approval: 1,
+          stakeholder_clarification_required: 1,
+          guideline_or_code_repair: 1,
+          feedback_curation_review: 1,
+          monitoring_or_diminishing_returns: 1,
+          targeted_feedback_collection: 1,
+          cooldown: 1,
+          insufficient_evidence: 1,
+          not_selected: 1,
+        },
+        secondary_issue_counts: {},
+        attention_queue: Array.from({ length: 6 }, (_, index) => ({
+          scorecard_name: 'Example Portfolio', score_name: `Attention ${index + 1}`,
+          primary_disposition: 'stakeholder_decision_required', evidence_count: 10 - index,
+        })),
+        questions_and_issues: Array.from({ length: 6 }, (_, index) => ({
+          scorecard_name: 'Example Portfolio', score_name: `Issue ${index + 1}`,
+          issue_flag: 'stakeholder_question', finding: `Issue finding ${index + 1}`,
+        })),
+        optimization_outcomes: Array.from({ length: 6 }, (_, index) => ({
+          scorecard_name: 'Example Portfolio', score_name: `Outcome ${index + 1}`,
+          primary_disposition: 'promotion_ready', outcome: 'promotion_ready',
+          rationale: `Outcome rationale ${index + 1}`,
+        })),
+        opportunity_distribution: [],
+        top_priorities: [{
+          scorecard_name: 'Example Portfolio', score_name: 'Ranked score',
+          evidence_rank: 4, candidate_rank: 2, policy_disposition: 'cooldown',
+          policy_reason: 'recent_score_activity', review_disposition: 'blocked',
+          eligibility_timestamp: '2026-08-05T00:00:00Z',
+        }],
+        scorecards: [{
+          scorecard_ref: 'safe-ref', scorecard_name: 'Example Portfolio', score_count: 1,
+          reviewed_error_opportunity: 1, artifacts: [detailDescriptor],
+        }],
+      }))))
+      .mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({
+        scorecard_name: 'Example Portfolio', questions_and_issues: [], scores: [{
+          score_name: 'Ranked score', evidence_rank: 4, candidate_rank: 2,
+          primary_disposition: 'cooldown', policy_disposition: 'cooldown',
+          policy_reason: 'recent_score_activity', review_disposition: 'blocked',
+          eligibility_timestamp: '2026-08-05T00:00:00Z', artifacts: [],
+        }],
+      }))))
+
+    render(<OptimizationRunStatus id="block-1" type="OptimizationRunStatus" name="Run Status" position={0} config={{}}
+      output={{ output_compacted: true, preview: { summary: { presentation: presentationDescriptor } } }} />)
+
+    expect(await screen.findByLabelText('Primary disposition mix: 17 scores')).toBeInTheDocument()
+    expect(screen.getByTestId('lifecycle-total')).toHaveTextContent('17 of 17 scores')
+    expect(screen.getByText('Stakeholder decision required: 1')).toBeInTheDocument()
+    expect(screen.getByText('Evidence rank #4')).toBeInTheDocument()
+    expect(screen.getByText('Eligible candidate #2')).toBeInTheDocument()
+    expect(screen.getByText('Policy: Cooldown · Recent score activity')).toBeInTheDocument()
+    expect(screen.getByText('Review: Blocked')).toBeInTheDocument()
+    expect(screen.getByText('Eligible after: 2026-08-05T00:00:00Z')).toBeInTheDocument()
+    expect(screen.queryByText('Attention 6')).not.toBeInTheDocument()
+    expect(screen.queryByText('Issue finding 6')).not.toBeInTheDocument()
+    expect(screen.queryByText('Outcome rationale 6')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Show all attention queue entries (6)' }))
+    await user.click(screen.getByRole('button', { name: 'Show all issues (6)' }))
+    await user.click(screen.getByRole('button', { name: 'Show all outcomes (6)' }))
+    expect(screen.getByText('Attention 6')).toBeInTheDocument()
+    expect(screen.getByText('Issue finding 6')).toBeInTheDocument()
+    expect(screen.getByText('Outcome rationale 6')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Collapse attention queue entries' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Example Portfolio/ }))
+    await user.click(screen.getAllByText('Ranked score').at(-1)!)
+    expect(await screen.findAllByText('Evidence rank #4')).toHaveLength(2)
+    expect(screen.getAllByText('Eligible candidate #2')).toHaveLength(2)
+    expect(screen.getAllByText('Policy: Cooldown · Recent score activity')).toHaveLength(2)
+    expect(screen.getAllByText('Review: Blocked')).toHaveLength(2)
+    expect(screen.getAllByText('Eligible after: 2026-08-05T00:00:00Z')).toHaveLength(2)
+  })
+
+  it.each([
+    ['an array used as the artifact record', []],
+    ['an invalid count map', { primary_decision_mix: { optimize: -1 } }],
+    ['a malformed issue row', { questions_and_issues: [[]] }],
+    ['a malformed outcome row', { optimization_outcomes: [[]] }],
+    ['malformed attention flags', { attention_queue: [{ secondary_issue_flags: { not: 'a list' } }] }],
+    ['a malformed nested issue action', { questions_and_issues: [{ next_action: { not: 'text' } }] }],
+    ['a malformed nested outcome disposition', { optimization_outcomes: [{ primary_disposition: [] }] }],
+    ['an unknown attention disposition', { attention_queue: [{ primary_disposition: 'unaccounted_attention_state' }] }],
+    ['an unknown outcome disposition', { optimization_outcomes: [{ primary_disposition: 'unaccounted_outcome_state' }] }],
+    ['a malformed nested priority action', { top_priorities: [{ next_action: [] }] }],
+    ['an unknown canonical disposition', { primary_disposition_counts: { unaccounted_state: 1 } }],
+  ])('shows a visible error for %s', async (_description, override) => {
+    const artifact = {
+      overview: {}, score_count: 0, scorecard_count: 0,
+      primary_decision_mix: {}, secondary_issue_counts: {},
+      attention_queue: [], questions_and_issues: [], optimization_outcomes: [],
+      opportunity_distribution: [], top_priorities: [], scorecards: [],
+      ...(Array.isArray(override) ? {} : override),
+    }
+    mockReadTaskArtifact.mockReset().mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify(override))))
+    if (!Array.isArray(override)) {
+      mockReadTaskArtifact.mockReset().mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify(artifact))))
+    }
+
+    render(<OptimizationRunStatus id="block-1" type="OptimizationRunStatus" name="Run Status" position={0} config={{}}
+      output={{ output_compacted: true, preview: { summary: { presentation: presentationDescriptor } } }} />)
+
+    expect(await screen.findByText(/malformed|invalid count/i)).toBeInTheDocument()
+  })
+
+  it.each([
+    ['score', [{ score_name: 'Malformed score', primary_disposition: [] }], []],
+    ['score disposition', [{ score_name: 'Readable score name', primary_disposition: 'unaccounted_detail_state' }], []],
+    ['question', [{ score_name: 'Valid score', artifacts: [] }], [{ score_name: 'Valid score', next_action: {} }]],
+  ])('shows a visible artifact error for a malformed scorecard-detail %s row', async (_kind, scores, questions) => {
+    const user = userEvent.setup()
+    mockReadTaskArtifact
+      .mockReset()
+      .mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({
+        overview: {}, score_count: 1, scorecard_count: 1,
+        primary_disposition_counts: { not_selected: 1 }, primary_decision_mix: {}, secondary_issue_counts: {},
+        attention_queue: [], questions_and_issues: [], optimization_outcomes: [],
+        opportunity_distribution: [], top_priorities: [],
+        scorecards: [{
+          scorecard_ref: 'detail-fixture', scorecard_name: 'Detail fixture', score_count: 1,
+          reviewed_error_opportunity: 0, artifacts: [detailDescriptor],
+        }],
+      }))))
+      .mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({
+        scorecard_name: 'Detail fixture', scores, questions_and_issues: questions,
+      }))))
+
+    render(<OptimizationRunStatus id="block-1" type="OptimizationRunStatus" name="Run Status" position={0} config={{}}
+      output={{ output_compacted: true, preview: { summary: { presentation: presentationDescriptor } } }} />)
+
+    await user.click(await screen.findByRole('button', { name: /Detail fixture/ }))
+
+    expect(await screen.findByText(/scorecard details contain a malformed/i)).toBeInTheDocument()
+  })
+
+  it('renders injected stakeholder data without reading an artifact and keeps scorecards independently expandable', async () => {
+    const user = userEvent.setup()
+    mockReadTaskArtifact.mockReset()
+    const presentation = {
+      overview: { lifecycle_status: 'complete' },
+      score_count: 2,
+      scorecard_count: 2,
+      primary_disposition_counts: { promotion_ready: 1, cooldown: 1 },
+      primary_decision_mix: {},
+      secondary_issue_counts: {},
+      attention_queue: [],
+      questions_and_issues: [],
+      optimization_outcomes: [],
+      opportunity_distribution: [],
+      top_priorities: [],
+      scorecards: [
+        { scorecard_ref: 'fixture-one', scorecard_name: 'Fixture group one', score_count: 1, reviewed_error_opportunity: 0, artifacts: [] },
+        { scorecard_ref: 'fixture-two', scorecard_name: 'Fixture group two', score_count: 1, reviewed_error_opportunity: 0, artifacts: [] },
+      ],
+    }
+
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={presentation}
+        scorecardDetails={{
+          'fixture-one': { scorecard_name: 'Fixture group one', questions_and_issues: [], scores: [{ score_name: 'Fixture score one', artifacts: [] }] },
+          'fixture-two': { scorecard_name: 'Fixture group two', questions_and_issues: [], scores: [{ score_name: 'Fixture score two', artifacts: [] }] },
+        }}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Fixture group one/ }))
+    await user.click(screen.getByRole('button', { name: /Fixture group two/ }))
+
+    expect(screen.getByText('Fixture score one')).toBeInTheDocument()
+    expect(screen.getByText('Fixture score two')).toBeInTheDocument()
+    expect(mockReadTaskArtifact).not.toHaveBeenCalled()
+  })
+
+  it('shows automatic execution counts and score decisions without an approval-pending message', async () => {
+    const user = userEvent.setup()
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: {
+            lifecycle_status: 'running',
+            execution_mode: 'automatic',
+            execution_selected_count: 2,
+            execution_launched_count: 1,
+            execution_rejected_count: 1,
+            execution_named_selected_count: 1,
+            execution_named_launched_count: 1,
+            execution_named_rejected_count: 1,
+            execution_detail_coverage: 'incomplete',
+            execution_detail_limitation: 'Named detail is available for 1 of 2 selected targets.',
+            pending_approval_count: 0,
+          },
+          score_count: 2,
+          scorecard_count: 1,
+          primary_disposition_counts: { optimization_in_progress: 1, no_safe_improvement: 1 },
+          primary_decision_mix: {}, secondary_issue_counts: {}, attention_queue: [],
+          questions_and_issues: [], optimization_outcomes: [], opportunity_distribution: [], top_priorities: [],
+          scorecards: [{
+            scorecard_ref: 'automatic-fixture', scorecard_name: 'Automatic fixture', score_count: 2,
+            reviewed_error_opportunity: 0, artifacts: [],
+          }],
+        }}
+        scorecardDetails={{
+          'automatic-fixture': {
+            scorecard_name: 'Automatic fixture', questions_and_issues: [], scores: [{
+              score_name: 'Launched score', execution_status: 'automatic_launched',
+              execution_reason: 'Meets the automatic policy.',
+              execution_authorization_source: 'published_policy', artifacts: [],
+            }, {
+              score_name: 'Policy-excluded score', execution_status: 'automatic_rejected',
+              execution_reason: 'Outside the safety cap.', artifacts: [],
+            }],
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByText('Automatic execution')).toBeInTheDocument()
+    expect(screen.getAllByText(/policy-selected/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/safe, policy-selected targets may launch automatically/i)).toBeInTheDocument()
+    expect(screen.getByText(/champion promotion remains manual/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/launched/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/not selected/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/rejected/i)).not.toBeInTheDocument()
+    expect(screen.getByText('Automatic execution detail is incomplete')).toBeInTheDocument()
+    expect(screen.getByText('Named detail is available for 1 of 2 selected targets.')).toBeInTheDocument()
+    expect(screen.queryByText(/pending approval/i)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Automatic fixture/ }))
+    expect(screen.getByText('Automatic launched')).toBeInTheDocument()
+    expect(screen.getByText('Not selected automatically')).toBeInTheDocument()
+    expect(screen.getByText('Meets the automatic policy.')).toBeInTheDocument()
+    expect(screen.getByText('Outside the safety cap.')).toBeInTheDocument()
+  })
+
+  it('shows the full opportunity-survey funnel without implying that completion means improvement', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: {
+            lifecycle_status: 'complete',
+            execution_mode: 'automatic',
+            evidence_ranked_score_count: 1105,
+            assessed_score_count: 696,
+            diagnosis_completed_count: 1,
+            execution_selected_count: 0,
+            execution_launched_count: 0,
+            optimizer_review_count: 0,
+          },
+          score_count: 1105,
+          scorecard_count: 56,
+          primary_disposition_counts: { guideline_or_code_repair: 958 },
+          primary_decision_mix: {}, secondary_issue_counts: {}, attention_queue: [],
+          questions_and_issues: [], optimization_outcomes: [], opportunity_distribution: [], top_priorities: [],
+          scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'Optimization opportunity survey' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Optimization execution funnel')).toHaveTextContent(
+      '1105Surveyed696Assessed1Diagnosed0Selected0Launched0Evaluated0Improved',
+    )
+    expect(screen.getByText('No score optimizer launched')).toBeInTheDocument()
+    expect(screen.getByText(/completed survey does not mean that a score was optimized/i)).toBeInTheDocument()
+  })
+
+  it('shows launched, evaluated, and safely improved scores as distinct funnel stages', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: {
+            lifecycle_status: 'complete',
+            execution_mode: 'automatic',
+            evidence_ranked_score_count: 40,
+            assessed_score_count: 12,
+            diagnosis_completed_count: 5,
+            execution_selected_count: 3,
+            execution_launched_count: 2,
+            optimizer_review_count: 2,
+          },
+          score_count: 40,
+          scorecard_count: 4,
+          primary_disposition_counts: { promotion_ready: 1, no_safe_improvement: 1 },
+          primary_decision_mix: {}, secondary_issue_counts: {}, attention_queue: [],
+          questions_and_issues: [], optimization_outcomes: [], opportunity_distribution: [], top_priorities: [],
+          scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.getByLabelText('Optimization execution funnel')).toHaveTextContent(
+      '40Surveyed12Assessed5Diagnosed3Selected2Launched2Evaluated1Improved',
+    )
+    expect(screen.getByText('1 validated safe improvement')).toBeInTheDocument()
+  })
+
+  it('keeps the human optimization-approval checkpoint visible for approval-required runs', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: { lifecycle_status: 'running', execution_mode: 'approval_required', pending_approval_count: 1 },
+          score_count: 0, scorecard_count: 0, primary_decision_mix: {}, secondary_issue_counts: {},
+          attention_queue: [], questions_and_issues: [], optimization_outcomes: [],
+          opportunity_distribution: [], top_priorities: [], scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.getByText('Human optimization approval')).toBeInTheDocument()
+    expect(screen.getByText(/human optimization-approval checkpoint/i)).toBeInTheDocument()
+    expect(screen.getByText(/champion promotion remains manual/i)).toBeInTheDocument()
+    expect(screen.queryByText('Automatic execution')).not.toBeInTheDocument()
   })
 })

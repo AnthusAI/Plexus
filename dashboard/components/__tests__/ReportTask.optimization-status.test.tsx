@@ -1,6 +1,7 @@
 import React from 'react'
 import { TextDecoder } from 'util'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 jest.mock('react-markdown', () => {
   const React = require('react')
@@ -10,7 +11,7 @@ jest.mock('react-markdown', () => {
       return React.createElement(
         React.Fragment,
         null,
-        components.code({
+        React.createElement(components.code, {
           node: { data: {} },
           inline: false,
           className: 'language-block',
@@ -98,7 +99,27 @@ jest.mock('@/lib/report-artifacts', () => {
   }
 })
 
+const readTaskArtifactMock = jest.requireMock('@/lib/report-artifacts').readTaskArtifact as jest.Mock
+
 describe('ReportTask optimization status integration', () => {
+  beforeEach(() => {
+    readTaskArtifactMock.mockReset().mockResolvedValue(
+      new Uint8Array(Buffer.from(JSON.stringify({
+        overview: {
+          lifecycle_status: 'running',
+          coverage_status: 'pending',
+          current_activity: 'Preparing the frozen portfolio.',
+        },
+        score_count: 0,
+        scorecard_count: 0,
+        primary_decision_mix: {},
+        secondary_issue_counts: {},
+        top_priorities: [],
+        scorecards: [],
+      }))),
+    )
+  })
+
   it('renders the aggregate presentation referenced by the report cover', async () => {
     render(
       <ReportTask
@@ -124,7 +145,7 @@ describe('ReportTask optimization status integration', () => {
       />,
     )
 
-    expect(await screen.findByText('Optimization portfolio overview')).toBeInTheDocument()
+    expect(await screen.findByText('Optimization opportunity survey')).toBeInTheDocument()
     expect(screen.getByText('Preparing the frozen portfolio.')).toBeInTheDocument()
   })
 
@@ -179,5 +200,93 @@ describe('ReportTask optimization status integration', () => {
     expect(screen.getByTestId('report-detail-content')).not.toHaveClass('h-full')
     expect(screen.getByTestId('report-cover-content')).not.toHaveClass('overflow-y-auto')
     expect(screen.getByTestId('report-cover-content')).not.toHaveClass('flex-1')
+  })
+
+  it('preserves expanded scorecard drill-in state when live progress refreshes', async () => {
+    const user = userEvent.setup()
+    const scorecardDescriptor = {
+      ...descriptor,
+      logical_id: 'scorecard_presentation:fixture',
+      kind: 'scorecard_presentation',
+      display_name: 'Interactive score details',
+      scope: 'scorecard',
+      object_key: 'tasks/task-1/scorecard-presentation-r0001.json',
+      scorecard_name: 'Example scorecard',
+    }
+    const presentationBytes = new Uint8Array(Buffer.from(JSON.stringify({
+        overview: { lifecycle_status: 'running', coverage_status: 'complete' },
+        score_count: 1,
+        scorecard_count: 1,
+        primary_decision_mix: { optimize: 1 },
+        secondary_issue_counts: {},
+        top_priorities: [],
+        scorecards: [{
+          scorecard_ref: 'scorecard-fixture',
+          scorecard_name: 'Example scorecard',
+          score_count: 1,
+          reviewed_error_opportunity: 3,
+          artifacts: [scorecardDescriptor],
+        }],
+      })))
+    const scorecardBytes = new Uint8Array(Buffer.from(JSON.stringify({
+        scorecard_name: 'Example scorecard',
+        questions_and_issues: [],
+        scores: [{ score_name: 'Example score', artifacts: [] }],
+      })))
+    readTaskArtifactMock.mockReset().mockImplementation((artifact: { kind?: string }) =>
+      Promise.resolve(artifact.kind === 'scorecard_presentation' ? scorecardBytes : presentationBytes),
+    )
+
+    const taskForBlock = (block: typeof statusBlock) => ({
+      id: 'report-1',
+      type: 'Report',
+      name: '',
+      description: '',
+      scorecard: '',
+      score: '',
+      time: '2026-07-30T00:00:00.000Z',
+      status: 'RUNNING' as const,
+      data: {
+        id: 'report-1',
+        title: 'Optimization portfolio',
+        name: 'Optimization portfolio',
+        configName: 'Optimization portfolio',
+        output: '# Optimization portfolio\n\n```block\nclass: OptimizationRunStatus\n```',
+        reportBlocks: [block],
+      },
+    })
+
+    const { rerender } = render(
+      <ReportTask variant="detail" task={taskForBlock(statusBlock) as any} />,
+    )
+
+    const scorecardButton = await screen.findByRole('button', { name: /Example scorecard/ })
+    await user.click(scorecardButton)
+    expect(await screen.findByText('Example score')).toBeInTheDocument()
+    expect(scorecardButton).toHaveAttribute('aria-expanded', 'true')
+
+    const progressOnlyBlock = {
+      ...statusBlock,
+      output: {
+        ...statusBlock.output,
+        preview: {
+          ...statusBlock.output.preview,
+          summary: {
+            ...statusBlock.output.preview.summary,
+            live_progress: {
+              phase: 'assessment',
+              current: 1,
+              total: 10,
+              message: 'Assessing the portfolio.',
+            },
+          },
+        },
+      },
+    }
+    rerender(<ReportTask variant="detail" task={taskForBlock(progressOnlyBlock) as any} />)
+
+    expect(await screen.findByText('1 of 10 scores assessed')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Example scorecard/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('Example score')).toBeInTheDocument()
   })
 })

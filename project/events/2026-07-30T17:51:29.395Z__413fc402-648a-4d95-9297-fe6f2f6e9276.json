@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "413fc402-648a-4d95-9297-fe6f2f6e9276",
+  "issue_id": "plx-df1853e8-e9dd-4d0f-927d-8f992e1df7cf",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T17:51:29.395Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Finalize living report state with procedure completion",
+    "description": "As an operator, I want a living optimization Report to publish a terminal revision when its Procedure completes, so that the Report lifecycle, current activity, and linked Task status agree.\n\nOut of scope: automatic score mutations, schema changes, or changing approval authority.\n\nFeature: Terminal living Report reconciliation\n\nScenario: Complete a portfolio procedure\nGiven a living Report is running with a linked Procedure Task\nWhen the portfolio procedure reaches a successful terminal result\nThen the Report publishes a final terminal revision\nAnd its lifecycle status is complete rather than running\nAnd its current activity and next checkpoint describe the terminal outcome\nAnd the linked Task, Procedure, and Report states agree\n\nScenario: Fail final publication\nGiven the procedure result is otherwise terminal\nWhen the final Report publication fails\nThen the procedure fails closed\nAnd the Report does not falsely claim completion",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

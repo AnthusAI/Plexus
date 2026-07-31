@@ -2,6 +2,7 @@ import {
   buildLinkedProcedureSummary,
   linkedProcedureSubtitle,
   optimizationFinalStatusFromReportBlocks,
+  optimizationReportSupersessionMap,
 } from '@/components/reports/linked-procedure-summary'
 
 const linkedTask = {
@@ -48,7 +49,7 @@ describe('buildLinkedProcedureSummary', () => {
 
     expect(summary).toMatchObject({
       id: 'procedure-1',
-      procedureType: 'Portfolio Optimization',
+      procedureType: 'Optimization opportunity survey',
       displayTitle: 'Scorecard-scoped optimization portfolio',
       displayScope: 'Focused scorecard portfolio',
       createdByUserId: 'user-1',
@@ -95,7 +96,7 @@ describe('buildLinkedProcedureSummary', () => {
 
     expect(summary?.status).toBe('INCOMPLETE')
     expect(summary?.task?.status).toBe('COMPLETED')
-    expect(linkedProcedureSubtitle(summary!)).toBe('Portfolio Optimization • Incomplete')
+    expect(linkedProcedureSubtitle(summary!)).toBe('Optimization opportunity survey • Incomplete')
   })
 
   it('uses the living Report revision when its terminal outcome arrives before Task metadata refreshes', () => {
@@ -123,5 +124,58 @@ describe('buildLinkedProcedureSummary', () => {
     expect(reportOutcome).toBe('INCOMPLETE')
     expect(summary?.status).toBe('INCOMPLETE')
     expect(summary?.task?.status).toBe('COMPLETED')
+  })
+})
+
+describe('optimizationReportSupersessionMap', () => {
+  const report = (
+    id: string,
+    taskId: string,
+    runKey: string,
+    revision: number,
+    updatedAt: string,
+  ) => ({
+    id,
+    taskId,
+    updatedAt,
+    parameters: JSON.stringify({
+      optimization_run: {
+        run_key: runKey,
+        latest_revision: { number: revision },
+      },
+    }),
+  })
+
+  it('marks an earlier revision for the same Task and run as superseded', () => {
+    const superseded = optimizationReportSupersessionMap([
+      report('report-early', 'task-1', 'run-1', 1, '2026-07-31T10:00:00Z'),
+      report('report-current', 'task-1', 'run-1', 6, '2026-07-31T11:00:00Z'),
+    ])
+
+    expect(superseded.get('report-early')).toEqual({
+      reportId: 'report-current',
+      latestRevision: 6,
+    })
+    expect(superseded.has('report-current')).toBe(false)
+  })
+
+  it('does not collapse retries that use different Tasks', () => {
+    const superseded = optimizationReportSupersessionMap([
+      report('report-one', 'task-1', 'run-1', 1, '2026-07-31T10:00:00Z'),
+      report('report-two', 'task-2', 'run-1', 6, '2026-07-31T11:00:00Z'),
+    ])
+
+    expect(superseded.size).toBe(0)
+  })
+
+  it('uses update time and then stable ID ordering when revisions tie', () => {
+    const superseded = optimizationReportSupersessionMap([
+      report('report-a', 'task-1', 'run-1', 2, '2026-07-31T11:00:00Z'),
+      report('report-b', 'task-1', 'run-1', 2, '2026-07-31T11:00:00Z'),
+      report('report-old', 'task-1', 'run-1', 2, '2026-07-31T10:00:00Z'),
+    ])
+
+    expect(superseded.get('report-a')?.reportId).toBe('report-b')
+    expect(superseded.get('report-old')?.reportId).toBe('report-b')
   })
 })

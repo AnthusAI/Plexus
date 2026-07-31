@@ -397,6 +397,10 @@ def test_sme_gate_tactus_uses_direct_text_output_not_tool_only_completion():
     tac_source = TactusRubricMemorySMEQuestionGateSynthesizer()._load_tac_source()
 
     assert 'model_type = "responses"' in tac_source
+    assert 'model = "gpt-5-mini-2025-08-07"' in tac_source
+    assert "max_tokens = 16000" in tac_source
+    assert "max_input_tokens = 48000" in tac_source
+    assert "model_attempt_max_attempts = 2" in tac_source
     assert "output = {\n        text = field.string{required = true}," in tac_source
     assert "local result = gate_agent({ message = gate_message })" in tac_source
     assert "local function get_field(value, key)" in tac_source
@@ -1494,13 +1498,64 @@ async def test_sme_question_gate_tactus_synthesizer_disables_control_loop_hitl(
 
     monkeypatch.setattr("tactus.core.runtime.TactusRuntime", _Runtime)
 
-    result = await TactusRubricMemorySMEQuestionGateSynthesizer().synthesize(
+    authority = object()
+    result = await TactusRubricMemorySMEQuestionGateSynthesizer(
+        model_attempt_authority=authority
+    ).synthesize(
         request=_sme_gate_request(),
     )
 
     assert result["final_agenda_markdown"] == "No SME agenda items."
     assert captured["hitl_handler"] is not None
     assert captured["hitl_handler"].check_pending_response("proc", "msg") is None
+    assert captured["model_attempt_authority"] is authority
+    assert captured["run_id"].startswith("rubric_memory_sme_question_gate:score-version-1:")
+
+
+@pytest.mark.asyncio
+async def test_sme_question_gate_skips_synthesizer_when_candidate_agenda_is_empty():
+    class _MustNotCall:
+        async def synthesize(self, *, request):
+            raise AssertionError("provider-backed synthesizer must not be called")
+
+    request = _sme_gate_request().model_copy(update={"candidate_agenda_items": []})
+    result = await RubricMemorySMEQuestionGateService(synthesizer=_MustNotCall()).gate(request)
+
+    assert result.final_items == []
+    assert result.final_agenda_markdown == "(No SME decisions needed this cycle)"
+    assert result.summary_counts["candidate"] == 0
+
+
+@pytest.mark.asyncio
+async def test_sme_and_evidence_tactus_synthesis_require_authority_before_runtime(monkeypatch):
+    runtime_calls = []
+
+    class _Runtime:
+        def __init__(self, **kwargs):
+            runtime_calls.append(kwargs)
+
+    monkeypatch.setattr("tactus.core.runtime.TactusRuntime", _Runtime)
+    with pytest.raises(RuntimeError, match="semantic model-attempt authority"):
+        await TactusRubricMemorySMEQuestionGateSynthesizer().synthesize(
+            request=_sme_gate_request()
+        )
+    confidence = ConfidenceInputs(
+        score_version_id="score-version-1",
+        total_evidence_count=0,
+        score_scope_evidence_count=0,
+        scorecard_scope_evidence_count=0,
+        unknown_scope_evidence_count=0,
+        high_authority_evidence_count=0,
+        low_authority_evidence_count=0,
+        conflicting_or_stale_evidence_count=0,
+        chronological_evidence_count=0,
+        suggested_confidence=ConfidenceLevel.LOW,
+    )
+    with pytest.raises(RuntimeError, match="semantic model-attempt authority"):
+        await TactusRubricEvidenceSynthesizer().synthesize(
+            request=_request(), evidence=[], history=[], confidence_inputs=confidence
+        )
+    assert runtime_calls == []
 
 
 @pytest.mark.asyncio

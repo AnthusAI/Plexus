@@ -1,0 +1,40 @@
+{
+  "id": "plx-06efb289-1995-49fa-8cc4-454cda27aeaf",
+  "title": "Preserve living report drill-in state across background refresh",
+  "description": "As an operator, I want report drill-in state and reading position to remain stable across background reconciliation, so that I can inspect long optimization reports without the page jumping.\n\nObserved behavior: an unchanged background refresh remounts the optimization presentation, collapses expanded scorecards, and changes layout height.\n\nFeature: Stable living-report interaction during refresh\n\nScenario: Unchanged reconciliation is a no-op\nGiven an operator is viewing a report whose durable Report and ReportBlocks have not changed\nAnd the operator has expanded a scorecard and scrolled within the report\nWhen the living-report reconciliation timer completes\nThen the report presentation is not remounted\nAnd the expanded scorecard remains expanded\nAnd the reading position remains stable\n\nScenario: Genuine live progress preserves drill-in state\nGiven an operator has expanded a scorecard in a living report\nWhen a new progress-only ReportBlock revision arrives\nThen the progress indicators update\nAnd the expanded scorecard remains expanded\nAnd the reading position remains stable\n\nScenario: A new immutable presentation is applied without an arbitrary jump\nGiven an operator is reading a living report\nWhen a materially new presentation artifact becomes current\nThen the new presentation is rendered\nAnd the report preserves a stable reading anchor when possible\n\nOut of scope: GraphQL schema or resource changes; changes to optimization policy; client-specific report content.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e2960314-c84f-4c68-bfb9-b8bf4a754571",
+      "author": "ryan.porter",
+      "text": "Reproduced in the local dashboard against an existing report. Expanding a scorecard changed aria-expanded to true, then the next background refresh reset it to false without a durable report revision change. Root cause investigation identified unconditional 15-second reconciliation plus unstable Markdown component identities that remount the optimization block. Next: add red regression coverage for no-op refreshes and progress-only rerenders before the smallest fix.",
+      "created_at": "2026-07-31T15:39:44.222896Z"
+    },
+    {
+      "id": "55c8e3f8-c55b-431b-994e-117422dbd30d",
+      "author": "ryan.porter",
+      "text": "Red/green evidence: added an outside-in ReportTask regression that expands a scorecard, applies a genuine progress-only ReportBlock update, and requires the expansion and loaded score detail to survive. The test failed with aria-expanded=false before the fix and now passes. Added deterministic snapshot coverage so unchanged GraphQL reconciliation is a no-op while progress and TaskStage changes remain visible. Focused validation: 39 tests pass; dashboard web and backend typechecks pass; diff check passes. Browser proof on the local production-backed report: after expansion, two consecutive 15-second reconciliation intervals retained aria-expanded=true and the exact scrollTop value 11553.6357421875; asynchronously loaded detail increased scrollHeight once without moving the reading position. No schema or resource changes.",
+      "created_at": "2026-07-31T15:46:35.996075Z"
+    },
+    {
+      "id": "e3f1f64d-261f-44f9-bc0c-38beb8e277cb",
+      "author": "ryan.porter",
+      "text": "Implemented stable living-report rendering and unchanged-snapshot suppression. Focused dashboard validation passed: 33 tests across report rendering, snapshot identity, and optimization status. Production-backed browser verification held an expanded drill-down and the report scroller at exactly 11000 through two refresh intervals. Keep open until the changes land.",
+      "created_at": "2026-07-31T16:19:50.803122Z"
+    }
+  ],
+  "created_at": "2026-07-31T15:39:37.502537Z",
+  "updated_at": "2026-07-31T16:19:50.803122Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

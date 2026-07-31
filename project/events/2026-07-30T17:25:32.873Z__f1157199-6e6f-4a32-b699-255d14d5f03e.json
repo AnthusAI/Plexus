@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f1157199-6e6f-4a32-b699-255d14d5f03e",
+  "issue_id": "plx-4e26c981-d7ab-4a8a-99ad-02e7bb1640b0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T17:25:32.873Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Forward Procedure Task identity into direct runtime modules",
+    "description": "As an operator, I want a directly executed portfolio procedure to pass its existing Task identity into deterministic Plexus runtime modules, so that its living Report attaches to the one authoritative Procedure Task.\n\nOut of scope: schema changes, automatic mutations, or changing remote dispatch behavior.\n\nFeature: One-Task runtime context propagation\n\nScenario: Execute a portfolio procedure with an existing Task\nGiven the procedure executor receives a runtime context containing the Procedure Task identifier\nWhen it registers the direct Plexus runtime module\nThen that module receives the same Task identifier\nAnd the living Report reuses the Procedure Task\nAnd no report-only Task is created\n\nScenario: Execute without a Task identifier\nGiven the procedure executor has no Task identifier\nWhen it registers the direct Plexus runtime module\nThen the module receives the remaining safe runtime context\nAnd existing non-procedure behavior remains available",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

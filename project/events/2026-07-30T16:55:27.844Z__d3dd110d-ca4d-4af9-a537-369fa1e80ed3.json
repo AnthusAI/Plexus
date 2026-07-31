@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d3dd110d-ca4d-4af9-a537-369fa1e80ed3",
+  "issue_id": "plx-ea798487-bb21-41c3-8598-483659043ed1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T16:55:27.844Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Bound living Report startup and surface initialization failure",
+    "description": "A synthetic production-backed acceptance created the optimization Report Task but did not reach initial Report creation before the local process ended, leaving operators without a cover page during initialization.\n\nFeature: Observable bounded living Report initialization\n\nScenario: Initial Report publication succeeds\nGiven an optimization run has created its durable Task\nWhen the Report and initial artifacts are initialized\nThen the first Report becomes visible within a bounded startup interval\nAnd the Task identifies the current initialization step\n\nScenario: Initial publication cannot complete\nGiven a required GraphQL or artifact request does not complete within its bounded retry policy\nWhen initialization exhausts that policy\nThen the Task becomes failed with an actionable startup reason\nAnd no phantom running optimization remains\n\nScenario: Process ends before Report creation\nGiven the Report Task exists and no Report has been created\nWhen the worker is interrupted or recovered\nThen recovery either resumes the same attempt safely or marks it terminal\nAnd operators can distinguish initialization from portfolio analysis.\n\nNo client data, score mutation, schema change, or new infrastructure resource is included.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

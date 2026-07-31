@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ca9c4bd5-cb15-4887-98ea-8a5a01198da9",
+  "issue_id": "plx-cdac3775-cefd-495c-95fd-8985bdca1cad",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T15:18:49.626Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Accept unresolved-action optimization completion",
+    "description": "A portfolio optimization run that completes analysis but leaves advisory human actions unresolved must remain a valid completed run. The living-report finalizer currently rejects this terminal state and marks the run failed.\n\nFeature: Preserve valid portfolio completion with unresolved actions\n\nScenario: Analysis completes with unresolved human actions\nGiven a portfolio optimization run has completed its exhaustive analysis\nAnd one or more advisory human actions remain unresolved\nWhen the living report is finalized with status COMPLETED_WITH_UNRESOLVED_ACTIONS\nThen the Report and Task preserve a completed-with-unresolved-actions terminal state\nAnd the run is not converted to failed\nAnd the report identifies the unresolved actions as the next operator work\n\nScenario: Unknown terminal status remains fail-closed\nGiven a portfolio optimization run produces an unsupported terminal status\nWhen the living report is finalized\nThen finalization rejects the status\nAnd the failure remains visible to operators\n\nExclusions: This repair does not approve actions, launch optimizers, mutate scores, or add data resources.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

@@ -196,6 +196,26 @@ describe('ProcedureTask optimizer auth flow', () => {
     expect(screen.queryByText('Local')).not.toBeInTheDocument()
   })
 
+  it('renders a child-waiting parent as active instead of pending or complete', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          task: {
+            ...baseProcedure.task,
+            status: 'WAITING_FOR_CHILDREN',
+            dispatchStatus: 'WAITING_FOR_CHILDREN',
+            metadata: JSON.stringify({ dispatch_policy: 'resume_once' }),
+          },
+        }}
+      />
+    )
+
+    expect(screen.getByText('Waiting for optimizer child procedures to finish.')).toBeInTheDocument()
+    expect(screen.queryByText('Pending...')).not.toBeInTheDocument()
+  })
+
   it('loads metadata without apiKey auth mode and does not call the proxy route', async () => {
     const metadataState = {
       state: {
@@ -384,10 +404,11 @@ describe('ProcedureTask optimizer auth flow', () => {
       />
     )
 
-    expect(screen.getByText('Portfolio Optimization')).toBeInTheDocument()
+    expect(screen.getByText('Optimization opportunity survey')).toBeInTheDocument()
     expect(screen.getByText('Account-wide optimization portfolio')).toBeInTheDocument()
     expect(screen.getByText('All scorecards')).toBeInTheDocument()
     expect(screen.queryByText(/^Optimization Procedure$/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Portfolio Optimization$/)).not.toBeInTheDocument()
     expect(screen.queryByText(/4e2ca776/)).not.toBeInTheDocument()
   })
 

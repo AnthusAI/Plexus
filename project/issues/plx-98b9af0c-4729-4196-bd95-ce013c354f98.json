@@ -46,10 +46,22 @@
       "author": "ryan.porter",
       "text": "Validation update: the zero-resource working diff has no Amplify/schema/resource/function/storage changes and no ActionRequest/ActionEvent references. A model-backed sandbox run completed through finalization with six immutable TASK_ATTACHMENT revisions; the final eight-sheet workbook reopened successfully, reconciled all published row counts, and was checksum-verified. Full Python CI is green on 3.11 and 3.12, and the dashboard typecheck, coverage, Storybook build, and serial Chromium suite are green.",
       "created_at": "2026-07-29T19:47:09.908847Z"
+    },
+    {
+      "id": "34d44de5-4e6c-4982-a198-d5eabe3b8fc2",
+      "author": "ryan.porter",
+      "text": "Production dogfood proved the current implementation violates this story's one-Task scenario: the Procedure owns one Task while OptimizationRunReportService discovers or creates a second Task. The duplicate causes a roughly 40-second deterministic Task scan before Report creation and splits operator status. Implementing an adoption path where the service reuses the runtime's existing Procedure Task, preserves its metadata and coarse Tactus stages, and keeps standalone report simulations backward compatible.",
+      "created_at": "2026-07-30T17:04:33.681101Z"
+    },
+    {
+      "id": "967f57cc-9419-415e-9882-bd6318f007aa",
+      "author": "ryan.porter",
+      "text": "Implemented the one-Task conformance path. The portfolio runtime now passes its existing Procedure Task into the living Report service. The service claims that Task idempotently, preserves unrelated metadata, rejects conflicting run claims, creates no duplicate Task or stages, uses the same Task for attachments and Report linkage, and leaves Task/stage completion to Tactus. Standalone simulations keep their self-managed Task behavior. Validation: 52 report/portfolio tests and 5 focused optimization runtime tests pass. Live end-to-end Procedure acceptance remains the next checkpoint.",
+      "created_at": "2026-07-30T17:08:32.576286Z"
     }
   ],
   "created_at": "2026-07-29T16:47:55.953878Z",
-  "updated_at": "2026-07-29T19:47:09.908847Z",
+  "updated_at": "2026-07-30T17:08:32.576286Z",
   "closed_at": null,
   "custom": {}
 }

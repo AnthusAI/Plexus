@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from hashlib import sha256
 from io import BytesIO
 import csv
 from copy import deepcopy
@@ -222,7 +223,42 @@ def _service(monkeypatch, *, block_class=_Block, dashboard_base_url=None):
         block_lookup=lambda _: [],
         stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
         artifact_uploader=lambda task_id, name, _: f"tasks/{task_id}/{name}",
+        publication_id_factory=lambda: "test",
     )
+
+
+def _semantic_service(monkeypatch, *, store=None, run_key="semantic-run-1"):
+    from plexus.optimization import run_report
+    from plexus.optimization.semantic_budget import SemanticBudgetSpec
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    store = store or _ArtifactStore()
+    spec = SemanticBudgetSpec(
+        max_cost_usd="1.00",
+        pricing_version="openai-2025-08-07-v1",
+    )
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(),
+        account_id="account-1",
+        run_key=run_key,
+        report_configuration_id="config-1",
+        artifact_store=store,
+        task_lookup=lambda _: None,
+        report_lookup=lambda _: None,
+        block_lookup=lambda _: [],
+        stage_lookup=lambda task: [
+            stage for stage in _TaskStage.created if stage.taskId == task.id
+        ],
+        publication_id_factory=lambda: "semantic-test",
+    )
+    state = service.start_or_resume({
+        "scope": {},
+        "semantic_budget": spec.to_dict(),
+    })
+    return service, state, store, spec
 
 
 def test_run_key_is_a_deterministic_fingerprint_of_account_and_frozen_spec():
@@ -235,6 +271,224 @@ def test_run_key_is_a_deterministic_fingerprint_of_account_and_frozen_spec():
     assert left == right
     assert left.startswith("optimization-run-")
     assert changed != left
+
+
+def test_semantic_ledger_is_committed_as_an_immutable_task_attachment_without_a_workbook(
+    monkeypatch,
+):
+    from plexus.optimization.semantic_budget import SemanticBudgetLedger, SemanticCallPlan
+
+    service, state, store, spec = _semantic_service(monkeypatch)
+    ledger = SemanticBudgetLedger(run_key=service.run_key, spec=spec)
+    ledger.reserve(SemanticCallPlan(
+        run_key=service.run_key,
+        target_id="scorecard-1:score-1",
+        call_site="rubric_consistency",
+        attempt=1,
+        max_attempts=2,
+        provider="openai",
+        model="gpt-5-mini-2025-08-07",
+        pricing_version=spec.pricing_version,
+        max_input_tokens=1_000,
+        max_output_tokens=100,
+    ))
+
+    pointer = service.persist_semantic_budget_ledger(ledger.to_dict())
+
+    assert pointer["ledger_revision"] == 1
+    assert pointer["sha256"] == ledger.digest()
+    assert pointer["kind"] == "semantic_budget_ledger"
+    filenames = [
+        request.filename for request, _content in store.uploads
+        if request.filename.startswith("optimization-semantic-ledger-")
+    ]
+    assert filenames == [
+        "optimization-semantic-ledger-r000001-semantic-test.json"
+    ]
+    assert not any(name.endswith(".xlsx") for name in filenames)
+    assert state.report.parameters["optimization_run"]["semantic_budget_latest"] == pointer
+    assert service.load_semantic_budget_ledger() == ledger.to_dict()
+
+
+def test_same_run_key_rejects_a_changed_semantic_budget_or_price_version(monkeypatch):
+    from plexus.optimization import run_report
+
+    service, _state, _store, spec = _semantic_service(monkeypatch)
+    base = {"scope": {}, "semantic_budget": spec.to_dict()}
+
+    with pytest.raises(run_report.OptimizationRunIntegrityError):
+        service.start_or_resume({
+            **base,
+            "semantic_budget": {**spec.to_dict(), "max_cost_usd": "2"},
+        })
+    with pytest.raises(run_report.OptimizationRunIntegrityError):
+        service.start_or_resume({
+            **base,
+            "semantic_budget": {
+                **spec.to_dict(),
+                "pricing_version": "openai-future-v2",
+            },
+        })
+
+
+def test_semantic_ledger_commits_before_contact_and_after_settlement_and_replay_is_idempotent(
+    monkeypatch,
+):
+    from plexus.optimization.semantic_budget import (
+        SemanticBudgetLedger,
+        SemanticCallPlan,
+        SemanticUsage,
+    )
+
+    service, _state, store, spec = _semantic_service(monkeypatch)
+    ledger = SemanticBudgetLedger(run_key=service.run_key, spec=spec)
+    reservation = ledger.reserve(SemanticCallPlan(
+        run_key=service.run_key,
+        target_id="scorecard-1:score-1",
+        call_site="rubric_consistency",
+        attempt=1,
+        max_attempts=2,
+        provider="openai",
+        model="gpt-5-mini-2025-08-07",
+        pricing_version=spec.pricing_version,
+        max_input_tokens=1_000,
+        max_output_tokens=100,
+    ))
+    reserved_pointer = service.persist_semantic_budget_ledger(ledger.to_dict())
+    assert service.persist_semantic_budget_ledger(ledger.to_dict()) == reserved_pointer
+
+    ledger.settle(
+        reservation["reservation_id"],
+        SemanticUsage(input_tokens=500, output_tokens=50, provider_request_id="req-1"),
+    )
+    settled_pointer = service.persist_semantic_budget_ledger(ledger.to_dict())
+
+    assert reserved_pointer["ledger_revision"] == 1
+    assert settled_pointer["ledger_revision"] == 2
+    assert len([
+        request for request, _content in store.uploads
+        if request.filename.startswith("optimization-semantic-ledger-")
+    ]) == 2
+    assert service.load_semantic_budget_ledger() == ledger.to_dict()
+
+
+def test_semantic_ledger_publication_failure_does_not_advance_the_report_commit_pointer(
+    monkeypatch,
+):
+    from plexus.optimization import run_report
+    from plexus.optimization.semantic_budget import SemanticBudgetLedger, SemanticCallPlan
+
+    service, state, _store, spec = _semantic_service(monkeypatch)
+    ledger = SemanticBudgetLedger(run_key=service.run_key, spec=spec)
+    ledger.reserve(SemanticCallPlan(
+        run_key=service.run_key,
+        target_id="scorecard-1:score-1",
+        call_site="rubric_consistency",
+        attempt=1,
+        max_attempts=1,
+        provider="openai",
+        model="gpt-5-mini-2025-08-07",
+        pricing_version=spec.pricing_version,
+        max_input_tokens=100,
+        max_output_tokens=10,
+    ))
+    original_update = state.report.update
+
+    def interrupted_update(**_values):
+        raise RuntimeError("simulated commit interruption")
+
+    state.report.update = interrupted_update
+    with pytest.raises(run_report.OptimizationRunRetryablePublicationError):
+        service.persist_semantic_budget_ledger(ledger.to_dict())
+    assert "semantic_budget_latest" not in state.report.parameters["optimization_run"]
+
+    state.report.update = original_update
+    pointer = service.persist_semantic_budget_ledger(ledger.to_dict())
+    assert pointer["ledger_revision"] == 1
+
+
+def test_semantic_ledger_load_rejects_checksum_or_frozen_spec_mismatch(monkeypatch):
+    from plexus.optimization import run_report
+    from plexus.optimization.semantic_budget import SemanticBudgetLedger, SemanticCallPlan
+
+    service, state, store, spec = _semantic_service(monkeypatch)
+    ledger = SemanticBudgetLedger(run_key=service.run_key, spec=spec)
+    ledger.reserve(SemanticCallPlan(
+        run_key=service.run_key,
+        target_id="scorecard-1:score-1",
+        call_site="rubric_consistency",
+        attempt=1,
+        max_attempts=1,
+        provider="openai",
+        model="gpt-5-mini-2025-08-07",
+        pricing_version=spec.pricing_version,
+        max_input_tokens=100,
+        max_output_tokens=10,
+    ))
+    pointer = service.persist_semantic_budget_ledger(ledger.to_dict())
+    store.content_by_key[pointer["object_key"]] = b"{}"
+
+    with pytest.raises(run_report.OptimizationRunIntegrityError):
+        service.load_semantic_budget_ledger()
+
+    state.report.parameters["optimization_run"]["run_spec"]["semantic_budget"] = {
+        **spec.to_dict(),
+        "max_cost_usd": "2",
+    }
+    with pytest.raises(run_report.OptimizationRunIntegrityError):
+        service.persist_semantic_budget_ledger(ledger.to_dict())
+
+
+@pytest.mark.parametrize(
+    ("transition", "reason_field", "corruption"),
+    [
+        ("cancel_pre_contact", "cancellation_reason", "missing"),
+        ("cancel_pre_contact", "cancellation_reason", "blank"),
+        ("mark_outcome_unknown", "outcome_unknown_reason", "missing"),
+        ("mark_outcome_unknown", "outcome_unknown_reason", "blank"),
+    ],
+)
+def test_semantic_ledger_checkpoint_load_rejects_evidence_free_states(
+    monkeypatch, transition, reason_field, corruption
+):
+    from plexus.optimization import run_report
+    from plexus.optimization.semantic_budget import (
+        SemanticBudgetLedger,
+        SemanticCallPlan,
+        canonical_json_bytes,
+    )
+
+    service, state, store, spec = _semantic_service(monkeypatch)
+    ledger = SemanticBudgetLedger(run_key=service.run_key, spec=spec)
+    reservation = ledger.reserve(SemanticCallPlan(
+        run_key=service.run_key,
+        target_id="scorecard-1:score-1",
+        call_site="rubric_consistency",
+        attempt=1,
+        max_attempts=1,
+        provider="openai",
+        model="gpt-5-mini-2025-08-07",
+        pricing_version=spec.pricing_version,
+        max_input_tokens=100,
+        max_output_tokens=10,
+    ))
+    service.persist_semantic_budget_ledger(ledger.to_dict())
+    getattr(ledger, transition)(reservation["reservation_id"], reason="evidence")
+    service.persist_semantic_budget_ledger(ledger.to_dict())
+
+    durable_ledger = ledger.to_dict()
+    if corruption == "missing":
+        durable_ledger["entries"][0].pop(reason_field)
+    else:
+        durable_ledger["entries"][0][reason_field] = ""
+    content = canonical_json_bytes(durable_ledger)
+    pointer = state.report.parameters["optimization_run"]["semantic_budget_latest"]
+    pointer["size_bytes"] = len(content)
+    pointer["sha256"] = sha256(content).hexdigest()
+    store.content_by_key[pointer["object_key"]] = content
+
+    with pytest.raises(run_report.OptimizationRunIntegrityError):
+        service.load_semantic_budget_ledger()
 
 
 def test_start_or_resume_uses_one_running_task_report_and_fixed_blocks(monkeypatch):
@@ -279,6 +533,25 @@ def test_start_is_self_identifying_in_the_task_report_list_and_cover(monkeypatch
     assert "Current phase:" not in state.report.output
     assert "Status: running" in state.report.output
     assert "```block\nclass: OptimizationRunStatus\n```" in state.report.output
+
+
+def test_report_cover_describes_the_execution_mode_without_changing_promotion_authority(monkeypatch):
+    automatic = _service(monkeypatch).start_or_resume({"scope": {}, "execution_mode": "automatic"})
+
+    assert "safe, policy-selected targets may launch automatically" in automatic.report.output
+    assert "Champion promotion remains a separate manual decision" in automatic.report.output
+    assert "human optimization-approval checkpoint" not in automatic.report.output
+
+    _Task.created.clear()
+    _Report.created.clear()
+    _Block.created.clear()
+    approval_required = _service(monkeypatch).start_or_resume(
+        {"scope": {}, "execution_mode": "approval_required"}
+    )
+
+    assert "human optimization-approval checkpoint" in approval_required.report.output
+    assert "safe, policy-selected targets may launch automatically" not in approval_required.report.output
+    assert "Champion promotion remains a separate manual decision" in approval_required.report.output
 
 
 def test_milestone_cover_projects_safe_progress_and_preserves_identity_on_finalize(monkeypatch):
@@ -333,6 +606,55 @@ def test_milestone_cover_projects_safe_progress_and_preserves_identity_on_finali
     assert state.report.output.startswith("# Account-wide optimization portfolio")
     assert "Status: incomplete" in state.report.output
     assert "Checking deterministic readiness" in state.report.output
+
+
+def test_report_cover_explains_semantic_budget_and_unknown_outcomes_without_raw_content():
+    from plexus.optimization.operator_identity import optimization_operator_identity
+    from plexus.optimization.run_report import OptimizationRunReportService
+
+    cover = OptimizationRunReportService._render_report_manifest(
+        "incomplete",
+        {
+            "number": 7,
+            "milestone": "finalization",
+            "overview": {
+                "coverage_status": "complete",
+                "inventory_coverage_status": "complete",
+                "analysis_coverage_status": "incomplete",
+                "semantic_budget_policy_version": "semantic-budget-policy-v1",
+                "semantic_budget_spec_schema_version": "semantic-budget-v1",
+                "semantic_budget_ledger_schema_version": "semantic-budget-ledger-v1",
+                "semantic_budget_pricing_version": "openai-2025-08-07-v1",
+                "semantic_budget_provider": "openai",
+                "semantic_budget_model": "gpt-5-mini-2025-08-07",
+                "semantic_budget_authorized_usd": "1",
+                "semantic_budget_settled_actual_usd": "0.000045",
+                "semantic_budget_held_reserved_usd": "0.0009",
+                "semantic_budget_available_usd": "0.999055",
+                "semantic_budget_reservation_count": 4,
+                "semantic_budget_reserved_count": 1,
+                "semantic_budget_settled_count": 1,
+                "semantic_budget_unknown_count": 1,
+                "semantic_budget_cancelled_count": 1,
+                "semantic_budget_deferred_count": 0,
+                "semantic_budget_failure_count": 0,
+                "semantic_budget_evidence_reference": "semantic-budget-ledger:r000007",
+                "semantic_budget_evidence_digest": "a" * 64,
+            },
+        },
+        identity=optimization_operator_identity(scope={}),
+    )
+
+    assert "Semantic diagnosis budget" in cover
+    assert "Budget policy: semantic-budget-policy-v1" in cover
+    assert "Budget spec schema: semantic-budget-v1" in cover
+    assert "Ledger schema: semantic-budget-ledger-v1" in cover
+    assert "Model: openai:gpt-5-mini-2025-08-07" in cover
+    assert "Authorized: $1; spent: $0.000045; held: $0.0009; remaining: $0.999055." in cover
+    assert "Reservations: 4 total; 1 reserved; 1 settled; 1 outcome unknown; 1 cancelled." in cover
+    assert "Deferred: 0; failed: 0." in cover
+    assert "semantic-budget-ledger:r000007" in cover
+    assert "private prompt" not in cover
 
 
 def test_start_creates_the_fixed_task_stages(monkeypatch):
@@ -425,7 +747,9 @@ def test_resume_rejects_a_different_frozen_scope_for_the_same_run_key(monkeypatc
     service = _service(monkeypatch)
     service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
 
-    with pytest.raises(ValueError, match="frozen run specification"):
+    from plexus.optimization.run_report import OptimizationRunIntegrityError
+
+    with pytest.raises(OptimizationRunIntegrityError, match="frozen run specification"):
         service.start_or_resume({"window": {"start": "2026-05-01T00:00:00Z"}})
 
 
@@ -444,6 +768,438 @@ def test_recovery_reuses_existing_task_report_and_fixed_blocks(monkeypatch):
     assert len(_Task.created) == 1
     assert len(_Report.created) == 1
     assert len(_Block.created) == 3
+
+
+def test_recovery_restores_lost_task_identity_from_its_existing_report(monkeypatch):
+    run_spec = {"window": {"start": "2026-04-30T00:00:00Z"}}
+    first_service = _service(monkeypatch)
+    first = first_service.start_or_resume(run_spec)
+    original_attempt_id = first.report.parameters["optimization_run"]["attempt_id"]
+    rewritten_metadata = json.loads(first.task.metadata)
+    for key in (
+        "optimization_run_key",
+        "attempt_id",
+        "lifecycle_version",
+        "run_spec",
+        "operator_identity",
+    ):
+        rewritten_metadata.pop(key, None)
+    rewritten_metadata["procedure_id"] = "procedure-1"
+    first.task.metadata = json.dumps(rewritten_metadata)
+
+    recovered = _service(monkeypatch)
+    recovered._existing_task = first.task
+    recovered._uses_existing_task = True
+    recovered._report_lookup = lambda task: first.report if task.id == first.task.id else None
+    recovered._block_lookup = lambda _: list(_Block.created)
+
+    resumed = recovered.start_or_resume(run_spec)
+
+    restored_metadata = json.loads(first.task.metadata)
+    assert resumed.task is first.task
+    assert resumed.report is first.report
+    assert restored_metadata["optimization_run_key"] == recovered.run_key
+    assert restored_metadata["attempt_id"] == original_attempt_id
+    assert restored_metadata["run_spec"] == {
+        **run_spec,
+        "execution_mode": "approval_required",
+    }
+    assert restored_metadata["procedure_id"] == "procedure-1"
+    assert len(_Report.created) == 1
+    assert len(_Block.created) == 3
+
+
+def test_default_report_lookup_uses_the_exact_task_relationship(monkeypatch):
+    from plexus.optimization import run_report
+
+    linked_report = SimpleNamespace(id="report-linked", taskId="task-1")
+
+    class _Client:
+        def execute(self, query, variables):
+            assert "getTask" in query
+            assert variables == {"id": "task-1"}
+            return {
+                "getTask": {
+                    "id": "task-1",
+                    "report": {"id": "report-linked", "taskId": "task-1"},
+                }
+            }
+
+    monkeypatch.setattr(
+        run_report.Report,
+        "get_by_id",
+        lambda report_id, client: linked_report
+        if report_id == "report-linked"
+        else None,
+    )
+    monkeypatch.setattr(
+        run_report.Report,
+        "list_by_account_id",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("account-wide Report scans are not an identity lookup")
+        ),
+    )
+    service = run_report.OptimizationRunReportService(
+        client=_Client(),
+        account_id="account-1",
+        run_key="run-1",
+        artifact_uploader=lambda *_args: "unused",
+    )
+
+    found = service._find_report(SimpleNamespace(id="task-1"))
+
+    assert found is linked_report
+
+
+@pytest.mark.parametrize(
+    ("record", "mutation"),
+    [
+        ("task", "missing"),
+        ("task", "malformed"),
+        ("report", "missing"),
+        ("report", "malformed"),
+        ("report", "mismatch"),
+    ],
+)
+def test_existing_attempt_requires_exact_frozen_identity_before_recovery(
+    monkeypatch, record, mutation,
+):
+    from plexus.optimization import run_report
+
+    requested_spec = {"scope": {}, "window": {"start": "2026-04-30T00:00:00Z"}}
+    first_service = _service(monkeypatch)
+    first = first_service.start_or_resume(requested_spec)
+    if record == "task":
+        metadata = json.loads(first.task.metadata)
+        if mutation == "missing":
+            metadata.pop("run_spec")
+        elif mutation == "malformed":
+            metadata["run_spec"] = "not-an-object"
+        first.task.metadata = json.dumps(metadata)
+    else:
+        run = first.report.parameters["optimization_run"]
+        if mutation == "missing":
+            run.pop("run_spec")
+        elif mutation == "malformed":
+            run["run_spec"] = ["not", "an", "object"]
+        else:
+            run["run_spec"] = {"scope": {"scorecard_ids": ["other"]}}
+
+    recovered = _service(monkeypatch)
+    recovered._task_lookup = lambda _: first.task
+    recovered._report_lookup = lambda _: first.report
+    recovered._block_lookup = lambda _: list(_Block.created)
+
+    with pytest.raises(run_report.OptimizationRunIntegrityError):
+        recovered.start_or_resume(requested_spec)
+    assert recovered._state is None
+    assert first.task.status == "FAILED"
+
+
+def test_recovery_loads_the_latest_durable_evidence_through_the_authorized_task_attachment(monkeypatch):
+    from plexus.optimization import run_report
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    store = _ArtifactStore()
+    run_spec = {"window": {"start": "2026-04-30T00:00:00Z"}, "scope": {}}
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="daily-v1-2026-07-29",
+        report_configuration_id="config-1", artifact_store=store,
+        now=lambda: datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc),
+        task_lookup=lambda _: None, report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
+    )
+    first = service.start_or_resume(run_spec)
+    evidence = {
+        "run_key": "daily-v1-2026-07-29",
+        "run_spec": first.run_spec,
+        "coverage": {"complete": True},
+        "rank": {"coverage": {"complete": True}, "ranked": []},
+        "assessments": [],
+    }
+    service.publish_milestone("assessment", evidence, stakeholder_view=_safe_view())
+
+    recovered = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="daily-v1-2026-07-29",
+        report_configuration_id="config-1", artifact_store=store,
+        now=lambda: datetime(2026, 7, 29, 12, 5, tzinfo=timezone.utc),
+        task_lookup=lambda _: first.task, report_lookup=lambda _: first.report,
+        block_lookup=lambda _: list(_Block.created),
+        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
+    )
+    resumed = recovered.start_or_resume(run_spec)
+
+    checkpoint = recovered.load_latest_checkpoint()
+
+    assert resumed.task.id == first.task.id
+    assert resumed.report.id == first.report.id
+    assert checkpoint["milestone"] == "assessment"
+    assert checkpoint["evidence"] == evidence
+    assert checkpoint["task_terminal"] is False
+    assert store.downloads[-1].operation == "READ"
+    assert store.downloads[-1].artifact_type == "TASK_ATTACHMENT"
+
+
+def test_interrupted_publication_retry_reuses_verified_artifacts_for_the_same_logical_revision(monkeypatch):
+    from plexus.optimization import run_report
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+
+    class FailFirstManifestStore(_ArtifactStore):
+        def __init__(self):
+            super().__init__()
+            self.failed = False
+
+        def upload_bytes(self, request, content, **kwargs):
+            if "optimization-revision-r0001" in request.filename and not self.failed:
+                self.failed = True
+                raise RuntimeError("simulated interrupted publication")
+            return super().upload_bytes(request, content, **kwargs)
+
+    store = FailFirstManifestStore()
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="daily-v1-2026-07-29",
+        report_configuration_id="config-1", artifact_store=store,
+        publication_id_factory=lambda: "publication-a",
+        now=lambda: datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc),
+        task_lookup=lambda _: None, report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
+    )
+    run_spec = {"scope": {}, "execution_mode": "automatic"}
+    state = service.start_or_resume(run_spec)
+
+    with pytest.raises(run_report.OptimizationRunPublicationError):
+        service.publish_milestone(
+            "ranking", {"run_key": "daily-v1-2026-07-29", "coverage": {"complete": True}},
+            stakeholder_view=_safe_view(),
+        )
+    # A manifest upload interruption has not crossed latest_revision, so this
+    # remains the same active attempt rather than a failed/replaced Task.
+    assert service._state.task.status == "RUNNING"
+    assert json.loads(service._state.task.metadata).get("optimization_run_final_status") is None
+    draft = json.loads(service._state.task.metadata)["optimization_publication_draft"]
+    assert draft["generated_at"] == "2026-07-29T12:00:00Z"
+    assert any(
+        path.rsplit("/", 1)[-1].startswith("optimization-publication-draft-r0001-")
+        for path in service._state.task.attachedFiles
+    )
+    recovered = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="daily-v1-2026-07-29",
+        report_configuration_id="config-1", artifact_store=store,
+        publication_id_factory=lambda: "publication-b",
+        now=lambda: datetime(2026, 7, 29, 12, 5, tzinfo=timezone.utc),
+        task_lookup=lambda _: state.task,
+        report_lookup=lambda _: state.report,
+        block_lookup=lambda _: list(_Block.created),
+        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
+    )
+    recovered.start_or_resume(run_spec)
+    downloads_before_retry = len(store.downloads)
+    recovered.publish_milestone(
+        "ranking", {"run_key": "daily-v1-2026-07-29", "coverage": {"complete": True}},
+        stakeholder_view=_safe_view(),
+    )
+    assert "optimization_publication_draft" not in json.loads(state.task.metadata)
+
+    evidence_names = [
+        request.filename for request, _content in store.uploads
+        if request.filename.startswith("optimization-evidence-r0001")
+    ]
+    assert evidence_names == ["optimization-evidence-r0001-publication-a.json"]
+    workbook_names = [
+        request.filename for request, _content in store.uploads
+        if request.filename.startswith("optimization-workbook-r0001")
+    ]
+    assert workbook_names == ["optimization-workbook-r0001-publication-a.xlsx"]
+    score_artifact_names = [
+        request.filename for request, _content in store.uploads
+        if request.filename.startswith(("score-", "scorecard-"))
+    ]
+    assert len(score_artifact_names) == 4
+    retry_download_names = [
+        request.filename for request in store.downloads[downloads_before_retry:]
+    ]
+    assert any(
+        name.startswith("optimization-publication-draft-r0001-")
+        for name in retry_download_names
+    )
+    assert not any(
+        name.startswith(("score-", "scorecard-"))
+        for name in retry_download_names
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing_run_spec", "frozen_spec_mismatch", "malformed_json",
+        "milestone_mismatch", "checksum_mismatch", "descriptor_mismatch",
+    ],
+)
+def test_recovery_rejects_corrupt_committed_evidence(monkeypatch, mutation):
+    from plexus.optimization import run_report
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    store = _ArtifactStore()
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="daily-v1-2026-07-29",
+        report_configuration_id="config-1", artifact_store=store,
+        now=lambda: datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc),
+        task_lookup=lambda _: None, report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
+        publication_id_factory=lambda: "test",
+    )
+    state = service.start_or_resume({"scope": {}})
+    service.publish_milestone(
+        "ranking",
+        {"run_key": service.run_key, "run_spec": {"scope": {}}, "coverage": {"complete": True}},
+        stakeholder_view=_safe_view(),
+    )
+    latest = state.report.parameters["optimization_run"]["latest_revision"]
+    evidence_key = latest["evidence"]["object_key"]
+    if mutation in {"missing_run_spec", "frozen_spec_mismatch", "malformed_json"}:
+        evidence = json.loads(store.content_by_key[evidence_key])
+        if mutation == "missing_run_spec":
+            evidence.pop("run_spec")
+        elif mutation == "frozen_spec_mismatch":
+            evidence["run_spec"] = {"scope": {"scorecard_ids": ["other"]}}
+        content = (
+            b"{malformed-json"
+            if mutation == "malformed_json"
+            else json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode()
+        )
+        store.content_by_key[evidence_key] = content
+        latest["evidence"]["size_bytes"] = len(content)
+        latest["evidence"]["sha256"] = __import__("hashlib").sha256(content).hexdigest()
+        manifest_key = latest["manifest"]["object_key"]
+        manifest = json.loads(store.content_by_key[manifest_key])
+        descriptor = next(item for item in manifest["artifacts"] if item["kind"] == "run_evidence")
+        descriptor.update(latest["evidence"])
+        manifest_content = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
+        store.content_by_key[manifest_key] = manifest_content
+        latest["manifest"]["size_bytes"] = len(manifest_content)
+        latest["manifest"]["sha256"] = __import__("hashlib").sha256(manifest_content).hexdigest()
+    elif mutation == "milestone_mismatch":
+        latest["milestone"] = "assessment"
+    elif mutation == "checksum_mismatch":
+        manifest_key = latest["manifest"]["object_key"]
+        manifest = json.loads(store.content_by_key[manifest_key])
+        descriptor = next(item for item in manifest["artifacts"] if item["kind"] == "run_evidence")
+        latest["evidence"]["sha256"] = "0" * 64
+        descriptor["sha256"] = "0" * 64
+        manifest_content = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
+        store.content_by_key[manifest_key] = manifest_content
+        latest["manifest"]["size_bytes"] = len(manifest_content)
+        latest["manifest"]["sha256"] = __import__("hashlib").sha256(manifest_content).hexdigest()
+    else:
+        latest["evidence"]["object_key"] = "tasks/task-1/other-evidence.json"
+
+    with pytest.raises(run_report.OptimizationRunIntegrityError):
+        service.load_latest_checkpoint()
+    assert state.task.status == "FAILED"
+    assert json.loads(state.task.metadata)["optimization_run_final_status"] == "failed"
+
+
+@pytest.mark.parametrize(
+    "error_type_name",
+    ["ArtifactTicketError", "ArtifactAuthorizationError", "ArtifactTransferError"],
+)
+def test_recovery_attachment_transport_errors_are_retryable_and_replayable(
+    monkeypatch, error_type_name,
+):
+    from plexus.optimization import run_report
+    from plexus.storage import graphql_artifact_store
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+
+    class _InterruptedReadStore(_ArtifactStore):
+        interruption = None
+
+        def download_bytes(self, request):
+            if self.interruption is not None:
+                interruption, self.interruption = self.interruption, None
+                raise interruption
+            return super().download_bytes(request)
+
+    store = _InterruptedReadStore()
+    run_spec = {"scope": {}}
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="replayable-read",
+        report_configuration_id="config-1", artifact_store=store,
+        task_lookup=lambda _: None, report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
+        publication_id_factory=lambda: "test",
+    )
+    state = service.start_or_resume(run_spec)
+    evidence = {
+        "run_key": "replayable-read", "run_spec": state.run_spec,
+        "coverage": {"complete": True},
+    }
+    service.publish_milestone("ranking", evidence, stakeholder_view=_safe_view())
+    error_type = getattr(graphql_artifact_store, error_type_name)
+    store.interruption = error_type("temporary authorized attachment interruption")
+    fail_calls: list[str] = []
+    service.fail = lambda message: fail_calls.append(str(message))
+
+    with pytest.raises(run_report.OptimizationRunRetryablePublicationError):
+        service.load_latest_checkpoint()
+    assert fail_calls == []
+    assert state.task.status == "RUNNING"
+    assert json.loads(state.task.metadata).get("optimization_run_final_status") is None
+
+    checkpoint = service.load_latest_checkpoint()
+    assert checkpoint["milestone"] == "ranking"
+    assert checkpoint["evidence"] == evidence
+
+
+def test_artifact_store_integrity_error_terminalizes_recovery(monkeypatch):
+    from plexus.optimization import run_report
+    from plexus.storage.graphql_artifact_store import ArtifactIntegrityError
+
+    class _IntegrityFailureStore(_ArtifactStore):
+        interruption = False
+
+        def download_bytes(self, request):
+            if self.interruption:
+                raise ArtifactIntegrityError("authorized artifact integrity mismatch")
+            return super().download_bytes(request)
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    store = _IntegrityFailureStore()
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="integrity-read",
+        report_configuration_id="config-1", artifact_store=store,
+        task_lookup=lambda _: None, report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
+        publication_id_factory=lambda: "test",
+    )
+    state = service.start_or_resume({"scope": {}})
+    service.publish_milestone(
+        "ranking",
+        {"run_key": "integrity-read", "run_spec": {"scope": {}}, "coverage": {"complete": True}},
+        stakeholder_view=_safe_view(),
+    )
+    store.interruption = True
+
+    with pytest.raises(run_report.OptimizationRunIntegrityError):
+        service.load_latest_checkpoint()
+    assert state.task.status == "FAILED"
+    assert json.loads(state.task.metadata)["optimization_run_final_status"] == "failed"
 
 
 def test_retry_after_failed_attempt_creates_a_linked_new_task_and_report(monkeypatch):
@@ -497,9 +1253,9 @@ def test_publish_milestone_keeps_raw_evidence_restricted_and_points_to_latest_im
     assert revision.raw_evidence_path.startswith("tasks/task-1/")
     assert revision.workbook_path.startswith("tasks/task-1/")
     assert revision.manifest_path.startswith("tasks/task-1/")
-    assert ("task", "optimization-evidence-r0001.json") in uploaded
-    assert ("task", "optimization-workbook-r0001.xlsx") in uploaded
-    assert ("task", "optimization-revision-r0001.json") in uploaded
+    assert ("task", "optimization-evidence-r0001-test.json") in uploaded
+    assert ("task", "optimization-workbook-r0001-test.xlsx") in uploaded
+    assert ("task", "optimization-revision-r0001-test.json") in uploaded
     assert revision.raw_evidence_path in state.task.attachedFiles
     assert state.report.parameters["optimization_run"]["latest_revision"]["number"] == 1
     latest = state.report.parameters["optimization_run"]["latest_revision"]
@@ -517,6 +1273,301 @@ def test_publish_milestone_keeps_raw_evidence_restricted_and_points_to_latest_im
     assert "opaque-id" not in str(_Block.created[2].updates[-1])
 
 
+def test_initial_automatic_report_identifies_the_policy_before_target_selection(monkeypatch):
+    uploaded: dict[str, bytes] = {}
+    service = _service(monkeypatch)
+    service._artifact_uploader = lambda task_id, name, content: (
+        uploaded.__setitem__(name, content) or f"tasks/{task_id}/{name}"
+    )
+
+    service.start_or_resume({"scope": {}, "execution_mode": "automatic"})
+
+    status = json.loads(uploaded["optimization-run-initial-status.json"])
+    assert status["execution_mode"] == "automatic"
+    workbook = load_workbook(BytesIO(uploaded["optimization-workbook-r0000.xlsx"]), data_only=False)
+    overview = dict(workbook["Overview"].values)
+    assert overview["Execution Mode"] == "automatic"
+    assert overview["Execution Selected Count"] == 0
+
+
+def test_automatic_execution_projection_reconciles_counts_and_keeps_opaque_ids_out_of_stakeholder_artifacts(monkeypatch):
+    uploaded: dict[str, bytes] = {}
+    service = _service(monkeypatch)
+    service._artifact_uploader = lambda task_id, name, content: (
+        uploaded.__setitem__(name, content) or f"tasks/{task_id}/{name}"
+    )
+    service.start_or_resume({"scope": {}, "execution_mode": "automatic"})
+    view = _safe_view()
+    evidence = {
+        "execution_mode": "automatic",
+        "execution_decisions": {
+            "mode": "automatic",
+            "selected_count": 1,
+            "launched_count": 1,
+            "rejected_count": 1,
+            "selected_targets": [{
+                "target_id": "opaque-selected-id",
+                "scorecard_id": "opaque-card-selected",
+                "score_id": "opaque-score-selected",
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Priority Score",
+                "reason": "Meets the automatic policy.",
+                "authorization_source": "published_policy",
+            }],
+            "rejected_targets": [{
+                "target_id": "opaque-rejected-id",
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Rejected Score",
+                "reason": "Outside the safety cap.",
+                "authorization_source": "published_policy",
+            }],
+        },
+        "dispatch": {"children": [{
+            "target": {"scorecard_id": "opaque-card-selected", "score_id": "opaque-score-selected"},
+            "procedure_id": "procedure-1", "task_id": "task-1",
+            "launch_state": {"phase": "waiting"},
+        }]},
+    }
+
+    service.publish_milestone("approval", evidence, stakeholder_view=view)
+
+    manifest = json.loads(uploaded["optimization-revision-r0001-test.json"])
+    assert manifest["overview"]["execution_mode"] == "automatic"
+    assert manifest["overview"]["execution_selected_count"] == 1
+    assert manifest["overview"]["execution_launched_count"] == 1
+    assert manifest["overview"]["execution_rejected_count"] == 1
+    presentation = json.loads(uploaded[next(
+        name for name in uploaded if name.startswith("optimization-presentation-r0001-")
+    )])
+    assert presentation["overview"]["execution_mode"] == "automatic"
+    selected = presentation["top_priorities"][0]
+    assert selected["execution_status"] == "automatic_launched"
+    assert selected["execution_reason"] == "Meets the automatic policy."
+    rejected = presentation["optimization_outcomes"][0]
+    assert rejected["score_name"] == "Rejected Score"
+    assert rejected["execution_status"] == "automatic_rejected"
+    assert rejected["execution_reason"] == "Outside the safety cap."
+    assert "opaque-selected-id" not in json.dumps(presentation)
+    assert "opaque-rejected-id" not in json.dumps(presentation)
+
+    workbook = load_workbook(BytesIO(uploaded[next(
+        name for name in uploaded if name.startswith("optimization-workbook-r0001-")
+    )]), data_only=False)
+    overview = dict(workbook["Overview"].values)
+    assert overview["Execution Mode"] == "automatic"
+    assert overview["Execution Selected Count"] == 1
+    execution_summary = next(
+        workbook["Run Log"].iter_rows(min_row=2, values_only=True)
+    )[4]
+    assert "not selected 1" in execution_summary
+    assert "rejected" not in execution_summary
+    headers = [cell.value for cell in workbook["Portfolio"][1]]
+    row = dict(zip(headers, next(workbook["Portfolio"].iter_rows(min_row=2, values_only=True))))
+    assert row["Automatic Execution"] == "automatic_launched"
+    assert row["Execution Reason"] == "Meets the automatic policy."
+    assert "opaque-selected-id" not in "".join(
+        str(cell.value or "") for sheet in workbook.worksheets for row in sheet.iter_rows() for cell in row
+    )
+    csv_name = next(name for name in uploaded if name.endswith(".csv"))
+    csv_row = next(csv.DictReader(uploaded[csv_name].decode("utf-8-sig").splitlines()))
+    assert csv_row["Automatic Execution"] == "automatic_launched"
+    assert csv_row["Execution Reason"] == "Meets the automatic policy."
+    summary_name = next(name for name in uploaded if name.endswith(".md") and "summary" in name)
+    summary = uploaded[summary_name].decode("utf-8")
+    assert "launched automatically" in summary
+    assert "Meets the automatic policy." in summary
+    assert "opaque-selected-id" not in summary
+
+
+def test_automatic_execution_marks_detail_incomplete_for_unnamed_targets_and_launch_mismatch(monkeypatch):
+    uploaded: dict[str, bytes] = {}
+    service = _service(monkeypatch)
+    service._artifact_uploader = lambda task_id, name, content: (
+        uploaded.__setitem__(name, content) or f"tasks/{task_id}/{name}"
+    )
+    service.start_or_resume({"scope": {}, "execution_mode": "automatic"})
+    evidence = {
+        "execution_mode": "automatic",
+        "execution_decisions": {
+            "mode": "automatic", "selected_count": 2, "launched_count": 2, "rejected_count": 2,
+            "selected_targets": [{
+                "scorecard_id": "named-card", "score_id": "named-score",
+                "scorecard_name": "Example Portfolio", "score_name": "Priority Score",
+                "reason": "Selected by policy.",
+            }, {
+                "scorecard_id": "unnamed-card", "score_id": "unnamed-score",
+                "reason": "Selected by policy.",
+            }],
+            "rejected_targets": [{
+                "scorecard_id": "rejected-card", "score_id": "rejected-score",
+                "scorecard_name": "Other Portfolio", "score_name": "Rejected Score",
+                "reason": "Outside the safety cap.",
+            }, {
+                "scorecard_id": "unnamed-rejected-card", "score_id": "unnamed-rejected-score",
+                "reason": "Insufficient evidence.",
+            }],
+        },
+        "dispatch": {"children": [{
+            "target": {"scorecard_id": "named-card", "score_id": "named-score"},
+            "procedure_id": "procedure-1", "task_id": "task-1",
+            "launch_state": {"phase": "running"},
+        }, {
+            "target": {"scorecard_id": "unnamed-card", "score_id": "unnamed-score"},
+            "procedure_id": "", "task_id": "task-2",
+            "launch_state": {"phase": "running"},
+        }]},
+    }
+
+    service.publish_milestone("optimization", evidence, stakeholder_view=_safe_view())
+
+    manifest = json.loads(uploaded["optimization-revision-r0001-test.json"])
+    overview = manifest["overview"]
+    assert overview["execution_named_selected_count"] == 1
+    assert overview["execution_named_launched_count"] == 1
+    assert overview["execution_named_rejected_count"] == 1
+    assert overview["execution_detail_coverage"] == "incomplete"
+    assert "1 of 2 selected" in overview["execution_detail_limitation"]
+    assert "durable launch evidence reconciles 1 of 2" in overview["execution_detail_limitation"]
+    stakeholder_bytes = b"".join(
+        content for name, content in uploaded.items()
+        if not name.startswith("optimization-evidence-")
+    )
+    assert b"unnamed-card" not in stakeholder_bytes
+    assert b"unnamed-score" not in stakeholder_bytes
+
+
+def test_durable_child_launch_matches_exact_target_and_requires_owned_authority(monkeypatch):
+    view = _safe_view()
+    evidence = {
+        "execution_mode": "automatic",
+        "execution_decisions": {
+            "mode": "automatic", "selected_count": 1, "launched_count": 1, "rejected_count": 0,
+            "selected_targets": [{
+                "scorecard_id": "card-a", "score_id": "score-a",
+                "scorecard_name": "Example Portfolio", "score_name": "Priority Score",
+            }], "rejected_targets": [],
+        },
+        "dispatch": {"children": [{
+            "target": {"scorecard_id": "card-a", "score_id": "different-score"},
+            "procedure_id": "procedure-1", "task_id": "task-1",
+            "launch_state": {"phase": "terminal"},
+        }, {
+            "target": {"scorecard_id": "card-a", "score_id": "score-a"},
+            "procedure_id": " ", "task_id": "task-2",
+            "launch_state": {"phase": "running"},
+        }]},
+    }
+    from plexus.optimization.run_report import _stakeholder_execution_projection
+
+    projected = _stakeholder_execution_projection(
+        view, evidence, expected_execution_mode="automatic"
+    )
+
+    assert projected["portfolio"][0]["execution_status"] == "automatic_selected"
+    assert projected["overview"]["execution_named_launched_count"] == 0
+    assert projected["overview"]["execution_detail_coverage"] == "incomplete"
+
+
+def test_execution_projection_keeps_duplicate_score_names_distinct_by_scorecard():
+    from plexus.optimization.run_report import _stakeholder_execution_projection
+
+    view = _safe_view()
+    second = dict(view["portfolio"][0])
+    second["scorecard_name"] = "Second Portfolio"
+    view["portfolio"].append(second)
+    evidence = {
+        "execution_mode": "automatic",
+        "execution_decisions": {
+            "mode": "automatic", "selected_count": 2, "launched_count": 1, "rejected_count": 0,
+            "selected_targets": [{
+                "scorecard_id": "card-a", "score_id": "score-a",
+                "scorecard_name": "Example Portfolio", "score_name": "Priority Score",
+            }, {
+                "scorecard_id": "card-b", "score_id": "score-b",
+                "scorecard_name": "Second Portfolio", "score_name": "Priority Score",
+            }], "rejected_targets": [],
+        },
+        "dispatch": {"children": [{
+            "target": {"scorecard_id": "card-a", "score_id": "score-a"},
+            "procedure_id": "procedure-1", "task_id": "task-1",
+            "launch_state": {"phase": "terminal"},
+        }]},
+    }
+
+    projected = _stakeholder_execution_projection(
+        view, evidence, expected_execution_mode="automatic"
+    )
+
+    statuses = {
+        row["scorecard_name"]: row["execution_status"] for row in projected["portfolio"]
+    }
+    assert statuses == {
+        "Example Portfolio": "automatic_launched",
+        "Second Portfolio": "automatic_selected",
+    }
+    assert projected["overview"]["execution_detail_coverage"] == "complete"
+
+
+def test_missing_execution_fields_freeze_the_conservative_approval_required_mode(monkeypatch):
+    uploaded: dict[str, bytes] = {}
+    service = _service(monkeypatch)
+    service._artifact_uploader = lambda task_id, name, content: (
+        uploaded.__setitem__(name, content) or f"tasks/{task_id}/{name}"
+    )
+    service.start_or_resume({"scope": {}})
+    service.publish_milestone("approval", {"coverage": {"complete": True}}, stakeholder_view=_safe_view())
+
+    manifest = json.loads(uploaded["optimization-revision-r0001-test.json"])
+    assert manifest["overview"]["execution_mode"] == "approval_required"
+
+
+def test_approval_required_execution_mode_remains_explicit_without_automatic_decisions(monkeypatch):
+    uploaded: dict[str, bytes] = {}
+    service = _service(monkeypatch)
+    service._artifact_uploader = lambda task_id, name, content: (
+        uploaded.__setitem__(name, content) or f"tasks/{task_id}/{name}"
+    )
+    service.start_or_resume({"scope": {}, "execution_mode": "approval_required"})
+    service.publish_milestone(
+        "approval", {"execution_mode": "approval_required"}, stakeholder_view=_safe_view()
+    )
+
+    manifest = json.loads(uploaded["optimization-revision-r0001-test.json"])
+    assert manifest["overview"]["execution_mode"] == "approval_required"
+    assert "execution_selected_count" not in manifest["overview"]
+
+
+@pytest.mark.parametrize(
+    ("frozen_mode", "evidence_mode", "decision_mode"),
+    [
+        ("automatic", "approval_required", "automatic"),
+        ("approval_required", "automatic", "approval_required"),
+        ("automatic", "automatic", "approval_required"),
+        ("approval_required", "approval_required", "automatic"),
+    ],
+)
+def test_report_rejects_decision_evidence_that_conflicts_with_the_frozen_execution_mode(
+    monkeypatch, frozen_mode, evidence_mode, decision_mode,
+):
+    from plexus.optimization import run_report
+
+    service = _service(monkeypatch)
+    state = service.start_or_resume({"scope": {}, "execution_mode": frozen_mode})
+
+    with pytest.raises(run_report.OptimizationRunIntegrityError, match="execution mode"):
+        service.publish_milestone(
+            "approval",
+            {
+                "coverage": {"complete": True},
+                "execution_mode": evidence_mode,
+                "execution_decisions": {"mode": decision_mode},
+            },
+            stakeholder_view=_safe_view(),
+        )
+
+    assert state.task.status == "FAILED"
+
+
 def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without_attaching_each_child(monkeypatch):
     uploaded: dict[str, bytes] = {}
     service = _service(monkeypatch, dashboard_base_url="https://dashboard.example.com")
@@ -530,8 +1581,14 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     view["questions_and_issues"][0].update({
         "scorecard_ref": "safe-ref-one",
         "score_name": "=Formula-like score",
+        "issue_flag": "feedback_rubric_contradiction",
         "finding": "Should this policy exception require stakeholder confirmation?",
         "next_action": "request_stakeholder_clarification",
+    })
+    view["portfolio"][0].update({
+        "primary_disposition": "guideline_or_code_repair",
+        "secondary_issue_flags": ["feedback_rubric_contradiction"],
+        "secondary_issue_summary": "feedback_rubric_contradiction",
     })
     second_row = dict(view["portfolio"][0])
     second_row.update({
@@ -547,47 +1604,38 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
         stakeholder_view=view,
     )
 
-    manifest = json.loads(uploaded["optimization-revision-r0001.json"])
+    manifest = json.loads(uploaded["optimization-revision-r0001-test.json"])
     presentation_artifact = next(
         artifact for artifact in manifest["artifacts"]
         if artifact["kind"] == "stakeholder_presentation"
     )
     presentation_name = presentation_artifact["object_key"].rsplit("/", 1)[-1]
     presentation = json.loads(uploaded[presentation_name])
+    assert presentation["questions_and_issues"] == view["questions_and_issues"]
+    assert presentation["contradictions"] == view["questions_and_issues"]
+    assert presentation["optimization_outcomes"] == view["optimization_outcomes"]
     assert sum(presentation["primary_decision_mix"].values()) == 2
+    assert presentation["primary_disposition_counts"] == presentation["primary_decision_mix"]
+    assert presentation["attention_queue"]
+    assert set(presentation["attention_queue"][0]) == {
+        "scorecard_name", "score_name", "primary_disposition", "evidence_count",
+        "severity", "rationale", "next_action", "dashboard_url",
+    }
     assert presentation["score_count"] == 2
+    assert presentation["score_count"] == len(view["portfolio"])
     assert len(presentation["scorecards"]) == 2
     assert presentation["scorecards"][0]["score_count"] == 1
     assert presentation["top_priorities"][0]["opportunity"] == 70
-    assert presentation["opportunity_distribution"] == [{
-        "evidence_rank": None,
-        "candidate_rank": None,
-        "scorecard_name": "Example Portfolio",
-        "score_name": "=Formula-like score",
-        "opportunity": 70,
-        "valid_feedback_count": 250,
-        "disagreement_rate": 0.28,
-        "review_disposition": "eligible_below_selection",
-        "policy_disposition": "eligible",
-        "policy_reason": "meets_rank_policy",
-        "eligibility_timestamp": None,
-        "next_action": "repair_guidelines",
-        "dashboard_url": None,
-    }, {
-        "evidence_rank": None,
-        "candidate_rank": None,
-        "scorecard_name": "Example Portfolio",
-        "score_name": "Second Score",
-        "opportunity": 70,
-        "valid_feedback_count": 75,
-        "disagreement_rate": 0.28,
-        "review_disposition": "eligible_below_selection",
-        "policy_disposition": "eligible",
-        "policy_reason": "meets_rank_policy",
-        "eligibility_timestamp": None,
-        "next_action": "repair_guidelines",
-        "dashboard_url": None,
-    }]
+    distribution = presentation["opportunity_distribution"]
+    assert [row["score_name"] for row in distribution] == ["=Formula-like score", "Second Score"]
+    assert all(
+        row["primary_disposition"] == view["portfolio"][0]["primary_disposition"]
+        for row in distribution
+    )
+    assert all(
+        row["secondary_issue_flags"] == view["portfolio"][0]["secondary_issue_flags"]
+        for row in distribution
+    )
     assert presentation_artifact["object_key"] in state.task.attachedFiles
     status_envelope = json.loads(state.blocks["status"].output)
     assert status_envelope["preview"]["type"] == "optimization_run_status"
@@ -619,6 +1667,9 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     assert all(artifact["object_key"].startswith(f"tasks/{state.task.id}/") for artifact in scorecard_artifacts)
     assert all(artifact["object_key"] not in state.task.attachedFiles for artifact in scorecard_artifacts)
     assert len(revision.artifacts) == len(manifest["artifacts"])
+    assert revision.row_counts["portfolio"] == len(view["portfolio"])
+    assert revision.row_counts["questions_and_issues"] == len(view["questions_and_issues"])
+    assert revision.row_counts["optimization_outcomes"] == len(view["optimization_outcomes"])
 
     score_artifacts = [
         artifact for artifact in manifest["artifacts"]
@@ -641,6 +1692,8 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     csv_rows = list(csv.DictReader(uploaded[csv_name].decode("utf-8-sig").splitlines()))
     assert len(csv_rows) == 1
     assert csv_rows[0]["Score"] == "'=Formula-like score"
+    assert csv_rows[0]["Primary Disposition"] == view["portfolio"][0]["primary_disposition"]
+    assert csv_rows[0]["Secondary Issues"] == view["portfolio"][0]["secondary_issue_summary"]
 
     summary_artifact = next(
         artifact for artifact in scorecard_artifacts
@@ -651,6 +1704,10 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     summary = uploaded[summary_name].decode("utf-8")
     assert summary.startswith("# Example Portfolio")
     assert "repair_guidelines" in summary
+    assert "Primary disposition" in summary
+    assert "Secondary issue flags" in summary
+    assert view["portfolio"][0]["primary_disposition"] in summary
+    assert ", ".join(view["portfolio"][0]["secondary_issue_flags"]) in summary
 
     detail_artifact = next(
         artifact for artifact in scorecard_artifacts
@@ -661,6 +1718,8 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     assert detail["scorecard_name"] == "Example Portfolio"
     assert len(detail["scores"]) == 1
     assert detail["scores"][0]["score_name"] == "=Formula-like score"
+    assert detail["scores"][0]["primary_disposition"] == view["portfolio"][0]["primary_disposition"]
+    assert detail["scores"][0]["secondary_issue_flags"] == view["portfolio"][0]["secondary_issue_flags"]
     brief_descriptor = detail["scores"][0]["artifacts"][0]
     assert brief_descriptor["kind"] == "score_brief"
     brief_name = brief_descriptor["object_key"].rsplit("/", 1)[-1]
@@ -668,6 +1727,11 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     assert brief.startswith("# =Formula-like score")
     assert "Should this policy exception require stakeholder confirmation?" in brief
     assert "request_stakeholder_clarification" in brief
+    assert f"Primary disposition: {view['portfolio'][0]['primary_disposition']}" in brief
+    assert (
+        f"Secondary issue flags: {', '.join(view['portfolio'][0]['secondary_issue_flags'])}"
+        in brief
+    )
 
 
 def test_report_artifact_base_url_rejects_non_https_or_non_origin_values(monkeypatch):
@@ -734,14 +1798,15 @@ def test_default_artifact_path_uses_only_task_graphql_tickets_without_direct_s3(
     assert all(request.resource_type == "TASK" for request in requests)
     assert all(request.resource_id == state.task.id for request in requests)
     assert all(request.artifact_type == "TASK_ATTACHMENT" for request in requests)
-    assert {request.filename for request in requests} >= {
+    filenames = {request.filename for request in requests}
+    assert filenames >= {
         "optimization-run-initial-status.json",
         "optimization-run-initial-evidence.json",
         "optimization-workbook-r0000.xlsx",
-        "optimization-evidence-r0001.json",
-        "optimization-workbook-r0001.xlsx",
-        "optimization-revision-r0001.json",
     }
+    assert any(name.startswith("optimization-evidence-r0001-") for name in filenames)
+    assert any(name.startswith("optimization-workbook-r0001-") for name in filenames)
+    assert any(name.startswith("optimization-revision-r0001-") for name in filenames)
     assert {
         request.content_type for request in requests
         if request.filename.endswith((".md", ".csv"))
@@ -793,7 +1858,7 @@ def test_artifact_checksum_mismatch_is_fatal_and_marks_the_attempt_failed(monkey
         artifact_store=_CorruptingStore(), verify_uploaded_artifacts=True,
     )
 
-    with pytest.raises(run_report.OptimizationRunPublicationError, match="initialize"):
+    with pytest.raises(run_report.OptimizationRunIntegrityError, match="checksum"):
         service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
 
     assert _Task.created[0].status == "FAILED"
@@ -976,6 +2041,367 @@ def test_progress_updates_the_existing_analysis_stage_and_live_cover_without_a_n
     assert "Assessment: 30 of 100 scores assessed" in state.report.output
 
 
+def test_ranking_progress_updates_the_existing_ranking_stage_without_an_artifact_revision(monkeypatch):
+    from plexus.optimization import run_report
+
+    procedure_task = _Task(
+        identifier="procedure-task",
+        accountId="account-1",
+        status="RUNNING",
+        metadata=json.dumps({"procedure_key": "preserve-me"}),
+    )
+    procedure_stages = [
+        _TaskStage(
+            f"procedure-stage-{index}", taskId=procedure_task.id, name=name.title(),
+            order=index, status="RUNNING" if name == "ranking" else "PENDING",
+        )
+        for index, name in enumerate(
+            ("preflight", "ranking", "assessment", "diagnosis", "approval", "optimization", "review", "finalization")
+        )
+    ]
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="ranking-progress-run",
+        report_configuration_id="config-1", existing_task=procedure_task,
+        report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda _: procedure_stages, artifact_store=_ArtifactStore(),
+        now=lambda: datetime(2026, 7, 31, 12, 0, tzinfo=timezone.utc),
+    )
+    state = service.start_or_resume({"scope": {}})
+    revision_before = service._latest_revision_number(state.report)
+
+    service.publish_progress(
+        phase="ranking",
+        subphase="inventory",
+        current=12,
+        total=None,
+        unit="scorecards",
+        state="retrying",
+        elapsed_seconds=63,
+        next_checkpoint="Retrying the scorecard inventory.",
+        message="Inventory has inspected 12 scorecards; retrying a page.",
+    )
+
+    ranking = next(stage for stage in procedure_stages if stage.name == "Ranking")
+    assert ranking.processedItems == 12
+    assert ranking.totalItems is None
+    assert ranking.statusMessage == "Inventory has inspected 12 scorecards; retrying a page."
+    assert service._latest_revision_number(state.report) == revision_before
+    status_envelope = json.loads(state.blocks["status"].output)
+    assert status_envelope["preview"]["summary"]["live_progress"] == {
+        "phase": "ranking",
+        "subphase": "inventory",
+        "current": 12,
+        "total": None,
+        "unit": "scorecards",
+        "state": "retrying",
+        "elapsed_seconds": 63,
+        "next_checkpoint": "Retrying the scorecard inventory.",
+        "message": "Inventory has inspected 12 scorecards; retrying a page.",
+        "updated_at": "2026-07-31T12:00:00Z",
+    }
+    assert "Ranking / Inventory: 12 scorecards inspected" in state.report.output
+    assert "Retrying the scorecard inventory." in state.report.output
+
+
+def test_a_stale_ranking_progress_update_cannot_overlay_a_durable_ranking_or_later_milestone(monkeypatch):
+    service = _service(monkeypatch)
+    state = service.start_or_resume({"scope": {}})
+    service.publish_milestone(
+        "ranking", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+    )
+    output_after_ranking = state.blocks["status"].output
+    revision_after_ranking = service._latest_revision_number(state.report)
+
+    service.publish_progress(
+        phase="ranking",
+        subphase="feedback_analysis",
+        current=5,
+        total=10,
+        unit="scorecards",
+        message="A delayed feedback-progress callback arrived.",
+    )
+
+    assert state.blocks["status"].output == output_after_ranking
+    assert service._latest_revision_number(state.report) == revision_after_ranking
+
+
+def test_assessment_artifact_publication_has_a_distinct_safe_live_phase(monkeypatch):
+    """A long artifact upload must not look like semantic diagnosis has begun."""
+    service = _service(monkeypatch)
+    state = service.start_or_resume({"scope": {}})
+    updates: list[dict] = []
+    original_publish_progress = service.publish_progress
+
+    def record_progress(**progress):
+        updates.append(progress)
+        return original_publish_progress(**progress)
+
+    service.publish_progress = record_progress
+    service.publish_milestone(
+        "assessment", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+    )
+
+    publication = [update for update in updates if update["phase"] == "publication"]
+    assert publication
+    assert service._latest_revision_number(state.report) == 1
+    assert all(update["unit"] == "artifacts" for update in publication)
+    assert publication[0]["current"] == 0
+    assert publication[0]["total"] == 8
+    assert publication[-1]["current"] == 8
+    assert publication[-1]["next_checkpoint"] == "Publishing the assessment milestone."
+    assert publication[-1]["artifact_counts"] == {
+        "decision_evidence": {"completed": 1, "total": 1},
+        "stakeholder_workbook": {"completed": 1, "total": 1},
+        "score_briefs": {"completed": 1, "total": 1},
+        "scorecard_summaries": {"completed": 1, "total": 1},
+        "scorecard_spreadsheets": {"completed": 1, "total": 1},
+        "scorecard_presentations": {"completed": 1, "total": 1},
+        "stakeholder_presentation": {"completed": 1, "total": 1},
+        "revision_manifest": {"completed": 1, "total": 1},
+    }
+    assert all("object_key" not in str(update) for update in publication)
+    assert all("diagnosis" not in update["message"].lower() for update in publication)
+
+
+def test_large_artifact_publication_advances_durable_progress_at_a_bounded_cadence(monkeypatch):
+    service = _service(monkeypatch)
+    service.start_or_resume({"scope": {}})
+    view = deepcopy(_safe_view())
+    template = view["portfolio"][0]
+    view["portfolio"] = [
+        {**template, "score_name": f"Score {index:02d}"}
+        for index in range(30)
+    ]
+    updates: list[dict] = []
+    original_publish_progress = service.publish_progress
+
+    def record_progress(**progress):
+        updates.append(deepcopy(progress))
+        return original_publish_progress(**progress)
+
+    service.publish_progress = record_progress
+    service.publish_milestone(
+        "assessment",
+        {"coverage": {"complete": True}},
+        stakeholder_view=view,
+    )
+
+    score_brief_counts = [
+        update["artifact_counts"]["score_briefs"]["completed"]
+        for update in updates
+        if update["phase"] == "publication"
+    ]
+    assert 25 in score_brief_counts
+    assert score_brief_counts[-1] == 30
+    assert sorted(set(score_brief_counts)) == [0, 25, 30]
+
+
+def test_unchanged_score_artifacts_are_reused_from_the_latest_committed_revision(monkeypatch):
+    from plexus.optimization import run_report
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    store = _ArtifactStore()
+    publication_ids = iter(["ranking", "assessment"])
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(),
+        account_id="account-1",
+        run_key="reuse-unchanged-artifacts",
+        report_configuration_id="config-1",
+        artifact_store=store,
+        publication_id_factory=lambda: next(publication_ids),
+        task_lookup=lambda _: None,
+        report_lookup=lambda _: None,
+        block_lookup=lambda _: [],
+        stage_lookup=lambda task: [
+            stage for stage in _TaskStage.created if stage.taskId == task.id
+        ],
+    )
+    service.start_or_resume({"scope": {}})
+    first = service.publish_milestone(
+        "ranking",
+        {"run_key": "reuse-unchanged-artifacts", "coverage": {"complete": True}},
+        stakeholder_view=_safe_view(),
+    )
+    uploads_after_first = len(store.uploads)
+
+    second = service.publish_milestone(
+        "assessment",
+        {
+            "run_key": "reuse-unchanged-artifacts",
+            "coverage": {"complete": True},
+            "assessments": [],
+        },
+        stakeholder_view=_safe_view(),
+    )
+
+    reusable_kinds = {
+        "score_brief",
+        "scorecard_summary",
+        "scorecard_portfolio_csv",
+        "scorecard_presentation",
+        "stakeholder_presentation",
+    }
+    first_by_id = {
+        artifact["logical_id"]: artifact
+        for artifact in first.artifacts
+        if artifact["kind"] in reusable_kinds
+    }
+    second_by_id = {
+        artifact["logical_id"]: artifact
+        for artifact in second.artifacts
+        if artifact["kind"] in reusable_kinds
+    }
+    assert second_by_id.keys() == first_by_id.keys()
+    assert {
+        logical_id: artifact["object_key"]
+        for logical_id, artifact in second_by_id.items()
+    } == {
+        logical_id: artifact["object_key"]
+        for logical_id, artifact in first_by_id.items()
+    }
+    assert all(artifact["source_revision"] == 1 for artifact in second_by_id.values())
+
+    second_upload_names = [
+        request.filename for request, _content in store.uploads[uploads_after_first:]
+    ]
+    assert not any(name.startswith("score-") for name in second_upload_names)
+    assert not any(name.startswith("scorecard-") for name in second_upload_names)
+    assert not any(name.startswith("optimization-presentation-") for name in second_upload_names)
+
+
+def test_changed_score_content_republishes_dependent_presentation_but_reuses_unchanged_csv(monkeypatch):
+    from plexus.optimization import run_report
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    store = _ArtifactStore()
+    publication_ids = iter(["ranking", "diagnosis"])
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="dependency-reuse",
+        report_configuration_id="config-1", artifact_store=store,
+        publication_id_factory=lambda: next(publication_ids),
+        task_lookup=lambda _: None, report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda task: [
+            stage for stage in _TaskStage.created if stage.taskId == task.id
+        ],
+    )
+    service.start_or_resume({"scope": {}})
+    first = service.publish_milestone(
+        "ranking", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+    )
+    changed_view = deepcopy(_safe_view())
+    changed_view["questions_and_issues"][0]["finding"] = "A clarified stakeholder question."
+    second = service.publish_milestone(
+        "diagnosis", {"coverage": {"complete": True}}, stakeholder_view=changed_view,
+    )
+
+    first_by_kind = {artifact["kind"]: artifact for artifact in first.artifacts}
+    second_by_kind = {artifact["kind"]: artifact for artifact in second.artifacts}
+    assert (
+        second_by_kind["scorecard_portfolio_csv"]["object_key"]
+        == first_by_kind["scorecard_portfolio_csv"]["object_key"]
+    )
+    assert (
+        second_by_kind["score_brief"]["object_key"]
+        != first_by_kind["score_brief"]["object_key"]
+    )
+    assert (
+        second_by_kind["scorecard_presentation"]["object_key"]
+        != first_by_kind["scorecard_presentation"]["object_key"]
+    )
+
+
+def test_corrupt_reuse_candidate_is_replaced_instead_of_becoming_current(monkeypatch):
+    from plexus.optimization import run_report
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    store = _ArtifactStore()
+    first_service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="corrupt-reuse",
+        report_configuration_id="config-1", artifact_store=store,
+        publication_id_factory=lambda: "ranking",
+        task_lookup=lambda _: None, report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda task: [
+            stage for stage in _TaskStage.created if stage.taskId == task.id
+        ],
+    )
+    state = first_service.start_or_resume({"scope": {}})
+    first = first_service.publish_milestone(
+        "ranking", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+    )
+    first_score_brief = next(
+        artifact for artifact in first.artifacts if artifact["kind"] == "score_brief"
+    )
+    store.content_by_key[first_score_brief["object_key"]] = b"corrupt"
+
+    recovered = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="corrupt-reuse",
+        report_configuration_id="config-1", artifact_store=store,
+        publication_id_factory=lambda: "assessment",
+        task_lookup=lambda _: state.task,
+        report_lookup=lambda _: state.report,
+        block_lookup=lambda _: list(_Block.created),
+        stage_lookup=lambda task: [
+            stage for stage in _TaskStage.created if stage.taskId == task.id
+        ],
+    )
+    recovered.start_or_resume({"scope": {}})
+    second = recovered.publish_milestone(
+        "assessment", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+    )
+    second_score_brief = next(
+        artifact for artifact in second.artifacts if artifact["kind"] == "score_brief"
+    )
+
+    assert second_score_brief["object_key"] != first_score_brief["object_key"]
+    assert second_score_brief["source_revision"] == 2
+    assert store.content_by_key[second_score_brief["object_key"]] != b"corrupt"
+
+
+def test_failed_assessment_artifact_publication_remains_distinct_from_diagnosis(monkeypatch):
+    service = _service(monkeypatch)
+    state = service.start_or_resume({"scope": {}})
+    original_uploader = service._artifact_uploader
+
+    def fail_workbook(task_id, name, content):
+        if name.endswith(".xlsx"):
+            raise RuntimeError("upload is unavailable")
+        return original_uploader(task_id, name, content)
+
+    service._artifact_uploader = fail_workbook
+    with pytest.raises(Exception, match="assessment"):
+        service.publish_milestone(
+            "assessment", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+        )
+
+    progress = json.loads(state.blocks["status"].output)["preview"]["summary"]["live_progress"]
+    assert progress["phase"] == "publication"
+    assert progress["state"] == "failed"
+    assert progress["artifact_counts"]["stakeholder_workbook"] == {"completed": 0, "total": 1}
+    assert progress["failure"] == {
+        "exception_class": "RuntimeError",
+        "operation_category": "stakeholder_workbook",
+        "retry_classification": "retryable",
+        "completed": progress["current"],
+        "total": progress["total"],
+    }
+    assert "upload is unavailable" not in json.dumps(progress)
+    assert "stakeholder workbook" in progress["message"].lower()
+    assert "diagnosis" not in state.report.output.lower()
+
+
 def test_procedure_owned_task_rejects_a_conflicting_run_claim(monkeypatch):
     from plexus.optimization import run_report
 
@@ -997,7 +2423,7 @@ def test_procedure_owned_task_rejects_a_conflicting_run_claim(monkeypatch):
         service.start_or_resume({"scope": {}})
 
 
-def test_stage_initialization_failure_marks_the_task_failed_after_publishing_the_report(monkeypatch):
+def test_stage_initialization_interruption_keeps_the_attempt_active_after_publishing_the_report(monkeypatch):
     from plexus.optimization import run_report
 
     class _FailingStage(_TaskStage):
@@ -1020,11 +2446,11 @@ def test_stage_initialization_failure_marks_the_task_failed_after_publishing_the
         service.start_or_resume({"scope": {}})
 
     assert len(_Report.created) == 1
-    assert _Task.created[0].status == "FAILED"
-    assert "stage service unavailable" in _Report.created[0].output
+    assert _Task.created[0].status == "RUNNING"
+    assert "Status: running" in _Report.created[0].output
 
 
-def test_publish_failure_marks_task_failed_and_raises_without_silent_progress(monkeypatch):
+def test_publish_interruption_keeps_task_active_and_raises_without_silent_progress(monkeypatch):
     class _FailingBlock(_Block):
         def update(self, **values):
             if self.name == "Decision Evidence" and "r0001" in str(values.get("output", "")):
@@ -1039,11 +2465,43 @@ def test_publish_failure_marks_task_failed_and_raises_without_silent_progress(mo
     with pytest.raises(OptimizationRunPublicationError, match="assessment"):
         service.publish_milestone("assessment", {"coverage": {"complete": True}}, stakeholder_view=_safe_view())
 
-    assert state.task.status == "FAILED"
-    assert any(update.get("status") == "FAILED" for update in state.task.updates)
-    active = next(stage for stage in _TaskStage.created if stage.status == "FAILED")
-    assert active.name == "preflight"
-    assert "attachment envelope write failed" in active.statusMessage
+    assert state.task.status == "RUNNING"
+    assert not any(update.get("status") == "FAILED" for update in state.task.updates)
+    assert all(stage.status != "FAILED" for stage in _TaskStage.created)
+
+
+def test_initialization_write_interruption_keeps_the_same_attempt_active(monkeypatch):
+    from plexus.optimization import run_report
+
+    class _InterruptedInitialBlock(_Block):
+        def update(self, **values):
+            if self.name == "Run Status":
+                raise RuntimeError("temporary authorization interruption")
+            return super().update(**values)
+
+    service = _service(monkeypatch, block_class=_InterruptedInitialBlock)
+    with pytest.raises(run_report.OptimizationRunRetryablePublicationError):
+        service.start_or_resume({"scope": {}})
+
+    assert service._state is not None
+    assert service._state.task.status == "RUNNING"
+    assert json.loads(service._state.task.metadata).get("optimization_run_final_status") is None
+
+
+def test_finalization_write_interruption_keeps_the_same_attempt_active(monkeypatch):
+    from plexus.optimization import run_report
+
+    service = _service(monkeypatch)
+    state = service.start_or_resume({"scope": {}})
+    state.report.update = lambda **_values: (_ for _ in ()).throw(
+        RuntimeError("temporary authorization interruption")
+    )
+
+    with pytest.raises(run_report.OptimizationRunRetryablePublicationError):
+        service.finalize(status="COMPLETED")
+
+    assert state.task.status == "RUNNING"
+    assert json.loads(state.task.metadata).get("optimization_run_final_status") is None
 
 
 def test_finalize_marks_the_single_task_complete_after_the_latest_revision(monkeypatch):

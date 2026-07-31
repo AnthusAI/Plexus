@@ -44,7 +44,10 @@ class ScoreRubricConsistencyResult:
 class ScoreRubricConsistencyService:
     """Generate a concise score-code vs rubric consistency assessment."""
 
-    DEFAULT_MODEL = "gpt-5-mini"
+    DEFAULT_MODEL = "gpt-5-mini-2025-08-07"
+    MAX_INPUT_TOKENS = 36_000
+    MAX_OUTPUT_TOKENS = 2_000
+    MAX_ATTEMPTS = 2
     VALID_STATUSES = {"consistent", "potential_conflict", "inconclusive"}
 
     def __init__(
@@ -52,13 +55,25 @@ class ScoreRubricConsistencyService:
         *,
         invoke_model: Optional[Callable[[str, str], str]] = None,
         model: str = DEFAULT_MODEL,
+        semantic_authority: Any = None,
+        openai_client_factory: Optional[Callable[[], Any]] = None,
+        token_counter: Optional[Callable[[str, str], int]] = None,
+        max_input_tokens: int = MAX_INPUT_TOKENS,
+        max_output_tokens: int = MAX_OUTPUT_TOKENS,
     ):
-        self._invoke_model = invoke_model or self._invoke_openai
+        self._invoke_model = invoke_model
         self._model = model
+        self._semantic_authority = semantic_authority
+        self._openai_client_factory = openai_client_factory
+        self._token_counter = token_counter or self._count_input_tokens
+        self._max_input_tokens = max_input_tokens
+        self._max_output_tokens = max_output_tokens
+        if invoke_model is None and model != self.DEFAULT_MODEL:
+            raise ValueError("rubric consistency requires the exact authorized model revision")
 
     def generate(self, request: ScoreRubricConsistencyRequest) -> ScoreRubricConsistencyResult:
         prompt = self._build_prompt(request)
-        raw_text = self._invoke_model(prompt, self._model)
+        raw_text = self._invoke(prompt, attempt=1)
         try:
             parsed = self._parse_response(raw_text)
         except json.JSONDecodeError:
@@ -67,7 +82,7 @@ class ScoreRubricConsistencyService:
                 f"{_truncate(raw_text or '(empty response)', 1000)}\n\n"
                 "Return ONLY valid JSON with exactly these keys: status, paragraph."
             )
-            raw_text = self._invoke_model(repair_prompt, self._model)
+            raw_text = self._invoke(repair_prompt, attempt=2)
             parsed = self._parse_response(raw_text)
         status = str(parsed.get("status") or "inconclusive").strip()
         if status not in self.VALID_STATUSES:
@@ -147,19 +162,111 @@ class ScoreRubricConsistencyService:
             cleaned = obj_match.group(0)
         return json.loads(cleaned)
 
-    def _invoke_openai(self, prompt: str, model: str) -> str:
+    def _invoke(self, prompt: str, *, attempt: int) -> str:
+        if self._invoke_model is not None:
+            return self._invoke_model(prompt, self._model)
+        return self._invoke_openai_budgeted(prompt, attempt=attempt)
+
+    def _invoke_openai_budgeted(self, prompt: str, *, attempt: int) -> str:
         from dotenv import load_dotenv
         from openai import OpenAI
+        from plexus.optimization.semantic_authority import SemanticOutcomeUnknown
+        from plexus.optimization.semantic_budget import SemanticUsage
+
+        if self._semantic_authority is None:
+            raise RuntimeError(
+                "rubric consistency model invocation requires semantic budget authority"
+            )
+        request_payload = {
+            "model": self._model,
+            "reasoning": {"effort": "low"},
+            "input": [{"role": "user", "content": prompt}],
+            "max_output_tokens": self._max_output_tokens,
+        }
+        measured_model_tokens = self._token_counter(request_payload, self._model)
+        from plexus.optimization.semantic_budget import canonical_json_bytes
+
+        conservative_input_bound = max(
+            measured_model_tokens,
+            len(canonical_json_bytes(request_payload)),
+        )
+        if conservative_input_bound > self._max_input_tokens:
+            raise ValueError("rubric consistency input exceeds max_input_tokens")
+        plan = self._semantic_authority.direct_plan(
+            attempt=attempt,
+            max_input_tokens=self._max_input_tokens,
+            max_output_tokens=self._max_output_tokens,
+            request_payload=request_payload,
+        )
+        decision = self._semantic_authority.reserve_direct(plan)
+        if decision.status == "replay":
+            replay = decision.replay_payload or {}
+            if replay.get("kind") != "plexus-direct-response":
+                raise RuntimeError("rubric consistency replay payload is invalid")
+            return str(replay.get("output_text") or "")
 
         load_dotenv(override=False)
-        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-        response = client.responses.create(
-            model=model,
-            reasoning={"effort": "low"},
-            input=[{"role": "user", "content": prompt}],
-            max_output_tokens=2000,
+        client = (
+            self._openai_client_factory()
+            if self._openai_client_factory is not None
+            else OpenAI(api_key=os.environ["OPENAI_API_KEY"], max_retries=0)
         )
-        return (response.output_text or "").strip()
+        try:
+            response = client.responses.create(**request_payload)
+        except Exception as exc:
+            self._semantic_authority.unknown_direct(
+                decision.reservation_id, reason=str(exc)
+            )
+            raise SemanticOutcomeUnknown(
+                "rubric consistency provider outcome is unknown"
+            ) from exc
+        output_text = str(getattr(response, "output_text", "") or "").strip()
+        try:
+            usage = getattr(response, "usage", None)
+            if usage is None:
+                raise ValueError("provider response has no usage")
+            input_tokens = _usage_int(usage, "input_tokens")
+            output_tokens = _usage_int(usage, "output_tokens")
+            details = _usage_value(usage, "input_tokens_details") or {}
+            cached_tokens = _usage_int(details, "cached_tokens", default=0)
+            self._semantic_authority.settle_direct(
+                decision.reservation_id,
+                SemanticUsage(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cached_input_tokens=cached_tokens,
+                    provider_request_id=(
+                        str(getattr(response, "id", "") or "") or None
+                    ),
+                ),
+                output_text=output_text,
+            )
+        except Exception as exc:
+            self._semantic_authority.unknown_direct(
+                decision.reservation_id, reason=str(exc)
+            )
+            raise SemanticOutcomeUnknown(
+                "rubric consistency usage settlement is incomplete"
+            ) from exc
+        return output_text
+
+    @staticmethod
+    def _count_input_tokens(request_payload: Any, model: str) -> int:
+        import tiktoken
+
+        try:
+            encoding = tiktoken.encoding_for_model(model)
+        except KeyError:
+            encoding = tiktoken.get_encoding("o200k_base")
+        # Canonical payload byte length is checked separately as a conservative
+        # ceiling that includes Responses role/framing fields.
+        input_rows = request_payload.get("input") if isinstance(request_payload, dict) else []
+        prompt = "\n".join(
+            str(row.get("content") or "")
+            for row in input_rows or []
+            if isinstance(row, dict)
+        )
+        return len(encoding.encode(prompt))
 
 
 def fetch_score_version_for_consistency(client: Any, score_version_id: str) -> Dict[str, Any]:
@@ -211,3 +318,18 @@ def _truncate(value: str, limit: int) -> str:
 def _compact_paragraph(value: str) -> str:
     value = re.sub(r"\s+", " ", value or "").strip()
     return value[:1200]
+
+
+def _usage_value(value: Any, name: str) -> Any:
+    if isinstance(value, dict):
+        return value.get(name)
+    return getattr(value, name, None)
+
+
+def _usage_int(value: Any, name: str, *, default: int | None = None) -> int:
+    raw = _usage_value(value, name)
+    if raw is None and default is not None:
+        return default
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
+        raise ValueError(f"provider usage {name} is missing or invalid")
+    return raw

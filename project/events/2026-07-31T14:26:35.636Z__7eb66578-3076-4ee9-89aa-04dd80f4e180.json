@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7eb66578-3076-4ee9-89aa-04dd80f4e180",
+  "issue_id": "plx-55b4c117-9d43-4cb0-9098-57d95650b532",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T14:26:35.636Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Keep procedure active until living report finalizes",
+    "description": "As an operator, I want a retryable living-report publication state to keep its procedure active, so that the authoritative Report cannot remain behind a falsely completed procedure.\n\nFeature: Retryable living-report publication\nScenario: Publication must be retried before procedure completion\n  Given a portfolio run has completed analysis\n  And publishing the next durable Report revision returns a retryable running state\n  When the Tactus procedure evaluates the portfolio-run result\n  Then the procedure remains active for replay\n  And it does not mark the procedure completed\n  And it does not advance to a terminal finalization stage\n\nScenario: Terminal completion requires an authoritative final Report revision\n  Given a portfolio run reaches a terminal decision\n  When the Tactus procedure completes\n  Then the linked Report contains a terminal finalization revision\n  And the Report and Procedure show consistent terminal status\n\nOut of scope: client-specific findings, automatic score changes, champion promotion, and new backend resources.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

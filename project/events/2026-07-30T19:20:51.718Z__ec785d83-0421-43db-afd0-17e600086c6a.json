@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ec785d83-0421-43db-afd0-17e600086c6a",
+  "issue_id": "plx-82be5edf-3731-452a-8dfe-ffc69aff9058",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T19:20:51.718Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Visualize optimization portfolio decision distribution",
+    "description": "As an operator, I want a stakeholder-safe distribution chart for optimization opportunities so that I can distinguish a steep priority drop-off from a broad portfolio of work.\n\nScope: reusable dashboard component only; no new backend resource, report schema, or client-specific data.\n\nGherkin:\nGiven evidence-ranked optimization opportunity rows\nWhen an operator views the distribution component\nThen it shows the complete ranked curve with labeled decision dispositions and a text equivalent\nAnd the operator can choose linear or logarithmic opportunity scale\nAnd no opaque identifiers or raw client evidence are displayed.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-8570854c-bad6-4049-be38-e04836aae830",
+    "labels": []
+  }
+}

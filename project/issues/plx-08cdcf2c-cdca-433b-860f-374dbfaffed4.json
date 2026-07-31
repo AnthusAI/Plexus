@@ -1,0 +1,37 @@
+{
+  "id": "plx-08cdcf2c-cdca-433b-860f-374dbfaffed4",
+  "title": "Refresh living report while linked task is active",
+  "description": "An open living Report remains on its initial ReportBlock revision while the backend publishes later milestones. Operators only see the latest Procedure Task and report evidence after navigating or reloading.\n\nFeature: Live milestone visibility\n\nScenario: A running report publishes a new milestone\nGiven an operator has a living Report open\nAnd its linked Task is nonterminal\nWhen the backend updates the Task and ReportBlock artifact pointer\nThen the open page displays the new progress and Report revision without manual reload\n\nScenario: A linked task becomes terminal\nGiven live refresh is active for a living Report\nWhen the linked Task reaches a terminal state\nThen the page displays the terminal Report revision\nAnd background refresh stops",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3a85090d-2bfc-4174-a292-c56ffd591865",
+      "author": "ryan.porter",
+      "text": "Root cause: the selected Report view observed Report and ReportBlock changes but not the linked Task or TaskStage lifecycle that powers the embedded Procedure summary. The dashboard now refreshes the existing full Report-with-blocks query for matching Task, TaskStage, Report, and ReportBlock events, with a 15-second active-run fallback that stops at terminal state. Focused hook/component tests and frontend/backend typechecks pass; no schema or backend resources changed.",
+      "created_at": "2026-07-30T18:16:54.379056Z"
+    },
+    {
+      "id": "331d84d6-05ed-4223-85d3-68c495f6c544",
+      "author": "ryan.porter",
+      "text": "Production dogfood showed the first fix was insufficient: the open Report remained on its initial content until navigation or reload, even though the durable revision had advanced. The current hook does not poll until the linked Task relation is already hydrated, and it stops immediately when a terminal Task is observed; both leave race windows around report creation/final publication. Reopening this behavior with outside-in tests for pre-link hydration and terminal-publication reconciliation before changing production code.",
+      "created_at": "2026-07-30T18:31:38.156606Z"
+    },
+    {
+      "id": "e0570ba4-252c-49d9-b4e9-507cab60cf4d",
+      "author": "ryan.porter",
+      "text": "Root cause and production proof: the Report carried its direct taskId immediately, but the dashboard discarded it and would not start live polling until the nested Task relation hydrated. It also stopped polling on terminal status without a final reconciliation fetch. The dashboard now preserves the direct taskId, prefers the hydrated relation when available, and performs one final terminal reconciliation. Focused tests and frontend/backend typechecks pass. A new read-only acceptance Report was opened at durable revision 6 and, without navigation or reload, advanced to revision 9, changed Running to Completed, updated its embedded Procedure from 1/6 to 6/6, and displayed the completed inventory. No schema or backend-resource changes.",
+      "created_at": "2026-07-30T18:39:14.822932Z"
+    }
+  ],
+  "created_at": "2026-07-30T18:11:06.048285Z",
+  "updated_at": "2026-07-30T18:39:14.822932Z",
+  "closed_at": null,
+  "custom": {}
+}

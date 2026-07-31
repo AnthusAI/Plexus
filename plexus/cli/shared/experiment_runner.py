@@ -6,6 +6,7 @@ import os
 import signal
 import threading
 import traceback
+import uuid
 from typing import Optional, Tuple, Dict, Any
 import logging
 import json
@@ -20,6 +21,7 @@ from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.procedure import Procedure as DashboardProcedure
 from plexus.dashboard.api.models.task import Task
 from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id
+from plexus.cli.procedure.scheduled_continuation import canonical_time_wait_request
 
 logger = logging.getLogger(__name__)
 LOCAL_DISPATCH_MODE = "local"
@@ -152,7 +154,28 @@ def _update_procedure_status_and_metadata(
 
 
 def _merge_task_metadata(task: Task, patch: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    metadata = _parse_json_dict(task.metadata)
+    authoritative_task = task
+    task_client = getattr(task, "_client", None)
+    if task_client is not None:
+        task_id = getattr(task, "id", None)
+        if not task_id:
+            raise RuntimeError(
+                "Cannot safely update Task metadata without an authoritative Task ID."
+            )
+        try:
+            authoritative_task = Task.get_by_id(task_id, task_client)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Cannot safely update metadata for Task {task_id}: "
+                "the authoritative Task could not be reloaded."
+            ) from exc
+        if authoritative_task is None:
+            raise RuntimeError(
+                f"Cannot safely update metadata for Task {task_id}: "
+                "the authoritative Task was not found."
+            )
+
+    metadata = _parse_json_dict(getattr(authoritative_task, "metadata", None))
     if patch:
         metadata.update(_to_json_safe(patch))
     return metadata
@@ -607,6 +630,24 @@ async def run_procedure_with_task_tracking(
         task.command if task and getattr(task, "command", None) else f"procedure run {procedure_id}"
     )
     task_ref = tracker.task if tracker and tracker.task else task
+    prior_runtime = (
+        _merge_task_metadata(task_ref).get("runtime")
+        if task_ref is not None
+        else None
+    )
+    tactus_run_id = (
+        prior_runtime.get("tactus_run_id")
+        if isinstance(prior_runtime, dict)
+        and isinstance(prior_runtime.get("tactus_run_id"), str)
+        and prior_runtime.get("tactus_run_id").strip()
+        else str(uuid.uuid4())
+    )
+    runtime_identity.update({
+        "procedure_id": procedure_id,
+        "task_id": task_ref.id if task_ref else None,
+        "account_id": account_id,
+        "tactus_run_id": tactus_run_id,
+    })
     failure_finalized = False
     installed_signal_handlers: Dict[int, Any] = {}
 
@@ -860,6 +901,10 @@ async def run_procedure_with_task_tracking(
         # Run the procedure (this is the actual hypothesis generation work)
         run_options = dict(experiment_options)
         run_options.setdefault("account_id", account_id)
+        # Tactus checkpoint entries must retain one run identity across every
+        # durable replay of this Procedure/Task. A process-local UUID would
+        # make a resumed execution reject all prior checkpoints as another run.
+        run_options.setdefault("_tactus_run_id", tactus_run_id)
         # Pass the task ID so the executor can update stage status in real-time
         if task_ref and task_ref.id:
             run_options.setdefault("_task_id_for_stage_tracking", task_ref.id)
@@ -867,6 +912,8 @@ async def run_procedure_with_task_tracking(
 
         procedure_status = str(experiment_result.get("status") or "").upper()
         is_waiting_for_human = procedure_status == "WAITING_FOR_HUMAN"
+        is_waiting_for_children = procedure_status == "WAITING_FOR_CHILDREN"
+        is_waiting_for_time = procedure_status == "WAITING_FOR_TIME"
         is_success = bool(experiment_result.get("success"))
         logger.info(
             f"[PROCEDURE_RUN] procedure={procedure_id} success={is_success} "
@@ -876,6 +923,12 @@ async def run_procedure_with_task_tracking(
         if is_waiting_for_human:
             mapped_task_status = "RUNNING"
             mapped_procedure_status = "WAITING_FOR_HUMAN"
+        elif is_waiting_for_children:
+            mapped_task_status = "WAITING_FOR_CHILDREN"
+            mapped_procedure_status = "WAITING_FOR_CHILDREN"
+        elif is_waiting_for_time:
+            mapped_task_status = "WAITING_FOR_TIME"
+            mapped_procedure_status = "WAITING_FOR_TIME"
         elif is_success:
             mapped_task_status = "COMPLETED"
             mapped_procedure_status = "COMPLETED"
@@ -899,14 +952,84 @@ async def run_procedure_with_task_tracking(
             )
             _finalize_failed(kind="exception", message=str(err_text))
 
+        child_wait_evidence: Optional[Dict[str, Any]] = None
+        if is_waiting_for_children:
+            wait_request = experiment_result.get("request")
+            child_snapshots = experiment_result.get("children")
+            if (
+                task_ref is None
+                or not isinstance(wait_request, dict)
+                or not isinstance(wait_request.get("children"), list)
+                or not wait_request["children"]
+            ):
+                raise RuntimeError(
+                    "WAITING_FOR_CHILDREN result lacks a durable parent Task and nonempty child request"
+                )
+            child_wait_evidence = {
+                "procedure_id": procedure_id,
+                "parent_task_id": task_ref.id,
+                "request": _to_json_safe(wait_request),
+                "children": _to_json_safe(child_snapshots or []),
+            }
+            # The checkpoint is already durable. Publish the indexed Procedure
+            # wait boundary before changing the parent Task so recovery can
+            # repair the one-sided Procedure-first crash window.
+            if not is_builtin_procedure_id(procedure_id):
+                _update_procedure_status_and_metadata(
+                    client,
+                    procedure_id,
+                    status="WAITING_FOR_CHILDREN",
+                    metadata_patch={"waiting_for_children": child_wait_evidence},
+                )
+
+        time_wait_evidence: Optional[Dict[str, Any]] = None
+        if is_waiting_for_time:
+            wait_request = canonical_time_wait_request(experiment_result.get("request"))
+            if task_ref is None or wait_request is None:
+                raise RuntimeError(
+                    "WAITING_FOR_TIME result lacks a durable parent Task and exact retry directive"
+                )
+            time_wait_evidence = {
+                "procedure_id": procedure_id,
+                "parent_task_id": task_ref.id,
+                "request": wait_request,
+            }
+            # The Tactus checkpoint is already durable. Publish its matching
+            # Procedure boundary before releasing the parent Task so a worker
+            # crash cannot make the scheduled replay look terminal.
+            if not is_builtin_procedure_id(procedure_id):
+                _update_procedure_status_and_metadata(
+                    client,
+                    procedure_id,
+                    status="WAITING_FOR_TIME",
+                    metadata_patch={"waiting_for_time": time_wait_evidence},
+                )
+
         # Complete or update the task
         if task_ref and mapped_task_status != "FAILED":
             try:
+                # The living report can publish attachments while this long-running
+                # procedure is executing.  task_ref was loaded at launch, so it is
+                # not authoritative for the terminal attachment merge.
+                current_task = Task.get_by_id(task_ref.id, client)
+                if current_task is None:
+                    raise RuntimeError(
+                        f"Task {task_ref.id} disappeared before terminal output persistence."
+                    )
+                if current_task.accountId != task_ref.accountId:
+                    raise RuntimeError(
+                        f"Task {task_ref.id} changed account before terminal output persistence."
+                    )
+                current_attached_files = getattr(current_task, "attachedFiles", None)
+                if current_attached_files is not None and not isinstance(current_attached_files, list):
+                    raise RuntimeError(
+                        f"Task {task_ref.id} has malformed attachedFiles before terminal output persistence."
+                    )
                 compact_output, attached_files, _attachment_key = persist_task_output_artifact(
                     task_id=task_ref.id,
                     output_payload=experiment_result,
                     format_type="json",
-                    existing_attached_files=getattr(task_ref, "attachedFiles", None),
+                    existing_attached_files=current_attached_files,
                     status=mapped_task_status.lower(),
                     client=client,
                 )
@@ -922,21 +1045,51 @@ async def run_procedure_with_task_tracking(
                 "output": compact_output,
                 "attachedFiles": attached_files,
             }
-            if local_dispatch:
+            task_metadata = _merge_task_metadata(task_ref)
+            if is_waiting_for_children:
+                assert child_wait_evidence is not None
+                task_metadata["dispatch_policy"] = "resume_once"
+                task_metadata["waiting_for_children"] = child_wait_evidence
+                update_data["dispatchStatus"] = "WAITING_FOR_CHILDREN"
+                update_data["workerNodeId"] = None
+                update_data["completedAt"] = None
+            elif is_waiting_for_time:
+                assert time_wait_evidence is not None
+                task_metadata["dispatch_policy"] = "resume_once"
+                task_metadata["waiting_for_time"] = time_wait_evidence
+                update_data["dispatchStatus"] = "WAITING_FOR_TIME"
+                update_data["workerNodeId"] = None
+                update_data["completedAt"] = None
+            else:
+                if task_metadata.get("dispatch_policy") == "resume_once":
+                    task_metadata.pop("dispatch_policy", None)
+                task_metadata.pop("waiting_for_children", None)
+                task_metadata.pop("waiting_for_time", None)
+            if local_dispatch and not is_waiting_for_children and not is_waiting_for_time:
                 update_data["dispatchStatus"] = LOCAL_DISPATCH_STATUS
                 update_data["workerNodeId"] = None
-                update_data["metadata"] = _json_dumps(
-                    _with_local_dispatch_metadata(_merge_task_metadata(task_ref))
-                )
+            if local_dispatch:
+                task_metadata = _with_local_dispatch_metadata(task_metadata)
+            update_data["metadata"] = _json_dumps(task_metadata)
             if mapped_task_status in {"COMPLETED", "FAILED"}:
                 update_data["completedAt"] = datetime.now(timezone.utc).isoformat()
             task_ref.update(**update_data)
 
         # Keep procedure status consistent with the actual run outcome for DB-backed procedures.
-        if mapped_procedure_status != "FAILED" and not is_builtin_procedure_id(procedure_id):
+        if (
+            mapped_procedure_status != "FAILED"
+            and not is_waiting_for_children
+            and not is_waiting_for_time
+            and not is_builtin_procedure_id(procedure_id)
+        ):
             try:
                 logger.info(f"[PROCEDURE_RUN] Updating procedure {procedure_id} status → {mapped_procedure_status}")
-                _update_procedure_status_and_metadata(client, procedure_id, status=mapped_procedure_status)
+                _update_procedure_status_and_metadata(
+                    client,
+                    procedure_id,
+                    status=mapped_procedure_status,
+                    remove_metadata_keys=["waiting_for_children", "waiting_for_time"],
+                )
             except Exception as _pe:
                 logger.warning(f"Failed to update procedure status for {procedure_id}: {_pe}")
 

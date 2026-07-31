@@ -1,0 +1,46 @@
+{
+  "id": "plx-36ed05aa-eb3e-4c70-9aa5-5432b73380fe",
+  "title": "Publish distinct ranking and assessment milestones",
+  "description": "As an optimization stakeholder, I want ranking and deterministic assessment published as separate durable milestones, so that a long-running portfolio analysis shows useful progress before semantic diagnosis begins.\n\nIncluded:\n- Publish the complete ranking immediately after exhaustive ranking succeeds.\n- Publish deterministic assessment after every ranked score is assessed.\n- Advance the existing living Report and Task stages without creating another Report.\n- Preserve honest partial coverage and immutable workbook revisions.\n\nExcluded:\n- Per-score workbook publication.\n- Optimizer launch or operational score mutation.\n\nFeature: Visible portfolio analysis progress\n\nScenario: Publish ranking before assessment\n  Given an exact exhaustive ranking\n  When the portfolio run begins deterministic assessment\n  Then the living Report publishes a ranking milestone first\n  And the ranking revision contains no invented assessment conclusions\n\nScenario: Publish assessment before diagnosis\n  Given every ranked score has been assessed\n  When semantic diagnosis is about to begin\n  Then the same Report publishes an assessment milestone\n  And semantic diagnosis starts only after that milestone is durable\n\nScenario: Stop when milestone publication fails\n  Given a ranking or assessment revision cannot be published\n  When the runner attempts to advance\n  Then the run fails before semantic diagnosis or optimizer execution.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7a83cf75-d1e8-426c-847f-88df96be94c0",
+      "author": "ryan.porter",
+      "text": "Dogfood reproduction showed one combined ranking/assessment revision only after a long account-wide assessment, leaving the living Report at the start milestone with no useful progress. Next: specify ranking-first publication, verify the old runner fails that behavior, and implement distinct durable ranking and assessment milestones.",
+      "created_at": "2026-07-29T21:53:32.586376Z"
+    },
+    {
+      "id": "7d6a30b7-901f-4cca-816b-e72080d5a504",
+      "author": "ryan.porter",
+      "text": "Outside-in lifecycle coverage exposed that durable report revisions did not advance TaskStages or the Task currentStageId. Implemented milestone-driven stage transitions after durable publication, terminal stage completion, active-stage failure handling, pending-approval publication before HITL suspension, and explicit optimization launch/dispatch publications. Focused report and portfolio suite: 39 passed.",
+      "created_at": "2026-07-29T22:04:31.926862Z"
+    },
+    {
+      "id": "fe43c23a-f621-4ba3-bdff-f1f3cbe836a0",
+      "author": "ryan.porter",
+      "text": "Runtime composition gate passed: 316 tests. The lifecycle failure contract now also requires the active TaskStage to carry the publication error, while the Task remains the canonical terminal failure signal.",
+      "created_at": "2026-07-29T22:09:38.802719Z"
+    },
+    {
+      "id": "4c8d7e9e-a7c4-42b5-a23a-be9a4d8723e8",
+      "author": "ryan.porter",
+      "text": "Production dogfood exposed a presentation gap after the lifecycle fix: revision 1 and the workbook are durable, but the Report cover still shows only status, revision number, and milestone. The cover must directly project safe current activity, next checkpoint, counts, and limitations; the generic programmatic ReportConfiguration description is also visible and not stakeholder-ready.",
+      "created_at": "2026-07-30T14:01:52.090123Z"
+    }
+  ],
+  "created_at": "2026-07-29T21:53:07.290709Z",
+  "updated_at": "2026-07-30T14:01:52.090123Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

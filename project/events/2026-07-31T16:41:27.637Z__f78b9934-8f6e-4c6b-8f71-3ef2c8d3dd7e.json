@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f78b9934-8f6e-4c6b-8f71-3ef2c8d3dd7e",
+  "issue_id": "plx-88ca4590-7921-43c8-a13a-e3792639673c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T16:41:27.637Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Fail before semantic spend when required evidence storage is unavailable",
+    "description": "The portfolio runner currently begins model-backed diagnosis before proving that required non-model evidence storage is readable. A credential or authorization failure can therefore consume semantic budget and only afterward produce incomplete evidence.\n\nScenario: required evidence authority is available\n  Given a selected semantic diagnosis target\n  When the portfolio diagnosis preflight runs\n  Then diagnosis may continue under the frozen semantic budget\n\nScenario: required evidence authority is unavailable\n  Given a selected semantic diagnosis target\n  When the evidence authority preflight cannot authenticate or read its configured storage\n  Then no semantic model call is made\n  And the living Report records a sanitized incomplete-evidence blocker and recovery action\n  And the run performs no optimizer mutation\n\nScenario: no semantic target is selected\n  Given deterministic assessment selects no semantic diagnosis target\n  When the portfolio run continues\n  Then the storage preflight is not called.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

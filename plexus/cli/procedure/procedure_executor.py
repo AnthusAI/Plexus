@@ -1156,6 +1156,7 @@ async def _execute_tactus(
     """
     logger.info(f"Executing procedure {procedure_id} with Tactus runtime")
     log_bridge: Optional[_PlexusTraceLogBridge] = None
+    _task_id: Optional[str] = None
 
     try:
         from tactus.core import TactusRuntime
@@ -1660,8 +1661,15 @@ async def _execute_tactus(
                 )
             _persist_inference_costs_to_state(storage, procedure_id, [event])
 
-        # Generate a run identifier for Tactus runtime correlation.
-        invocation_run_id = str(uuid.uuid4())
+        # A durable replay must use the original Tactus run identifier so its
+        # position-based checkpoints remain authoritative across worker
+        # processes. Callers without a tracked Task retain the legacy fresh ID.
+        supplied_run_id = options.pop("_tactus_run_id", None)
+        invocation_run_id = (
+            supplied_run_id.strip()
+            if isinstance(supplied_run_id, str) and supplied_run_id.strip()
+            else str(uuid.uuid4())
+        )
 
         log_bridge = _PlexusTraceLogBridge(
             trace_sink,
@@ -1669,11 +1677,40 @@ async def _execute_tactus(
             lifecycle_trace=options.pop("lifecycle_trace", None),
         )
 
+        # ``Procedure.await_children`` is a supported upstream Tactus
+        # checkpoint primitive. Only procedures that use it need the Plexus
+        # resolver, and they must fail explicitly if the installed runtime has
+        # not yet been upgraded to the supported constructor contract.
+        requires_external_child_wait = "await_children" in procedure_source
+        child_wait_resolver = None
+        if requires_external_child_wait:
+            runtime_account_id = (
+                context.get("account_id") or context.get("accountId")
+                if isinstance(context, dict)
+                else None
+            )
+            if not isinstance(runtime_account_id, str) or not runtime_account_id.strip():
+                raise RuntimeError(
+                    "Procedure.await_children requires an account_id in the runtime context"
+                )
+            from plexus.cli.procedure.tactus_adapters.external_children import (
+                OptimizerExternalChildResolver,
+            )
+            from plexus.optimization.optimizer_dispatch_backend import (
+                GraphQLOptimizerDispatchBackend,
+            )
+
+            child_wait_resolver = OptimizerExternalChildResolver(
+                backend=GraphQLOptimizerDispatchBackend(client),
+                account_id=runtime_account_id,
+            )
+
         # Create Tactus runtime with Plexus adapters.
         # Support both newer and older runtime signatures.
         _runtime_param_names: list = [
             "procedure_id", "storage_backend", "hitl_handler", "chat_recorder",
             "trace_sink", "log_handler", "mcp_server", "openai_api_key", "run_id",
+            "child_wait_resolver",
         ]
 
         runtime_kwargs: Dict[str, Any] = {
@@ -1687,7 +1724,10 @@ async def _execute_tactus(
             "openai_api_key": _api_key,
             "run_id": invocation_run_id,
         }
+        if child_wait_resolver is not None:
+            runtime_kwargs["child_wait_resolver"] = child_wait_resolver
         supports_chat_recorder = True
+        supports_child_wait_resolver = True
         try:
             runtime_sig = inspect.signature(TactusRuntime.__init__)
             accepts_var_kwargs = any(
@@ -1701,6 +1741,9 @@ async def _execute_tactus(
                     if name != "self"
                 }
                 supports_chat_recorder = "chat_recorder" in supported_params
+                supports_child_wait_resolver = (
+                    "child_wait_resolver" in supported_params
+                )
                 # Use the static param names list (not runtime_kwargs) to avoid
                 # taint-analysis false positives on logged key names.
                 dropped = sorted(k for k in _runtime_param_names if k not in supported_params)
@@ -1718,6 +1761,12 @@ async def _execute_tactus(
             logger.debug(
                 "Could not inspect TactusRuntime signature (%s); using default runtime kwargs",
                 sig_error,
+            )
+
+        if requires_external_child_wait and not supports_child_wait_resolver:
+            raise RuntimeError(
+                "Procedure.await_children requires TactusRuntime "
+                "child_wait_resolver; upgrade Tactus before deploying this procedure"
             )
 
         runtime = TactusRuntime(**runtime_kwargs)
@@ -1954,6 +2003,12 @@ async def _execute_tactus(
 
         execution_succeeded = bool(isinstance(result, dict) and result.get("success"))
         waiting_on_message_id = None
+        waiting_for_durable_continuation = (
+            isinstance(result, dict)
+            and result.get("success") is False
+            and str(result.get("status") or "").upper()
+            in {"WAITING_FOR_TIME", "WAITING_FOR_CHILDREN"}
+        )
         if not execution_succeeded:
             try:
                 persisted_metadata = storage.load_procedure_metadata(procedure_id)
@@ -1984,11 +2039,10 @@ async def _execute_tactus(
             try:
                 if execution_succeeded:
                     _complete_all_task_stages(client, _task_id)
-                elif waiting_on_message_id:
+                elif waiting_on_message_id or waiting_for_durable_continuation:
                     logger.info(
-                        "Procedure %s paused for human response %s; leaving task stages resumable",
+                        "Procedure %s paused for a durable continuation; leaving task stages resumable",
                         procedure_id,
-                        waiting_on_message_id,
                     )
                 else:
                     task_error = ""

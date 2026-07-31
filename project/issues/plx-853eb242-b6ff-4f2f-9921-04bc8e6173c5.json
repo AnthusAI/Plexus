@@ -1,0 +1,25 @@
+{
+  "id": "plx-853eb242-b6ff-4f2f-9921-04bc8e6173c5",
+  "title": "Distinguish scope inventory from the selected optimization portfolio",
+  "description": "A scoped run must enumerate the account inventory to resolve opaque IDs and literal prefixes, but the living Report currently presents that inventory count as though every inspected scorecard were in the optimization portfolio.\n\nFeature: Honest scoped-run coverage\n\nScenario: View a scoped optimization run after ranking\n  Given exhaustive inventory inspected more scorecards than the selected scope contains\n  When a stakeholder views the Report cover or aggregate presentation\n  Then the Report separately identifies the inventory inspected and the scorecards in scope\n  And ranked, assessed, and diagnosed counts are clearly associated with the selected scope\n\nScenario: View an account-wide run\n  Given no scorecard selectors were supplied\n  When a stakeholder views coverage\n  Then the account inventory and selected scope are clearly equivalent\n\nOut of scope:\n- Changing exhaustive inventory behavior.\n- Exposing opaque identifiers in stakeholder presentation.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "400e447d-fdcb-497f-899b-91440cf434e5",
+      "author": "ryan.porter",
+      "text": "Production dogfood confirmed selector behavior was correct but presentation was ambiguous: a one-scorecard run displayed all 56 enumerated account scorecards as 'inspected' beside one ranked score. The stakeholder overview and aggregate component now separate account inventory inspected from scorecards in scope, while retaining scoped ranked/assessment/diagnosis counts. Focused validation is green: 46 Python tests, 11 dashboard tests, and TypeScript compilation. No change to exhaustive inventory or opaque-ID behavior.",
+      "created_at": "2026-07-30T16:43:47.569898Z"
+    }
+  ],
+  "created_at": "2026-07-30T16:38:58.230223Z",
+  "updated_at": "2026-07-30T16:43:47.569898Z",
+  "closed_at": null,
+  "custom": {}
+}

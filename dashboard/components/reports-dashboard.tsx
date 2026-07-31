@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useParams, usePathname } from 'next/navigation'
+import Link from 'next/link'
 import { getClient } from '@/utils/amplify-client'
 import { useAccount } from '@/app/contexts/AccountContext'
 import type { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api'
@@ -30,10 +31,12 @@ import ReportTask, { ReportTaskData } from "@/components/ReportTask" // Import R
 import { RunReportButton } from '@/components/task-dispatch' // Import direct button
 import ReportConfigurationSelector from "@/components/ReportConfigurationSelector"
 import { parseOutputString } from '@/lib/utils'
+import { livingReportSnapshotKey } from '@/lib/living-report-snapshot'
 import {
   buildLinkedProcedureSummary,
   linkedProcedureSubtitle,
   optimizationFinalStatusFromReportBlocks,
+  optimizationReportSupersessionMap,
 } from '@/components/reports/linked-procedure-summary'
 import {
   resolveLivingReportTaskId,
@@ -57,6 +60,7 @@ type ReportDisplayData = {
   updatedAt?: string | null;
   createdByUserId?: string | null;
   output?: string | null;
+  parameters?: unknown;
   reportConfiguration?: {
     id: string;
     name?: string | null;
@@ -549,6 +553,7 @@ function transformReportData(report: Report): ReportDisplayData | null {
     updatedAt: report.updatedAt,
     createdByUserId: resolveReportAuthorUserId(report),
     output: report.output || null,
+    parameters: (report as any).parameters,
     reportConfiguration: configInfo,
     taskId: (report as any).taskId || (taskData as Task | null)?.id || null,
     task: taskData as Task | null
@@ -596,6 +601,7 @@ export default function ReportsDashboard({
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [reportsFilter, setReportsFilter] = useState('');
   const selectedReportRefreshSequence = useRef(0)
+  const selectedReportSnapshotRef = useRef<{ reportId: string, key: string } | null>(null)
 
   const refreshSelectedReport = useCallback(async (reportId: string) => {
     const requestSequence = ++selectedReportRefreshSequence.current
@@ -606,6 +612,13 @@ export default function ReportsDashboard({
       })
       const fullReport = 'data' in response ? response.data?.getReport : null
       if (!fullReport || requestSequence !== selectedReportRefreshSequence.current) return
+      const snapshotKey = livingReportSnapshotKey(fullReport)
+      if (
+        selectedReportSnapshotRef.current?.reportId === reportId
+        && selectedReportSnapshotRef.current.key === snapshotKey
+      ) {
+        return
+      }
 
       const transformedReport = transformReportData(fullReport as Report)
       const transformedBlocks = (fullReport.reportBlocks?.items || []).map((block: RawReportBlock) => {
@@ -636,6 +649,7 @@ export default function ReportsDashboard({
           : [transformedReport, ...previous])
       }
       setSelectedReportBlocks([...transformedBlocks])
+      selectedReportSnapshotRef.current = { reportId, key: snapshotKey }
     } catch (err) {
       console.error('Error refreshing selected Report:', err)
     }
@@ -643,6 +657,10 @@ export default function ReportsDashboard({
 
   const selectedReport = reports.find(report => report.id === selectedReportId)
   const selectedReportTask = selectedReport?.task
+  const supersededReports = useMemo(
+    () => optimizationReportSupersessionMap(reports),
+    [reports],
+  )
   useLivingReportRefresh({
     reportId: selectedReportId,
     taskId: resolveLivingReportTaskId(selectedReport),
@@ -781,6 +799,7 @@ export default function ReportsDashboard({
 
   // Fetch Report Blocks when selectedReportId changes
   useEffect(() => {
+    selectedReportSnapshotRef.current = null
     if (selectedReportId) {
       void refreshSelectedReport(selectedReportId)
     } else {
@@ -1176,7 +1195,10 @@ export default function ReportsDashboard({
 
     // Ensure we have a valid display name for the report
     const displayName = report.name || 'Report';
-    const optimizationFinalStatus = optimizationFinalStatusFromReportBlocks(selectedReportBlocks)
+    const supersededBy = supersededReports.get(report.id)
+    const optimizationFinalStatus = supersededBy
+      ? 'SUPERSEDED'
+      : optimizationFinalStatusFromReportBlocks(selectedReportBlocks)
     const linkedProcedure = buildLinkedProcedureSummary({
       reportId: report.id,
       reportName: displayName,
@@ -1194,6 +1216,23 @@ export default function ReportsDashboard({
       <ReportTask
         variant="detail"
         linkedProcedure={linkedProcedure}
+        detailNotice={supersededBy ? (
+          <div
+            className="mb-3 rounded-md bg-amber-500/10 p-4 text-sm"
+            role="status"
+          >
+            <div className="font-medium">Earlier duplicate Report</div>
+            <p className="mt-1 text-muted-foreground">
+              This Report preserves an earlier revision of the same run. The authoritative Report has revision {supersededBy.latestRevision}.
+            </p>
+            <Link
+              className="mt-2 inline-flex font-medium text-primary hover:underline"
+              href={`/lab/reports/${supersededBy.reportId}`}
+            >
+              Open authoritative Report
+            </Link>
+          </div>
+        ) : null}
         task={{
           id: report.id,
           type: 'Report',
@@ -1256,7 +1295,7 @@ export default function ReportsDashboard({
         key={report.id}
       />
     );
-  }, [selectedReportId, reports, selectedReportBlocks, isFullWidth, handleCloseReport, handleDelete, copyLinkToClipboard]); // Dependencies
+  }, [selectedReportId, reports, selectedReportBlocks, supersededReports, isFullWidth, handleCloseReport, handleDelete, copyLinkToClipboard]); // Dependencies
 
   // Memoized click handler factory
   const getReportClickHandler = useCallback((reportId: string) => {
@@ -1405,9 +1444,12 @@ export default function ReportsDashboard({
                           
                           // Ensure we have a valid display name for the report - USE FORCED STRING TYPE
                           const displayName = String(report.name || 'Report');
-                          const optimizationFinalStatus = report.id === selectedReportId
-                            ? optimizationFinalStatusFromReportBlocks(selectedReportBlocks)
-                            : undefined
+                          const supersededBy = supersededReports.get(report.id)
+                          const optimizationFinalStatus = supersededBy
+                            ? 'SUPERSEDED'
+                            : report.id === selectedReportId
+                              ? optimizationFinalStatusFromReportBlocks(selectedReportBlocks)
+                              : undefined
                           const linkedProcedure = buildLinkedProcedureSummary({
                             reportId: report.id,
                             reportName: displayName,

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "4bba0df5-9834-40e9-a223-9efcc0571982",
+  "issue_id": "plx-82be5edf-3731-452a-8dfe-ffc69aff9058",
+  "event_type": "field_updated",
+  "occurred_at": "2026-07-30T19:57:25.095Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "As an operator, I want a stakeholder-safe distribution chart for optimization opportunities so that I can distinguish a steep priority drop-off from a broad portfolio of work.\n\nScope: reusable dashboard component only; no new backend resource, report schema, or client-specific data.\n\nGherkin:\nGiven evidence-ranked optimization opportunity rows\nWhen an operator views the distribution component\nThen it shows the complete ranked curve with labeled decision dispositions and a text equivalent\nAnd the operator can choose linear or logarithmic opportunity scale\nAnd no opaque identifiers or raw client evidence are displayed.",
+        "to": "As an operator, I want stakeholder-safe visual explanations of optimization opportunity so that I can distinguish a steep priority drop-off, understand why a score ranks highly, and compare selected candidates with policy-deferred scores.\n\nScope: dashboard visualization and existing stakeholder presentation fields only; no new backend resource, GraphQL schema, or client-specific data.\n\nFeature: Optimization opportunity evidence visualization\n\nScenario: Preserve evidence rank and policy disposition\nGiven evidence-ranked optimization opportunity rows\nWhen an operator views the distribution component\nThen it shows the complete pre-policy ranked curve with labeled selected, eligible, cooldown, blocked, and incomplete dispositions\nAnd the operator can choose linear or logarithmic opportunity scale\nAnd excluded rows remain visible and interactive.\n\nScenario: Explain the components of opportunity\nGiven a score with valid feedback volume and a disagreement rate\nWhen the operator views its opportunity mark or text equivalent\nThen the disagreement rate and feedback volume are visible alongside reviewed-error opportunity\nAnd their units are explicit\nAnd visual encoding does not rely on color alone.\n\nScenario: Protect stakeholder-safe output\nGiven portfolio presentation data\nWhen the visualization renders\nThen no opaque identifiers, raw feedback, prompts, transcripts, or reviewer comments are displayed."
+      }
+    }
+  }
+}

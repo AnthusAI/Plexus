@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ecc15d64-5eb3-4aa0-be9e-264e8de632b5",
+  "issue_id": "plx-d092bf88-8a75-4890-886d-6a0e9e0fe458",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T22:42:41.741Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Classify and prioritize portfolio outcomes and contradictions",
+    "description": "As an account operator, I want every selected score to have a clear outcome and the largest contradictions to be prioritized, so that I can distinguish safe automation from policy, evidence, and repair work.\n\nFeature: Portfolio outcome classification\n\nScenario: Assign one primary disposition\n  Given ranking, assessment, diagnosis, optimizer, and evaluation evidence for a selected score\n  When the living Report is revised\n  Then the score has exactly one primary disposition\n  And evidence health and recent activity remain separate visible axes\n  And incomplete evidence cannot imply improvement\n\nScenario: Prioritize contradictions\n  Given multiple guideline, code, rubric, feedback, or evidence conflicts\n  When contradictions are presented\n  Then blockers to active work appear before lower-impact findings\n  And ties use reviewed-error exposure, evidence strength, recent worsening, and stable identity\n  And the largest findings are explained in ordinary language\n\nScenario: Preserve non-optimization outcomes\n  Given a score needs repair, clarification, targeted collection, monitoring, cooldown, or no safe change\n  When the run is summarized\n  Then that outcome remains visible without launching an optimizer",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

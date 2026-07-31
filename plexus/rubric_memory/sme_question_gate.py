@@ -127,14 +127,22 @@ class TactusRubricMemorySMEQuestionGateSynthesizer:
         self,
         *,
         provider: str = "openai",
-        model: str = "gpt-5-mini",
+        model: str = "gpt-5-mini-2025-08-07",
         procedure_id: str = "rubric_memory_sme_question_gate",
         max_tokens: int = 16000,
+        max_input_tokens: int = 48000,
+        model_attempt_max_attempts: int = 2,
+        model_attempt_authority: Any = None,
     ):
         self.provider = provider
         self.model = model
         self.procedure_id = procedure_id
         self.max_tokens = max_tokens
+        self.max_input_tokens = max_input_tokens
+        self.model_attempt_max_attempts = model_attempt_max_attempts
+        self.model_attempt_authority = model_attempt_authority
+        if provider != "openai" or model != "gpt-5-mini-2025-08-07":
+            raise ValueError("SME question gate requires the exact authorized model revision")
 
     async def synthesize(
         self,
@@ -146,11 +154,18 @@ class TactusRubricMemorySMEQuestionGateSynthesizer:
 
         tac_source = self._load_tac_source()
         prompt = self._build_prompt(request)
+        if self.model_attempt_authority is None:
+            raise RuntimeError("SME question gate requires semantic model-attempt authority")
         runtime = TactusRuntime(
             procedure_id=self.procedure_id,
             storage_backend=MemoryStorage(),
             hitl_handler=_NoOpHITLHandler(),
             openai_api_key=os.environ.get("OPENAI_API_KEY"),
+            run_id=(
+                f"{self.procedure_id}:{request.score_version_id}:"
+                f"{hashlib.sha256(prompt.encode('utf-8')).hexdigest()}"
+            ),
+            model_attempt_authority=self.model_attempt_authority,
         )
         result = await runtime.execute(
             tac_source,
@@ -167,6 +182,8 @@ class TactusRubricMemorySMEQuestionGateSynthesizer:
             tac_template.replace("{{PROVIDER}}", self.provider)
             .replace("{{MODEL}}", self.model)
             .replace("{{MAX_TOKENS}}", str(self.max_tokens))
+            .replace("{{MAX_INPUT_TOKENS}}", str(self.max_input_tokens))
+            .replace("{{MODEL_ATTEMPT_MAX_ATTEMPTS}}", str(self.model_attempt_max_attempts))
         )
 
     def _build_prompt(self, request: RubricMemorySMEQuestionGateRequest) -> str:
@@ -266,6 +283,19 @@ class RubricMemorySMEQuestionGateService:
         self,
         request: RubricMemorySMEQuestionGateRequest,
     ) -> RubricMemorySMEQuestionGateResult:
+        if not request.candidate_agenda_items:
+            return RubricMemorySMEQuestionGateResult(
+                score_version_id=request.score_version_id,
+                final_agenda_markdown="(No SME decisions needed this cycle)",
+                summary_counts={
+                    "candidate": 0,
+                    "final": 0,
+                    "suppressed": 0,
+                    "transformed": 0,
+                    "kept": 0,
+                    "citation_warnings": 0,
+                },
+            )
         raw_result = await self.synthesizer.synthesize(request=request)
         return self._shape_result(raw_result, request)
 

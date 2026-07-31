@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d371761b-447d-46f7-adc4-3c8370d95290",
+  "issue_id": "plx-db00faf2-768a-4da2-b181-d47749f80b70",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T02:37:51.788Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Budget all portfolio semantic diagnosis call sites",
+    "description": "Route consistency, repair, and SME-gate attempts through one authority; bound tokens and retries; preserve partial evidence; reject unsafe calls before provider contact.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

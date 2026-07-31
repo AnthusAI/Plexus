@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a1a2e62a-2c0e-4dd9-ab7b-dc3c2b2989f8",
+  "issue_id": "plx-d74f1a9b-d1a8-4a48-ac1a-28fb816a5d57",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T15:52:12.175Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Publish revisioned scorecard summaries and CSV exports",
+    "description": "As an optimization stakeholder, I want revisioned scorecard summaries and quantitative exports, so that I can understand and share run findings at the appropriate level of detail.\n\nOut of scope:\n- New GraphQL models, storage resources, or authorization roles.\n- Artifact retention changes.\n- Persisting signed download URLs.\n\nFeature: Revisioned scorecard artifacts\n\nScenario: Publish stakeholder-safe scorecard artifacts\nGiven a living optimization report reaches a meaningful milestone\nWhen scorecard findings have changed\nThen the run publishes one Markdown summary and one CSV for each scorecard\nAnd the CSV contains one row per score\nAnd every artifact is indexed by an immutable revision descriptor\n\nScenario: Reuse unchanged scorecard content\nGiven a scorecard summary has not changed since the prior milestone\nWhen a new run revision is published\nThen the manifest may reference the unchanged artifact descriptor\nAnd no duplicate content upload is required\n\nScenario: Produce safe spreadsheet data\nGiven score names or findings begin with spreadsheet formula characters\nWhen a scorecard CSV is generated\nThen those values are escaped as plain text\nAnd the CSV remains readable by common spreadsheet software\n\nScenario: Reconcile artifact counts\nGiven a revision contains scorecard exports\nWhen publication validation runs\nThen scorecard and score row counts match the presentation evidence\nAnd checksum, size, content type, task key, logical id, and source revision are recorded\n\nScenario: Keep task attachments bounded\nGiven a run contains many scorecards\nWhen a revision is published\nThen only root run artifacts are attached directly to the Task\nAnd child scorecard artifacts are discoverable through the revision manifest",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import difflib
+from hashlib import sha256
 import json
 import logging
 import os
@@ -41,6 +42,11 @@ SCORE_AUDIT_UNIFIED_DIFF_MAX_CHARS = 20_000
 FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY = 4
 FEEDBACK_ALIGNMENT_SCORECARD_CONCURRENCY = 5
 OPTIMIZATION_RANK_INVENTORY_PAGE_SIZE = 100
+# Long portfolio reads must remain observable, but report status is not an
+# event log.  These aggregate intervals deliberately avoid a report write per
+# scorecard page/result while still giving an operator regular confirmation of
+# forward progress.
+OPTIMIZATION_RANK_PROGRESS_INTERVAL = 5
 
 
 PLEXUS_DOCS_DIR = os.path.normpath(
@@ -874,6 +880,21 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
 DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     key: spec.handler for key, spec in RUNTIME_METHOD_SPECS.items()
 }
+
+
+def _require_optimization_application_authority() -> None:
+    """Refresh the local application session before portfolio state exists.
+
+    Portfolio runs can execute long enough for a caller's existing bearer
+    token to become unusable.  Require an access token from the operating
+    system keychain before the portfolio path reads or creates its durable
+    Task/Report/ChatMessage state.  The typed Cognito failures deliberately
+    propagate unchanged: each already includes operator-specific recovery
+    guidance and none proves it is safe to begin the run.
+    """
+    from plexus.auth.cognito import CognitoAuthService
+
+    CognitoAuthService().get_access_token()
 
 
 def _default_scorecards_list(args: dict[str, Any]) -> Any:
@@ -2452,6 +2473,13 @@ def _default_feedback_alignment_batch(
         }
     """
     raw_scorecards = args.get("scorecards")
+    progress_callback = args.get("_optimization_rank_progress")
+
+    def publish_progress(event: Mapping[str, Any]) -> None:
+        """Relay private portfolio-ranking progress without affecting output."""
+        if not callable(progress_callback):
+            return
+        progress_callback(dict(event))
     prefetched_scorecards_by_id: dict[str, dict[str, Any]] = {}
     portfolio_selection_rule: str | None = None
     has_explicit_scorecard = any(
@@ -2532,6 +2560,7 @@ def _default_feedback_alignment_batch(
             "scorecard_name",
             "scorecard_id",
             "scorecard_limit",
+            "_optimization_rank_progress",
         ):
             single_args.pop(key, None)
 
@@ -2552,6 +2581,20 @@ def _default_feedback_alignment_batch(
             window_start=args.get("window_start"),
             window_end=args.get("window_end"),
         )
+        target_count = len(scorecard_identifiers)
+        publish_progress({
+            "phase": "ranking",
+            "subphase": "feedback_analysis",
+            "state": "active",
+            "current": 0,
+            "total": target_count,
+            "unit": "scorecards",
+            "message": (
+                "Shared feedback evidence is loaded; analyzing the selected "
+                f"{target_count} scorecards."
+            ),
+            "next_checkpoint": "The next update follows an aggregate feedback-analysis batch.",
+        })
 
         def analyze_scorecard(identifier: str) -> dict[str, Any]:
             try:
@@ -2572,20 +2615,104 @@ def _default_feedback_alignment_batch(
         # local after the single feedback-window read.  Avoid thread startup
         # and scheduling overhead on that latency-critical path.  Explicit
         # named scorecard lists still use bounded parallel reads below.
+        def publish_batch_progress(
+            *, processed_count: int, successful_count: int, failed_count: int
+        ) -> None:
+            """Publish an honest aggregate checkpoint before rank validates output.
+
+            A batch worker can fail independently.  Until the rank adapter has
+            validated the returned coverage, a progress event must describe
+            processed work rather than imply that every yielded result was a
+            successful analysis.
+            """
+            if failed_count:
+                publish_progress({
+                    "phase": "ranking",
+                    "subphase": "feedback_analysis",
+                    "state": "incomplete",
+                    "current": successful_count,
+                    "total": target_count,
+                    "unit": "scorecards",
+                    "message": (
+                        "Feedback analysis has processed "
+                        f"{processed_count} of {target_count} scorecards; "
+                        f"{successful_count} completed and {failed_count} failed."
+                    ),
+                    "next_checkpoint": (
+                        "Feedback analysis continues, but the ranking will remain "
+                        "incomplete unless every selected scorecard succeeds."
+                    ),
+                })
+                return
+            publish_progress({
+                "phase": "ranking",
+                "subphase": "feedback_analysis",
+                "state": "active",
+                "current": successful_count,
+                "total": target_count,
+                "unit": "scorecards",
+                "message": (
+                    "Feedback analysis completed for "
+                    f"{successful_count} of {target_count} scorecards."
+                ),
+                "next_checkpoint": (
+                    "Feedback analysis continues until every selected scorecard is covered."
+                ),
+            })
+
         if portfolio_selection_rule is not None:
-            scorecard_results = [
-                analyze_scorecard(identifier) for identifier in scorecard_identifiers
-            ]
+            scorecard_results = []
+            successful_count = 0
+            failed_count = 0
+            for index, identifier in enumerate(scorecard_identifiers, start=1):
+                result = analyze_scorecard(identifier)
+                scorecard_results.append(result)
+                if result.get("error"):
+                    failed_count += 1
+                else:
+                    successful_count += 1
+                if (
+                    index % OPTIMIZATION_RANK_PROGRESS_INTERVAL == 0
+                    and index < target_count
+                ):
+                    publish_batch_progress(
+                        processed_count=index,
+                        successful_count=successful_count,
+                        failed_count=failed_count,
+                    )
         else:
             with ThreadPoolExecutor(
                 max_workers=min(
                     FEEDBACK_ALIGNMENT_SCORECARD_CONCURRENCY,
-                    len(scorecard_identifiers),
+                    target_count,
                 )
             ) as executor:
-                scorecard_results = list(
-                    executor.map(analyze_scorecard, scorecard_identifiers)
-                )
+                # Keep the established ``map`` contract: it applies bounded
+                # concurrency while yielding responses in target order.  That
+                # stable order is part of the public batch result; the progress
+                # signal is intentionally aggregate, so it does not need to
+                # expose the nondeterministic order in which worker futures
+                # happened to complete.
+                scorecard_results = []
+                successful_count = 0
+                failed_count = 0
+                for completed, result in enumerate(
+                    executor.map(analyze_scorecard, scorecard_identifiers), start=1
+                ):
+                    scorecard_results.append(result)
+                    if result.get("error"):
+                        failed_count += 1
+                    else:
+                        successful_count += 1
+                    if (
+                        completed % OPTIMIZATION_RANK_PROGRESS_INTERVAL == 0
+                        and completed < target_count
+                    ):
+                        publish_batch_progress(
+                            processed_count=completed,
+                            successful_count=successful_count,
+                            failed_count=failed_count,
+                        )
         failed_count = sum(
             1 for scorecard_result in scorecard_results
             if scorecard_result.get("error")
@@ -2605,6 +2732,16 @@ def _default_feedback_alignment_batch(
         }
         if portfolio_selection_rule is not None:
             result["selection_rule"] = portfolio_selection_rule
+        # The rank adapter owns the only successful N/N status after it has
+        # independently reconciled coverage and returned rows.  The batch may
+        # immediately surface a known failure, but never claims terminal
+        # success on its own.
+        if failed_count:
+            publish_batch_progress(
+                processed_count=len(scorecard_results),
+                successful_count=completed_count,
+                failed_count=failed_count,
+            )
         return result
 
     from plexus.cli.feedback.feedback_service import FeedbackService
@@ -3906,7 +4043,9 @@ def _default_score_contradictions(args: dict[str, Any]) -> dict[str, Any]:
         except Exception:
             pass
 
-    result = ScoreRubricConsistencyService().generate_from_api(
+    result = ScoreRubricConsistencyService(
+        semantic_authority=args.get("_semantic_authority")
+    ).generate_from_api(
         client=client,
         scorecard_identifier=str(scorecard_identifier),
         score_identifier=str(score_identifier),
@@ -3915,6 +4054,32 @@ def _default_score_contradictions(args: dict[str, Any]) -> dict[str, Any]:
         item_text=item_text,
     )
     return result.to_parameters_payload()
+
+
+def _semantic_diagnosis_must_fail_closed(exc: Exception) -> bool:
+    """Return whether continuing could make another unauthorized model contact."""
+    from plexus.optimization.run_report import (
+        OptimizationRunIntegrityError,
+        OptimizationRunPublicationError,
+    )
+    from plexus.optimization.semantic_authority import SemanticAuthorityError
+    from plexus.optimization.semantic_budget import SemanticBudgetError
+
+    fail_closed: tuple[type[BaseException], ...] = (
+        SemanticAuthorityError,
+        SemanticBudgetError,
+        OptimizationRunIntegrityError,
+        OptimizationRunPublicationError,
+    )
+    try:
+        from tactus.protocols.model_attempt import (
+            ModelAttemptOutcomeUnknown,
+            ModelAttemptRejected,
+        )
+        fail_closed += (ModelAttemptOutcomeUnknown, ModelAttemptRejected)
+    except ImportError:
+        pass
+    return isinstance(exc, fail_closed)
 
 
 def _default_item_last(args: dict[str, Any]) -> Any:
@@ -8433,6 +8598,42 @@ def _default_rubric_memory_recent_entries(args: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _default_optimization_diagnosis_preflight(
+    _args: dict[str, Any],
+    *,
+    s3_client: Any | None = None,
+) -> dict[str, Any]:
+    """Prove rubric-memory storage authority before any semantic model spend."""
+    from plexus.rubric_memory.s3_corpus import RUBRIC_MEMORY_BUCKET_ENV_VAR
+
+    bucket_name = str(os.environ.get(RUBRIC_MEMORY_BUCKET_ENV_VAR) or "").strip()
+    if not bucket_name:
+        return {
+            "complete": False,
+            "failure_category": "required_evidence_unavailable",
+            "message": (
+                "Required rubric-memory storage is not configured; "
+                "repair worker configuration and resume."
+            ),
+        }
+    try:
+        if s3_client is None:
+            import boto3
+
+            s3_client = boto3.client("s3")
+        s3_client.list_objects_v2(Bucket=bucket_name, MaxKeys=1)
+    except Exception:
+        return {
+            "complete": False,
+            "failure_category": "required_evidence_unavailable",
+            "message": (
+                "Required rubric-memory storage authorization is unavailable; "
+                "refresh worker AWS credentials and resume."
+            ),
+        }
+    return {"complete": True, "authority": "rubric_memory_storage"}
+
+
 def _default_rubric_memory_evidence_pack(args: dict[str, Any]) -> dict[str, Any]:
     """Generate rubric-memory citation context for a disputed score item."""
     from plexus.cli.shared.client_utils import create_client
@@ -8460,7 +8661,11 @@ def _default_rubric_memory_evidence_pack(args: dict[str, Any]) -> dict[str, Any]
         client, scorecard_identifier, score_identifier, score_id_hint
     )
 
-    provider = RubricMemoryContextProvider(api_client=client)
+    authority = args.get("_model_attempt_authority")
+    provider = RubricMemoryContextProvider(
+        api_client=client,
+        **({"model_attempt_authority": authority} if authority is not None else {}),
+    )
     method = provider.generate_for_score_item if synthesize else provider.retrieve_for_score_item
 
     context = _run_async_from_sync(
@@ -8494,6 +8699,7 @@ def _default_rubric_memory_sme_question_gate(args: dict[str, Any]) -> dict[str, 
         RubricMemoryCitationContext,
         RubricMemorySMEQuestionGateRequest,
         RubricMemorySMEQuestionGateService,
+        TactusRubricMemorySMEQuestionGateSynthesizer,
         candidate_agenda_items_from_markdown,
     )
 
@@ -8528,7 +8734,11 @@ def _default_rubric_memory_sme_question_gate(args: dict[str, Any]) -> dict[str, 
         candidate_agenda_items=candidate_items,
         optimizer_context=optimizer_context,
     )
-    result = _run_async_from_sync(RubricMemorySMEQuestionGateService().gate(request))
+    result = _run_async_from_sync(RubricMemorySMEQuestionGateService(
+        synthesizer=TactusRubricMemorySMEQuestionGateSynthesizer(
+            model_attempt_authority=args.get("_model_attempt_authority")
+        )
+    ).gate(request))
     return {"success": True, **result.model_dump(mode="json")}
 
 
@@ -8557,6 +8767,19 @@ class _Namespace:
                 return _runtime_api_error_value(self._name, method_name, exc)
 
         return call
+
+
+class _PortfolioAssessmentContext:
+    """Ephemeral exact-ID configuration reader state for one portfolio run.
+
+    It deliberately never enters a decision packet, checkpoint, Report, or
+    public optimization operation.  A procedure retry starts a new context and
+    either resumes its durable assessment checkpoint or reads current facts
+    again before any new assessment is emitted.
+    """
+
+    def __init__(self) -> None:
+        self.client: Any | None = None
 
 
 class PlexusRuntimeModule:
@@ -8617,6 +8840,9 @@ class PlexusRuntimeModule:
         optimization_report_service_factory: Callable[[str, str, dict[str, Any]], Any] | None = None,
         optimization_action_service_factory: Callable[[Any], Any] | None = None,
         optimization_persister: Callable[[dict[str, Any]], Any] | None = None,
+        optimization_child_step: Callable[..., Mapping[str, Any]] | None = None,
+        optimization_child_request: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        optimization_diagnosis_preflight: Callable[[dict[str, Any]], Mapping[str, Any]] | None = None,
         guidelines_validator: Callable[[str], dict[str, Any]] | None = None,
         terminal_class_resolver: Callable[[str], Any] | None = None,
         review_evidence_loader: Callable[[str], dict[str, Any]] | None = None,
@@ -8818,6 +9044,17 @@ class PlexusRuntimeModule:
         )
         self._optimization_report_service_factory = optimization_report_service_factory
         self._optimization_action_service_factory = optimization_action_service_factory
+        self._optimization_child_step = optimization_child_step
+        self._optimization_child_request = optimization_child_request
+        self._optimization_diagnosis_preflight = (
+            optimization_diagnosis_preflight
+            if optimization_diagnosis_preflight is not None
+            else (
+                (lambda _request: {"complete": True, "authority": "injected_diagnosis"})
+                if optimization_handlers and "diagnose" in optimization_handlers
+                else _default_optimization_diagnosis_preflight
+            )
+        )
         self._guidelines_validator = guidelines_validator
         self._terminal_class_resolver = terminal_class_resolver
         self._review_evidence_loader = review_evidence_loader
@@ -8825,6 +9062,12 @@ class PlexusRuntimeModule:
             method: self._default_optimization_handler(method)
             for method in ("rank", "assess", "diagnose", "run", "review", "summary")
         }
+        # Only the living portfolio coordinator receives this validator.  The
+        # public optimization.run handler uses the same freshness/approval
+        # checks but cannot launch without Report publication authority.
+        self._optimization_run_validator = self._default_optimization_handler(
+            "run", durable_publication_authority=True,
+        )
         self._optimization_handlers["portfolio_run"] = (
             optimization_portfolio_runner
             if optimization_portfolio_runner is not None
@@ -9666,10 +9909,53 @@ class PlexusRuntimeModule:
 
         as_of_datetime = datetime.now(timezone.utc).replace(microsecond=0)
         as_of = as_of_datetime.isoformat().replace("+00:00", "Z")
+        started_monotonic = time.monotonic()
+        progress_callback = args.get("_optimization_rank_progress")
+
+        def publish_progress(
+            *,
+            subphase: str,
+            state: str,
+            current: int,
+            total: int | None,
+            unit: str,
+            message: str,
+            next_checkpoint: str,
+        ) -> None:
+            """Publish aggregate ranking status through the living-Report callback.
+
+            This callback is private to the portfolio runner.  It deliberately
+            carries counts and generic phase names only—never scorecard or
+            score identifiers—and does not change ranking evidence.
+            """
+            if not callable(progress_callback):
+                return
+            progress_callback({
+                "phase": "ranking",
+                "subphase": subphase,
+                "state": state,
+                "current": current,
+                "total": total,
+                "unit": unit,
+                "message": message,
+                "elapsed_seconds": max(0, int(time.monotonic() - started_monotonic)),
+                "next_checkpoint": next_checkpoint,
+                "heartbeat_interval_seconds": 90,
+            })
+
         cards: list[dict[str, Any]] = []
         failures: list[dict[str, Any]] = []
         next_token: Any = None
         pages = 0
+        publish_progress(
+            subphase="inventory",
+            state="active",
+            current=0,
+            total=None,
+            unit="scorecards",
+            message="Starting exhaustive scorecard inventory.",
+            next_checkpoint="The next update follows inventory progress or a retry.",
+        )
         while True:
             page_args = {
                 "return_metadata": True,
@@ -9685,9 +9971,28 @@ class PlexusRuntimeModule:
                     page = self._scorecards_lister(page_args)
                     break
                 except Exception as exc:  # noqa: BLE001 - preserve coverage evidence
+                    if attempt == 0:
+                        publish_progress(
+                            subphase="inventory",
+                            state="retrying",
+                            current=len(cards),
+                            total=None,
+                            unit="scorecards",
+                            message="Retrying the exhaustive scorecard inventory after a temporary delay.",
+                            next_checkpoint="One inventory retry is in progress before coverage is marked incomplete.",
+                        )
                     if attempt:
                         failures.append({"page": pages + 1, "error": str(exc)})
             if page is None:
+                publish_progress(
+                    subphase="inventory",
+                    state="incomplete",
+                    current=len(cards),
+                    total=None,
+                    unit="scorecards",
+                    message="Scorecard inventory could not complete after its retry; ranking will remain incomplete.",
+                    next_checkpoint="Publish the incomplete coverage result rather than assign an exact priority.",
+                )
                 break
             pages += 1
             if isinstance(page, dict):
@@ -9696,6 +10001,16 @@ class PlexusRuntimeModule:
             else:
                 items, next_token = page, None
             cards.extend(item for item in items if isinstance(item, dict))
+            if pages % OPTIMIZATION_RANK_PROGRESS_INTERVAL == 0:
+                publish_progress(
+                    subphase="inventory",
+                    state="active",
+                    current=len(cards),
+                    total=None,
+                    unit="scorecards",
+                    message=f"Exhaustive inventory has inspected {len(cards)} scorecards across {pages} pages.",
+                    next_checkpoint="The next update follows more inventory pages or scope resolution.",
+                )
             if not next_token:
                 break
 
@@ -9775,6 +10090,38 @@ class PlexusRuntimeModule:
         if failures or not matched_ids:
             return base_payload
 
+        publish_progress(
+            subphase="activity_evidence",
+            state="active",
+            current=len(selected_cards),
+            total=len(selected_cards),
+            unit="scorecards",
+            message=(
+                "Inventory and score-activity evidence are complete for "
+                f"{len(selected_cards)} scorecards in scope."
+            ),
+            next_checkpoint="Starting one frozen feedback-analysis batch for the selected scope.",
+        )
+
+        def feedback_progress(event: Mapping[str, Any]) -> None:
+            source = dict(event)
+            publish_progress(
+                subphase=str(source.get("subphase") or "feedback_analysis"),
+                state=str(source.get("state") or "active"),
+                current=int(source.get("current") or 0),
+                total=(
+                    int(source["total"])
+                    if source.get("total") is not None
+                    else None
+                ),
+                unit=str(source.get("unit") or "scorecards"),
+                message=str(source.get("message") or "Feedback analysis is running."),
+                next_checkpoint=str(
+                    source.get("next_checkpoint")
+                    or "The next update follows aggregate feedback-analysis progress."
+                ),
+            )
+
         try:
             alignment = self._feedback_aligner_batch({
                 "scorecards": matched_ids,
@@ -9783,14 +10130,25 @@ class PlexusRuntimeModule:
                 "window_end": window["end"],
                 "account_id": args.get("account_id"),
                 "as_of": as_of,
+                "_optimization_rank_progress": feedback_progress,
             })
         except Exception as exc:  # noqa: BLE001 - partial is observable, never exact
             coverage["complete"] = False
             coverage["failures"].append({"stage": "feedback_alignment", "error": str(exc)})
+            publish_progress(
+                subphase="feedback_analysis",
+                state="incomplete",
+                current=0,
+                total=len(matched_ids),
+                unit="scorecards",
+                message="Feedback analysis did not complete; ranking will remain incomplete.",
+                next_checkpoint="Publish the incomplete coverage result rather than assign an exact priority.",
+            )
             return base_payload
 
         downstream_coverage = alignment.get("coverage") if isinstance(alignment, dict) else None
         expected_targets = len(matched_ids)
+        reported_completed_count: int | None = None
         if not isinstance(downstream_coverage, dict):
             coverage["complete"] = False
             coverage["failures"].append({
@@ -9800,6 +10158,12 @@ class PlexusRuntimeModule:
         else:
             reported_targets = downstream_coverage.get("target_count")
             completed_targets = downstream_coverage.get("completed_count")
+            if (
+                isinstance(completed_targets, int)
+                and not isinstance(completed_targets, bool)
+                and 0 <= completed_targets <= expected_targets
+            ):
+                reported_completed_count = completed_targets
             if downstream_coverage.get("complete") is not True:
                 coverage["complete"] = False
                 coverage["failures"].extend(
@@ -9916,6 +10280,38 @@ class PlexusRuntimeModule:
                 "error": "analysis result omitted discovered scorecards",
                 "scorecard_ids": missing_scorecards,
             })
+        observed_completed_count = len(analyzed_scorecards)
+        completed_for_progress = (
+            observed_completed_count
+            if reported_completed_count is None
+            else min(reported_completed_count, observed_completed_count)
+        )
+        if coverage["complete"] is True:
+            publish_progress(
+                subphase="feedback_analysis",
+                state="active",
+                current=expected_targets,
+                total=expected_targets,
+                unit="scorecards",
+                message=(
+                    "Feedback analysis coverage is complete for all "
+                    f"{expected_targets} scorecards in scope."
+                ),
+                next_checkpoint="Reconcile complete feedback evidence with score activity and publish the ranked result.",
+            )
+        else:
+            publish_progress(
+                subphase="feedback_analysis",
+                state="incomplete",
+                current=completed_for_progress,
+                total=expected_targets,
+                unit="scorecards",
+                message=(
+                    "Feedback analysis coverage is incomplete; "
+                    f"{completed_for_progress} of {expected_targets} scorecards completed."
+                ),
+                next_checkpoint="Publish incomplete coverage rather than assign an exact ranking.",
+            )
         return {
             "scores": rows,
             "coverage": coverage,
@@ -10014,6 +10410,136 @@ class PlexusRuntimeModule:
             "evidence": dict(evidence),
         })
 
+    @staticmethod
+    def _new_portfolio_assessment_context() -> _PortfolioAssessmentContext:
+        """Create the non-serializable context shared by one portfolio pass."""
+        return _PortfolioAssessmentContext()
+
+    @staticmethod
+    def _portfolio_assessment_score_info(
+        context: _PortfolioAssessmentContext,
+        *,
+        account_id: str,
+        scorecard_id: str,
+        score_id: str,
+        expected_champion_version: str,
+    ) -> dict[str, Any]:
+        """Read only the exact score and its current champion configuration.
+
+        Portfolio assessment already holds opaque exact IDs from exhaustive
+        ranking.  Calling the general score-info command for each row makes it
+        re-resolve the scorecard, enumerate every sibling, list versions, and
+        only then fetch this champion.  This narrow path retains the same
+        current champion/configuration facts while avoiding that repeated
+        discovery work.  Ownership mismatches are structural evidence failures
+        rather than data that an assessment may silently accept.
+        """
+        if context.client is None:
+            from plexus.cli.shared.client_utils import create_client
+
+            context.client = create_client()
+        client = context.client
+        if client is None:
+            raise RuntimeError(
+                "portfolio assessment could not create an authenticated dashboard client"
+            )
+
+        query = """
+        query GetPortfolioAssessmentScore($score_id: ID!) {
+            getScore(id: $score_id) {
+                id
+                name
+                key
+                externalId
+                description
+                type
+                championVersionId
+                updatedAt
+                isDisabled
+                scorecard { id name accountId }
+                championVersion {
+                    id
+                    scoreId
+                    configuration
+                    guidelines
+                    createdAt
+                    updatedAt
+                    note
+                    isFeatured
+                    parentVersionId
+                    metadata
+                }
+            }
+        }
+        """
+        result = client.execute(query, {"score_id": score_id})
+        if not isinstance(result, Mapping) or result.get("errors"):
+            raise RuntimeError(
+                "portfolio assessment exact score configuration read failed"
+            )
+        score = result.get("getScore")
+        if not isinstance(score, Mapping) or str(score.get("id") or "") != score_id:
+            raise RuntimeError("portfolio assessment exact score was not found")
+        scorecard = score.get("scorecard")
+        if not isinstance(scorecard, Mapping) or str(scorecard.get("id") or "") != scorecard_id:
+            raise RuntimeError(
+                "portfolio assessment score does not belong to the requested scorecard"
+            )
+        if not account_id:
+            raise RuntimeError("portfolio assessment active account is required")
+        if str(scorecard.get("accountId") or "") != account_id:
+            raise RuntimeError(
+                "portfolio assessment scorecard does not belong to the active account"
+            )
+        if not expected_champion_version:
+            raise RuntimeError(
+                "portfolio assessment frozen champion version is required"
+            )
+
+        champion_id = str(score.get("championVersionId") or "").strip()
+        champion = score.get("championVersion")
+        if bool(champion_id) != (champion is not None):
+            raise RuntimeError(
+                "portfolio assessment champion relationship is incomplete"
+            )
+        if not isinstance(champion, Mapping):
+            raise RuntimeError(
+                "portfolio assessment champion relationship is incomplete"
+            )
+        if champion_id != expected_champion_version:
+            raise RuntimeError(
+                "portfolio assessment champion changed since frozen ranking"
+            )
+        if (
+            str(champion.get("id") or "") != champion_id
+            or str(champion.get("scoreId") or "") != score_id
+        ):
+            raise RuntimeError(
+                "portfolio assessment champion configuration does not belong to the requested score"
+            )
+        version = dict(champion) if isinstance(champion, Mapping) else None
+        return {
+            "found": True,
+            "scoreId": score_id,
+            "scoreName": score.get("name"),
+            "scoreKey": score.get("key"),
+            "externalId": score.get("externalId"),
+            "type": score.get("type"),
+            "championVersionId": champion_id,
+            "updatedAt": score.get("updatedAt"),
+            "isDisabled": score.get("isDisabled", False),
+            "location": {
+                "scorecardId": scorecard_id,
+                "scorecardName": scorecard.get("name"),
+            },
+            "description": score.get("description"),
+            "code": version.get("configuration") if version else None,
+            "guidelines": version.get("guidelines") if version else None,
+            "targetVersionId": champion_id if version else None,
+            "isChampionVersion": bool(version),
+            "versionDetails": version,
+        }
+
     def _optimization_assessment_payload(self, args: dict[str, Any]) -> dict[str, Any]:
         scorecard_id = str(args.get("scorecard_id") or "")
         score_id = str(args.get("score_id") or "")
@@ -10080,10 +10606,47 @@ class PlexusRuntimeModule:
             for key in ("valid_feedback_count", "total_items", "totalItems")
         ):
             failures.append("frozen feedback metrics are required")
+        context = args.get("_portfolio_assessment_context")
+        frozen_champion_version = str(
+            evidence.get("champion_version")
+            or evidence.get("championVersionId")
+            or ""
+        ).strip()
         try:
-            info = self._score_info({"scorecard_identifier": scorecard_id, "score_identifier": score_id})
+            if isinstance(context, _PortfolioAssessmentContext):
+                info = self._portfolio_assessment_score_info(
+                    context,
+                    account_id=str(args.get("account_id") or ""),
+                    scorecard_id=scorecard_id,
+                    score_id=score_id,
+                    expected_champion_version=frozen_champion_version,
+                )
+            else:
+                # Public single-score assessment retains the generic resolver
+                # path, including its flexible name/key/version semantics.
+                info = self._score_info({
+                    "scorecard_identifier": scorecard_id,
+                    "score_identifier": score_id,
+                })
         except Exception as exc:  # noqa: BLE001
-            return {"scorecard_id": scorecard_id, "score_id": score_id, "coverage": {"complete": False, "failures": [str(exc)]}, "coverage_complete": False}
+            coverage = dict(evidence.get("coverage") or {})
+            return {
+                **evidence,
+                "account_id": args.get("account_id"),
+                "scorecard_id": scorecard_id,
+                "score_id": score_id,
+                "scope": {"scorecard_id": scorecard_id, "score_id": score_id},
+                "window": window,
+                "coverage": {
+                    **coverage,
+                    "complete": False,
+                    "failures": [*failures, str(exc)],
+                },
+                "coverage_complete": False,
+                "coverage_failures": [*failures, str(exc)],
+                "champion_version": frozen_champion_version or None,
+                "feedback_watermark": evidence.get("feedback_watermark"),
+            }
         code = info.get("code") if isinstance(info, dict) else None
         guidelines = info.get("guidelines") if isinstance(info, dict) else None
         terminal_classes: list[str] = []
@@ -10142,7 +10705,7 @@ class PlexusRuntimeModule:
             "window": window,
             "coverage": {**coverage, "complete": complete, "failures": failures},
             "coverage_complete": complete, "coverage_failures": failures,
-            "champion_version": info.get("championVersionId"),
+            "champion_version": frozen_champion_version or info.get("championVersionId"),
             "configuration_readable": bool(code), "terminal_classes_resolved": terminal_resolved,
             "reachable_classes": terminal_classes, "final_label_counts": counts,
             "guideline_state": guideline_state,
@@ -10170,6 +10733,19 @@ class PlexusRuntimeModule:
             "version": score_version_id,
             "score_version_id": score_version_id,
         }
+        semantic_coordinator = args.get("_semantic_budget_coordinator")
+        target_id = f"{scorecard_id}:{score_id}"
+        if semantic_coordinator is not None:
+            base["_semantic_authority"] = semantic_coordinator.view(
+                target_id=target_id,
+                call_site="score_rubric_consistency",
+                max_attempts=2,
+            )
+            base["_model_attempt_authority"] = semantic_coordinator.view(
+                target_id=target_id,
+                call_site="rubric_evidence_synthesis",
+                max_attempts=3,
+            )
         results: dict[str, Any] = {}
         for name, handler in (
             ("contradictions", self._score_contradictions),
@@ -10182,6 +10758,8 @@ class PlexusRuntimeModule:
                 if isinstance(value, dict) and (value.get("pending") or value.get("handle_id")):
                     failures.append(f"{name} pending")
             except Exception as exc:  # noqa: BLE001
+                if _semantic_diagnosis_must_fail_closed(exc):
+                    raise
                 failures.append(str(exc))
         rubric_context = results.get("rubric_evidence") or results.get("rubric_memory") or {}
         gate_args = {
@@ -10196,12 +10774,20 @@ class PlexusRuntimeModule:
                 "rubric_evidence": results.get("rubric_evidence") or {},
             }),
         }
+        if semantic_coordinator is not None:
+            gate_args["_model_attempt_authority"] = semantic_coordinator.view(
+                target_id=target_id,
+                call_site="rubric_memory_sme_question_gate",
+                max_attempts=2,
+            )
         try:
             value = self._rubric_memory_sme_question_gate(gate_args)
             results["sme_gate"] = value
             if isinstance(value, dict) and (value.get("pending") or value.get("handle_id")):
                 failures.append("sme_gate pending")
         except Exception as exc:  # noqa: BLE001
+            if _semantic_diagnosis_must_fail_closed(exc):
+                raise
             failures.append(str(exc))
         contradictions = results.get("contradictions") or {}
         sme = results.get("sme_gate") or {}
@@ -10272,7 +10858,10 @@ class PlexusRuntimeModule:
             return {"evidence": {"procedure_id": procedure_id, "terminal": False, "incomplete": True, "error": str(exc)}}
 
     def _default_optimization_handler(
-        self, method: str
+        self,
+        method: str,
+        *,
+        durable_publication_authority: bool = False,
     ) -> Callable[[dict[str, Any]], Any]:
         """Return a thin adapter to the shared decision service.
 
@@ -10370,50 +10959,33 @@ class PlexusRuntimeModule:
                 accepted_targets.append(target)
 
             # Validation is pure and returns only explicitly accepted opaque
-            # targets.  Dispatch each accepted target through the existing
-            # optimizer entry point; never create score versions or promote a
-            # champion here.
-            dispatches: list[dict[str, Any]] = []
-            for target in accepted_targets:
-                if not isinstance(target, dict):
-                    continue
-                dispatch_args = {
-                    key: value
-                    for key, value in args.items()
-                    if key not in {"approved", "targets", "current_fingerprints", "persist", "concurrency", "max_concurrency"}
-                }
-                dispatch_args.update({
-                    "scorecard": target["scorecard_id"],
-                    "score": target["score_id"],
-                })
-                dispatch_row = {
-                    "target": {
-                        "scorecard_id": target["scorecard_id"],
-                        "score_id": target["score_id"],
-                    },
-                }
-                try:
-                    dispatch_row.update({
-                        "status": "dispatched",
-                        "result": self._procedure_optimize(dispatch_args),
-                    })
-                except Exception as exc:  # noqa: BLE001 - preserve per-target coverage
-                    dispatch_row.update({"status": "failed", "error": str(exc)})
-                dispatches.append(dispatch_row)
-            failed_dispatches = sum(
-                row.get("status") == "failed" for row in dispatches
-            )
+            # targets. Actual Procedure/Task creation is owned by the living
+            # Report coordinator, which durably publishes every phase before
+            # enabling its following mutation.
+            run_key = str(args.get("run_key") or "").strip()
+            if not run_key:
+                rejected.extend({
+                    "target": target,
+                    "reason": "missing_frozen_run_key",
+                } for target in accepted_targets)
+                accepted_targets = []
+            if accepted_targets and not durable_publication_authority:
+                rejected.extend({
+                    "target": target,
+                    "reason": "durable_publication_authority_required",
+                } for target in accepted_targets)
+                accepted_targets = []
             return {
                 **result,
                 "accepted": bool(accepted_targets) and not rejected,
                 "accepted_targets": accepted_targets,
                 "rejected": rejected,
-                "dispatches": dispatches,
+                "dispatches": [],
                 "dispatch_coverage": {
-                    "target_count": len(dispatches),
-                    "dispatched_count": len(dispatches) - failed_dispatches,
-                    "failed_count": failed_dispatches,
-                    "complete": failed_dispatches == 0,
+                    "target_count": 0,
+                    "dispatched_count": 0,
+                    "failed_count": 0,
+                    "complete": not rejected,
                 },
             }
 
@@ -10438,6 +11010,10 @@ class PlexusRuntimeModule:
             OptimizationPortfolioRunner,
             PortfolioRunDependencies,
         )
+        from plexus.optimization.optimizer_dispatch import OptimizerTaskDispatchService
+        from plexus.optimization.optimizer_dispatch_backend import (
+            GraphQLOptimizerDispatchBackend,
+        )
         from plexus.optimization.run_report import (
             OptimizationRunReportService,
             dashboard_base_url_from_account_settings,
@@ -10446,6 +11022,12 @@ class PlexusRuntimeModule:
         account_id = str(args.get("account_id") or "").strip()
         if not account_id:
             raise ValueError("optimization.portfolio_run requires account_id")
+        # This is intentionally scoped to the default portfolio execution
+        # path. It must happen before client construction, Task lookup, Report
+        # creation, or action publication so failed local authentication never
+        # leaves stakeholder-visible partial state behind.
+        if self._optimization_report_service_factory is None:
+            _require_optimization_application_authority()
         procedure_task_id = str(self._runtime_context.get("task_id") or "").strip()
 
         def report_request(request: Mapping[str, Any]) -> dict[str, Any]:
@@ -10454,6 +11036,10 @@ class PlexusRuntimeModule:
                 **({"procedure_task_id": procedure_task_id} if procedure_task_id else {}),
             }
 
+        # The report service and optimizer child dispatcher intentionally share
+        # one authenticated GraphQL client. The child dispatcher is the sole
+        # production launch path; it creates durable Procedure/Task records and
+        # never uses an in-process or subprocess optimizer fallback.
         client = None
         if self._optimization_report_service_factory is None:
             client = create_client()
@@ -10481,6 +11067,81 @@ class PlexusRuntimeModule:
             report_service_factory = lambda run_key, request: self._optimization_report_service_factory(
                 account_id, run_key, report_request(request)
             )
+
+        child_step = self._optimization_child_step
+        child_request = self._optimization_child_request
+        if child_step is None or child_request is None:
+            optimizer_source: str | None = None
+            optimizer_source_digest: str | None = None
+            optimizer_dispatch: OptimizerTaskDispatchService | None = None
+
+            def _optimizer_child_runtime() -> tuple[str, str, OptimizerTaskDispatchService]:
+                nonlocal client, optimizer_source, optimizer_source_digest, optimizer_dispatch
+                if optimizer_dispatch is not None:
+                    assert optimizer_source is not None and optimizer_source_digest is not None
+                    return optimizer_source, optimizer_source_digest, optimizer_dispatch
+                if client is None:
+                    client = create_client()
+                if client is None:
+                    raise RuntimeError(
+                        "optimization.portfolio_run requires an authenticated dashboard client "
+                        "for durable optimizer child dispatch"
+                    )
+                optimizer_source_path = os.path.join(
+                    PLEXUS_PROJECT_ROOT,
+                    "plexus",
+                    "procedures",
+                    "feedback_alignment_optimizer.yaml",
+                )
+                try:
+                    with open(optimizer_source_path, "rb") as optimizer_source_file:
+                        optimizer_source_bytes = optimizer_source_file.read()
+                except OSError as exc:
+                    raise RuntimeError(
+                        "optimization.portfolio_run could not load feedback_alignment_optimizer.yaml"
+                    ) from exc
+                if not optimizer_source_bytes:
+                    raise RuntimeError(
+                        "optimization.portfolio_run optimizer procedure source is empty"
+                    )
+                optimizer_source = optimizer_source_bytes.decode("utf-8")
+                optimizer_source_digest = sha256(optimizer_source_bytes).hexdigest()
+                optimizer_dispatch = OptimizerTaskDispatchService(
+                    GraphQLOptimizerDispatchBackend(client)
+                )
+                return optimizer_source, optimizer_source_digest, optimizer_dispatch
+
+            def _child_request(base: Mapping[str, Any]) -> Mapping[str, Any]:
+                optimizer_source, optimizer_source_digest, _ = _optimizer_child_runtime()
+                request = dict(base)
+                request["optimizer_yaml"] = optimizer_source
+                # Kept alongside the source as explicit immutable provenance.
+                # The dispatch service recomputes and embeds this digest in its
+                # launch spec rather than trusting caller data.
+                request["optimizer_yaml_sha256"] = optimizer_source_digest
+                return request
+
+            def _child_step(
+                request: Mapping[str, Any],
+                state: Mapping[str, Any] | None,
+                *,
+                may_mutate: bool,
+            ) -> Mapping[str, Any]:
+                _, optimizer_source_digest, optimizer_dispatch = _optimizer_child_runtime()
+                supplied = request.get("optimizer_yaml_sha256")
+                if supplied != optimizer_source_digest:
+                    raise RuntimeError(
+                        "optimizer child request source digest does not match "
+                        "the checked-in procedure source"
+                    )
+                return optimizer_dispatch.step(
+                    request,
+                    state,
+                    may_mutate=may_mutate,
+                )
+
+            child_step = _child_step
+            child_request = _child_request
 
         action_service = (
             self._optimization_action_service_factory(client)
@@ -10526,10 +11187,23 @@ class PlexusRuntimeModule:
                 session_id=session_id,
             )
 
+        # This context is intentionally request-scoped. It is not part of the
+        # frozen decision evidence and cannot survive/rewrite a checkpoint;
+        # durable assessment packets remain the replay boundary.
+        portfolio_assessment_context = self._new_portfolio_assessment_context()
+
         def operation(name: str) -> Callable[[dict[str, Any]], Any]:
-            return lambda payload: self._optimization_handlers[name](
-                _merge_runtime_context_args(dict(payload), self._runtime_context)
-            )
+            def invoke(payload: dict[str, Any]) -> Any:
+                operation_payload = _merge_runtime_context_args(
+                    dict(payload), self._runtime_context,
+                )
+                if name == "assess":
+                    operation_payload["_portfolio_assessment_context"] = (
+                        portfolio_assessment_context
+                    )
+                return self._optimization_handlers[name](operation_payload)
+
+            return invoke
 
         runner = OptimizationPortfolioRunner(
             PortfolioRunDependencies(
@@ -10537,7 +11211,9 @@ class PlexusRuntimeModule:
                 assess=operation("assess"),
                 diagnose=operation("diagnose"),
                 summary=operation("summary"),
-                dispatch=operation("run"),
+                dispatch=lambda payload: self._optimization_run_validator(
+                    _merge_runtime_context_args(dict(payload), self._runtime_context)
+                ),
                 review=operation("review"),
                 report_service=report_service_factory,
                 # Persisted procedure resumes use the evidence-bound
@@ -10550,6 +11226,9 @@ class PlexusRuntimeModule:
                     if action_service is not None and hasattr(action_service, "publish_update")
                     else None
                 ),
+                optimizer_child_step=child_step,
+                optimizer_child_request=child_request,
+                diagnosis_preflight=self._optimization_diagnosis_preflight,
             )
         )
         return runner.run({**args, "wait_for_human": True})

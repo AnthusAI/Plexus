@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f130af67-ab77-4233-ab0c-ea1ec20b35bc",
+  "issue_id": "plx-fc47c654-1141-44ef-a474-434a5091746a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T18:42:20.029Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Show incremental portfolio analysis progress",
+    "description": "As an operator, I want a living optimization Report to show assessment and diagnosis progress while those loops run, so that I can distinguish active work from a stalled process.\n\nOut of scope: per-score workbook revisions, new backend resources, and optimizer mutations.\n\nFeature: Incremental portfolio analysis progress\n\nScenario: Deterministic assessment is running\nGiven a living optimization Report has published its ranked portfolio\nWhen ranked scores are assessed over a long-running loop\nThen the existing Analysis TaskStage exposes processed and total work\nAnd the Report overview displays the same current progress without a new immutable workbook revision\n\nScenario: Semantic diagnosis is running\nGiven deterministic assessment is complete\nWhen selected scores receive semantic diagnosis\nThen progress continues from the assessment count through the combined analysis total\nAnd the current activity clearly identifies semantic diagnosis\n\nScenario: Progress publication fails\nGiven stakeholder-visible progress cannot be durably updated\nWhen the orchestrator attempts to advance analysis\nThen the run fails closed rather than continuing ahead of its visible state",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

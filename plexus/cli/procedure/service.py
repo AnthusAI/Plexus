@@ -376,7 +376,7 @@ class ProcedureService:
                 success=False,
                 message=f"Failed to create experiment: {str(e)}"
             )
-    
+
     def get_procedure_info(self, procedure_id: str) -> Optional[ProcedureInfo]:
         """Get comprehensive information about an procedure.
         

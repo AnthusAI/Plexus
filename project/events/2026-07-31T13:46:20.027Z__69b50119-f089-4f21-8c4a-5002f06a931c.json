@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "69b50119-f089-4f21-8c4a-5002f06a931c",
+  "issue_id": "plx-c11456c0-c906-4d67-9350-8122bb8c5da6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T13:46:20.027Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Reconcile live progress with durable milestone counts in portfolio Reports",
+    "description": "The living optimization Report overlays current assessment progress on the latest immutable milestone, but still renders the milestone summary count. Operators can simultaneously see a current nonzero assessment count and a stale zero count for the same phase.\n\nFeature: One coherent visible progress state\n\nScenario: Live assessment is ahead of the durable milestone\n  Given the latest immutable milestone records zero completed assessments\n  And live progress records a later completed count for the same total\n  When the Report is rendered\n  Then the visible assessment summary uses the newer live count\n  And it does not show a contradictory stale count as current status\n  And the immutable milestone remains available as evidence\n\nScenario: A newer durable milestone supersedes live progress\n  Given a durable milestone includes completed assessment evidence\n  When the Report is rendered\n  Then stale or older live progress does not override it.\n\nNo client information is included.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+    "labels": []
+  }
+}

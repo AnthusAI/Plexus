@@ -1,0 +1,28 @@
+{
+  "id": "plx-88ca4590-7921-43c8-a13a-e3792639673c",
+  "title": "Fail before semantic spend when required evidence storage is unavailable",
+  "description": "The portfolio runner currently begins model-backed diagnosis before proving that required non-model evidence storage is readable. A credential or authorization failure can therefore consume semantic budget and only afterward produce incomplete evidence.\n\nScenario: required evidence authority is available\n  Given a selected semantic diagnosis target\n  When the portfolio diagnosis preflight runs\n  Then diagnosis may continue under the frozen semantic budget\n\nScenario: required evidence authority is unavailable\n  Given a selected semantic diagnosis target\n  When the evidence authority preflight cannot authenticate or read its configured storage\n  Then no semantic model call is made\n  And the living Report records a sanitized incomplete-evidence blocker and recovery action\n  And the run performs no optimizer mutation\n\nScenario: no semantic target is selected\n  Given deterministic assessment selects no semantic diagnosis target\n  When the portfolio run continues\n  Then the storage preflight is not called.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6006da98-b614-4c6c-8558-518c87cbeb1e",
+      "author": "ryan.porter",
+      "text": "Implemented the required-evidence preflight and stakeholder-safe incomplete-state projection. When the prerequisite is unavailable, the runner stops before semantic calls or optimizer dispatch, records a high-severity issue and recovery action, and the workbook validator explicitly permits the new prerequisite status fields. Validation: focused prerequisite scenario passed; portfolio 136 passed; runtime contract 280 passed; living Report 88 passed; dispatcher/runner 51 passed. No production mutation or new run was performed.",
+      "created_at": "2026-07-31T16:54:29.718334Z"
+    }
+  ],
+  "created_at": "2026-07-31T16:41:27.637142Z",
+  "updated_at": "2026-07-31T16:54:29.718334Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

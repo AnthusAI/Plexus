@@ -1,0 +1,31 @@
+{
+  "id": "plx-cdac3775-cefd-495c-95fd-8985bdca1cad",
+  "title": "Accept unresolved-action optimization completion",
+  "description": "A portfolio optimization run that completes analysis but leaves advisory human actions unresolved must remain a valid completed run. The living-report finalizer currently rejects this terminal state and marks the run failed.\n\nFeature: Preserve valid portfolio completion with unresolved actions\n\nScenario: Analysis completes with unresolved human actions\nGiven a portfolio optimization run has completed its exhaustive analysis\nAnd one or more advisory human actions remain unresolved\nWhen the living report is finalized with status COMPLETED_WITH_UNRESOLVED_ACTIONS\nThen the Report and Task preserve a completed-with-unresolved-actions terminal state\nAnd the run is not converted to failed\nAnd the report identifies the unresolved actions as the next operator work\n\nScenario: Unknown terminal status remains fail-closed\nGiven a portfolio optimization run produces an unsupported terminal status\nWhen the living report is finalized\nThen finalization rejects the status\nAnd the failure remains visible to operators\n\nExclusions: This repair does not approve actions, launch optimizers, mutate scores, or add data resources.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "520d088e-8a56-4285-8982-6719b6320a18",
+      "author": "ryan.porter",
+      "text": "Production dogfood reproduced the defect after complete inventory, assessment, and diagnosis. The procedure produced a valid completed-with-unresolved-actions status, while the report finalizer rejected that status and published a failed cover page. Next: add a failing finalization specification, repair the status mapping, and rerun focused portfolio/report tests.",
+      "created_at": "2026-07-30T15:18:54.413902Z"
+    },
+    {
+      "id": "7fd9de19-69c4-49e9-a936-251c35d1bf36",
+      "author": "ryan.porter",
+      "text": "Repair complete in the integration worktree. Added an outside-in regression for the exact COMPLETED_WITH_UNRESOLVED_ACTIONS status emitted by the portfolio coordinator; the living-report finalizer now accepts it while retaining the earlier spelling for compatibility. Focused report, portfolio, and action suites pass (48 tests total). A bounded production-data rerun finalized INCOMPLETE without being misclassified as failed.",
+      "created_at": "2026-07-30T15:38:19.381846Z"
+    }
+  ],
+  "created_at": "2026-07-30T15:18:49.625884Z",
+  "updated_at": "2026-07-30T15:38:19.381846Z",
+  "closed_at": null,
+  "custom": {}
+}

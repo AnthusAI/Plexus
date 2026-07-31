@@ -1,0 +1,37 @@
+{
+  "id": "plx-ba9c0f2d-81a6-447c-9d4f-eedd9ba896cb",
+  "title": "Keep scheduled procedure continuations nonterminal",
+  "description": "A scheduled portfolio continuation can be returned by the procedure runtime as WAITING_FOR_TIME while the local task dispatcher records the Task as COMPLETED. This can make unfinished child optimization work appear terminal.\n\nFeature: Preserve scheduled continuation state at dispatch boundaries\n\nScenario: A procedure schedules its next continuation\n  Given a procedure execution returns WAITING_FOR_TIME with a future wake time\n  When the task dispatcher records the execution result\n  Then the Task remains in a durable waiting state\n  And the worker releases without marking the Task completed\n\nScenario: A scheduled continuation becomes due\n  Given a Task is durably waiting for a future wake time\n  When the continuation becomes due and the procedure resumes\n  Then the procedure reloads its persisted state\n  And it may complete only after the resumed execution returns a terminal outcome\n\nScenario: Unsupported or missing persistence fails closed\n  Given scheduled continuation state cannot be persisted or restored\n  When the dispatcher handles the result\n  Then it does not claim successful completion\n  And the failure remains observable to the operator",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter@capacity.com",
+  "creator": null,
+  "parent": "plx-78b7597b-9390-408b-9a5c-6799b70c2ab2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "09beb8ad-5625-4531-89ce-cd2d02001ca9",
+      "author": "ryan.porter",
+      "text": "Reproduced during local automatic portfolio-run readiness testing. Focused Tactus scheduling tests pass, but the Plexus dispatcher currently maps WAITING_FOR_TIME through a nonterminal gap and can default the Task to COMPLETED. Authentication was separately verified healthy; this bug is the remaining launch-safety blocker. Next: add the failing dispatcher contract, implement the smallest nonterminal mapping/reload fix, and rerun focused suites before any production launch.",
+      "created_at": "2026-07-31T16:09:18.235779Z"
+    },
+    {
+      "id": "236dc4cd-3fe8-4347-92f8-8eedf766f5c1",
+      "author": "ryan.porter",
+      "text": "Starting outside-in fix: local task dispatch must preserve scheduled continuation waits, reload their durable Task state, and fail closed if that state cannot be reloaded. No production work will be launched.",
+      "created_at": "2026-07-31T16:09:31.293398Z"
+    },
+    {
+      "id": "84931bf9-eeea-4716-86ec-b5ba229a795d",
+      "author": "ryan.porter",
+      "text": "Focused verification complete. Local dispatcher now treats scheduled continuations as durable nonterminal waits, reloads the Task rather than writing a completion, and leaves an uncorroborated wait nonterminal while logging the persistence gap. Added an explicit missing-persistence fail-closed contract. Evidence: CommandDispatch 17 passed; resume/portfolio procedure 26 passed; Tactus scheduled continuation 16 passed. No production work was launched.",
+      "created_at": "2026-07-31T16:10:41.561717Z"
+    }
+  ],
+  "created_at": "2026-07-31T16:09:12.901688Z",
+  "updated_at": "2026-07-31T16:10:41.561717Z",
+  "closed_at": null,
+  "custom": {}
+}

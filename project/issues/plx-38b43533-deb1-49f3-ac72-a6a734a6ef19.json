@@ -1,0 +1,31 @@
+{
+  "id": "plx-38b43533-deb1-49f3-ac72-a6a734a6ef19",
+  "title": "Complete exhaustive portfolio ranking under production page limits",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3e93d09e-4ded-4a80-8ae6-83fbdf2b2279",
+      "author": "ryan.porter",
+      "text": "Feature: Exhaustive portfolio ranking tolerates production GraphQL response limits\n\nScenario: Inventory spans several bounded pages\n  Given an account has more scores than fit in one safe GraphQL response\n  When optimization ranking enumerates the portfolio\n  Then it requests bounded pages until the end cursor\n  And every scorecard is represented exactly once\n  And the feedback analysis still uses one frozen account-wide evidence window\n\nScenario: A page read fails transiently\n  Given one bounded inventory page fails once\n  When the same page is retried\n  Then ranking continues without duplicating or skipping records\n\nScenario: A page cannot be recovered\n  Given a bounded inventory page still fails after one retry\n  When ranking reports coverage\n  Then the portfolio is incomplete\n  And no exact priority ordering or optimization-ready target is claimed\n\nObserved failure: the current inventory request uses a page size of 1000 and can exceed the production GraphQL response budget before the living Report reaches useful ranking content. The repair will reduce the page size, add exactly one same-page retry, preserve exhaustive coverage evidence, and fail closed.",
+      "created_at": "2026-07-30T14:53:28.896646Z"
+    },
+    {
+      "id": "aeb241a6-402d-44ee-a002-0b583f8f81d0",
+      "author": "ryan.porter",
+      "text": "The outside-in page-limit specification failed against the previous implementation because all inventory requests omitted a limit and defaulted to 1000. Added a fixed 100-scorecard page limit to the existing exhaustive cursor loop; the existing one-retry and fail-closed semantics were preserved. Focused ranking/scoping validation passes (39 tests). Production-backed dogfood then completed exhaustive inventory and ranking with complete coverage across 56 scorecards, proving the bounded page path works under the real response shape. The bug remains open until the change lands.",
+      "created_at": "2026-07-30T15:05:47.695316Z"
+    }
+  ],
+  "created_at": "2026-07-30T14:53:21.933135Z",
+  "updated_at": "2026-07-30T15:05:47.695316Z",
+  "closed_at": null,
+  "custom": {}
+}

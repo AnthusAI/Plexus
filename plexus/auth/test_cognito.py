@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 import pytest
+import requests
 
 from plexus.auth.cognito import (
     ApplicationAuthenticationRequired,
@@ -13,6 +14,9 @@ from plexus.auth.cognito import (
     CognitoAuthService,
     KeyringRefreshTokenStore,
     LoopbackCallbackError,
+    MissingApplicationSession,
+    RefreshCredentialRejected,
+    RefreshTransportFailure,
     TokenSet,
 )
 
@@ -20,6 +24,17 @@ from plexus.auth.cognito import (
 def _jwt(payload):
     encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
     return f"header.{encoded}.signature"
+
+
+def _oauth_error_response(status_code, *, payload=None, body=None):
+    response = requests.Response()
+    response.status_code = status_code
+    if payload is not None:
+        response._content = json.dumps(payload).encode()
+        response.headers["Content-Type"] = "application/json"
+    else:
+        response._content = (body or "").encode()
+    return response
 
 
 @pytest.fixture
@@ -270,17 +285,132 @@ def test_access_token_is_refreshed_when_it_is_within_the_pre_expiry_window(confi
     assert http.post.call_count == 2
 
 
-def test_revoked_refresh_token_is_removed_and_requires_login(config):
+def test_missing_refresh_credential_requires_login_without_a_network_refresh(config):
+    store = Mock(get=Mock(return_value=None))
+    http = Mock()
+    service = CognitoAuthService(config=config, credential_store=store, http=http)
+
+    with pytest.raises(MissingApplicationSession, match="No Plexus application session"):
+        service.get_access_token()
+
+    http.post.assert_not_called()
+    store.delete.assert_not_called()
+
+
+def test_confirmed_invalid_grant_removes_refresh_credential_and_requires_login(config):
     store = Mock()
     store.get.return_value = "revoked-refresh-token"
     response = Mock()
-    response.raise_for_status.side_effect = RuntimeError("401 unauthorized")
-    service = CognitoAuthService(config=config, credential_store=store, http=Mock(post=Mock(return_value=response)))
+    response.status_code = 400
+    response.json.return_value = {"error": "invalid_grant"}
+    response.raise_for_status.side_effect = requests.HTTPError(
+        "400 invalid_grant", response=response,
+    )
+    http = Mock(post=Mock(return_value=response))
+    sleeper = Mock()
+    service = CognitoAuthService(
+        config=config,
+        credential_store=store,
+        http=http,
+        sleeper=sleeper,
+    )
 
-    with pytest.raises(ApplicationAuthenticationRequired, match="plexus login"):
+    with pytest.raises(RefreshCredentialRejected, match="expired or was revoked"):
         service.get_access_token()
 
     store.delete.assert_called_once()
+    http.post.assert_called_once()
+    sleeper.assert_not_called()
+
+
+def test_invalid_grant_raised_directly_by_post_removes_refresh_credential(config):
+    store = Mock(get=Mock(return_value="revoked-refresh-token"))
+    response = _oauth_error_response(400, payload={"error": "invalid_grant"})
+    rejected = requests.HTTPError("400 invalid_grant", response=response)
+    service = CognitoAuthService(
+        config=config,
+        credential_store=store,
+        http=Mock(post=Mock(side_effect=rejected)),
+    )
+
+    with pytest.raises(RefreshCredentialRejected) as captured:
+        service.get_access_token()
+
+    store.delete.assert_called_once()
+    assert captured.value.__cause__ is rejected
+
+
+def test_transient_refresh_failure_is_retried_before_the_command_fails(config):
+    store = Mock(get=Mock(return_value="refresh-token"))
+    first_response = Mock()
+    first_response.raise_for_status.side_effect = requests.Timeout("temporary timeout")
+    second_response = Mock()
+    second_response.raise_for_status.return_value = None
+    second_response.json.return_value = {"access_token": "recovered-token", "expires_in": 3600}
+    http = Mock(post=Mock(side_effect=[first_response, second_response]))
+    sleeper = Mock()
+    service = CognitoAuthService(
+        config=config,
+        credential_store=store,
+        http=http,
+        sleeper=sleeper,
+    )
+
+    assert service.get_access_token() == "recovered-token"
+    assert http.post.call_count == 2
+    sleeper.assert_called_once()
+    store.delete.assert_not_called()
+
+
+def test_repeated_transient_refresh_failures_stop_after_the_bounded_retry(config):
+    store = Mock(get=Mock(return_value="refresh-token"))
+    response = Mock()
+    response.raise_for_status.side_effect = requests.Timeout("temporary timeout")
+    sleeper = Mock()
+    service = CognitoAuthService(
+        config=config,
+        credential_store=store,
+        http=Mock(post=Mock(return_value=response)),
+        sleeper=sleeper,
+    )
+
+    with pytest.raises(RefreshTransportFailure, match="temporarily unavailable"):
+        service.get_access_token()
+
+    assert service.http.post.call_count == 3
+    assert sleeper.call_count == 2
+    store.delete.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("response", "case"),
+    [
+        (_oauth_error_response(503, payload={"error": "server_error"}), "server failure"),
+        (_oauth_error_response(400, body="not json"), "malformed body"),
+        (_oauth_error_response(400, payload={"error": "invalid_request"}), "other OAuth error"),
+    ],
+)
+def test_unproven_refresh_rejections_preserve_credential(config, response, case):
+    store = Mock(get=Mock(return_value="refresh-token"))
+    transport_error = requests.HTTPError(case, response=response)
+    response.raise_for_status = Mock(side_effect=transport_error)
+    service = CognitoAuthService(
+        config=config,
+        credential_store=store,
+        http=Mock(post=Mock(return_value=response)),
+    )
+
+    with pytest.raises(RefreshTransportFailure) as captured:
+        service.get_access_token()
+
+    store.delete.assert_not_called()
+    assert captured.value.__cause__ is transport_error
+
+
+def test_typed_refresh_failures_remain_compatible_with_authentication_callers():
+    assert issubclass(MissingApplicationSession, ApplicationAuthenticationRequired)
+    assert issubclass(RefreshCredentialRejected, ApplicationAuthenticationRequired)
+    assert issubclass(RefreshTransportFailure, ApplicationAuthenticationRequired)
 
 
 def test_whoami_uses_non_sensitive_identity_from_current_token(config):

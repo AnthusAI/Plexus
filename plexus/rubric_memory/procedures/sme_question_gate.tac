@@ -7,6 +7,8 @@ gate_agent = Agent {
     model_type = "responses",
     temperature = 1.0,
     max_tokens = {{MAX_TOKENS}},
+    max_input_tokens = {{MAX_INPUT_TOKENS}},
+    model_attempt_max_attempts = {{MODEL_ATTEMPT_MAX_ATTEMPTS}},
     system_prompt = [[
 You gate proposed SME agenda questions using rubric-memory evidence.
 

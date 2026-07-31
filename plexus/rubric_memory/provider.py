@@ -23,10 +23,12 @@ class RubricMemoryContextProvider:
         *,
         api_client: Any,
         citation_formatter: Optional[RubricMemoryCitationFormatter] = None,
+        model_attempt_authority: Any = None,
     ):
         self.api_client = api_client
         self.citation_formatter = citation_formatter or RubricMemoryCitationFormatter()
         self.last_diagnostics: list[dict[str, Any]] = []
+        self.model_attempt_authority = model_attempt_authority
 
     def _unavailable_context(
         self,
@@ -195,9 +197,16 @@ class RubricMemoryContextProvider:
                 score_identifier=request.score_identifier,
                 reason=str(exc),
             )
+        synthesizer = (
+            TactusRubricEvidenceSynthesizer(
+                model_attempt_authority=self.model_attempt_authority
+            )
+            if self.model_attempt_authority is not None
+            else TactusRubricEvidenceSynthesizer()
+        )
         service = RubricEvidencePackService(
             retriever=retriever,
-            synthesizer=TactusRubricEvidenceSynthesizer(),
+            synthesizer=synthesizer,
         )
         pack = await service.generate(request)
         context = self.citation_formatter.from_pack(pack)

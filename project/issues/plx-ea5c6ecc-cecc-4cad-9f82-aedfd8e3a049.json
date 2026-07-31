@@ -1,0 +1,31 @@
+{
+  "id": "plx-ea5c6ecc-cecc-4cad-9f82-aedfd8e3a049",
+  "title": "Implement frozen automatic portfolio execution mode",
+  "description": "Implement story plx-428482 through outside-in specifications and the existing portfolio-run architecture.\n\nBinding decisions:\n- Add execution_mode with exactly automatic and approval_required values.\n- The checked-in periodic portfolio procedure defaults execution_mode to automatic.\n- Lower-level orchestration remains fail-safe for callers that omit the mode; compatibility behavior must be specified explicitly.\n- Normalize and freeze execution_mode in run_spec, checkpoints, evidence fingerprints, and resume validation so a retry cannot change authorization semantics.\n- In automatic mode, do not create a blocking optimization-approval ChatMessage. Treat deterministic policy selection as launch authorization only for targets with complete target-level diagnosis/readiness and current freshness, configuration, champion, feedback watermark, and cooldown evidence.\n- Reuse existing optimizer dispatch and exact limits; do not bypass optimization.run validation or create another dispatch path.\n- Advisory stakeholder, collection, repair, and ambiguity actions remain visible and non-launching.\n- Incomplete, contradictory, stale, cooldown, structurally blocked, or otherwise unsafe targets remain rejected independently with explicit reasons.\n- Never automatically promote a champion or mutate guidelines/feedback settings.\n- Project execution_mode and automatic selected/launched/rejected counts and reasons into the same living Report, workbook, scorecard exports, immutable evidence, and summaries.\n- Add no GraphQL models/resources and do not monkeypatch Tactus.\n\nDelivery sequence:\n1. Add failing outside-in runner and procedure contract specifications.\n2. Implement frozen mode normalization and automatic target authorization.\n3. Extend Report/workbook projections and reconciliation tests.\n4. Run focused cross-repo and dashboard validation.\n5. Obtain independent review before technical acceptance.\n\nDo not implement until the active bounded dogfood run has produced its next durable evidence.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "123b447a-6f7a-4e5d-929e-60b3cc26b68c",
+      "author": "ryan.porter",
+      "text": "Implementation wave started after explicit Product Owner authorization while the bounded dogfood run continues independently. Disjoint ownership: one coding agent owns procedure/runner execution-mode semantics; one owns Report/workbook/dashboard projection against the fixed execution_decisions contract. Both must begin with failing outside-in specifications, preserve the running process, add no resources, and return uncommitted completion reports. Independent review follows integration.\n",
+      "created_at": "2026-07-31T04:51:14.824450Z"
+    },
+    {
+      "id": "8f8f3325-4d5d-44a1-aec9-0ff0c4b96308",
+      "author": "ryan.porter",
+      "text": "Implementation and independent review complete; issue remains open until the change lands. The periodic procedure now defaults to frozen automatic execution while direct runner omission remains fail-safe approval-required. Automatic policy selects only independently complete targets, reuses existing freshness/limit validation and durable dispatch, skips blocking optimizer approval, preserves advisory actions, and never promotes automatically. Durable execution decisions include per-target launch status and aggregate counts derived together from exact owned child evidence; unknown or incomplete launch states remain unlaunched. The same Report, workbook, exports, and dashboard show automatic mode, selected/launched/rejected counts and reasons, plus explicit named-detail coverage without exposing opaque IDs. Two independent review rounds resolved false launch accounting, missing per-target launch status, aggregate/detail mismatch disclosure, and whitespace-only authority identifiers. Final focused evidence: 206 combined portfolio/Report/YAML/lifecycle tests, 16 authority edge tests, 20 dashboard tests, and dashboard typechecks pass; diff check is clean and no Amplify resource file changed. No commit, push, deploy, or production optimizer occurred.\n",
+      "created_at": "2026-07-31T09:52:57.507457Z"
+    }
+  ],
+  "created_at": "2026-07-31T04:46:30.642684Z",
+  "updated_at": "2026-07-31T09:52:57.507457Z",
+  "closed_at": null,
+  "custom": {}
+}

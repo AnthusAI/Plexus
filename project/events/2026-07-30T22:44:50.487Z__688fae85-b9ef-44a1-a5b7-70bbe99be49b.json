@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "688fae85-b9ef-44a1-a5b7-70bbe99be49b",
+  "issue_id": "plx-7d882ece-70ed-474c-911a-a697bf4e286c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T22:44:50.487Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Validate phase-two optimization reporting end to end",
+    "description": "Run focused outside-in specifications, complete Python and dashboard gates, workbook reconciliation and visual checks, zero-resource diff proof, and a model-backed sandbox lifecycle from approval through terminal child review. Production mutation, deployment, push, and champion promotion remain out of scope.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

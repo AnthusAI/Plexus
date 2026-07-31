@@ -1,0 +1,37 @@
+{
+  "id": "plx-c11456c0-c906-4d67-9350-8122bb8c5da6",
+  "title": "Reconcile live progress with durable milestone counts in portfolio Reports",
+  "description": "The living optimization Report overlays current assessment progress on the latest immutable milestone, but still renders the milestone summary count. Operators can simultaneously see a current nonzero assessment count and a stale zero count for the same phase.\n\nFeature: One coherent visible progress state\n\nScenario: Live assessment is ahead of the durable milestone\n  Given the latest immutable milestone records zero completed assessments\n  And live progress records a later completed count for the same total\n  When the Report is rendered\n  Then the visible assessment summary uses the newer live count\n  And it does not show a contradictory stale count as current status\n  And the immutable milestone remains available as evidence\n\nScenario: A newer durable milestone supersedes live progress\n  Given a durable milestone includes completed assessment evidence\n  When the Report is rendered\n  Then stale or older live progress does not override it.\n\nNo client information is included.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d8c33ed8-184d-49a6-83da-fc9ee6d21db4",
+      "author": "ryan.porter",
+      "text": "Beginning outside-in dashboard specification for reconciling live progress with durable milestone counts. Scope is presentation only; immutable evidence and automatic-mode copy remain unchanged.",
+      "created_at": "2026-07-31T13:46:50.470726Z"
+    },
+    {
+      "id": "fd4da09c-614d-4630-ac45-8a49513cd67d",
+      "author": "ryan.porter",
+      "text": "Added outside-in dashboard regressions for live-ahead and durable-ahead assessment progress. The display now overlays live assessment progress only when it advances the same immutable assessment cohort; delayed/stale live events retain the durable milestone as the visible current state. Focused Jest (24 tests), dashboard typecheck, and scoped diff check pass. No evidence artifacts or execution-mode copy changed.",
+      "created_at": "2026-07-31T13:48:20.225893Z"
+    },
+    {
+      "id": "aaea433b-b9a5-4b25-b04f-2eed3deaca3d",
+      "author": "ryan.porter",
+      "text": "Added the explicit mismatched-cohort regression requested in review: durable 72 of 100 remains visible when a live event reports 73 of 101. The existing exact-total reconciliation guard already satisfies it; no production-code expansion was needed. Focused Jest and scoped diff check pass.",
+      "created_at": "2026-07-31T13:49:52.307918Z"
+    }
+  ],
+  "created_at": "2026-07-31T13:46:20.026886Z",
+  "updated_at": "2026-07-31T13:49:52.307918Z",
+  "closed_at": null,
+  "custom": {}
+}
