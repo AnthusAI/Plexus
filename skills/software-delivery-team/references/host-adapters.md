@@ -28,24 +28,69 @@ Select the requested model by assigned role:
 
 Resolve the balanced-worker request through repository or host configuration.
 The configuration may use a capability alias, model profile, policy rule, or
-native automatic selection. Keep provider and model names out of repository
-skills. Treat `balanced-worker` as a capability name, not a required native API
-value or field name; translate it to the host's actual spawn arguments. If the
-host does not support model selection, inherit the spawning owner's
-configuration, record the fallback in `requested_model_policy`, and do not
-block safe work solely on unavailable model routing.
+native automatic selection (on Cursor: **Auto**). Treat `balanced-worker` as a
+capability name, not a required native API value or field name; translate it
+via the host section below. If the host does not support model selection,
+inherit the spawning owner's configuration, record the fallback in
+`requested_model_policy`, and do not block safe work solely on unavailable
+model routing.
 
 Record all three evidence layers in every handoff or proxy artifact:
 
 - `requested_model_policy`: intended role policy/class and fallback semantics.
 - `actual_model_arguments_sent`: exact relevant arguments/options actually
-  supplied by the spawn executor, including meaningful explicit omissions. Set
-  it to `pending` before execution and update it after invocation.
+  supplied by the spawn executor, including meaningful explicit omissions.
 - `effective_model_if_exposed`: authoritative platform-confirmed effective
   model only, or `not exposed/unconfirmed`.
 
 A request, sent argument, status listing, or child self-report is not
 effective-model confirmation.
+
+## Fresh-session Outside Consultant
+
+Do not create the Outside Consultant with a spawn, Task, child, background
+agent, proxy, or external agent executable. The human opens a fresh session and
+explicitly assigns the role before analysis begins.
+
+The human selects a premium advisory profile suitable for high-level strategic
+reasoning. Record the requested profile and only authoritative effective-profile
+evidence. If the platform does not expose the effective profile, use `not
+exposed/unconfirmed` and continue.
+
+On Cursor, the existing Auto rule remains mandatory for spawned Coding and
+Review agents. It does not select the Outside Consultant's fresh-session
+profile. Do not pin or alter worker models while configuring a consultation.
+
+The consultant has no spawn topology, logical manager, child return route, or
+delivery capacity slot. Its durable return path is existing Kanbus issue
+comments plus a verbatim copy in the human-facing session.
+
+## Cursor IDE (Task subagents)
+
+This repository is commonly driven from Cursor. Map role policy to Cursor Task
+spawns as follows — **do not improvise by pinning a vendor model slug**.
+
+| Role policy | Cursor Task behavior |
+|---|---|
+| Inherit (Product Owner, Engineering Lead) | **Omit** the Task `model` parameter entirely so the child inherits the parent session (typically Auto when the human-facing session is Auto). |
+| Balanced worker / reviewer (Coding, Review) | Use Cursor **Auto**: omit `model` as well when that is how this host expresses Auto inheritance from an Auto parent; if the host exposes an explicit Auto control for subagents, select **Auto** only — never a concrete slug from the Task model enum. |
+
+**Forbidden misunderstanding:** Concrete vendor model enum entries are **not**
+the balanced-worker mapping. Choosing one because it “looks like a default
+worker” violates this adapter. `model_profile: "balanced-worker"` in skill prose
+means Cursor **Auto** / omit-`model` inheritance — **not** “pick any slug from
+the enum.”
+
+When recording evidence for Cursor Task spawns:
+
+- `requested_model_policy`: `owner inheritance` or `balanced-worker → Cursor Auto`
+- `actual_model_arguments_sent`: e.g. `Task: model omitted (Auto inherit)` or
+  `Task: Auto` if an explicit Auto argument exists
+- `effective_model_if_exposed`: `not exposed/unconfirmed` unless Cursor shows
+  an authoritative effective model for the child
+
+Proxy spawns from the Product Owner must follow the same omit-`model` / Auto
+rules the Lead requested — do not “helpfully” add a pinned slug.
 
 ## Runtime adapter
 
@@ -64,8 +109,9 @@ protocol. If it lacks any authorized spawn primitive, stop at the completed
 brief, plan, or packet and report the capability blocker.
 
 For Product Owner and Engineering Lead spawns, omit model and setting
-overrides. For Coding and Review spawns, resolve the `balanced-worker`
-capability through the host's configured profile and inherit other settings.
+overrides (Cursor: omit Task `model` → inherit / Auto). For Coding and Review
+spawns, resolve `balanced-worker` to Cursor **Auto** (omit Task `model` or
+explicit Auto only — never a pinned enum slug) and inherit other settings.
 Record the configuration source and actual arguments used. If unavailable or
 uncontrollable, inherit the spawning owner's configuration and record the
 fallback. Record only platform-confirmed effective-model evidence; otherwise

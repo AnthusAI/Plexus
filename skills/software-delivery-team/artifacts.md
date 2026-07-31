@@ -13,7 +13,7 @@ Logical owner: <role>
 Assigned role: <role receiving the work>
 Spawn executor: <agent/process that will invoke the host tool>
 requested_model_policy: <owner inheritance or configured balanced-worker request; include fallback if used>
-actual_model_arguments_sent: <pending before execution; afterward, exact relevant arguments/options sent and meaningful omitted overrides>
+actual_model_arguments_sent: <exact relevant spawn arguments/options sent; state meaningful omitted overrides>
 effective_model_if_exposed: <platform-confirmed model, or not exposed/unconfirmed>
 Return target: <role or agent id>
 Repository/worktree: <absolute path, branch, and base>
@@ -174,7 +174,7 @@ Severity meanings:
 Logical manager: Engineering Lead <agent id>
 Spawn executor requested: Product Owner or host coordinator <agent id>
 requested_model_policy: <owner inheritance or configured balanced-worker request; include fallback if used>
-actual_model_arguments_sent: <pending before execution; afterward, exact relevant arguments/options sent and meaningful omitted overrides>
+actual_model_arguments_sent: <exact relevant spawn arguments/options sent; state meaningful omitted overrides>
 effective_model_if_exposed: <platform-confirmed model, or not exposed/unconfirmed>
 Repository/worktree: <absolute path, branch, and base>
 Role skill to load: <skill path>
@@ -185,6 +185,75 @@ Expected return artifact: <artifact>
 Route return to: Engineering Lead <agent id>
 Concurrency and filesystem notes: <capacity, ownership, worktree>
 ```
+
+## Outside consultant session brief
+
+```markdown
+# Outside consultant session brief
+
+Fresh human-facing session confirmed: yes
+Consultation anchor issue: <existing Kanbus issue id>
+Focus question: <question or unscoped portfolio review>
+Time horizon: <current delivery / release / portfolio>
+Repository/worktree: <absolute path, branch, commit, and dirty state>
+Requested session profile: <human-selected premium advisory profile>
+Effective session profile if exposed: <platform-confirmed profile, or not exposed/unconfirmed>
+Comment authority: existing in-scope Kanbus issues only
+```
+
+## Outside consultant targeted comment
+
+Post no more than one of these to each affected issue in one consultation:
+
+```markdown
+## Outside consultant finding OC-<n>
+
+Classification: Strategic contradiction | Major risk | Opportunity | Question
+Evidence: <repository, code, documentation, and Kanbus facts>
+Inference: <reasoning clearly separated from evidence>
+What should be happening: <desired direction>
+Observed divergence: <difference, or none>
+Inversion — how this fails: <failure path and missing safeguard>
+Recommendation: <specific advisory action>
+Open question: <remaining uncertainty, or none>
+Suggested owner: Product Owner | Engineering Lead | Human
+Disposition required: adopt | defer | reject | investigate | not required
+Anchor issue: <issue-id>
+```
+
+Use `Disposition required: adopt | defer | reject | investigate` for Strategic
+contradictions and Major risks. Use `not required` for Opportunities and
+Questions unless the human requests a decision.
+
+## Outside consultant anchor synthesis
+
+Post targeted comments first, capture their IDs or prefixes, then post this to
+the consultation anchor:
+
+```markdown
+## Outside consultant advisory
+
+Consultation scope: <focus and time horizon>
+Repository reference: <path, branch, commit, and dirty state>
+Requested session profile: <premium advisory profile>
+Effective profile if exposed: <platform-confirmed profile, or not exposed/unconfirmed>
+Evidence inspected: <documents, code, tests, history, and Kanbus issue ids>
+Executive thesis: <what should be happening>
+Vision and code alignment: <aligned areas and material divergence>
+Inversion / pre-mortem: <how the project fails and safeguards>
+Adversarial challenges: <assumptions, second-order effects, opportunity cost>
+Recommended priorities: Now | Next | Later
+Targeted findings:
+- OC-1 — <issue-id>#<comment-id-or-prefix>
+Prior advice still applicable: <references, or none>
+Unmapped recommendations: <advice with no existing issue, or none>
+Open questions: <questions requiring human or owner input>
+Owner dispositions required: <finding ids and owners, or none>
+```
+
+If no material divergence exists, say so with evidence and use `Targeted
+findings: none`. If a write fails, preserve the exact draft in session output under
+`UNPOSTED`, with its intended issue and the command error.
 
 ## Integration report
 

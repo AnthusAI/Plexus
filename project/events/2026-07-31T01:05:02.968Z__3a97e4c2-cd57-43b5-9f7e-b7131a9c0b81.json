@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3a97e4c2-cd57-43b5-9f7e-b7131a9c0b81",
+  "issue_id": "plx-44ad754d-6e9b-4ced-bc02-db1158dd41e1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T01:05:02.968Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Extend the repository-owned general agent skills with an optional fresh-session strategic advisor while preserving the existing delivery hierarchy and worker selection rules.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Add outside consultant to repository delivery suite"
+  }
+}
