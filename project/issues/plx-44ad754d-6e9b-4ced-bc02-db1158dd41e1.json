@@ -1,0 +1,18 @@
+{
+  "id": "plx-44ad754d-6e9b-4ced-bc02-db1158dd41e1",
+  "title": "Add outside consultant to repository delivery suite",
+  "description": "Extend the repository-owned general agent skills with an optional fresh-session strategic advisor while preserving the existing delivery hierarchy and worker selection rules.",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-07-31T01:05:02.967973Z",
+  "updated_at": "2026-07-31T01:05:13.652468Z",
+  "closed_at": null,
+  "custom": {}
+}

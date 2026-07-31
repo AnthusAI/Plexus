@@ -1,0 +1,31 @@
+{
+  "id": "plx-180a722b-6eec-4f1c-91d1-9c5ab75b15fd",
+  "title": "Implement and validate outside consultant skill",
+  "description": "Port the finalized provider-neutral outside-consultant role, shared artifacts, host adapter guidance, role dispositions, discovery metadata, and validation coverage into Plexus. Preserve the existing Cursor Auto rule for spawned Coding and Review agents.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-44ad754d-6e9b-4ced-bc02-db1158dd41e1",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1a46d8d0-42d4-4f03-8a88-8b24fba357b5",
+      "author": "ryan",
+      "text": "Implementation started in /Users/ryan/Projects/Plexus-outside-consultant-skill on codex/outside-consultant-skill from origin/develop 8231546d6. Source is the finalized B0RD repository-owned suite now on B0RD main. Scope is limited to agent skill files, discovery guidance, host metadata, and this sanitized Kanbus hierarchy.",
+      "created_at": "2026-07-31T01:05:13.674205Z"
+    },
+    {
+      "id": "abae9581-f49f-4297-9831-ac94d893672c",
+      "author": "ryan",
+      "text": "Implementation and pre-publication validation complete. Added the provider-neutral outside-consultant role, Plexus-specific explicit-anchor rule, shared artifacts, role dispositions, discovery guidance, and preserved Cursor Auto worker routing. All six skills pass quick_validate.py; git diff --check and static authority scans pass; focused skill metadata/runtime tests pass (26 passed, 238 deselected). A fresh-context spawned-role test correctly refused before repository inspection or Kanbus access with no ambiguity.",
+      "created_at": "2026-07-31T01:07:20.998125Z"
+    }
+  ],
+  "created_at": "2026-07-31T01:05:09.960175Z",
+  "updated_at": "2026-07-31T01:07:20.998125Z",
+  "closed_at": null,
+  "custom": {}
+}

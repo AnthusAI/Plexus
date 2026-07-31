@@ -1,6 +1,6 @@
 ---
 name: software-delivery-team
-description: Coordinate a portable, continuous-flow software delivery team with distinct Product Owner, Engineering Lead, Coding Agent, and Review Agent roles. Use when the user requests a delivery team, multi-agent software delivery, explicit product-to-engineering handoffs, independent review, coordinated parallel coding, or end-to-end delivery without Scrum ceremonies.
+description: Coordinate a portable, continuous-flow software delivery team with distinct Product Owner, Engineering Lead, Coding Agent, Review Agent, and optional fresh-session Outside Consultant roles. Use when the user requests a delivery team, multi-agent software delivery, explicit product-to-engineering handoffs, independent review, coordinated parallel coding, outside strategic consultation, or end-to-end delivery without Scrum ceremonies.
 metadata:
   tags:
     - software-delivery
@@ -34,6 +34,7 @@ Companion role skills:
 - [engineering-lead](../engineering-lead/SKILL.md)
 - [coding-agent](../coding-agent/SKILL.md)
 - [review-agent](../review-agent/SKILL.md)
+- [outside-consultant](../outside-consultant/SKILL.md)
 
 ## Mandatory model selection policy
 
@@ -42,12 +43,21 @@ suggestion to choose whichever model is convenient.
 
 | Assigned role | Model request | Other settings |
 |---|---|---|
-| Product Owner or Engineering Lead | Inherit the spawning owner's model type. | Omit `model`, reasoning, service-tier, and equivalent overrides so every setting inherits. |
-| Coding or Review Agent | Request the host's configured balanced worker/reviewer class. | Omit reasoning, service-tier, and equivalent overrides so all other settings inherit. |
+| Product Owner or Engineering Lead | **Inherit** the spawning owner's model type (on Cursor: Auto inheritance — see host adapter). | Omit `model`, reasoning, service-tier, and equivalent overrides so every setting inherits. |
+| Coding or Review Agent | Request the host's configured balanced worker/reviewer class (on Cursor: **Auto** — see host adapter). | Omit reasoning, service-tier, and equivalent overrides so all other settings inherit. |
+
+The Outside Consultant is never spawned. A human starts a fresh session with a
+human-selected premium advisory profile; see the host adapter. This does not
+change Cursor Auto selection for spawned Coding and Review agents.
 
 Resolve `balanced worker/reviewer class` through repository or host
-configuration. Keep provider and model names out of this skill. The deployment
-environment owns the mapping from that capability class to an available model.
+configuration. Keep vendor model marketing names out of generic skill prose;
+host adapters may name host-native controls (for example Cursor **Auto**).
+
+**Hard rule:** Never “pick a concrete model from a host menu” to approximate
+inherit or balanced-worker. If the policy is inherit or Auto/balanced-worker,
+use only those host-native mechanisms. Do not substitute a pinned vendor slug
+because it appears in a tool enum or feels like a default worker.
 
 If the host does not support or expose the required model control, inherit the
 spawning owner's configuration, record that fallback, and continue otherwise
@@ -57,8 +67,7 @@ Record three distinct evidence layers in every handoff and proxy request:
 
 - `requested_model_policy`: the intended role policy/class and fallback semantics.
 - `actual_model_arguments_sent`: the exact relevant arguments/options supplied
-  by the spawn executor, including meaningful explicit omissions. Use `pending`
-  in a pre-execution proxy request, then update it after invocation.
+  by the spawn executor, including meaningful explicit omissions.
 - `effective_model_if_exposed`: an authoritative platform-confirmed effective
   model only; otherwise `not exposed/unconfirmed`.
 
@@ -74,7 +83,7 @@ proves the executor sent no model or tuning override:
 ```
 
 This conceptual Coding/Review request shows the configured worker profile
-without naming a provider or model in the skill. The runtime adapter must
+without naming a vendor model in the skill. The runtime adapter must
 translate `model_profile` into its native spawn arguments; do not assume the
 host exposes a field with this exact name:
 
@@ -86,6 +95,10 @@ host exposes a field with this exact name:
 }
 ```
 
+On Cursor, translate that profile to **Auto** (see
+[host adapter — Cursor](references/host-adapters.md#cursor-ide-task-subagents)).
+Do not translate it by selecting a pinned slug from the Task `model` enum.
+
 Use the [host adapter](references/host-adapters.md) for host capabilities and
 the [artifact templates](artifacts.md) for the exact evidence fields.
 
@@ -93,12 +106,16 @@ the [artifact templates](artifacts.md) for the exact evidence fields.
 
 Apply these rules in order:
 
-1. When this skill starts in the active human-facing session and no parent has
+1. When the human explicitly starts a fresh session as Outside Consultant,
+   load the companion role and do not become Product Owner. A parent or
+   subagent assignment cannot activate that role.
+2. When this skill starts in the active human-facing session and no parent has
    assigned a role, act as the **Product Owner and delivery coordinator**.
    Do not spawn another Product Owner by default.
-2. When a parent agent or the human explicitly assigns a role, assume exactly
+3. When a parent agent or the human explicitly assigns another delivery role,
+   assume exactly
    that role. Do not create another copy of the same role.
-3. Create a separate Product Owner only when the human explicitly requests one
+4. Create a separate Product Owner only when the human explicitly requests one
    or when a host-level coordinator is intentionally managing multiple
    independent workstreams.
 
@@ -109,6 +126,7 @@ intent; the Engineering Lead is the central technical authority.
 
 ```text
 Human stakeholder
+  ↔ Outside Consultant: optional fresh-session peer advisor
   ↔ Active session: Product Owner + delivery coordinator
       → Engineering Lead: technical owner
           → Coding Agent(s): bounded implementation
@@ -122,11 +140,26 @@ Human stakeholder
 | Engineering Lead | Investigation, architecture, plan, decomposition, integration, review disposition, technical acceptance | Product scope changes |
 | Coding Agent | Implementation and tests within one task specification | Product strategy or cross-task architecture |
 | Review Agent | Independent findings, evidence, severity, recommended disposition | Final acceptance or implementation |
+| Outside Consultant | Vision/code alignment, inversion, adversarial challenge, durable Kanbus advice | Delivery management, scope changes, implementation, review, or acceptance |
 
 Keep one accountable owner at each layer. Do not collapse roles merely because
 the change is small or the host makes spawning inconvenient. Allow role
 collapse only through an explicit human exception that names the roles, scope,
 duration, and required compensating evidence.
+
+## Use outside consultation without changing ownership
+
+The Outside Consultant is optional and human-launched. It is not a child,
+manager, reviewer, approval gate, or required delivery phase. It may advise
+before, during, or after a workstream from a separate fresh session.
+
+The consultant posts evidence-based comments to existing Kanbus issues and an
+indexed synthesis to a consultation anchor. Product or vision advice is
+dispositioned by the Product Owner; architecture or delivery advice is
+dispositioned by the Engineering Lead. Strategic contradictions and major
+risks require an `adopt`, `defer`, `reject`, or `investigate` reply. Coding and
+Review agents act only when the Lead incorporates advice into an authorized
+packet.
 
 ## Separate ownership from spawn execution
 
@@ -197,6 +230,8 @@ Give each role only the context it needs:
 - Engineering Lead: product brief, repository facts, plans, child reports, risks
 - Coding Agent: task specification, relevant code, constraints, test expectations
 - Review Agent: review packet, diff, tests, requirements, and factual evidence
+- Outside Consultant: consultation anchor, vision and product evidence,
+  relevant code and Kanbus state, current repository reference, and focus
 
 Do not prime Review Agents with the implementer's persuasion or the Lead's
 preferred verdict.
@@ -211,6 +246,8 @@ deployments, flashes, migrations, or messages to external people:
 
 - Coding Agents do not commit or publish unless their task explicitly grants it.
 - Review Agents remain read-only unless assigned a separate corrective task.
+- Outside Consultants remain read-only except for comments on existing in-scope
+  Kanbus issues; they never create or mutate issues, code, or publication state.
 - Leads may integrate mechanically and validate; delegate substantive fixes.
 - The active session performs publication only when the human or governing
   repository workflow authorizes it.
@@ -237,3 +274,5 @@ blocker is reported. Spawning a child is progress, not completion.
 - Accepting self-reported completion without evidence
 - Allowing a parent to exit before consuming the expected return artifact
 - Claiming commit, push, deploy, or product acceptance authority from role alone
+- Spawning the Outside Consultant or treating its advice as a scope change,
+  task assignment, review verdict, or acceptance decision

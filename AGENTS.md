@@ -92,8 +92,11 @@ Use `software-delivery-team` for coordinated product-to-engineering delivery. In
 - **engineering-lead**: Technical investigation, planning, Coding/Review delegation, integration, and technical acceptance.
 - **coding-agent**: Bounded implementation and validation under an Engineering Lead.
 - **review-agent**: Independent, read-only evaluation and severity-classified findings.
+- **outside-consultant**: Optional fresh-session strategic advisor that records evidence-based guidance on existing Kanbus issues without entering the delivery hierarchy.
 
 When an agent host cannot spawn nested children, the active Product Owner may execute Lead-authored spawn requests as a transport proxy. The Engineering Lead remains the logical manager and receives the child reports.
+
+For an outside consultation, the human opens a fresh session with a human-selected premium advisory profile and explicitly invokes `outside-consultant` with an existing Plexus Kanbus anchor. The consultant may only add comments to existing in-scope issues through `kbs`; it must not inspect project issue/event JSON directly, mutate issue state, edit code, publish, or spawn children. Existing Cursor Auto rules for spawned Coding and Review agents remain unchanged.
 
 ### Operational skills (`/skills/`)
 
