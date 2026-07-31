@@ -1,47 +1,25 @@
 # Delivery team artifact templates
 
-Use the smallest template that preserves the decision and evidence boundary.
-Do not omit acceptance criteria from implementation or review packets.
+Use the smallest template that preserves decisions, authority, and evidence.
 
-## Handoff envelope
-
-Prefix every delegated artifact with:
+## Main-agent decision brief
 
 ```markdown
-Artifact: <name and version>
-Logical owner: <role>
-Assigned role: <role receiving the work>
-Spawn executor: <agent/process that will invoke the host tool>
-requested_model_policy: <owner inheritance or configured balanced-worker request; include fallback if used>
-actual_model_arguments_sent: <exact relevant spawn arguments/options sent; state meaningful omitted overrides>
-effective_model_if_exposed: <platform-confirmed model, or not exposed/unconfirmed>
-Return target: <role or agent id>
-Repository/worktree: <absolute path, branch, and base>
-Decisions already made: <binding decisions>
-Open items: <questions the assigned role may resolve>
-Side-effect authority: <read-only / edit / test / commit / publish limits>
-Expected return artifact: <completion, review, integration, or escalation report>
-```
+# Decision brief: <title>
 
-## Product brief
-
-```markdown
-# Product brief: <title>
-
-## Problem
-## Desired outcome
-## Motivation
-## Users or consumers
-## Relevant scenarios
-## Constraints
-## Non-goals
+## Vision and desired outcome
+## Current state and evidence
+## Requested action
+## Value and opportunity cost
+## Inversion — how this fails
+## What we should not do
+## Recommended path
+## Alternatives
+## CEO decision required
+## Scope and non-goals
 ## Acceptance criteria
 - [ ] <testable criterion>
-## Priority
-## Open product questions
-## Decisions already made
-## Authority granted to Engineering Lead
-## Escalation conditions
+## Constraints and reserved authority
 ```
 
 ## Technical investigation
@@ -54,37 +32,47 @@ Expected return artifact: <completion, review, integration, or escalation report
 ## Existing architecture and abstractions
 ## Contracts that must remain stable
 ## Existing tests
-## Dependencies
+## Dependencies and prerequisites
 ## Migration or rollout concerns
-## Likely failure modes
+## Inverted failure modes and safeguards
 ## Request ambiguities
 ## Feasibility
 ```
 
-## Engineering plan
+## Delivery plan
 
 ```markdown
-# Engineering plan: <title>
+# Delivery plan: <title>
 
 ## Approach
 ## Interfaces and data flow
-## Risks and constraints
+## Risks, constraints, and actions to avoid
 ## Test strategy
-## Rollout, observability, and security
+## Rollout, observability, rollback, and security
 
 ## Task graph
-| ID | Objective | Ownership | Depends on | Execution wave |
+| ID | Objective | Files/components | Depends on | Execution wave |
 |---|---|---|---|---|
 
 ## Integration sequence
 1. <step>
 
-## Product questions
+## Open decisions
 ```
 
-## Coding task specification
+## Coding Agent handoff
 
 ```markdown
+Artifact: Coding task <id>
+Logical owner and return target: Main Product Owner + Engineering Lead <agent id>
+Assigned role: Coding Agent
+requested_worker_settings: <explicit user model/effort, or economical-coding-worker profile>
+actual_worker_arguments_sent: <exact arguments and meaningful omissions>
+effective_worker_profile_if_exposed: <platform-confirmed profile, or not exposed/unconfirmed>
+Repository/worktree: <absolute path, branch, and base>
+Side-effect authority: <edit / test / commit / publish limits>
+Expected return artifact: implementation completion report
+
 # Task: <id> — <title>
 
 ## Objective
@@ -92,8 +80,8 @@ Expected return artifact: <completion, review, integration, or escalation report
 ### In scope
 ### Out of scope
 ## Files or components
-## Interfaces
-## Constraints
+## Interfaces and binding decisions
+## Constraints and actions to avoid
 ## Acceptance criteria
 - [ ] <criterion>
 ## Test expectations
@@ -117,73 +105,26 @@ Expected return artifact: <completion, review, integration, or escalation report
 ## Assumptions and deviations
 ## Known limitations
 ## Concerns or follow-up
-## Factual notes for review
+## Factual notes for direct review
 ```
 
-## Review packet
+## Main-agent direct review
 
 ```markdown
-# Review packet: <task or change set>
+# Direct review: <task or change set>
 
-## Review objective
-## Task specification and acceptance criteria
-## Relevant requirements and constraints
-## Changed files and diff
-## Surrounding code to inspect
-## Tests and output
-## Static analysis or typecheck output
-## Explicit reviewer questions
-## Omit
-Implementer persuasion, desired verdict, unrelated product history, and rejected
-alternatives unless comparison is the review question.
-```
-
-## Review report
-
-```markdown
-# Review report: <task or change set>
-
-## Overall assessment
-## Evidence inspected
-## Findings
-### Blocking
-### Major
-### Minor
-### Questions
-### Suggestions
+## Diff and surrounding code inspected
+## Tests and validation independently verified
 ## Acceptance criteria
 | Criterion | Evidence | Status |
 |---|---|---|
-## Recommended disposition
-Accept | Accept with minor follow-up | Revise | Reject | Unable to determine
-```
-
-Severity meanings:
-
-- **Blocking:** must resolve before technical acceptance
-- **Major:** significant correctness, security, reliability, or architecture issue
-- **Minor:** real but limited issue
-- **Question:** clarification required to judge
-- **Suggestion:** optional improvement
-
-## Proxy spawn request
-
-```markdown
-# Proxy spawn request: <role and task>
-
-Logical manager: Engineering Lead <agent id>
-Spawn executor requested: Product Owner or host coordinator <agent id>
-requested_model_policy: <owner inheritance or configured balanced-worker request; include fallback if used>
-actual_model_arguments_sent: <exact relevant spawn arguments/options sent; state meaningful omitted overrides>
-effective_model_if_exposed: <platform-confirmed model, or not exposed/unconfirmed>
-Repository/worktree: <absolute path, branch, and base>
-Role skill to load: <skill path>
-Shared skill and resources to load: <paths>
-Child prompt: <complete, unmodified role assignment and bounded packet>
-Side-effect authority: <limits>
-Expected return artifact: <artifact>
-Route return to: Engineering Lead <agent id>
-Concurrency and filesystem notes: <capacity, ownership, worktree>
+## Correctness, security, reliability, and maintainability
+## Integration effects
+## Inversion — remaining ways this could fail
+## Findings and Coding Agent revisions
+## Residual risks
+## Decision
+Accept | Revise | Reject | Replan | Escalate to CEO
 ```
 
 ## Outside consultant session brief
@@ -216,7 +157,7 @@ Observed divergence: <difference, or none>
 Inversion — how this fails: <failure path and missing safeguard>
 Recommendation: <specific advisory action>
 Open question: <remaining uncertainty, or none>
-Suggested owner: Product Owner | Engineering Lead | Human
+Suggested owner: Main delivery agent | Human
 Disposition required: adopt | defer | reject | investigate | not required
 Anchor issue: <issue-id>
 ```
@@ -252,33 +193,22 @@ Owner dispositions required: <finding ids and owners, or none>
 ```
 
 If no material divergence exists, say so with evidence and use `Targeted
-findings: none`. If a write fails, preserve the exact draft in session output under
-`UNPOSTED`, with its intended issue and the command error.
+findings: none`. If a write fails, preserve the exact draft in session output
+under `UNPOSTED`, with its intended issue and command error.
 
-## Integration report
+## Final delivery report
 
 ```markdown
-# Integration report: <title>
+# Delivery report: <title>
 
+## CEO decision and intended outcome
 ## What was implemented
-## Important technical decisions
-## Review findings and disposition
+## Important product and technical decisions
+## Coding Agent work and direct-review disposition
 ## Validation performed
-## Evidence for product acceptance
+## Acceptance criteria results
+## Inversion risks addressed
 ## Deviations, limitations, and remaining risks
 ## Publication state
-## Open items
-```
-
-## Product acceptance
-
-```markdown
-# Product acceptance: <title>
-
-## Decision
-Accept | Reject | Iterate
-## Outcome versus desired outcome
-## Acceptance criteria results
-## Product rationale
 ## Follow-up
 ```

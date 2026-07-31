@@ -85,18 +85,16 @@ Plexus uses the repository-owned `skills/` directory as the general agent-skills
 
 ### Software delivery team (`/skills/`)
 
-Use `software-delivery-team` for coordinated product-to-engineering delivery. In the ordinary human-facing session, the active agent is the Product Owner and delivery coordinator; it delegates technical ownership to an Engineering Lead rather than spawning a second Product Owner.
+Use `software-delivery-team` for coordinated delivery. In the ordinary human-facing session, the active agent combines Product Owner and Engineering Lead responsibility. It challenges priorities against vision and value, applies inversion, delegates bounded Coding Agents, and directly reviews their work.
 
-- **software-delivery-team**: Shared role model, handoffs, spawn-proxy behavior, parallelism, and acceptance flow.
-- **product-owner**: Human-facing product intent, scope, criteria, coordination, and product acceptance.
-- **engineering-lead**: Technical investigation, planning, Coding/Review delegation, integration, and technical acceptance.
-- **coding-agent**: Bounded implementation and validation under an Engineering Lead.
-- **review-agent**: Independent, read-only evaluation and severity-classified findings.
+- **software-delivery-team**: Shared combined-leadership model, Coding Agent handoffs, parallelism, direct review, and acceptance flow.
+- **product-owner**: Combined product and engineering leadership, strategic pushback, inversion, delegation, review, and acceptance.
+- **coding-agent**: Bounded implementation and validation under the active main agent.
 - **outside-consultant**: Optional fresh-session strategic advisor that records evidence-based guidance on existing Kanbus issues without entering the delivery hierarchy.
 
-When an agent host cannot spawn nested children, the active Product Owner may execute Lead-authored spawn requests as a transport proxy. The Engineering Lead remains the logical manager and receives the child reports.
+Do not spawn Product Owner, Engineering Lead, or Review Agent roles. The active main agent is the Coding Agents' logical manager, direct reviewer, and return target. Explicit user model and effort settings take precedence for Coding Agents; otherwise use the configured economical worker profile. On Cursor, the default mapping remains Auto rather than a pinned model-menu value.
 
-For an outside consultation, the human opens a fresh session with a human-selected premium advisory profile and explicitly invokes `outside-consultant` with an existing Plexus Kanbus anchor. The consultant may only add comments to existing in-scope issues through `kbs`; it must not inspect project issue/event JSON directly, mutate issue state, edit code, publish, or spawn children. Existing Cursor Auto rules for spawned Coding and Review agents remain unchanged.
+For an outside consultation, the human opens a fresh session with a human-selected premium advisory profile and explicitly invokes `outside-consultant` with an existing Plexus Kanbus anchor. The consultant may only add comments to existing in-scope issues through `kbs`; it must not inspect project issue/event JSON directly, mutate issue state, edit code, publish, or spawn children. Coding Agent worker settings remain independent of the consultant's premium session profile.
 
 ### Operational skills (`/skills/`)
 

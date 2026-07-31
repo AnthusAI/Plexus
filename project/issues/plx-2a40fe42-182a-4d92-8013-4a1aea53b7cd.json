@@ -1,0 +1,18 @@
+{
+  "id": "plx-2a40fe42-182a-4d92-8013-4a1aea53b7cd",
+  "title": "Simplify software delivery agent roles",
+  "description": "Simplify the repository delivery suite so the active human-facing agent owns both product and technical leadership, delegates only bounded coding work, reviews results directly, and challenges work against vision, value, and inversion before execution.",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-07-31T17:43:41.257205Z",
+  "updated_at": "2026-07-31T17:43:50.469983Z",
+  "closed_at": null,
+  "custom": {}
+}
