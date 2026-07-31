@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "013d75a5-aeec-411f-80e4-f08059702862",
+  "issue_id": "plx-d1dfd528-20d6-4bf3-80a7-0965532bc12f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T17:43:47.404Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "As the CEO, I want the active delivery agent to combine product and engineering leadership, so that it challenges priorities, delegates implementation efficiently, and remains accountable for review and outcomes.\n\nFeature: Simplified software delivery leadership\n\nScenario: Main agent owns product and engineering judgment\nGiven the human invokes the software delivery team in a human-facing session\nWhen the agent evaluates the request\nThen it acts as combined Product Owner and Engineering Lead and does not spawn leadership or review roles\n\nScenario: Main agent challenges low-value work\nGiven a requested task may not be the highest-value vision-aligned next step\nWhen the main agent evaluates what should be done\nThen it explains the concern and recommends a better path while recognizing the CEO as final authority\n\nScenario: Main agent applies inversion\nGiven a proposed path toward a goal\nWhen the main agent plans and reviews the work\nThen it identifies actions, omissions, assumptions, and failure modes that could prevent success\n\nScenario: Coding agents receive economical settings\nGiven bounded implementation work is ready to delegate\nWhen the main agent spawns a Coding Agent\nThen it uses explicit user model and effort settings when supplied, otherwise the configured economical worker profile\n\nScenario: Main agent reviews delegated work\nGiven a Coding Agent returns an implementation report\nWhen the main agent integrates the result\nThen it directly inspects the diff, tests, risks, and acceptance evidence before accepting or revising the work",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-2a40fe42-182a-4d92-8013-4a1aea53b7cd",
+    "priority": 2,
+    "status": "open",
+    "title": "Main delivery agent owns judgment and technical delivery"
+  }
+}

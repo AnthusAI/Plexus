@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c1745f1c-4877-4a2d-a7d1-868d7a3fc837",
+  "issue_id": "plx-180a722b-6eec-4f1c-91d1-9c5ab75b15fd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T01:05:09.960Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Port the finalized provider-neutral outside-consultant role, shared artifacts, host adapter guidance, role dispositions, discovery metadata, and validation coverage into Plexus. Preserve the existing Cursor Auto rule for spawned Coding and Review agents.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-44ad754d-6e9b-4ced-bc02-db1158dd41e1",
+    "priority": 2,
+    "status": "open",
+    "title": "Implement and validate outside consultant skill"
+  }
+}

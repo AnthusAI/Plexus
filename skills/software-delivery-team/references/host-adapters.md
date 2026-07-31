@@ -1,114 +1,100 @@
-# Agent host adapters
+# Agent host adapter
 
-Use native host primitives to preserve the logical role model. Treat tool names
-and process nesting as transport details, not organizational authority.
+Use native host primitives to preserve the simple role model. Tool names and
+process nesting are transport details, not organizational authority.
 
 ## Capability check
 
 Before delegation:
 
-1. Identify native spawn, message, resume, wait, and interrupt primitives.
-2. Confirm whether child agents may create nested children.
-3. Confirm concurrency limits and whether agents share a filesystem or worktree.
-4. Confirm which process remains available to route return artifacts.
-5. Resolve the exact repository/worktree path, branch, and base for all work.
-6. Record the result in the Engineering Lead plan.
+1. Identify native spawn, message, wait, resume, and interrupt primitives.
+2. Confirm concurrency limits and whether agents share a filesystem or worktree.
+3. Resolve the exact repository path, branch, base, and governing instructions.
+4. Determine which process remains available to review returned work.
+5. Resolve worker settings using the precedence below.
 
-Do not test capability by starting side-effectful work. Do not shell out to an
-external agent CLI merely to bypass missing native tools or authentication.
+Do not shell out to an external agent executable merely to bypass missing
+native tools or authentication.
 
-## Model-selection and evidence policy
+## Coding Agent settings precedence
 
-Select the requested model by assigned role:
+Resolve settings in this order:
 
-| Assigned role | Request |
-|---|---|
-| Product Owner or Engineering Lead | Inherit the spawning owner's model type and all settings: omit model, reasoning, service-tier, and equivalent overrides. |
-| Coding or Review Agent | Request the host's balanced worker class; inherit reasoning and all other settings. |
+1. **Explicit user settings:** If the user names a Coding Agent model, model
+   class, effort, or equivalent tuning, pass those settings exactly when the
+   host supports them. User settings override repository defaults for that
+   delegation scope.
+2. **Economical default:** Otherwise resolve `economical-coding-worker` through
+   repository or host configuration to the simplest, lower-cost profile that is
+   reasonably capable of the bounded task.
+3. **Host automatic selection:** On Cursor, map the default profile to **Auto**.
+   Omit the Task `model` parameter when omission expresses Auto, or select the
+   explicit Auto control. Never pin a concrete model-menu value as a substitute.
+4. **Uncontrollable routing:** Inherit the main session's configuration and
+   disclose that the economical policy could not be enforced.
 
-Resolve the balanced-worker request through repository or host configuration.
-The configuration may use a capability alias, model profile, policy rule, or
-native automatic selection. Keep provider and model names out of repository
-skills. Treat `balanced-worker` as a capability name, not a required native API
-value or field name; translate it to the host's actual spawn arguments. If the
-host does not support model selection, inherit the spawning owner's
-configuration, record the fallback in `requested_model_policy`, and do not
-block safe work solely on unavailable model routing.
+An explicit user effort setting travels with the explicit user model setting or
+may be specified independently. Do not silently discard it. If a requested
+combination is unsupported, report the exact translation or omission.
 
-Record all three evidence layers in every handoff or proxy artifact:
+Do not use a cheaper profile when the bounded task demonstrably needs more
+capability. Prefer splitting, narrowing, or clarifying the task before raising
+cost; escalate to the user when the tradeoff is material.
 
-- `requested_model_policy`: intended role policy/class and fallback semantics.
-- `actual_model_arguments_sent`: exact relevant arguments/options actually
-  supplied by the spawn executor, including meaningful explicit omissions. Set
-  it to `pending` before execution and update it after invocation.
-- `effective_model_if_exposed`: authoritative platform-confirmed effective
-  model only, or `not exposed/unconfirmed`.
+Record:
 
-A request, sent argument, status listing, or child self-report is not
-effective-model confirmation.
+- `requested_worker_settings`
+- `actual_worker_arguments_sent`
+- `effective_worker_profile_if_exposed`
 
-## Runtime adapter
+Only authoritative platform evidence confirms the effective profile. Requests,
+arguments, status listings, and child self-reports do not.
 
-Map the host to these primitives:
+## Runtime mapping
 
 | Required behavior | Primitive |
 |---|---|
-| Create isolated role context | spawn |
-| Deliver a bounded artifact | message |
-| Continue the logical owner | resume or follow-up |
+| Create bounded Coding Agent context | spawn |
+| Deliver or clarify a task | message |
 | Observe completion or escalation | wait |
+| Continue the main agent's review | resume or follow-up |
 | Stop unsafe or superseded work | interrupt |
 
-If the host lacks nested spawn but has a top-level spawn executor, use the proxy
-protocol. If it lacks any authorized spawn primitive, stop at the completed
-brief, plan, or packet and report the capability blocker.
+The active main agent is always the Coding Agent's logical manager, reviewer,
+and return target. There is no nested leadership or review topology.
 
-For Product Owner and Engineering Lead spawns, omit model and setting
-overrides. For Coding and Review spawns, resolve the `balanced-worker`
-capability through the host's configured profile and inherit other settings.
-Record the configuration source and actual arguments used. If unavailable or
-uncontrollable, inherit the spawning owner's configuration and record the
-fallback. Record only platform-confirmed effective-model evidence; otherwise
-use `not exposed/unconfirmed`.
+Shared filesystems are common. Assign disjoint files before concurrent editing
+and never assume a child has an isolated worktree. Start every child in the
+explicitly assigned checkout.
 
-Use native spawn, wait, message, resume, and interrupt primitives. Treat nested
-spawn availability as a capability to detect, not an assumption. Do not invoke
-an external agent executable merely to bypass missing native tools or
-authentication.
+## Coding Agent prompt requirements
 
-Child agents may spawn nested roles when the host permits. If the Lead cannot,
-return a proxy spawn request to the active Product Owner. Shared filesystems are
-common, so assign disjoint files before concurrent editing and never assume an
-agent has an isolated worktree.
+Include:
 
-Start every child in the explicitly assigned worktree. Never infer the target
-checkout from the spawning process's current directory when multiple checkouts
-exist.
+1. Coding Agent role and main-agent return target
+2. Paths to shared and Coding Agent skills
+3. Bounded task and acceptance criteria
+4. Repository/worktree path, branch, base, and governing instructions
+5. Files/components owned and concurrency constraints
+6. Side-effect authority
+7. Required completion report
+8. Escalation triggers
+9. Requested worker settings
+10. Actual arguments sent and authoritative effective profile if exposed
 
-## Child prompt requirements
-
-Include all of the following in every spawn prompt:
-
-1. Assigned role and logical manager
-2. Paths to the shared skill, assigned role skill, and required resources
-3. Bounded input artifact and acceptance criteria
-4. Exact repository/worktree path, branch, base, and governing instructions
-5. Side-effect authority, including commit and publication limits
-6. Expected return artifact and exact return target
-7. Escalation triggers
-8. Requested model policy and any fallback
-9. Actual model arguments sent, including meaningful omitted overrides
-10. Effective model only if authoritatively exposed by the platform
-
-Do not include the full stakeholder transcript, implementer persuasion for a
-reviewer, or unrelated workstream state.
+Do not include unrelated workstream state or ask the worker to decide product
+priority, architecture across tasks, review disposition, or acceptance.
 
 ## Capacity and persistence
 
-Count the active Product Owner and Engineering Lead against host concurrency
-limits. Run independent Coding Agents in as many parallel slots as remain, then
-use deterministic waves. Run Review after a coherent diff exists and coding
-slots have been released.
+Count the active main agent against the host concurrency limit. Use remaining
+slots for disjoint Coding Agents in deterministic waves. Keep the main agent
+alive or resumable until it has received, inspected, and dispositioned every
+expected return artifact.
 
-Keep the logical parent alive or explicitly resumable. A spawned child without
-a known return route is an orphaned workstream, not delegation.
+## Fresh-session Outside Consultant
+
+Do not spawn the Outside Consultant. The human opens a fresh session and
+explicitly assigns that role. Its durable return path is existing Kanbus issue
+comments plus a verbatim copy in the human-facing session. Consultant session
+settings do not change Coding Agent worker settings.

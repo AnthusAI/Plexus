@@ -3,16 +3,35 @@
   "title": "Feedback opportunity discovery and prioritization",
   "description": "Purpose: Give operators complete, evidence-based portfolio discovery that identifies and ranks optimization opportunities without silently sampling or overstating incomplete evidence.\n\nExclusions:\n- Automatic score mutation or promotion.\n- Hidden qualitative weighting.\n- Client-specific prioritization rules or data.\n\nDependencies: Consumes generic feedback and coverage data. It may proceed independently of execution and candidate-generation work.\n\nDefinition of Done:\n- Complete portfolio enumeration reports explicit coverage.\n- Opportunity ranking exposes transparent disagreement volume, drift, evidence sufficiency, rubric clarity, and fixability signals.\n- Partial evidence is labeled incomplete.\n- Results provide actionable, compact recommendations suitable for choosing optimization targets.\n- Behavior-first specifications and focused tests pass.\n\nRunning log: Record sanitized decisions, attempts, outcomes, and next steps in this epic or its child issues.",
   "type": "epic",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-8570854c-bad6-4049-be38-e04836aae830",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "232c269d-f578-4563-937d-2ef8ae2eb15a",
+      "author": "ryan.porter",
+      "text": "Started the scoped-ranking increment under story plx-5359ea. The implementation will preserve exhaustive account enumeration, apply exact-ID and literal case-insensitive prefix selectors before bounded feedback analysis, retain opaque IDs, and fail closed on incomplete coverage. No alternate execution path or fuzzy selector is being added.",
+      "created_at": "2026-07-28T00:40:45.895617Z"
+    },
+    {
+      "id": "e8c79852-1637-4da6-a4f3-0fb632032a57",
+      "author": "ryan.porter",
+      "text": "Starting final integration of the retained optimization decision toolchain onto current develop. Scope includes reconciling the already-specified ranking, selected-scope, activity-cooldown, and evidence-gate behavior; regenerating dependency state from the merged manifest; running focused specifications plus complete local Python and dashboard CI; and merging only after all gates pass. Superseded stale pull requests will be closed rather than overlaid on newer implementations.",
+      "created_at": "2026-07-30T23:45:27.778851Z"
+    },
+    {
+      "id": "0fc98da4-a38f-4706-bbb9-b40054064335",
+      "author": "ryan.porter",
+      "text": "Completed by PR #495. Develop now contains exhaustive portfolio opportunity ranking, transparent evidence and coverage, scoped selection, activity cooldown, assessment, and approved launch orchestration. Full local release-equivalent validation passed.",
+      "created_at": "2026-07-31T00:06:01.436553Z"
+    }
+  ],
   "created_at": "2026-07-27T20:52:48.354441Z",
-  "updated_at": "2026-07-27T20:52:48.354441Z",
-  "closed_at": null,
+  "updated_at": "2026-07-31T00:06:01.725298Z",
+  "closed_at": "2026-07-31T00:06:01.725298Z",
   "custom": {}
 }

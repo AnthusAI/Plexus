@@ -260,9 +260,8 @@ def test_real_repo_skills_have_explicit_console_support_classification() -> None
     assert {
         "software-delivery-team",
         "product-owner",
-        "engineering-lead",
         "coding-agent",
-        "review-agent",
+        "outside-consultant",
         "score-code-editor",
         "score-setup",
         "guidelines",
@@ -275,9 +274,8 @@ def test_real_repo_skills_have_explicit_console_support_classification() -> None
     delivery_role_requirements = {
         "software-delivery-team": True,
         "product-owner": True,
-        "engineering-lead": True,
         "coding-agent": False,
-        "review-agent": False,
+        "outside-consultant": False,
     }
     for skill_id, requires_subagent in delivery_role_requirements.items():
         entry = entries_by_id[skill_id]

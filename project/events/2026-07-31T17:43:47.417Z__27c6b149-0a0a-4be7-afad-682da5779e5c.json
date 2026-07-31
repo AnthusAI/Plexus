@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "27c6b149-0a0a-4be7-afad-682da5779e5c",
+  "issue_id": "plx-25a407d4-ab14-4c5d-acf0-cb87ec4e1dc2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T17:43:47.417Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Remove Engineering Lead and Review Agent skills, revise the shared delivery model and artifacts, strengthen the combined main role with vision/value judgment and inversion, retain Coding Agent delegation, and update worker model/effort routing with explicit user overrides.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-2a40fe42-182a-4d92-8013-4a1aea53b7cd",
+    "priority": 2,
+    "status": "open",
+    "title": "Revise delivery skills for combined leadership"
+  }
+}

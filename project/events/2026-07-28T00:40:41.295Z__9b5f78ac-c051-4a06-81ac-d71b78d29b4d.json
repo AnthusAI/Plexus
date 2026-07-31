@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9b5f78ac-c051-4a06-81ac-d71b78d29b4d",
+  "issue_id": "plx-5359eae6-8d9a-41cb-b489-2f4bf9b8223d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T00:40:41.295Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Scope opportunity ranking to selected scorecards",
+    "description": "As an optimization operator, I want to restrict portfolio ranking by exact scorecard IDs or literal name prefixes, so that I can focus analysis without losing complete-coverage guarantees.\n\nOut of scope: fuzzy matching, regex/glob selectors, alternate ranking paths, automatic optimization, and client-specific policy.\n\nFeature: Scoped optimization opportunity ranking\n\n  Scenario: Rank exact scorecard identifiers\n    Given a completely enumerated account scorecard collection\n    When ranking is requested with exact opaque scorecard identifiers\n    Then only matched identifiers are analyzed\n    And every identifier reaches downstream analysis unchanged\n\n  Scenario: Rank literal scorecard name prefixes\n    Given scorecard names with different letter casing\n    When ranking is requested with one or more literal name prefixes\n    Then matching is case-insensitive and prefix-only\n    And the union of exact and prefix matches is deduplicated\n\n  Scenario: Preserve scoped coverage evidence\n    Given a scoped ranking request\n    When enumeration and downstream analysis complete\n    Then the packet reports requested selectors, matches, unmatched selectors, inspected count, and complete coverage\n\n  Scenario: Return an exact empty scoped result\n    Given complete scorecard enumeration with no selector matches\n    When scoped ranking completes\n    Then the result is exactly empty\n    And downstream feedback analysis is not invoked\n\n  Scenario: Reject ambiguous empty scope\n    Given an explicitly supplied selector field with no values\n    When ranking is requested\n    Then the request is rejected instead of becoming account-wide\n\n  Scenario: Never overstate partial scoped evidence\n    Given enumeration or downstream analysis fails\n    When scoped ranking returns partial evidence\n    Then the result is marked incomplete and not exact",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

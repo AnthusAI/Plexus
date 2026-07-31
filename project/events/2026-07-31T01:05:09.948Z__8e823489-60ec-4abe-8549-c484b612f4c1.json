@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8e823489-60ec-4abe-8549-c484b612f4c1",
+  "issue_id": "plx-402e58dc-6475-4c67-86c3-4fca5148d4bf",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T01:05:09.948Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "As a human stakeholder, I want to launch an independent outside consultant in a fresh session, so that strategic contradictions, major risks, and opportunities are recorded without changing delivery authority.\n\nFeature: Outside consultant advisory workflow\n\nScenario: Fresh-session consultation\nGiven a human starts a fresh session with a premium advisory profile and an existing Kanbus anchor\nWhen the outside-consultant skill is invoked\nThen it inspects repository and Kanbus evidence and posts targeted comments before an indexed anchor synthesis\n\nScenario: Spawned invocation refuses\nGiven a parent or subagent assigns the outside-consultant role\nWhen the role checks its session topology\nThen it refuses before analysis or Kanbus writes and requests a fresh human-facing session\n\nScenario: Significant advice is dispositioned\nGiven a finding is a strategic contradiction or major risk\nWhen the consultant posts it\nThen the Product Owner or Engineering Lead replies adopt, defer, reject, or investigate\n\nScenario: Failed writes remain truthful\nGiven a Kanbus comment write fails\nWhen the consultant reports its output\nThen it labels the exact draft UNPOSTED and does not claim the comment exists",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-44ad754d-6e9b-4ced-bc02-db1158dd41e1",
+    "priority": 2,
+    "status": "open",
+    "title": "Fresh outside consultant provides durable strategic advice"
+  }
+}
