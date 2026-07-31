@@ -3,7 +3,7 @@
   "title": "Implement and validate outside consultant skill",
   "description": "Port the finalized provider-neutral outside-consultant role, shared artifacts, host adapter guidance, role dispositions, discovery metadata, and validation coverage into Plexus. Preserve the existing Cursor Auto rule for spawned Coding and Review agents.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Implementation and pre-publication validation complete. Added the provider-neutral outside-consultant role, Plexus-specific explicit-anchor rule, shared artifacts, role dispositions, discovery guidance, and preserved Cursor Auto worker routing. All six skills pass quick_validate.py; git diff --check and static authority scans pass; focused skill metadata/runtime tests pass (26 passed, 238 deselected). A fresh-context spawned-role test correctly refused before repository inspection or Kanbus access with no ambiguity.",
       "created_at": "2026-07-31T01:07:20.998125Z"
+    },
+    {
+      "id": "c69618e1-83f1-409e-9c9b-9792872fe766",
+      "author": "ryan",
+      "text": "Implemented and validated in commit b32612793; landed through PR #525 at merge commit 8577ad92310703d984f6f66c78d51b97446b51fe.",
+      "created_at": "2026-07-31T01:08:05.830319Z"
     }
   ],
   "created_at": "2026-07-31T01:05:09.960175Z",
-  "updated_at": "2026-07-31T01:07:20.998125Z",
-  "closed_at": null,
+  "updated_at": "2026-07-31T01:08:05.840908Z",
+  "closed_at": "2026-07-31T01:08:05.840908Z",
   "custom": {}
 }

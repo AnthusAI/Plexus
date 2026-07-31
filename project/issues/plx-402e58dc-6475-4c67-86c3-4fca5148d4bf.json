@@ -3,16 +3,23 @@
   "title": "Fresh outside consultant provides durable strategic advice",
   "description": "As a human stakeholder, I want to launch an independent outside consultant in a fresh session, so that strategic contradictions, major risks, and opportunities are recorded without changing delivery authority.\n\nFeature: Outside consultant advisory workflow\n\nScenario: Fresh-session consultation\nGiven a human starts a fresh session with a premium advisory profile and an existing Kanbus anchor\nWhen the outside-consultant skill is invoked\nThen it inspects repository and Kanbus evidence and posts targeted comments before an indexed anchor synthesis\n\nScenario: Spawned invocation refuses\nGiven a parent or subagent assigns the outside-consultant role\nWhen the role checks its session topology\nThen it refuses before analysis or Kanbus writes and requests a fresh human-facing session\n\nScenario: Significant advice is dispositioned\nGiven a finding is a strategic contradiction or major risk\nWhen the consultant posts it\nThen the Product Owner or Engineering Lead replies adopt, defer, reject, or investigate\n\nScenario: Failed writes remain truthful\nGiven a Kanbus comment write fails\nWhen the consultant reports its output\nThen it labels the exact draft UNPOSTED and does not claim the comment exists",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "plx-44ad754d-6e9b-4ced-bc02-db1158dd41e1",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "6075176a-d7db-47ed-88c2-6cbc1afa453d",
+      "author": "ryan",
+      "text": "Behavior is represented by the landed outside-consultant skill and verified by six-skill validation, focused repository tests, and a fresh-context spawned-role refusal test.",
+      "created_at": "2026-07-31T01:08:05.850871Z"
+    }
+  ],
   "created_at": "2026-07-31T01:05:09.947812Z",
-  "updated_at": "2026-07-31T01:05:09.947812Z",
-  "closed_at": null,
+  "updated_at": "2026-07-31T01:08:05.859447Z",
+  "closed_at": "2026-07-31T01:08:05.859447Z",
   "custom": {}
 }
