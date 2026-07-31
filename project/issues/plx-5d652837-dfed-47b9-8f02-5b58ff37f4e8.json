@@ -3,7 +3,7 @@
   "title": "Defer recently modified scores from optimization",
   "description": "As an optimization operator, I want recently modified scores excluded from automatic optimization selection, so that the system does not repeatedly spend effort on work that is already active.\n\nIn scope: deterministic ranking cooldown, evidence and fingerprints, assessment state, launch-time recheck, documentation, and tests.\n\nOut of scope: production optimization runs, automatic champion promotion, and feedback mutations.\n\nFeature: Seven-day score activity cooldown\n\nScenario: A recently created version is not ranked\nGiven a score has complete ranking evidence\nAnd its newest version was created within the rolling seven-day UTC window\nWhen optimization opportunities are ranked\nThen the score is retained as unranked with recent activity evidence\nAnd it is not returned as an optimization candidate\n\nScenario: A recent score update starts the cooldown\nGiven the newest score version is older than seven days\nAnd the score record was updated within seven days\nWhen optimization opportunities are ranked\nThen the score is excluded for recent activity\n\nScenario: Missing recency evidence fails closed\nGiven an otherwise eligible score lacks valid score activity evidence\nWhen optimization opportunities are ranked\nThen the score is not ranked\nAnd portfolio coverage is incomplete\n\nScenario: Launch rechecks activity\nGiven a score was previously approved for optimization\nAnd new score activity occurs before dispatch\nWhen the approved optimizer batch is launched\nThen that target is rejected for recent activity\nAnd no optimizer procedure is dispatched for it",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -46,10 +46,16 @@
       "author": "ryan.porter",
       "text": "Final integration pass started on current develop. Preserve this issue's existing observable behavior and fail-closed evidence contract, resolve only integration conflicts, and verify focused specifications plus complete local CI before merge.",
       "created_at": "2026-07-30T23:45:29.174277Z"
+    },
+    {
+      "id": "0a62eb2c-27ea-4385-ba81-9dfa6ae3f04f",
+      "author": "ryan.porter",
+      "text": "Merged to develop in PR #495 with deterministic seven-day activity cooldown, evidence fingerprints, and launch-time recheck. Final local release gates passed.",
+      "created_at": "2026-07-31T00:06:00.870811Z"
     }
   ],
   "created_at": "2026-07-28T17:09:16.380112Z",
-  "updated_at": "2026-07-30T23:45:29.174277Z",
-  "closed_at": null,
+  "updated_at": "2026-07-31T00:06:01.146738Z",
+  "closed_at": "2026-07-31T00:06:01.146738Z",
   "custom": {}
 }
