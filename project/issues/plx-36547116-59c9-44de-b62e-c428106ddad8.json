@@ -3,7 +3,7 @@
   "title": "Restore complete newest-version activity evidence in optimization ranking",
   "description": "As an optimization operator, I want portfolio ranking to distinguish a valid champion/version history from a dangling champion identifier, so that structurally ineligible scores do not incorrectly make otherwise complete activity coverage fail.\n\nObserved platform defect: the exhaustive score inventory can return a scalar champion version identifier while both the champion relationship and reverse version history are empty. Ranking currently treats that row as otherwise eligible and reports missing activity evidence. The fix must use the existing exhaustive GraphQL query, preserve opaque identifiers, include unpromoted versions for valid scores, and add no per-score reads.\n\nFeature: Correctly classify inaccessible score versions\n\nScenario: A score has a dangling champion identifier\nGiven an exhaustive score inventory row has a champion version identifier\nAnd its champion version relationship is null\nAnd its reverse version history is empty\nWhen optimization ranking evaluates eligibility\nThen it classifies the score as structurally unranked with an explicit invalid-champion reason\nAnd it does not classify the row as incomplete cooldown activity evidence\nAnd the structurally ineligible row does not make otherwise complete portfolio activity coverage incomplete\n\nScenario: A valid score has a newer unpromoted version\nGiven the champion relationship is valid\nAnd the reverse version history contains a newer unpromoted version\nWhen optimization ranking evaluates cooldown activity\nThen it uses the newest version timestamp rather than the champion timestamp\nAnd preserves the newest version opaque identifier unchanged\n\nScenario: An otherwise eligible score still lacks newest-version evidence\nGiven the champion relationship is valid\nAnd newest-version activity cannot be established\nWhen optimization ranking runs\nThen the score fails closed\nAnd the portfolio is not exact\nAnd the primary next action reports evidence repair rather than rank completion\n\nOut of scope: data repair, score mutation, optimizer launch, and cooldown-policy changes.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -40,10 +40,16 @@
       "author": "ryan.porter",
       "text": "Final integration pass started on current develop. Preserve this issue's existing observable behavior and fail-closed evidence contract, resolve only integration conflicts, and verify focused specifications plus complete local CI before merge.",
       "created_at": "2026-07-30T23:45:28.264163Z"
+    },
+    {
+      "id": "99efcb6e-be0c-4d43-91a9-e1abf2d3a635",
+      "author": "ryan.porter",
+      "text": "Merged to develop in PR #495. Final release-equivalent validation passed: executable feature, 469 focused tests, Python 3.11 and 3.12 full suites, Node 20 typechecks and unit tests, Storybook build, and 700 Chromium tests.",
+      "created_at": "2026-07-31T00:05:59.714618Z"
     }
   ],
   "created_at": "2026-07-28T18:41:17.381830Z",
-  "updated_at": "2026-07-30T23:45:28.264163Z",
-  "closed_at": null,
+  "updated_at": "2026-07-31T00:05:59.963553Z",
+  "closed_at": "2026-07-31T00:05:59.963553Z",
   "custom": {}
 }
