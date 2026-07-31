@@ -34,10 +34,22 @@
       "author": "ryan.porter",
       "text": "Review correction applied: optimizer_artifacts is now read only from Procedure.metadata, matching the existing optimizer indexer. Resolver verifies pointer.task_id equals the exact Task, schema/index timestamp, canonical three artifact keys, and per-artifact S3 key, positive size, SHA-256 shape, and content type. Added outside-in completed-child production-shape and mismatched-pointer-task tests. Red: Procedure-owned pointer initially did not terminalize. Green: resolver 8 passed; MCP runtime 261 passed; procedure/resolver/dispatch set 125 passed; invoke lint and diff check passed.",
       "created_at": "2026-07-31T00:28:08.994875Z"
+    },
+    {
+      "id": "f24e72d5-d992-4db9-a080-8c7dc883a7cb",
+      "author": "ryan.porter",
+      "text": "Release inversion found that optimization-specific held_once and resume_once branches in the existing Amplify task-dispatcher function duplicate the generic transition-to-PENDING plus conditional-claim behavior. Keeping them would expand the deployed function surface and violate the living-workflow zero-Amplify-function-diff gate without being required for durable child waiting. Corrective scope: restore the dispatcher function/tests to develop, retain host-neutral Task transitions in Plexus, and prove portfolio lifecycle plus the existing generic dispatcher claim regressions remain green. No schema, resource, IAM, storage, or production change.",
+      "created_at": "2026-07-31T18:39:10.664187Z"
+    },
+    {
+      "id": "bc1bd39d-e4f9-42f4-a6a1-ddbcdfb50850",
+      "author": "ryan.porter",
+      "text": "Correction implemented and independently reviewed: restored dashboard/amplify/functions/taskDispatcher/index.py and test_index.py byte-for-byte to develop. The generic transition-to-PENDING and conditional claim remain the only dispatcher authority. Validation: both dispatcher suites plus optimizer backend, portfolio lifecycle, child lifecycle, and command-dispatch tests passed 185 tests; diff check passed. After commit, the branch has no dashboard/amplify diff. Task remains in progress until the durable Tactus dependency and end-to-end release gate land.",
+      "created_at": "2026-07-31T18:41:21.552728Z"
     }
   ],
   "created_at": "2026-07-30T22:44:49.627349Z",
-  "updated_at": "2026-07-31T00:28:08.994875Z",
+  "updated_at": "2026-07-31T18:41:21.552728Z",
   "closed_at": null,
   "custom": {}
 }

@@ -99,16 +99,6 @@ def is_self_managed_task(task):
     return metadata.get("dispatch_mode") in SELF_MANAGED_DISPATCH_MODES
 
 
-def is_held_once_task(task):
-    metadata = metadata_dict(task.get("metadata"))
-    return metadata.get("dispatch_policy") == "held_once"
-
-
-def is_resume_once_task(task):
-    metadata = metadata_dict(task.get("metadata"))
-    return metadata.get("dispatch_policy") == "resume_once"
-
-
 def _json_for_log(payload):
     """Serialize log payloads defensively (DynamoDB numbers may be Decimal)."""
     return json.dumps(payload, default=str)
@@ -271,49 +261,6 @@ def handler(event, context):
                 logger.info("Skipping self-managed task dispatch")
                 skipped_count += 1
                 continue
-
-            # A held-once Task is created inert and may dispatch only from the
-            # single durable release edge. Stream replays or later status
-            # rewrites must never enqueue it again.
-            if is_held_once_task(task):
-                old_image = record.get('dynamodb', {}).get('OldImage')
-                if event_name != 'MODIFY' or not old_image:
-                    logger.info("Skipping held-once task without a release MODIFY event")
-                    skipped_count += 1
-                    continue
-                old_task = deserialize_dynamo_item(old_image)
-                old_status = old_task.get('dispatchStatus')
-                new_status = task.get('dispatchStatus')
-                if old_status != 'HELD' or new_status != 'PENDING':
-                    logger.info(
-                        "Skipping held-once task without literal HELD to PENDING transition "
-                        f"(old: {old_status}, new: {new_status})"
-                    )
-                    skipped_count += 1
-                    continue
-
-            # A suspended parent may dispatch exactly once from its durable
-            # child-completion release edge.  Inserts, stream replays, and
-            # racing recovery ticks remain inert.
-            if is_resume_once_task(task):
-                old_image = record.get('dynamodb', {}).get('OldImage')
-                if event_name != 'MODIFY' or not old_image:
-                    logger.info("Skipping resume-once task without a release MODIFY event")
-                    skipped_count += 1
-                    continue
-                old_task = deserialize_dynamo_item(old_image)
-                old_status = old_task.get('dispatchStatus')
-                new_status = task.get('dispatchStatus')
-                if (
-                    old_status not in {'WAITING_FOR_CHILDREN', 'WAITING_FOR_TIME'}
-                    or new_status != 'PENDING'
-                ):
-                    logger.info(
-                        "Skipping resume-once task without a literal durable-wait "
-                        f"to PENDING transition (old: {old_status}, new: {new_status})"
-                    )
-                    skipped_count += 1
-                    continue
             
             # For MODIFY events, check if dispatchStatus changed to PENDING
             if event_name == 'MODIFY':
