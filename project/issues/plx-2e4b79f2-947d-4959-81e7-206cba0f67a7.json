@@ -1,0 +1,28 @@
+{
+  "id": "plx-2e4b79f2-947d-4959-81e7-206cba0f67a7",
+  "title": "Bound score-level artifact fanout in living reports",
+  "description": "As an optimization operator, I want milestone publication to create individual score briefs only for scores with stakeholder-relevant detail, so that the living Report becomes useful promptly without losing complete portfolio and scorecard evidence.\n\nFeature: Bound score-level artifact fanout\n\nScenario: Ranking publishes a bounded actionable artifact set\n  Given a complete portfolio containing many scores\n  And only a subset appears in priorities, questions, issues, or optimization outcomes\n  When the ranking milestone is published\n  Then every score remains in the stakeholder workbook and scorecard-level CSV\n  And an individual Markdown score brief is published only for that stakeholder-relevant subset\n  And the published artifact plan exactly reconciles with the uploaded artifacts\n\nScenario: A later finding creates a score brief\n  Given a score did not require an individual brief in an earlier milestone\n  When a later milestone adds that score to a stakeholder question or optimization outcome\n  Then that milestone publishes a score brief for the score\n  And the scorecard presentation links to the exact immutable brief revision\n\nScenario: Unchanged relevant briefs are reused\n  Given a stakeholder-relevant score brief was committed in the prior milestone\n  When the next milestone leaves its content unchanged\n  Then the prior verified artifact is reused\n  And no duplicate upload is required\n\nOut of scope:\n- Removing any score from the portfolio workbook or scorecard CSV.\n- Weakening checksum, reconciliation, privacy, or fatal-publication guarantees.\n- Parallel or unordered artifact writes.\n- Automatic score, guideline, champion, or feedback-setting mutation.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "acda5bb4-d8be-4158-880c-7a8cd8050dea",
+      "author": "ryan.porter",
+      "text": "Production-backed dogfood evidence exposed an account-wide ranking publication bottleneck: 1,262 artifacts were planned before assessment could begin, including 1,105 individual score briefs. The durable ranking revision remained unavailable while the live status advanced through the uploads. At 997/1,262, publication had consumed about 494 seconds.\n\nInversion decision: do not trade away atomic publication, checksums, privacy, immutable evidence, interruption recovery, or fatal failure semantics. Bound only score-level Markdown fanout. Keep every portfolio row in the workbook and every scorecard summary/CSV/presentation; create individual briefs only for scores represented in priorities, stakeholder questions/issues, or optimization outcomes.\n\nA Terra Coding Agent added failing outside-in specifications, implemented the shared selector, and returned 90 passing report tests. Direct Product Owner/Engineering Lead review found an opaque-ID mismatch in issue lookup; the agent corrected it and added duplicate-name regression coverage. Main-agent validation currently passes 90 run-report tests and 142 portfolio-run tests. The live baseline run continues under the pre-fix loaded code so its timing remains honest.",
+      "created_at": "2026-07-31T18:15:13.817460Z"
+    }
+  ],
+  "created_at": "2026-07-31T18:09:03.951939Z",
+  "updated_at": "2026-07-31T18:15:13.817460Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

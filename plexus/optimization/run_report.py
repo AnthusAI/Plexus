@@ -219,7 +219,7 @@ _OVERVIEW_KEYS = {
     "semantic_diagnosis_issues",
 }
 _ROW_METADATA_KEYS = {
-    "scorecard_ref", "rank", "evidence_rank", "candidate_rank", "policy_disposition",
+    "scorecard_ref", "score_ref", "rank", "evidence_rank", "candidate_rank", "policy_disposition",
     "policy_reason", "review_disposition", "eligibility_timestamp",
     "primary_disposition", "secondary_issue_flags", "secondary_issue_summary",
     "issue_flag", "issue_severity", "affected_evidence_count", "affected_disagreement_rate",
@@ -847,21 +847,74 @@ def _artifact_descriptor(
 def _score_issues(
     stakeholder_view: Mapping[str, Any],
     *,
-    scorecard_name: str,
-    scorecard_ref: str,
-    score_name: str,
+    portfolio_row: Mapping[str, Any],
 ) -> list[Mapping[str, Any]]:
     return [
         issue for issue in stakeholder_view.get("questions_and_issues", [])
-        if issue.get("score_name") == score_name
-        and (
-            issue.get("scorecard_ref") == scorecard_ref
-            or (
-                not issue.get("scorecard_ref")
-                and issue.get("scorecard_name") == scorecard_name
-            )
-        )
+        if isinstance(issue, Mapping)
+        and _score_evidence_matches_portfolio_row(portfolio_row, issue)
     ]
+
+
+def _score_evidence_matches_portfolio_row(
+    portfolio_row: Mapping[str, Any], evidence_row: Mapping[str, Any]
+) -> bool:
+    """Return whether a stakeholder finding identifies this portfolio score.
+
+    Newer projections retain opaque scorecard and score references outside the
+    stakeholder-facing tables.  When a finding supplies either reference it is
+    authoritative for that component; legacy projections safely retain their
+    display-name matching behavior instead.  A score name/reference is always
+    required, so scorecard-wide issues do not accidentally create a brief for
+    every score in the scorecard.
+    """
+    evidence_score_ref = str(evidence_row.get("score_ref") or "")
+    portfolio_score_ref = str(portfolio_row.get("score_ref") or "")
+    evidence_score_name = str(evidence_row.get("score_name") or "")
+    portfolio_score_name = str(portfolio_row.get("score_name") or "")
+    if evidence_score_ref:
+        if not portfolio_score_ref or portfolio_score_ref != evidence_score_ref:
+            return False
+    elif not evidence_score_name or portfolio_score_name != evidence_score_name:
+        return False
+
+    evidence_scorecard_ref = str(evidence_row.get("scorecard_ref") or "")
+    portfolio_scorecard_ref = str(portfolio_row.get("scorecard_ref") or "")
+    evidence_scorecard_name = str(evidence_row.get("scorecard_name") or "")
+    portfolio_scorecard_name = str(portfolio_row.get("scorecard_name") or "")
+    if evidence_scorecard_ref:
+        return bool(
+            portfolio_scorecard_ref
+            and portfolio_scorecard_ref == evidence_scorecard_ref
+        )
+    if evidence_scorecard_name:
+        return portfolio_scorecard_name == evidence_scorecard_name
+    return True
+
+
+def _score_brief_portfolio_indexes(
+    stakeholder_view: Mapping[str, Any],
+) -> set[int]:
+    """Select portfolio rows that have stakeholder-relevant score evidence.
+
+    This is deliberately the sole score-brief selection contract.  Artifact
+    generation and pre-publication progress planning both call it, preventing
+    an inaccurate progress total or an unbounded per-score artifact fanout.
+    """
+    evidence_rows: list[Mapping[str, Any]] = []
+    for group in ("priorities", "questions_and_issues", "optimization_outcomes"):
+        evidence_rows.extend(
+            row for row in stakeholder_view.get(group, []) if isinstance(row, Mapping)
+        )
+    return {
+        index
+        for index, portfolio_row in enumerate(stakeholder_view.get("portfolio", []))
+        if isinstance(portfolio_row, Mapping)
+        and any(
+            _score_evidence_matches_portfolio_row(portfolio_row, evidence_row)
+            for evidence_row in evidence_rows
+        )
+    }
 
 
 def _secondary_issue_flags_text(row: Mapping[str, Any]) -> str:
@@ -874,7 +927,6 @@ def _secondary_issue_flags_text(row: Mapping[str, Any]) -> str:
 
 def _score_brief_markdown(
     scorecard_name: str,
-    scorecard_ref: str,
     row: Mapping[str, Any],
     stakeholder_view: Mapping[str, Any],
 ) -> bytes:
@@ -900,9 +952,7 @@ def _score_brief_markdown(
     ]
     issues = _score_issues(
         stakeholder_view,
-        scorecard_name=scorecard_name,
-        scorecard_ref=scorecard_ref,
-        score_name=score_name,
+        portfolio_row=row,
     )
     if issues:
         lines.extend(["", "## Questions and issues", ""])
@@ -1051,11 +1101,12 @@ def build_scorecard_artifacts(
 ) -> list[dict[str, Any]]:
     """Publish one safe Markdown summary and quantitative CSV per scorecard."""
     _validate_view(stakeholder_view)
-    grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
-    for row in stakeholder_view.get("portfolio", []):
+    relevant_score_indexes = _score_brief_portfolio_indexes(stakeholder_view)
+    grouped: dict[tuple[str, str], list[tuple[int, Mapping[str, Any]]]] = {}
+    for portfolio_index, row in enumerate(stakeholder_view.get("portfolio", [])):
         scorecard_name = str(row.get("scorecard_name") or "Unlabeled scorecard")
         stable_key = str(row.get("scorecard_ref") or scorecard_name)
-        grouped.setdefault((stable_key, scorecard_name), []).append(row)
+        grouped.setdefault((stable_key, scorecard_name), []).append((portfolio_index, row))
 
     descriptors: list[dict[str, Any]] = []
     publication_suffix = f"-{publication_id}" if publication_id else ""
@@ -1090,17 +1141,20 @@ def build_scorecard_artifacts(
             on_artifact_upload(progress_kind, True)
         return object_key, source_revision
 
-    for (stable_key, scorecard_name), rows in sorted(grouped.items(), key=lambda item: item[0][1].casefold()):
+    for (stable_key, scorecard_name), indexed_rows in sorted(grouped.items(), key=lambda item: item[0][1].casefold()):
+        rows = [row for _, row in indexed_rows]
         scope_hash = sha256(stable_key.encode("utf-8")).hexdigest()[:16]
         score_artifacts: list[list[Mapping[str, Any]]] = []
-        for row_index, row in enumerate(rows):
+        for row_index, (portfolio_index, row) in enumerate(indexed_rows):
+            if portfolio_index not in relevant_score_indexes:
+                score_artifacts.append([])
+                continue
             score_name = str(row.get("score_name") or "Unlabeled score")
             score_hash = sha256(
                 f"{stable_key}\0{score_name}\0{row_index}".encode("utf-8")
             ).hexdigest()[:16]
             content = _score_brief_markdown(
                 scorecard_name,
-                stable_key,
                 row,
                 stakeholder_view,
             )
@@ -1223,7 +1277,7 @@ def _artifact_publication_plan(
     totals = {
         "decision_evidence": 1,
         "stakeholder_workbook": 1,
-        "score_briefs": len(rows),
+        "score_briefs": len(_score_brief_portfolio_indexes(stakeholder_view)),
         "scorecard_summaries": scorecard_count,
         "scorecard_spreadsheets": scorecard_count,
         "scorecard_presentations": scorecard_count,

@@ -1675,12 +1675,12 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
         artifact for artifact in manifest["artifacts"]
         if artifact["scope"] == "score"
     ]
-    assert len(score_artifacts) == 2
+    # Only the first score is represented in the priority and issue evidence.
+    # The second remains fully visible in its scorecard's CSV, summary, and
+    # presentation, but does not need an individual stakeholder brief.
+    assert len(score_artifacts) == 1
     assert {artifact["kind"] for artifact in score_artifacts} == {"score_brief"}
-    assert {artifact["score_name"] for artifact in score_artifacts} == {
-        "=Formula-like score",
-        "Second Score",
-    }
+    assert {artifact["score_name"] for artifact in score_artifacts} == {"=Formula-like score"}
     assert all(artifact["object_key"] not in state.task.attachedFiles for artifact in score_artifacts)
 
     csv_artifact = next(
@@ -1732,6 +1732,150 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
         f"Secondary issue flags: {', '.join(view['portfolio'][0]['secondary_issue_flags'])}"
         in brief
     )
+
+
+def test_score_briefs_are_bounded_to_rows_represented_in_stakeholder_findings_and_plan_matches(
+    monkeypatch,
+):
+    """The detailed artifact fanout follows the same relevance contract as progress."""
+    from plexus.optimization import run_report
+
+    view = deepcopy(_safe_view())
+    view["portfolio"] = [
+        {
+            **view["portfolio"][0],
+            "scorecard_ref": "shared-scorecard",
+            "score_ref": "score-a",
+            "scorecard_name": "Shared Scorecard",
+            "score_name": "Same display name",
+        },
+        {
+            **view["portfolio"][0],
+            "scorecard_ref": "shared-scorecard",
+            "score_ref": "score-b",
+            "scorecard_name": "Shared Scorecard",
+            "score_name": "Same display name",
+        },
+        {
+            **view["portfolio"][0],
+            "scorecard_name": "Legacy Scorecard",
+            "score_name": "Legacy name fallback",
+        },
+        {
+            **view["portfolio"][0],
+            "scorecard_name": "Unselected Scorecard",
+            "score_name": "Unselected score",
+        },
+    ]
+    # Opaque references distinguish duplicate display names.  The legacy
+    # projection intentionally has no references and exercises the fallback.
+    view["priorities"] = [{
+        "scorecard_ref": "shared-scorecard",
+        "score_ref": "score-b",
+        "scorecard_name": "Shared Scorecard",
+        "score_name": "Same display name",
+    }]
+    view["questions_and_issues"] = [
+        {
+            "scorecard_ref": "shared-scorecard",
+            "score_ref": "score-a",
+            "scorecard_name": "Shared Scorecard",
+            "score_name": "Same display name",
+            "finding": "Sibling opaque issue.",
+        },
+        {
+            "scorecard_ref": "shared-scorecard",
+            "score_ref": "score-b",
+            "scorecard_name": "Shared Scorecard",
+            "score_name": "Same display name",
+            "finding": "Selected opaque issue.",
+        },
+        {
+            "scorecard_name": "Legacy Scorecard",
+            "score_name": "Legacy name fallback",
+            "finding": "Clarification needed.",
+        },
+    ]
+    view["optimization_outcomes"] = []
+    uploaded: dict[str, bytes] = {}
+
+    artifacts = run_report.build_scorecard_artifacts(
+        view,
+        revision_number=1,
+        task_id="task-1",
+        uploader=lambda task_id, filename, content: (
+            uploaded.__setitem__(filename, content) or f"tasks/{task_id}/{filename}"
+        ),
+    )
+
+    score_briefs = [artifact for artifact in artifacts if artifact["kind"] == "score_brief"]
+    assert len(score_briefs) == 3
+    assert {(artifact["scorecard_name"], artifact["score_name"]) for artifact in score_briefs} == {
+        ("Shared Scorecard", "Same display name"),
+        ("Legacy Scorecard", "Legacy name fallback"),
+    }
+    presentations = [artifact for artifact in artifacts if artifact["kind"] == "scorecard_presentation"]
+    shared = next(
+        artifact for artifact in presentations if artifact["scorecard_name"] == "Shared Scorecard"
+    )
+    shared_rows = json.loads(uploaded[shared["object_key"].rsplit("/", 1)[-1]])["scores"]
+    assert all(row["artifacts"] for row in shared_rows)
+    selected_brief = next(
+        row["artifacts"][0] for row in shared_rows if row["score_ref"] == "score-b"
+    )
+    selected_brief_content = uploaded[selected_brief["object_key"].rsplit("/", 1)[-1]].decode("utf-8")
+    assert "Selected opaque issue." in selected_brief_content
+    assert "Sibling opaque issue." not in selected_brief_content
+    assert len(json.loads(uploaded[next(
+        artifact["object_key"].rsplit("/", 1)[-1]
+        for artifact in presentations
+        if artifact["scorecard_name"] == "Unselected Scorecard"
+    )])["scores"]) == 1
+    assert run_report._artifact_publication_plan(view)["score_briefs"] == {
+        "completed": 0,
+        "total": 3,
+    }
+
+
+def test_a_later_milestone_creates_a_new_score_brief_when_it_first_becomes_relevant(monkeypatch):
+    from plexus.optimization import run_report
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    store = _ArtifactStore()
+    publication_ids = iter(["ranking", "diagnosis"])
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="brief-later-relevant",
+        report_configuration_id="config-1", artifact_store=store,
+        publication_id_factory=lambda: next(publication_ids),
+        task_lookup=lambda _: None, report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
+    )
+    initial = deepcopy(_safe_view())
+    initial["priorities"] = []
+    initial["questions_and_issues"] = []
+    initial["optimization_outcomes"] = []
+    service.start_or_resume({"scope": {}})
+    first = service.publish_milestone(
+        "ranking", {"coverage": {"complete": True}}, stakeholder_view=initial,
+    )
+    assert not [artifact for artifact in first.artifacts if artifact["kind"] == "score_brief"]
+
+    later = deepcopy(initial)
+    later["optimization_outcomes"] = [{
+        "scorecard_name": "Example Portfolio",
+        "score_name": "Priority Score",
+        "outcome": "ready_for_review",
+    }]
+    second = service.publish_milestone(
+        "diagnosis", {"coverage": {"complete": True}}, stakeholder_view=later,
+    )
+    score_briefs = [artifact for artifact in second.artifacts if artifact["kind"] == "score_brief"]
+    assert len(score_briefs) == 1
+    assert score_briefs[0]["score_name"] == "Priority Score"
+    assert score_briefs[0]["source_revision"] == 2
 
 
 def test_report_artifact_base_url_rejects_non_https_or_non_origin_values(monkeypatch):
@@ -2175,6 +2319,13 @@ def test_large_artifact_publication_advances_durable_progress_at_a_bounded_caden
     view["portfolio"] = [
         {**template, "score_name": f"Score {index:02d}"}
         for index in range(30)
+    ]
+    view["priorities"] = [
+        {
+            **view["priorities"][0],
+            "score_name": row["score_name"],
+        }
+        for row in view["portfolio"]
     ]
     updates: list[dict] = []
     original_publish_progress = service.publish_progress

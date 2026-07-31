@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3a44aee3-7e4c-4ea0-b388-4065d11993de",
+  "issue_id": "plx-7a55dbcf-ea34-4a8e-8da4-b3304859c10b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T18:09:20.261Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Implement bounded score brief selection",
+    "description": "Implement the bounded score-brief selection specified by plx-2e4b79f2-947d-4959-81e7-206cba0f67a7.\n\nScope:\n- Add outside-in tests that fail before production changes.\n- Select score briefs from stakeholder priorities, questions/issues, and optimization outcomes.\n- Preserve every portfolio row in the workbook, scorecard CSV, summary, and presentation.\n- Preserve immutable revision, reuse, reconciliation, privacy, and fatal-publication behavior.\n- Update publication totals to use the identical selection contract.\n\nValidation:\n- Focused run_report tests.\n- Existing artifact reuse, interruption recovery, reconciliation, and privacy tests.\n\nNo client-specific data and no GraphQL/backend resource changes.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}
