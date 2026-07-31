@@ -1,0 +1,25 @@
+{
+  "id": "plx-44ad754d-6e9b-4ced-bc02-db1158dd41e1",
+  "title": "Add outside consultant to repository delivery suite",
+  "description": "Extend the repository-owned general agent skills with an optional fresh-session strategic advisor while preserving the existing delivery hierarchy and worker selection rules.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "007377f5-b3f1-42e2-bf0b-4d4bec836c2d",
+      "author": "ryan",
+      "text": "Outside consultant role is available in Plexus repository-owned skills on develop through PR #525.",
+      "created_at": "2026-07-31T01:08:05.868319Z"
+    }
+  ],
+  "created_at": "2026-07-31T01:05:02.967973Z",
+  "updated_at": "2026-07-31T01:08:05.877210Z",
+  "closed_at": "2026-07-31T01:08:05.877210Z",
+  "custom": {}
+}

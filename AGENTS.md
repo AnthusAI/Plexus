@@ -79,18 +79,34 @@ Add to your `.cursor/mcp.json`:
 }
 ```
 
-## .claude Directory Structure
+## Repository Agent Skills and Specialized Agents
 
-Plexus uses the `.claude` directory to define standardized behaviors for AI agents.
+Plexus uses the repository-owned `skills/` directory as the general agent-skills standard. Each skill is a portable `SKILL.md` package with optional resources and host metadata. The `.claude/agents/` directory remains available for legacy and Plexus-specific specialist personas.
 
-### Skills (`/skills/`)
-Skills are reusable definitions of **how** to perform specific tasks. They provide the "muscle memory" for agents.
+### Software delivery team (`/skills/`)
 
-- **plexus-score-setup**: Standard workflow for creating scorecard/score records via the API. Ensures all metadata is captured correctly before creation.
-- **plexus-guidelines**: Formatting and validation rules for creating high-quality guidelines documents.
+Use `software-delivery-team` for coordinated delivery. In the ordinary human-facing session, the active agent combines Product Owner and Engineering Lead responsibility. It challenges priorities against vision and value, applies inversion, delegates bounded Coding Agents, and directly reviews their work.
 
-### Agents (`/.claude/agents/`)
-Agents are specialized personas with specific permissions, tools, and instructions for complex workflows.
+- **software-delivery-team**: Shared combined-leadership model, Coding Agent handoffs, parallelism, direct review, and acceptance flow.
+- **product-owner**: Combined product and engineering leadership, strategic pushback, inversion, delegation, review, and acceptance.
+- **coding-agent**: Bounded implementation and validation under the active main agent.
+- **outside-consultant**: Optional fresh-session strategic advisor that records evidence-based guidance on existing Kanbus issues without entering the delivery hierarchy.
+
+Do not spawn Product Owner, Engineering Lead, or Review Agent roles. The active main agent is the Coding Agents' logical manager, direct reviewer, and return target. Explicit user model and effort settings take precedence for Coding Agents; otherwise use the configured economical worker profile. On Cursor, the default mapping remains Auto rather than a pinned model-menu value.
+
+For an outside consultation, the human opens a fresh session with a human-selected premium advisory profile and explicitly invokes `outside-consultant` with an existing Plexus Kanbus anchor. The consultant may only add comments to existing in-scope issues through `kbs`; it must not inspect project issue/event JSON directly, mutate issue state, edit code, publish, or spawn children. Coding Agent worker settings remain independent of the consultant's premium session profile.
+
+### Operational skills (`/skills/`)
+
+- **score-setup**: Create scorecard and score metadata records via the supported runtime APIs.
+- **guidelines**: Create and validate classifier guidelines documents.
+- **score-code-editor**: Edit and validate Tactus score code through the supported workflow.
+- **score-optimizer**: Run, debug, and steer feedback-alignment optimization.
+- **client-redaction**: Scan and remediate sensitive client references under repository confidentiality rules.
+
+### Legacy and specialized agents (`/.claude/agents/`)
+
+These are specialized personas with specific permissions, tools, and instructions for complex Plexus workflows.
 
 - **plexus-score-config-updater**: The **only** agent authorized to touch score YAML configurations. It follows a strict safe-deployment protocol (Load Docs -> Pull -> Edit -> Validate -> Push).
 - **plexus-score-guidelines-updater**: Specialist for writing and refining score guidelines based on policy documents.

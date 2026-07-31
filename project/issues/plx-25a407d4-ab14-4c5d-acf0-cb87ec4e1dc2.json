@@ -1,0 +1,37 @@
+{
+  "id": "plx-25a407d4-ab14-4c5d-acf0-cb87ec4e1dc2",
+  "title": "Revise delivery skills for combined leadership",
+  "description": "Remove Engineering Lead and Review Agent skills, revise the shared delivery model and artifacts, strengthen the combined main role with vision/value judgment and inversion, retain Coding Agent delegation, and update worker model/effort routing with explicit user overrides.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2a40fe42-182a-4d92-8013-4a1aea53b7cd",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6e668e44-9ed2-49f7-b868-ba47291efe21",
+      "author": "ryan",
+      "text": "Implementation started in /Users/ryan/Projects/Plexus-simplified-delivery-skill on codex/simplified-delivery-team from origin/develop 39d4dd6e3. The change is limited to repository delivery skills, discovery guidance, and this sanitized Kanbus hierarchy.",
+      "created_at": "2026-07-31T17:43:50.492247Z"
+    },
+    {
+      "id": "26301109-ba50-4435-9b32-91603c2daefe",
+      "author": "ryan",
+      "text": "Plexus implementation and pre-publication validation complete. The delivery suite now has one combined Product Owner/Engineering Lead main role, Coding Agents only, and the optional fresh-session Outside Consultant. The main role evaluates vision/value, pushes back with CEO final authority, applies inversion continuously, directly reviews worker diffs, and honors explicit user worker model/effort settings before economical defaults. Four skills pass quick_validate.py; focused repository skill tests pass (26 passed, 238 deselected); static removed-role/link checks pass; fresh-context forward test correctly challenged a broad rewrite, preserved CEO authority, delegated only Coding Agents, honored model X/effort Y, and planned direct review.",
+      "created_at": "2026-07-31T17:47:54.577079Z"
+    },
+    {
+      "id": "2f1433df-9fcf-430b-ac39-fb7b7aa6518b",
+      "author": "ryan",
+      "text": "Landed through PR #528 at merge commit 7a8172a1ba2e5022b82a0dd99b20b0444223203a.",
+      "created_at": "2026-07-31T17:49:30.619810Z"
+    }
+  ],
+  "created_at": "2026-07-31T17:43:47.417130Z",
+  "updated_at": "2026-07-31T17:49:30.632061Z",
+  "closed_at": "2026-07-31T17:49:30.632061Z",
+  "custom": {}
+}

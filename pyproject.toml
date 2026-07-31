@@ -53,7 +53,7 @@ rapidfuzz = "3.9.4"
 azure-identity = { version = ">=1.15.0", optional = true }
 rich = ">=13.9.4"
 gql = { version = ">=3.0.0,<4.0.0", extras = ["requests"] }
-openai-cost-calculator = { git = "https://github.com/AnthusAI/openai_cost_calculator.git", branch = "main" }
+openai-cost-calculator = { git = "https://github.com/AnthusAI/openai_cost_calculator.git", branch = "main", optional = true }
 fastmcp = { version = ">=2.14.0,<3.0.0", optional = true }
 ollama = { version = ">=0.1.6", optional = true }
 requests = ">=2.31.0"
@@ -111,9 +111,12 @@ scoring = [
     "langchain", "langchain-core", "langchain-community",
     "langgraph", "langchain-aws", "langchain-openai",
     "langchain-ollama", "langchain-anthropic", "langgraph-checkpoint-postgres",
-    "psycopg", "tactus", "nltk", "graphviz",
-    "pandas", "pyarrow", "contractions", "seaborn", "openpyxl",
+    "psycopg", "tactus", "nltk",
 ]
+# The general Kubernetes worker also hosts legacy CLI workflows used by the
+# local demo. Keep their data and rendering dependencies out of the production
+# scoring Lambda while declaring them explicitly for that worker image.
+worker = ["graphviz", "pandas", "pyarrow", "contractions", "seaborn", "openpyxl"]
 # Direct dependencies used by the interactive Console worker in addition to
 # the scoring runtime. Keep broad service infrastructure out of this image.
 console = ["celery", "fastmcp", "requests-aws4auth"]
@@ -132,6 +135,7 @@ infra = [
     "qdrant-client", "ollama",
 ]
 all = [
+    "openai-cost-calculator",
     "pandas", "pyarrow", "nltk", "transformers", "seaborn",
     "pydot", "pydotplus", "graphviz",
     "scikit-learn", "tables", "xgboost",

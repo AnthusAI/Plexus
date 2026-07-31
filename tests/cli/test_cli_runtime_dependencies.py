@@ -41,12 +41,13 @@ def test_installed_cli_uses_the_lightweight_entrypoint():
     assert pyproject["tool"]["poetry"]["scripts"]["plexus"] == "plexus.cli.entrypoint:main"
 
 
-def test_worker_scoring_extra_declares_legacy_cli_import_dependencies():
-    """The worker image must import every command used by the demo fixture."""
+def test_worker_extra_declares_legacy_cli_import_dependencies():
+    """The general worker must import every command used by the demo fixture."""
     project_root = Path(__file__).resolve().parents[2]
     pyproject = tomllib.loads((project_root / "pyproject.toml").read_text())
+    worker_dockerfile = (project_root / "docker" / "Dockerfile").read_text()
 
-    scoring = set(pyproject["tool"]["poetry"]["extras"]["scoring"])
+    worker = set(pyproject["tool"]["poetry"]["extras"]["worker"])
 
     assert {
         "contractions",
@@ -54,4 +55,5 @@ def test_worker_scoring_extra_declares_legacy_cli_import_dependencies():
         "pandas",
         "pyarrow",
         "seaborn",
-    } <= scoring
+    } <= worker
+    assert 'ARG PLEXUS_EXTRAS="scoring,worker,evaluation,infra"' in worker_dockerfile
