@@ -3,16 +3,23 @@
   "title": "Simplify software delivery agent roles",
   "description": "Simplify the repository delivery suite so the active human-facing agent owns both product and technical leadership, delegates only bounded coding work, reviews results directly, and challenges work against vision, value, and inversion before execution.",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "2abe80b7-8187-4e34-991d-91b1ca2d2e8f",
+      "author": "ryan",
+      "text": "Simplified software delivery skills are available on Plexus develop through PR #528.",
+      "created_at": "2026-07-31T17:49:30.667893Z"
+    }
+  ],
   "created_at": "2026-07-31T17:43:41.257205Z",
-  "updated_at": "2026-07-31T17:43:50.469983Z",
-  "closed_at": null,
+  "updated_at": "2026-07-31T17:49:30.679053Z",
+  "closed_at": "2026-07-31T17:49:30.679053Z",
   "custom": {}
 }
