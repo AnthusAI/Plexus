@@ -1837,6 +1837,83 @@ def test_score_briefs_are_bounded_to_rows_represented_in_stakeholder_findings_an
     }
 
 
+def test_score_brief_relevance_uses_priority_cutoff_and_ignores_not_run_outcomes(monkeypatch):
+    """Production-shaped full evidence projections cannot fan out every score brief."""
+    from plexus.optimization import run_report
+
+    view = deepcopy(_safe_view())
+    template = view["portfolio"][0]
+    view["overview"].update({
+        "priority_cutoff_rank": 2,
+        "priority_display_limit": 4,
+    })
+    view["portfolio"] = [
+        {
+            **template,
+            "scorecard_ref": "production-shaped-scorecard",
+            "score_ref": f"score-{rank}",
+            "score_name": f"Score {rank}",
+            "evidence_rank": rank,
+        }
+        for rank in range(1, 7)
+    ]
+    # The production projection retains every evidence-ranked row here.  Only
+    # the report's explicit display cutoff makes a priority stakeholder-facing.
+    view["priorities"] = [
+        {
+            "scorecard_ref": "production-shaped-scorecard",
+            "score_ref": f"score-{rank}",
+            "scorecard_name": "Example Portfolio",
+            "score_name": f"Score {rank}",
+            "evidence_rank": rank,
+            "opportunity": 100 - rank,
+        }
+        for rank in range(1, 7)
+    ]
+    view["questions_and_issues"] = [{
+        "scorecard_ref": "production-shaped-scorecard",
+        "score_ref": "score-4",
+        "scorecard_name": "Example Portfolio",
+        "score_name": "Score 4",
+        "finding": "A score-specific question remains material.",
+    }]
+    view["optimization_outcomes"] = [
+        {
+            "scorecard_ref": "production-shaped-scorecard",
+            "score_ref": f"score-{rank}",
+            "scorecard_name": "Example Portfolio",
+            "score_name": f"Score {rank}",
+            "outcome": "not_run",
+        }
+        for rank in range(1, 7)
+    ] + [{
+        "scorecard_ref": "production-shaped-scorecard",
+        "score_ref": "score-5",
+        "scorecard_name": "Example Portfolio",
+        "score_name": "Score 5",
+        "outcome": "optimization_in_progress",
+    }]
+    uploaded: dict[str, bytes] = {}
+
+    artifacts = run_report.build_scorecard_artifacts(
+        view,
+        revision_number=1,
+        task_id="task-1",
+        uploader=lambda task_id, filename, content: (
+            uploaded.__setitem__(filename, content) or f"tasks/{task_id}/{filename}"
+        ),
+    )
+
+    briefs = [artifact for artifact in artifacts if artifact["kind"] == "score_brief"]
+    assert {artifact["score_name"] for artifact in briefs} == {
+        "Score 1", "Score 2", "Score 4", "Score 5",
+    }
+    assert run_report._artifact_publication_plan(view)["score_briefs"] == {
+        "completed": 0,
+        "total": 4,
+    }
+
+
 def test_a_later_milestone_creates_a_new_score_brief_when_it_first_becomes_relevant(monkeypatch):
     from plexus.optimization import run_report
 

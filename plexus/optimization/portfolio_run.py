@@ -2886,6 +2886,11 @@ def _issue_rows(
     return rows
 
 
+def _stakeholder_opaque_ref(value: str | None) -> str | None:
+    """Return a stable stakeholder-safe reference without exposing an opaque ID."""
+    return sha256(value.encode("utf-8")).hexdigest()[:16] if value else None
+
+
 def _milestone_narrative(
     milestone: str,
     *,
@@ -3250,7 +3255,8 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             "candidate_rank": row.get("candidate_rank"),
             "scorecard_name": row.get("scorecard_name") or assessment.get("scorecard_name") or "Unlabeled scorecard",
             "score_name": row.get("score_name") or assessment.get("score_name") or "Unlabeled score",
-            "scorecard_ref": sha256(key[0].encode("utf-8")).hexdigest()[:16] if key else None,
+            "scorecard_ref": _stakeholder_opaque_ref(key[0]) if key else None,
+            "score_ref": _stakeholder_opaque_ref(key[1]) if key else None,
             "semantic_diagnosis_status": semantic_diagnosis_status,
         }
         portfolio_row = {
@@ -3454,7 +3460,8 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             "rank": rank_position,
             "scorecard_name": row.get("scorecard_name") or "Unlabeled scorecard",
             "score_name": row.get("score_name") or "Unlabeled score",
-            "scorecard_ref": sha256(key[0].encode("utf-8")).hexdigest()[:16] if key else None,
+            "scorecard_ref": _stakeholder_opaque_ref(key[0]) if key else None,
+            "score_ref": _stakeholder_opaque_ref(key[1]) if key else None,
             "evidence_count": row.get("valid_feedback_count"),
             "outcome": outcome,
             "evidence_status": coverage_status,

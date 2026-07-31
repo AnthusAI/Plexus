@@ -892,6 +892,67 @@ def _score_evidence_matches_portfolio_row(
     return True
 
 
+def _stakeholder_priority_evidence_rows(
+    stakeholder_view: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
+    """Return only priority rows intentionally displayed to stakeholders."""
+    priority_rows = [
+        row for row in stakeholder_view.get("priorities", []) if isinstance(row, Mapping)
+    ]
+    overview = stakeholder_view.get("overview")
+    overview = overview if isinstance(overview, Mapping) else {}
+
+    def positive_integer(value: Any) -> int | None:
+        if isinstance(value, bool):
+            return None
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed > 0 else None
+
+    cutoff = positive_integer(overview.get("priority_cutoff_rank"))
+    if cutoff is None:
+        cutoff = positive_integer(overview.get("priority_display_limit"))
+    # Older callers supplied only the already-bounded priority display.  Do
+    # not reinterpret that legacy shape as an unbounded evidence inventory.
+    if cutoff is None:
+        return priority_rows
+
+    displayed: list[Mapping[str, Any]] = []
+    for position, row in enumerate(priority_rows, start=1):
+        rank = positive_integer(row.get("evidence_rank"))
+        if rank is None:
+            rank = positive_integer(row.get("rank"))
+        if rank is None:
+            rank = position
+        if rank <= cutoff:
+            displayed.append(row)
+    return displayed
+
+
+def _score_brief_evidence_rows(
+    stakeholder_view: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
+    """Return the only stakeholder findings that justify a score brief."""
+    questions = [
+        row
+        for row in stakeholder_view.get("questions_and_issues", [])
+        if isinstance(row, Mapping)
+    ]
+    material_outcomes = [
+        row
+        for row in stakeholder_view.get("optimization_outcomes", [])
+        if isinstance(row, Mapping)
+        and str(row.get("outcome") or "").strip().casefold() not in {"", "not_run"}
+    ]
+    return [
+        *_stakeholder_priority_evidence_rows(stakeholder_view),
+        *questions,
+        *material_outcomes,
+    ]
+
+
 def _score_brief_portfolio_indexes(
     stakeholder_view: Mapping[str, Any],
 ) -> set[int]:
@@ -901,11 +962,7 @@ def _score_brief_portfolio_indexes(
     generation and pre-publication progress planning both call it, preventing
     an inaccurate progress total or an unbounded per-score artifact fanout.
     """
-    evidence_rows: list[Mapping[str, Any]] = []
-    for group in ("priorities", "questions_and_issues", "optimization_outcomes"):
-        evidence_rows.extend(
-            row for row in stakeholder_view.get(group, []) if isinstance(row, Mapping)
-        )
+    evidence_rows = _score_brief_evidence_rows(stakeholder_view)
     return {
         index
         for index, portfolio_row in enumerate(stakeholder_view.get("portfolio", []))

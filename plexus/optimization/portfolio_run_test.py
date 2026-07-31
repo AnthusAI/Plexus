@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
+from hashlib import sha256
 from typing import Any
 
 import pytest
@@ -3184,6 +3185,96 @@ def test_stakeholder_projection_preserves_available_counts_states_trends_and_act
     assert "opaque-score" not in str(view)
     assert view["priorities"][0]["evidence_count"] == 240
     assert view["feedback_investment"][0]["coverage_status"] == "complete"
+
+
+def test_stakeholder_projection_uses_stable_distinct_score_refs_without_exporting_opaque_score_ids():
+    """Duplicate display names must stay distinguishable without leaking IDs."""
+    from datetime import datetime, timezone
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from plexus.optimization.portfolio_run import _stakeholder_view
+    from plexus.optimization.run_report import build_stakeholder_workbook
+
+    opaque_first = "opaque-score-id-first"
+    opaque_second = "opaque-score-id-second"
+    state = {
+        "rank": {
+            "coverage": {"complete": True},
+            "ranked": [
+                {
+                    "scorecard_id": "opaque-card-id",
+                    "score_id": opaque_first,
+                    "scorecard_name": "Example Portfolio",
+                    "score_name": "Repeated Score Name",
+                    "valid_feedback_count": 20,
+                    "reviewed_disagreements": 10,
+                    "disagreement_rate": 0.5,
+                    "reviewed_error_opportunity": 10,
+                    "evidence_rank": 1,
+                },
+                {
+                    "scorecard_id": "opaque-card-id",
+                    "score_id": opaque_second,
+                    "scorecard_name": "Example Portfolio",
+                    "score_name": "Repeated Score Name",
+                    "valid_feedback_count": 10,
+                    "reviewed_disagreements": 5,
+                    "disagreement_rate": 0.5,
+                    "reviewed_error_opportunity": 5,
+                    "evidence_rank": 2,
+                },
+            ],
+        },
+        "assessments": [
+            {
+                "scope": {"scorecard_id": "opaque-card-id", "score_id": opaque_first},
+                "coverage": {"complete": True},
+                "states": {"optimization": "repair_required", "guideline_health": "missing"},
+            },
+            {
+                "scope": {"scorecard_id": "opaque-card-id", "score_id": opaque_second},
+                "coverage": {"complete": True},
+                "states": {"optimization": "ready_to_optimize", "feedback_collection": "continue_broad_collection"},
+            },
+        ],
+    }
+
+    view = _stakeholder_view(state, milestone="diagnosis")
+    expected_refs = {
+        sha256(opaque_first.encode("utf-8")).hexdigest()[:16],
+        sha256(opaque_second.encode("utf-8")).hexdigest()[:16],
+    }
+    for section in ("portfolio", "priorities", "feedback_investment", "questions_and_issues", "optimization_outcomes"):
+        rows = view[section]
+        assert rows
+        assert {row["score_ref"] for row in rows}.issubset(expected_refs)
+    assert {row["score_ref"] for row in view["portfolio"]} == expected_refs
+    assert {row["score_ref"] for row in view["priorities"]} == expected_refs
+    assert {row["score_ref"] for row in view["optimization_outcomes"]} == expected_refs
+    assert view["questions_and_issues"][0]["score_ref"] == sha256(opaque_first.encode("utf-8")).hexdigest()[:16]
+    assert next(
+        row["score_ref"]
+        for row in view["feedback_investment"]
+        if row["state"] == "continue_broad_collection"
+    ) == sha256(opaque_second.encode("utf-8")).hexdigest()[:16]
+    stakeholder_values = str(view)
+    assert opaque_first not in stakeholder_values
+    assert opaque_second not in stakeholder_values
+
+    artifact = build_stakeholder_workbook(
+        view, revision_number=1, generated_at=datetime(2026, 7, 31, tzinfo=timezone.utc),
+    )
+    workbook = load_workbook(BytesIO(artifact.content), data_only=False)
+    exported_values = str([
+        cell.value
+        for worksheet in workbook.worksheets
+        for row in worksheet.iter_rows()
+        for cell in row
+    ])
+    assert opaque_first not in exported_values
+    assert opaque_second not in exported_values
 
 
 def test_stakeholder_overview_explains_current_work_and_next_durable_checkpoint():
