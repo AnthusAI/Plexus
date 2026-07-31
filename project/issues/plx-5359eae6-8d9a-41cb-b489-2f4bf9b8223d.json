@@ -1,0 +1,55 @@
+{
+  "id": "plx-5359eae6-8d9a-41cb-b489-2f4bf9b8223d",
+  "title": "Scope opportunity ranking to selected scorecards",
+  "description": "As an optimization operator, I want to restrict portfolio ranking by exact scorecard IDs or literal name prefixes, so that I can focus analysis without losing complete-coverage guarantees.\n\nOut of scope: fuzzy matching, regex/glob selectors, alternate ranking paths, automatic optimization, and client-specific policy.\n\nFeature: Scoped optimization opportunity ranking\n\n  Scenario: Rank exact scorecard identifiers\n    Given a completely enumerated account scorecard collection\n    When ranking is requested with exact opaque scorecard identifiers\n    Then only matched identifiers are analyzed\n    And every identifier reaches downstream analysis unchanged\n\n  Scenario: Rank literal scorecard name prefixes\n    Given scorecard names with different letter casing\n    When ranking is requested with one or more literal name prefixes\n    Then matching is case-insensitive and prefix-only\n    And the union of exact and prefix matches is deduplicated\n\n  Scenario: Preserve scoped coverage evidence\n    Given a scoped ranking request\n    When enumeration and downstream analysis complete\n    Then the packet reports requested selectors, matches, unmatched selectors, inspected count, and complete coverage\n\n  Scenario: Return an exact empty scoped result\n    Given complete scorecard enumeration with no selector matches\n    When scoped ranking completes\n    Then the result is exactly empty\n    And downstream feedback analysis is not invoked\n\n  Scenario: Reject ambiguous empty scope\n    Given an explicitly supplied selector field with no values\n    When ranking is requested\n    Then the request is rejected instead of becoming account-wide\n\n  Scenario: Never overstate partial scoped evidence\n    Given enumeration or downstream analysis fails\n    When scoped ranking returns partial evidence\n    Then the result is marked incomplete and not exact",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b9f02aee-bd68-4059-acf2-eb0cb41b0ea6",
+      "author": "ryan.porter",
+      "text": "Implemented scorecard-scoped opportunity ranking with exact opaque-ID selectors, literal case-insensitive name-prefix selectors, union and deduplication, exhaustive enumeration before local filtering, exact zero-match behavior, scope coverage evidence, and scope-bound fingerprints. Local validation is complete: focused runtime suite 270 passed; full Python 3.11 and 3.12 suites each 3,940 passed with 13 dispatch-regression tests passing on each version; version synchronization, lock validation, lint, and diff checks passed; Node 20 dashboard typecheck and 650 unit tests passed; Storybook built and 700 Chromium tests passed. Independent implementation, CI, and delivery audits found no blocking defects. The story remains in progress until the change merges to develop.",
+      "created_at": "2026-07-28T01:04:36.584095Z"
+    },
+    {
+      "id": "4bd49fe9-d7f2-4bb8-bd80-5b7a6f986245",
+      "author": "ryan.porter",
+      "text": "Final integration validation completed after merging current develop. The merge exposed and resolved two compatibility issues: the dependency manifest now keeps the MCP framework on its supported major version, and input-source tests use the repository's explicit score-class resolver. Final results on the merge commit: Python 3.11 and 3.12 each passed 3,931 tests with 13 dispatch-regression tests passing per version; focused optimization/runtime coverage passed 293 tests; lint, version synchronization, lock validation, and diff checks passed. The unchanged dashboard tree retains the validated Node 20 results: typecheck, 650 unit tests, Storybook build, and 700 Chromium tests. The tracked scorecard-path symlink was restored after test-generated filesystem changes. Ready for PR review; keep this story open until merge to develop.",
+      "created_at": "2026-07-28T01:17:28.717497Z"
+    },
+    {
+      "id": "2b73848f-07de-41a3-992c-7cadb608fde5",
+      "author": "ryan.porter",
+      "text": "Starting behavior-first test coverage for a launch-time optimization anti-churn recheck. The tests will require a recent live score version/update to reject dispatch, older unchanged activity to remain eligible, and missing live activity to fail closed. No production behavior is changed in this step.",
+      "created_at": "2026-07-28T17:13:12.562851Z"
+    },
+    {
+      "id": "ebe1ce6e-1117-41d9-aee0-33eb04183fdb",
+      "author": "ryan.porter",
+      "text": "Added tests only for the launch-time anti-churn recheck. Current focused result: the CLI boundary correctly suppresses a target when injected live freshness reports recent activity; four new shared/runtime behavior checks are red because score activity is not yet required or compared. Required implementation behavior is: reject a score updated within seven days with recent_score_activity, retain activity older than seven days, fail closed when live activity is absent, and never dispatch a rejected target. No production files were changed.",
+      "created_at": "2026-07-28T17:14:43.214948Z"
+    },
+    {
+      "id": "6d4f6492-4726-4940-bf30-bce743399faf",
+      "author": "ryan.porter",
+      "text": "Correction: the two most recent anti-churn test notes were recorded on this already-complete scoped-ranking story by mistake. The seven-day cooldown work and its validation belong to story plx-5d6528; this story remains unchanged in scope.",
+      "created_at": "2026-07-28T17:27:36.472189Z"
+    },
+    {
+      "id": "8b4665b5-1b0a-47f4-a6bd-36b4c2132250",
+      "author": "ryan.porter",
+      "text": "Final integration pass started on current develop. Preserve this issue's existing observable behavior and fail-closed evidence contract, resolve only integration conflicts, and verify focused specifications plus complete local CI before merge.",
+      "created_at": "2026-07-30T23:45:28.790777Z"
+    }
+  ],
+  "created_at": "2026-07-28T00:40:41.295656Z",
+  "updated_at": "2026-07-30T23:45:28.790777Z",
+  "closed_at": null,
+  "custom": {}
+}

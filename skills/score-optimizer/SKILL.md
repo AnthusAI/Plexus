@@ -1,6 +1,6 @@
 ---
 name: score-optimizer
-description: Run, debug, and steer the Plexus feedback-alignment optimizer from the direct CLI, including contradiction analysis, SME rubric questions, and approval-gated feedback invalidation.
+description: Rank feedback-driven optimization opportunities, assess and diagnose score readiness, run or steer the Plexus feedback-alignment optimizer, review promotion evidence, and report feedback-investment recommendations. Use for portfolio triage, diminishing-returns analysis, rubric questions, optimizer procedures, and approval-gated score improvement work.
 tags:
   - score-workflow
   - optimizer
@@ -106,6 +106,61 @@ detect class-specific regression, policy changes, and production drift. When
 the evidence is insufficient to choose a collection policy, state exactly what
 coverage is missing and recommend the smallest targeted collection that would
 resolve it.
+
+## Optimization Decision Toolchain
+
+Use the shared `plexus.optimization.*` workflow before composing portfolio
+triage, readiness, launch, and reporting steps by hand. Read
+[references/optimization-decision-toolchain.md](references/optimization-decision-toolchain.md)
+for the API sequence, decision states, evidence contract, and approval gates.
+
+Keep ranking, feedback-investment advice, optimization readiness, and promotion
+readiness as separate signals. A score can need continued feedback collection
+and still be ready to optimize, or have strong alignment while remaining
+blocked by missing or contradictory rubric evidence.
+
+### Scope portfolio ranking deliberately
+
+Use `plexus.optimization.rank({})` for the whole account. To restrict the
+portfolio, supply one or both optional selectors:
+
+```lua
+plexus.optimization.rank({
+  scorecard_ids = { "opaque-scorecard-id" },
+  scorecard_name_prefixes = { "Example Portfolio" },
+})
+```
+
+- `scorecard_ids` are exact opaque values. Preserve returned IDs unchanged;
+  never resolve, abbreviate, repair, or retype them.
+- `scorecard_name_prefixes` are literal, case-insensitive prefixes of complete
+  scorecard names. Do not use fuzzy matching or regular expressions.
+- When both selectors are present, their matches form a deduplicated union.
+  An explicitly supplied empty selector is invalid; omit both only when the
+  intended scope is account-wide.
+- The ranker still paginates the canonical account-wide collection completely,
+  filters locally, and passes only the matched returned IDs to analysis. Its
+  packet and evidence fingerprint retain the normalized requested scope.
+- Return matched and unmatched selectors, inspected and matched counts, and
+  collection plus analysis coverage. A fully enumerated zero-match scope is an
+  exact empty result and must not invoke feedback analysis. A page or downstream
+  failure is incomplete coverage: report partial evidence, never an exact rank
+  or count, and never include out-of-scope scorecards.
+
+The ranker also enforces the fixed seven-day score-activity cooldown. It freezes
+one UTC `as_of` timestamp and uses the later of the score record's `updatedAt`
+and the newest version's `createdAt`. Activity exactly at the 168-hour cutoff
+is still inside the cooldown. Recently edited scores remain visible under
+`unranked` with reason `recent_score_activity`, their opaque newest-version ID,
+activity source and timestamp, cutoff, and eligibility timestamp. Do not bypass
+this fixed policy or reinterpret a recently modified score as a candidate.
+Missing or malformed activity evidence fails closed and makes the portfolio
+incomplete. A direct assessment reports `cooldown_active` with
+`wait_for_cooldown`; an approved run rechecks live activity immediately before
+dispatch and rejects any newly modified target without starting its optimizer.
+If a scalar champion ID does not resolve through the champion relationship,
+the score is structurally ineligible and remains visible as
+`unresolved_champion_reference`; it is not an activity-coverage failure.
 
 ## Three-Phase Rubric-Memory SOP
 

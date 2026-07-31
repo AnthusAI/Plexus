@@ -1,0 +1,49 @@
+{
+  "id": "plx-36547116-59c9-44de-b62e-c428106ddad8",
+  "title": "Restore complete newest-version activity evidence in optimization ranking",
+  "description": "As an optimization operator, I want portfolio ranking to distinguish a valid champion/version history from a dangling champion identifier, so that structurally ineligible scores do not incorrectly make otherwise complete activity coverage fail.\n\nObserved platform defect: the exhaustive score inventory can return a scalar champion version identifier while both the champion relationship and reverse version history are empty. Ranking currently treats that row as otherwise eligible and reports missing activity evidence. The fix must use the existing exhaustive GraphQL query, preserve opaque identifiers, include unpromoted versions for valid scores, and add no per-score reads.\n\nFeature: Correctly classify inaccessible score versions\n\nScenario: A score has a dangling champion identifier\nGiven an exhaustive score inventory row has a champion version identifier\nAnd its champion version relationship is null\nAnd its reverse version history is empty\nWhen optimization ranking evaluates eligibility\nThen it classifies the score as structurally unranked with an explicit invalid-champion reason\nAnd it does not classify the row as incomplete cooldown activity evidence\nAnd the structurally ineligible row does not make otherwise complete portfolio activity coverage incomplete\n\nScenario: A valid score has a newer unpromoted version\nGiven the champion relationship is valid\nAnd the reverse version history contains a newer unpromoted version\nWhen optimization ranking evaluates cooldown activity\nThen it uses the newest version timestamp rather than the champion timestamp\nAnd preserves the newest version opaque identifier unchanged\n\nScenario: An otherwise eligible score still lacks newest-version evidence\nGiven the champion relationship is valid\nAnd newest-version activity cannot be established\nWhen optimization ranking runs\nThen the score fails closed\nAnd the portfolio is not exact\nAnd the primary next action reports evidence repair rather than rank completion\n\nOut of scope: data repair, score mutation, optimizer launch, and cooldown-policy changes.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1b8d6019-f0a5-4863-953f-4da1dadae5a3",
+      "author": "ryan.porter",
+      "text": "Production-shaped read-only dogfood evidence reproduced the defect safely: exhaustive scorecard enumeration completed, while a subset of versioned scores returned no reverse newest-version row. Implementation will begin with failing outside-in specifications and will not weaken cooldown semantics or add per-score reads.",
+      "created_at": "2026-07-28T18:41:22.796433Z"
+    },
+    {
+      "id": "0ae402ed-cf16-4f93-82ce-1d317b46566f",
+      "author": "ryan.porter",
+      "text": "A direct production GraphQL check showed an affected scalar champion identifier resolves to null and the indexed version list for that score is empty. The implementation plan is simplified: expose the champion relationship in the existing exhaustive inventory, classify dangling pointers as structural ineligibility, and retain newest-version cooldown checks for valid scores.",
+      "created_at": "2026-07-28T18:44:04.895834Z"
+    },
+    {
+      "id": "73f823b0-bbf9-4ffd-aa3e-c705e4448bf5",
+      "author": "ryan.porter",
+      "text": "Implemented the minimal GraphQL-path fix: exhaustive inventory now resolves the champion relationship, dangling scalar pointers are structurally unranked, valid scores still use newest version history for cooldown, and incomplete packets request coverage repair. The focused optimization/runtime suite passes 340 tests, and a read-only integration verification now returns exact activity coverage with no activity-evidence failures. The issue remains open until merge.",
+      "created_at": "2026-07-28T18:47:30.022386Z"
+    },
+    {
+      "id": "ea7b0105-e4fb-49cd-bb4d-e564cc927f9b",
+      "author": "ryan.porter",
+      "text": "Terminology correction: the observable condition is an unresolved champion reference, not proof that a champion configuration is invalid. The public unranked reason and documentation will use unresolved_champion_reference before the next dogfood run.",
+      "created_at": "2026-07-28T19:01:07.944413Z"
+    },
+    {
+      "id": "e036d02d-ec28-48a1-a489-b1f738ceed8c",
+      "author": "ryan.porter",
+      "text": "Final integration pass started on current develop. Preserve this issue's existing observable behavior and fail-closed evidence contract, resolve only integration conflicts, and verify focused specifications plus complete local CI before merge.",
+      "created_at": "2026-07-30T23:45:28.264163Z"
+    }
+  ],
+  "created_at": "2026-07-28T18:41:17.381830Z",
+  "updated_at": "2026-07-30T23:45:28.264163Z",
+  "closed_at": null,
+  "custom": {}
+}

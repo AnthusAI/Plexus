@@ -10,9 +10,22 @@
   "parent": "plx-8570854c-bad6-4049-be38-e04836aae830",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "232c269d-f578-4563-937d-2ef8ae2eb15a",
+      "author": "ryan.porter",
+      "text": "Started the scoped-ranking increment under story plx-5359ea. The implementation will preserve exhaustive account enumeration, apply exact-ID and literal case-insensitive prefix selectors before bounded feedback analysis, retain opaque IDs, and fail closed on incomplete coverage. No alternate execution path or fuzzy selector is being added.",
+      "created_at": "2026-07-28T00:40:45.895617Z"
+    },
+    {
+      "id": "e8c79852-1637-4da6-a4f3-0fb632032a57",
+      "author": "ryan.porter",
+      "text": "Starting final integration of the retained optimization decision toolchain onto current develop. Scope includes reconciling the already-specified ranking, selected-scope, activity-cooldown, and evidence-gate behavior; regenerating dependency state from the merged manifest; running focused specifications plus complete local Python and dashboard CI; and merging only after all gates pass. Superseded stale pull requests will be closed rather than overlaid on newer implementations.",
+      "created_at": "2026-07-30T23:45:27.778851Z"
+    }
+  ],
   "created_at": "2026-07-27T20:52:48.354441Z",
-  "updated_at": "2026-07-27T20:52:48.354441Z",
+  "updated_at": "2026-07-30T23:45:27.778851Z",
   "closed_at": null,
   "custom": {}
 }
