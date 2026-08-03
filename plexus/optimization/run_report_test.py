@@ -1351,7 +1351,11 @@ def test_automatic_execution_projection_reconciles_counts_and_keeps_opaque_ids_o
 
 
 def test_automatic_missing_diagnosis_is_presented_as_analysis_work_not_approved_execution():
-    from plexus.optimization.run_report import _stakeholder_execution_projection
+    from plexus.optimization.run_report import (
+        _stakeholder_execution_projection,
+        _validate_view,
+        build_stakeholder_workbook,
+    )
 
     view = _safe_view()
     view["portfolio"][0].update({
@@ -1391,8 +1395,26 @@ def test_automatic_missing_diagnosis_is_presented_as_analysis_work_not_approved_
     for section in ("portfolio", "priorities", "optimization_outcomes"):
         row = projected[section][0]
         assert row["execution_status"] == "diagnosis_required"
+        assert row["state"] == "incomplete"
         assert row["next_action"] == "await_semantic_diagnosis"
         assert "diagnosis" in row["rationale"].lower()
+
+    # The execution overlay is itself a publication input.  Its safe schema
+    # must accept every field the overlay adds before any artifact is written.
+    _validate_view(projected)
+    artifact = build_stakeholder_workbook(
+        projected,
+        revision_number=1,
+        generated_at=datetime(2026, 8, 3, tzinfo=timezone.utc),
+    )
+    workbook = load_workbook(BytesIO(artifact.content), data_only=False)
+    for sheet_name in ("Portfolio", "Priorities", "Optimization Outcomes"):
+        headers = [cell.value for cell in workbook[sheet_name][1]]
+        row = dict(zip(
+            headers,
+            next(workbook[sheet_name].iter_rows(min_row=2, values_only=True)),
+        ))
+        assert row["State"] == "incomplete"
 
 
 def test_automatic_top_k_deferral_is_presented_as_next_run_work_not_launch_failure():
