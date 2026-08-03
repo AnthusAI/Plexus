@@ -6,6 +6,7 @@ import pytest
 
 from plexus.infrastructure.scoring_service import (
     ScoringServiceAsyncScoringStack,
+    ScoringServiceContainerRepositoryStack,
     ScoringServiceIntegrationStack,
     ScoringServiceMonitoringStack,
     ScoringServiceNetworkStack,
@@ -19,10 +20,38 @@ def test_scoring_service_platform_exports_complete_reusable_surface() -> None:
     assert ScoringServiceNetworkStack
     assert ScoringServiceOperationsStack
     assert ScoringServiceAsyncScoringStack
+    assert ScoringServiceContainerRepositoryStack
     assert ScoringServiceRepositoryStack
     assert ScoringServiceIntegrationStack
     assert ScoringServiceScheduledWorkersStack
     assert ScoringServiceMonitoringStack
+
+
+def test_container_repository_stack_uses_consumer_supplied_identity() -> None:
+    app = cdk.App()
+    stack = ScoringServiceContainerRepositoryStack(
+        app,
+        "ScoringRuntimeImages",
+        repository_name="example-scoring-runtime-test",
+        service_name="example-scoring-runtime",
+        environment="test",
+        output_export_name="example-scoring-runtime-test-repository-uri",
+        env=cdk.Environment(account="123456789012", region="us-east-1"),
+    )
+
+    template = assertions.Template.from_stack(stack)
+    template.has_resource_properties(
+        "AWS::ECR::Repository",
+        {
+            "RepositoryName": "example-scoring-runtime-test",
+            "ImageScanningConfiguration": {"ScanOnPush": True},
+            "ImageTagMutability": "IMMUTABLE_WITH_EXCLUSION",
+        },
+    )
+    template.has_output(
+        "RuntimeRepositoryUri",
+        {"Export": {"Name": "example-scoring-runtime-test-repository-uri"}},
+    )
 
 
 def test_scoring_service_platform_contains_no_consumer_specific_values() -> None:

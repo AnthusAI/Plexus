@@ -1,4 +1,5 @@
 from .async_scoring_stack import ScoringServiceAsyncScoringStack
+from .container_repository_stack import ScoringServiceContainerRepositoryStack
 from .monitoring_stack import ScoringServiceMonitoringStack
 from .network_stack import ScoringServiceNetworkStack
 from .operations_stack import ScoringServiceOperationsStack
@@ -16,6 +17,7 @@ __all__ = [
     "ScheduledWorkerDefinition",
     "ScheduledWorkerSecretValue",
     "ScoringServiceAsyncScoringStack",
+    "ScoringServiceContainerRepositoryStack",
     "ScoringServiceIntegrationStack",
     "ScoringServiceMonitoringStack",
     "ScoringServiceNetworkStack",
