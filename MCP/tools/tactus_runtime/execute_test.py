@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import subprocess
@@ -3409,12 +3409,13 @@ def test_default_optimization_run_rejects_launch_without_the_frozen_parent_run_k
 
 def test_default_optimization_run_rejects_recent_score_activity_before_launch() -> None:
     optimizer_calls: list[dict] = []
+    recent_activity = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
     module = execute.PlexusRuntimeModule(
         FastMCP("test-optimization-run-recent-score-activity"),
         score_info=lambda _args: {
             "championVersionId": "v-1",
-            "updatedAt": "2026-07-27T12:00:00Z",
-            "versions": [{"id": "new-version", "createdAt": "2026-07-27T12:00:00Z"}],
+            "updatedAt": recent_activity,
+            "versions": [{"id": "new-version", "createdAt": recent_activity}],
         },
         feedback_latest_update=lambda _args: {
             "latest_feedback_updated_at": "2026-01-01T00:00:00Z",
@@ -3423,6 +3424,7 @@ def test_default_optimization_run_rejects_recent_score_activity_before_launch() 
     )
 
     result = module.optimization.run({
+        "run_key": "frozen-run-recent-score-activity",
         "approved": True,
         "targets": [_ready_optimization_target(
             "sc-1", "s-1", "v-1", "2026-01-01T00:00:00Z"

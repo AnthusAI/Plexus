@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "efd9fdba-bbdd-452e-95dc-6612ff60a705",
+  "issue_id": "plx-942b3cf2-b895-479a-b706-d16830c1f865",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-03T16:40:52.548Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Preserve intended cooldown rejection in optimizer launch contract",
+    "description": "A launch-contract fixture does not provide the frozen run identity required by an earlier safety gate, so the test cannot exercise its intended recent-activity rejection.\n\nFeature: Optimizer launch safety contracts\n  Scenario: Recent activity remains the observable rejection after earlier preconditions pass\n    Given an optimization target with complete frozen-run provenance\n    And the score has activity inside the cooldown window\n    When launch preconditions are evaluated\n    Then the target is rejected for recent score activity\n    And no optimizer procedure is dispatched",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}
