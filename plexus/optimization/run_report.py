@@ -12,7 +12,7 @@ from __future__ import annotations
 import csv
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from hashlib import sha256
 from io import BytesIO, StringIO
@@ -28,6 +28,10 @@ from openpyxl.writer.excel import ExcelWriter
 from plexus.optimization.operator_identity import (
     OptimizationOperatorIdentity,
     optimization_operator_identity,
+)
+from plexus.optimization.report_actions import (
+    build_action_projection,
+    build_decision_summary,
 )
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
@@ -276,6 +280,8 @@ class PublishedRevision:
     row_counts: Mapping[str, int]
     overview: Mapping[str, Any]
     artifacts: tuple[Mapping[str, Any], ...] = ()
+    detail_status: str = "pending"
+    detail_source_revision: Optional[int] = None
 
 
 def _utc_now() -> datetime:
@@ -1407,9 +1413,15 @@ def build_stakeholder_presentation(
     stakeholder_view: Mapping[str, Any],
     *,
     scorecard_artifacts: list[Mapping[str, Any]],
+    detail_status: str = "not_requested",
+    detail_source_revision: Optional[int] = None,
 ) -> dict[str, Any]:
     """Build the safe, deterministic aggregate/card projection for the dashboard."""
     _validate_view(stakeholder_view)
+    if detail_status not in {"not_requested", "pending", "complete", "stale"}:
+        raise ValueError("unsupported stakeholder detail status")
+    if detail_source_revision is not None and detail_source_revision < 1:
+        raise ValueError("stakeholder detail source revision must be positive")
     rows = list(stakeholder_view.get("portfolio", []))
     primary_decision_mix: dict[str, int] = {}
     grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
@@ -1453,6 +1465,11 @@ def build_stakeholder_presentation(
                 for row in score_rows
                 if isinstance(row.get("reviewed_error_opportunity"), (int, float))
             ),
+            # A core revision has deliberately not uploaded drill-down
+            # artifacts yet.  The dashboard must not render its empty
+            # artifact list as a complete scorecard detail view.
+            "detail_status": detail_status,
+            "detail_source_revision": detail_source_revision,
             "artifacts": artifacts_by_ref.get(scope_hash, []),
         })
 
@@ -1505,10 +1522,16 @@ def build_stakeholder_presentation(
             str(row.get("score_name") or "").casefold(),
         ),
     )
+    action_projection = build_action_projection(rows)
     return {
         "overview": overview,
         "score_count": len(rows),
         "scorecard_count": len(scorecards),
+        "detail_status": detail_status,
+        "detail_source_revision": detail_source_revision,
+        "decision_summary": build_decision_summary(overview, primary_decision_mix),
+        "action_counts": action_projection["action_counts"],
+        "action_workstreams": action_projection["action_workstreams"],
         "primary_disposition_counts": primary_decision_mix,
         # Compatibility alias for report views published before dispositions.
         "primary_decision_mix": primary_decision_mix,
@@ -1891,6 +1914,54 @@ class OptimizationRunReportService:
                     "Latest optimization artifact manifest has invalid logical identities"
                 )
             index[logical_id] = dict(descriptor)
+
+        # A finalization core manifest remains immutable after it is
+        # committed.  Its separately immutable detail manifest is the only
+        # authority for score-level reuse after a process restart.  Without
+        # loading it here, a fresh worker would needlessly republish every
+        # score/scorecard artifact despite having verified, completed details.
+        if latest.get("detail_status") == "complete":
+            detail_descriptor = latest.get("detail_manifest")
+            if not isinstance(detail_descriptor, Mapping):
+                raise OptimizationRunIntegrityError(
+                    "Completed optimization detail enrichment is missing its manifest"
+                )
+            try:
+                detail_bytes = self._download_task_attachment(
+                    state.task.id, detail_descriptor,
+                )
+                detail_manifest = json.loads(detail_bytes.decode("utf-8"))
+            except OptimizationRunIntegrityError:
+                raise
+            except Exception as exc:
+                raise OptimizationRunRetryablePublicationError(
+                    "Could not load the latest completed optimization detail manifest"
+                ) from exc
+            if not isinstance(detail_manifest, Mapping):
+                raise OptimizationRunIntegrityError(
+                    "Latest optimization detail manifest is malformed"
+                )
+            if int(detail_manifest.get("source_revision") or 0) != revision_number:
+                raise OptimizationRunIntegrityError(
+                    "Latest optimization detail manifest has the wrong source revision"
+                )
+            if str(detail_manifest.get("milestone") or "") != str(
+                latest.get("milestone") or ""
+            ):
+                raise OptimizationRunIntegrityError(
+                    "Latest optimization detail manifest has the wrong milestone"
+                )
+            for descriptor in detail_manifest.get("artifacts") or []:
+                if not isinstance(descriptor, Mapping):
+                    raise OptimizationRunIntegrityError(
+                        "Latest optimization detail manifest contains an invalid descriptor"
+                    )
+                logical_id = str(descriptor.get("logical_id") or "")
+                if not logical_id or logical_id in index:
+                    raise OptimizationRunIntegrityError(
+                        "Latest optimization detail manifest has invalid logical identities"
+                    )
+                index[logical_id] = dict(descriptor)
         self._committed_artifact_index_cache = (revision_number, index)
         return dict(index)
 
@@ -2147,6 +2218,7 @@ class OptimizationRunReportService:
         publication_counts: dict[str, dict[str, int]] = {}
         active_artifact_kind = "revision_manifest"
         publication_started_at: Optional[datetime] = None
+        core_committed = False
 
         def _publication_label(kind: str) -> str:
             return kind.replace("_", " ")
@@ -2278,6 +2350,14 @@ class OptimizationRunReportService:
                 )
 
             publication_counts = _artifact_publication_plan(stakeholder_view)
+            if milestone != "finalization":
+                for detail_kind in (
+                    "score_briefs",
+                    "scorecard_summaries",
+                    "scorecard_spreadsheets",
+                    "scorecard_presentations",
+                ):
+                    publication_counts[detail_kind] = {"completed": 0, "total": 0}
             publication_started_at = self.now()
             safe_overview = dict(stakeholder_view.get("overview") or {})
             raw_evidence = _json(decision_evidence)
@@ -2373,71 +2453,46 @@ class OptimizationRunReportService:
                     source_revision=workbook_source_revision,
                 ),
             ]
-            resolved_draft_artifacts = dict(draft_artifacts)
-            draft_dirty_count = 0
-
-            def _record_resolved_score_artifact(
-                _kind: str, descriptor: Mapping[str, Any]
-            ) -> None:
-                nonlocal draft_dirty_count
-                logical_id = str(descriptor.get("logical_id") or "")
-                object_key = str(descriptor.get("object_key") or "")
-                if not logical_id or not object_key:
-                    raise OptimizationRunIntegrityError(
-                        "resolved score artifact descriptor is incomplete"
-                    )
-                normalized = dict(descriptor)
-                if resolved_draft_artifacts.get(logical_id) == normalized:
-                    return
-                resolved_draft_artifacts[logical_id] = normalized
-                draft_dirty_count += 1
-                if draft_dirty_count >= 25:
-                    self._persist_publication_draft_artifacts(
-                        revision_number=revision_number,
-                        milestone=milestone,
-                        publication_id=publication_id,
-                        evidence_checksum=evidence_checksum,
-                        stakeholder_view_checksum=stakeholder_view_checksum,
-                        generated_at=generated_at,
-                        artifacts=resolved_draft_artifacts,
-                    )
-                    draft_dirty_count = 0
-
-            active_artifact_kind = "score_briefs"
-            _publish_artifact_progress("score_briefs")
-            scorecard_artifacts = build_scorecard_artifacts(
-                stakeholder_view,
-                revision_number=revision_number,
-                task_id=state.task.id,
-                uploader=self._artifact_uploader,
-                publication_id=publication_id,
-                on_artifact_upload=_record_artifact_upload,
-                reuse_artifact=_reuse_artifact,
-                on_artifact_resolved=_record_resolved_score_artifact,
-            )
-            if draft_dirty_count:
-                self._persist_publication_draft_artifacts(
-                    revision_number=revision_number,
-                    milestone=milestone,
-                    publication_id=publication_id,
-                    evidence_checksum=evidence_checksum,
-                    stakeholder_view_checksum=stakeholder_view_checksum,
-                    generated_at=generated_at,
-                    artifacts=resolved_draft_artifacts,
+            if milestone == "finalization":
+                # This safe, immutable input lets a restarted local worker
+                # resume detail enrichment without rebuilding or re-running
+                # any analysis. It is deliberately not a scorecard artifact.
+                detail_input = _json({
+                    "schema_version": "optimization-run-detail-input-v1",
+                    "source_revision": revision_number,
+                    "milestone": milestone,
+                    "evidence_checksum": evidence_checksum,
+                    "stakeholder_view_checksum": stakeholder_view_checksum,
+                    "stakeholder_view": stakeholder_view,
+                })
+                detail_input_path = self._artifact_uploader(
+                    state.task.id,
+                    f"optimization-detail-input-r{revision_number:04d}-{publication_id}.json",
+                    detail_input,
                 )
-                draft_dirty_count = 0
-            artifacts.extend(scorecard_artifacts)
-            for kind in ("score_briefs", "scorecard_summaries", "scorecard_spreadsheets", "scorecard_presentations"):
-                if publication_counts[kind]["completed"] != publication_counts[kind]["total"]:
-                    raise OptimizationRunIntegrityError(
-                        f"artifact publication count mismatch for {kind}"
-                    )
-            _publish_artifact_progress("scorecard_presentations")
+                self._attach_task_file(state.task, detail_input_path)
+                artifacts.append(_artifact_descriptor(
+                    logical_id="detail_input",
+                    kind="detail_input",
+                    display_name="Final detail enrichment input",
+                    scope="run",
+                    content_type="application/json",
+                    content=detail_input,
+                    object_key=detail_input_path,
+                    task_id=state.task.id,
+                    source_revision=revision_number,
+                ))
+            # Core publication deliberately excludes per-score and per-scorecard
+            # material.  Ranking, assessment, diagnosis, and optimizer launch
+            # can continue as soon as this compact revision is authoritative.
             active_artifact_kind = "stakeholder_presentation"
             _publish_artifact_progress("stakeholder_presentation")
+            core_detail_status = "pending"
             presentation = build_stakeholder_presentation(
                 stakeholder_view,
-                scorecard_artifacts=scorecard_artifacts,
+                scorecard_artifacts=[],
+                detail_status=core_detail_status,
+                detail_source_revision=None,
             )
             presentation_bytes = _json(presentation)
             reusable_presentation = _reuse_artifact(
@@ -2490,12 +2545,12 @@ class OptimizationRunReportService:
                 "coverage_complete": bool((decision_evidence.get("coverage") or {}).get("complete", decision_evidence.get("coverage_complete", False))),
                 "evidence_checksum": evidence_checksum, "workbook_checksum": workbook.checksum,
                 "workbook_path": workbook_path, "row_counts": dict(workbook.row_counts),
-                "scorecard_count": sum(
-                    1 for item in artifacts if item["kind"] == "scorecard_summary"
-                ),
+                "scorecard_count": 0,
                 "score_count": len(stakeholder_view.get("portfolio", [])),
                 "artifacts": artifacts,
                 "overview": safe_overview,
+                "detail_status": core_detail_status,
+                "detail_source_revision": None,
             }
             manifest_bytes = _json(manifest)
             manifest_checksum = sha256(manifest_bytes).hexdigest()
@@ -2518,6 +2573,8 @@ class OptimizationRunReportService:
                     "milestone": milestone,
                     "overview": safe_overview,
                     "presentation": presentation_artifact,
+                    "detail_status": manifest["detail_status"],
+                    "detail_source_revision": None,
                 },
             })
             revision = PublishedRevision(
@@ -2534,6 +2591,7 @@ class OptimizationRunReportService:
                 row_counts=workbook.row_counts,
                 overview=safe_overview,
                 artifacts=tuple(artifacts),
+                detail_status=manifest["detail_status"],
             )
             self._record_latest_revision(state, revision)
             self._committed_artifact_index_cache = (
@@ -2547,7 +2605,18 @@ class OptimizationRunReportService:
             # only after the immutable evidence, workbook, block pointers, and
             # Report cover page have all been made durable.
             self._advance_stage_for_milestone(milestone)
-            return revision
+            core_committed = True
+            if milestone != "finalization":
+                return revision
+            return self._publish_final_detail_enrichment(
+                core_revision=revision,
+                stakeholder_view=stakeholder_view,
+                committed_artifacts=committed_artifacts,
+                publication_id=publication_id,
+                evidence_checksum=evidence_checksum,
+                stakeholder_view_checksum=stakeholder_view_checksum,
+                generated_at=generated_at,
+            )
         except OptimizationRunIntegrityError as exc:
             try:
                 self.fail(f"Optimization run integrity failure: {exc}")
@@ -2559,7 +2628,7 @@ class OptimizationRunReportService:
             # commit point.  Its partial attachments are intentionally ignored
             # on replay, so marking this Task failed would destroy the only safe
             # recovery path for ordinary auth/publication interruptions.
-            if publication_counts:
+            if publication_counts and not core_committed:
                 try:
                     _publish_artifact_progress(
                         active_artifact_kind,
@@ -2573,6 +2642,366 @@ class OptimizationRunReportService:
             raise OptimizationRunRetryablePublicationError(
                 f"Could not publish optimization milestone {milestone}"
             ) from exc
+
+    def _publish_final_detail_enrichment(
+        self,
+        *,
+        core_revision: PublishedRevision,
+        stakeholder_view: Mapping[str, Any],
+        committed_artifacts: Mapping[str, Mapping[str, Any]],
+        publication_id: str,
+        evidence_checksum: str,
+        stakeholder_view_checksum: str,
+        generated_at: datetime,
+    ) -> PublishedRevision:
+        """Attach final score details after the finalization core is durable.
+
+        The core revision remains immutable and is the replay checkpoint.  This
+        method adds an immutable detail manifest and advances only the mutable
+        Report/Task pointers that describe whether that core revision now has a
+        reconciled stakeholder-detail projection.
+        """
+        state = self._require_state()
+        revision_number = core_revision.number
+        current_artifacts = self._latest_committed_artifact_index()
+        reusable_artifacts = {**dict(committed_artifacts), **current_artifacts}
+        full_plan = _artifact_publication_plan(stakeholder_view)
+        detail_counts = {
+            kind: {"completed": 0, "total": full_plan[kind]["total"]}
+            for kind in (
+                "score_briefs", "scorecard_summaries", "scorecard_spreadsheets",
+                "scorecard_presentations",
+            )
+        }
+        active_detail_kind = "score_briefs"
+
+        def publish_detail_progress(
+            *, state_value: str = "active", failure_class: str | None = None,
+        ) -> None:
+            current = sum(item["completed"] for item in detail_counts.values())
+            total = sum(item["total"] for item in detail_counts.values())
+            failure = None
+            if failure_class:
+                failure = {
+                    "exception_class": failure_class if re.fullmatch(
+                        r"[A-Za-z_][A-Za-z0-9_]{0,127}", failure_class,
+                    ) else "Exception",
+                    "operation_category": active_detail_kind,
+                    "retry_classification": "retryable",
+                    "completed": current,
+                    "total": total,
+                }
+            # Final-detail work is still artifact publication.  Keep it on
+            # the existing public progress contract, but give it its own
+            # message and counts so operators do not confuse it with the
+            # compact core revision that has already been committed.
+            self.publish_progress(
+                phase="publication",
+                current=current,
+                total=total,
+                unit="artifacts",
+                state=state_value,
+                message=(
+                    "Final score and scorecard details are incomplete and will retry."
+                    if state_value == "failed"
+                    else "Publishing final score and scorecard details."
+                ),
+                next_checkpoint="Completing final stakeholder detail artifacts.",
+                artifact_counts=detail_counts,
+                failure=failure,
+            )
+
+        def record_progress_kind(kind: str, completed: bool) -> None:
+            nonlocal active_detail_kind
+            active_detail_kind = kind
+            if not completed:
+                return
+            if kind not in detail_counts:
+                raise OptimizationRunIntegrityError("unknown final detail artifact category")
+            detail_counts[kind]["completed"] += 1
+            if (
+                detail_counts[kind]["completed"] % 25 == 0
+                or detail_counts[kind]["completed"] == detail_counts[kind]["total"]
+            ):
+                publish_detail_progress()
+
+        publish_detail_progress()
+        draft_artifacts = self._load_publication_draft_artifacts(
+            revision_number=revision_number,
+            milestone=core_revision.milestone,
+            evidence_checksum=evidence_checksum,
+            stakeholder_view_checksum=stakeholder_view_checksum,
+            generated_at=generated_at,
+        )
+        resolved_draft_artifacts = dict(draft_artifacts)
+        draft_dirty_count = 0
+
+        def reuse_artifact(
+            logical_id: str,
+            kind: str,
+            content_type: str,
+            content: bytes,
+            filename: str,
+        ) -> Optional[Mapping[str, Any]]:
+            for artifact_index in (reusable_artifacts, draft_artifacts):
+                reusable = self._reuse_committed_artifact(
+                    artifact_index,
+                    logical_id=logical_id,
+                    kind=kind,
+                    content_type=content_type,
+                    content=content,
+                )
+                if reusable is not None:
+                    return reusable
+            return self._reuse_uncommitted_task_attachment(
+                logical_id=logical_id,
+                kind=kind,
+                content_type=content_type,
+                content=content,
+                filename=filename,
+                publication_id=publication_id,
+                source_revision=revision_number,
+            )
+
+        def persist_draft_if_needed(*, force: bool = False) -> None:
+            nonlocal draft_dirty_count
+            if not force and draft_dirty_count < 25:
+                return
+            if not resolved_draft_artifacts:
+                return
+            self._persist_publication_draft_artifacts(
+                revision_number=revision_number,
+                milestone=core_revision.milestone,
+                publication_id=publication_id,
+                evidence_checksum=evidence_checksum,
+                stakeholder_view_checksum=stakeholder_view_checksum,
+                generated_at=generated_at,
+                artifacts=resolved_draft_artifacts,
+            )
+            draft_dirty_count = 0
+
+        def record_artifact(_kind: str, descriptor: Mapping[str, Any]) -> None:
+            nonlocal draft_dirty_count
+            logical_id = str(descriptor.get("logical_id") or "")
+            object_key = str(descriptor.get("object_key") or "")
+            if not logical_id or not object_key:
+                raise OptimizationRunIntegrityError(
+                    "resolved detail artifact descriptor is incomplete"
+                )
+            normalized = dict(descriptor)
+            if resolved_draft_artifacts.get(logical_id) == normalized:
+                return
+            resolved_draft_artifacts[logical_id] = normalized
+            draft_dirty_count += 1
+            persist_draft_if_needed()
+
+        try:
+            detail_artifacts = build_scorecard_artifacts(
+                stakeholder_view,
+                revision_number=revision_number,
+                task_id=state.task.id,
+                uploader=self._artifact_uploader,
+                publication_id=publication_id,
+                on_artifact_upload=record_progress_kind,
+                reuse_artifact=reuse_artifact,
+                on_artifact_resolved=record_artifact,
+            )
+        except Exception as exc:
+            try:
+                publish_detail_progress(
+                    state_value="failed", failure_class=type(exc).__name__,
+                )
+            except Exception:
+                pass
+            raise
+        persist_draft_if_needed(force=True)
+        # Individual detail files may be reused byte-for-byte, but this
+        # aggregate projection records completion of this immutable core
+        # revision.  Its source must therefore be the current revision.
+        detail_source_revision = revision_number
+        detail_presentation = build_stakeholder_presentation(
+            stakeholder_view,
+            scorecard_artifacts=detail_artifacts,
+            detail_status="complete",
+            detail_source_revision=detail_source_revision,
+        )
+        detail_presentation_bytes = _json(detail_presentation)
+        presentation_filename = (
+            f"optimization-detail-presentation-r{revision_number:04d}-{publication_id}.json"
+        )
+        reusable_presentation = reuse_artifact(
+            "stakeholder_detail_presentation",
+            "stakeholder_detail_presentation",
+            "application/json",
+            detail_presentation_bytes,
+            presentation_filename,
+        )
+        if isinstance(reusable_presentation, Mapping):
+            presentation_path = str(reusable_presentation.get("object_key") or "")
+            presentation_source_revision = int(
+                reusable_presentation.get("source_revision") or 0
+            )
+        else:
+            presentation_path = self._artifact_uploader(
+                state.task.id, presentation_filename, detail_presentation_bytes,
+            )
+            presentation_source_revision = revision_number
+        if not presentation_path or presentation_source_revision < 1:
+            raise OptimizationRunIntegrityError(
+                "final stakeholder detail presentation descriptor is incomplete"
+            )
+        self._attach_task_file(state.task, presentation_path)
+        presentation_artifact = _artifact_descriptor(
+            logical_id="stakeholder_detail_presentation",
+            kind="stakeholder_detail_presentation",
+            display_name="Stakeholder detail presentation data",
+            scope="run",
+            content_type="application/json",
+            content=detail_presentation_bytes,
+            object_key=presentation_path,
+            task_id=state.task.id,
+            source_revision=presentation_source_revision,
+        )
+        detail_artifacts.append(presentation_artifact)
+        if self.dashboard_base_url:
+            for artifact in detail_artifacts:
+                artifact["dashboard_url"] = _report_artifact_url(
+                    self.dashboard_base_url,
+                    report_id=state.report.id,
+                    revision_number=revision_number,
+                    logical_id=str(artifact["logical_id"]),
+                )
+        detail_manifest = {
+            "schema_version": "optimization-run-detail-manifest-v1",
+            "source_revision": revision_number,
+            "source_manifest_checksum": core_revision.manifest_checksum,
+            "milestone": core_revision.milestone,
+            "published_at": _iso(generated_at),
+            "stakeholder_view_checksum": stakeholder_view_checksum,
+            "artifacts": detail_artifacts,
+        }
+        detail_manifest_bytes = _json(detail_manifest)
+        detail_manifest_path = self._artifact_uploader(
+            state.task.id,
+            f"optimization-detail-manifest-r{revision_number:04d}-{publication_id}.json",
+            detail_manifest_bytes,
+        )
+        self._attach_task_file(state.task, detail_manifest_path)
+        detail_manifest_descriptor = _artifact_descriptor(
+            logical_id="detail_manifest",
+            kind="detail_manifest",
+            display_name="Final detail artifact manifest",
+            scope="run",
+            content_type="application/json",
+            content=detail_manifest_bytes,
+            object_key=detail_manifest_path,
+            task_id=state.task.id,
+            source_revision=revision_number,
+        )
+        self._record_detail_enrichment(
+            core_revision=core_revision,
+            detail_manifest=detail_manifest_descriptor,
+            detail_presentation=presentation_artifact,
+        )
+        self._committed_artifact_index_cache = (
+            revision_number,
+            {
+                str(artifact["logical_id"]): dict(artifact)
+                for artifact in (*core_revision.artifacts, *detail_artifacts)
+            },
+        )
+        return replace(
+            core_revision,
+            artifacts=tuple((*core_revision.artifacts, *detail_artifacts)),
+            detail_status="complete",
+            detail_source_revision=revision_number,
+        )
+
+    def _resume_final_detail_enrichment(
+        self,
+        *,
+        latest: Mapping[str, Any],
+        core_manifest: Mapping[str, Any],
+    ) -> None:
+        """Finish a final detail pass from its immutable core checkpoint."""
+        state = self._require_state()
+        source_revision = int(latest.get("number") or 0)
+        detail_input = next(
+            (
+                item for item in (core_manifest.get("artifacts") or [])
+                if isinstance(item, Mapping) and item.get("kind") == "detail_input"
+            ),
+            None,
+        )
+        if not isinstance(detail_input, Mapping):
+            raise OptimizationRunIntegrityError(
+                "finalization core revision is missing deferred detail input"
+            )
+        try:
+            input_value = json.loads(
+                self._download_task_attachment(state.task.id, detail_input).decode("utf-8")
+            )
+        except OptimizationRunIntegrityError:
+            raise
+        except Exception as exc:
+            raise OptimizationRunRetryablePublicationError(
+                "Could not read deferred final detail input"
+            ) from exc
+        if not isinstance(input_value, Mapping):
+            raise OptimizationRunIntegrityError("deferred final detail input is malformed")
+        stakeholder_view = input_value.get("stakeholder_view")
+        if not isinstance(stakeholder_view, Mapping):
+            raise OptimizationRunIntegrityError("deferred final detail input lacks a stakeholder view")
+        _validate_view(stakeholder_view)
+        stakeholder_view_checksum = str(input_value.get("stakeholder_view_checksum") or "")
+        if sha256(_json(stakeholder_view)).hexdigest() != stakeholder_view_checksum:
+            raise OptimizationRunIntegrityError("deferred final detail input checksum conflicts with its view")
+        evidence_checksum = str(input_value.get("evidence_checksum") or "")
+        if evidence_checksum != str(core_manifest.get("evidence_checksum") or ""):
+            raise OptimizationRunIntegrityError("deferred final detail input conflicts with core evidence")
+        try:
+            generated_at = datetime.fromisoformat(
+                str(core_manifest.get("published_at") or "").replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
+        except ValueError as exc:
+            raise OptimizationRunIntegrityError(
+                "finalization core revision has an invalid publication time"
+            ) from exc
+        publication_id = self._publication_id_factory()
+        if (
+            not isinstance(publication_id, str)
+            or not publication_id
+            or any(not (character.isalnum() or character in "-_.") for character in publication_id)
+        ):
+            raise OptimizationRunIntegrityError("detail recovery publication ID is invalid")
+        core_revision = PublishedRevision(
+            number=source_revision,
+            milestone="finalization",
+            published_at=str(core_manifest.get("published_at") or ""),
+            raw_evidence_path=str(latest.get("evidence_path") or ""),
+            workbook_path=str(latest.get("workbook_path") or ""),
+            manifest_path=str(latest.get("manifest_path") or ""),
+            manifest_checksum=str((latest.get("manifest") or {}).get("sha256") or ""),
+            manifest_size_bytes=int((latest.get("manifest") or {}).get("size_bytes") or 0),
+            evidence_checksum=evidence_checksum,
+            workbook_checksum=str(core_manifest.get("workbook_checksum") or ""),
+            row_counts=dict(core_manifest.get("row_counts") or {}),
+            overview=dict(core_manifest.get("overview") or {}),
+            artifacts=tuple(
+                dict(item) for item in (core_manifest.get("artifacts") or [])
+                if isinstance(item, Mapping)
+            ),
+            detail_status="pending",
+        )
+        self._publish_final_detail_enrichment(
+            core_revision=core_revision,
+            stakeholder_view=stakeholder_view,
+            committed_artifacts=self._latest_committed_artifact_index(),
+            publication_id=publication_id,
+            evidence_checksum=evidence_checksum,
+            stakeholder_view_checksum=stakeholder_view_checksum,
+            generated_at=generated_at,
+        )
 
     def persist_semantic_budget_ledger(
         self, ledger_value: Mapping[str, Any]
@@ -2864,6 +3293,14 @@ class OptimizationRunReportService:
                 raise ValueError("Report metadata does not preserve the frozen run specification")
             task_status = str(getattr(state.task, "status", "")).upper()
             final_status = str(task_metadata.get("optimization_run_final_status") or "").upper()
+            if (
+                milestone == "finalization"
+                and latest.get("detail_status") != "complete"
+            ):
+                self._resume_final_detail_enrichment(
+                    latest=latest,
+                    core_manifest=manifest,
+                )
             return {
                 "milestone": milestone,
                 "evidence": dict(evidence),
@@ -2873,6 +3310,8 @@ class OptimizationRunReportService:
             raise OptimizationRunRetryablePublicationError(
                 "Could not read the latest optimization checkpoint attachment"
             ) from exc
+        except OptimizationRunRetryablePublicationError:
+            raise
         except ArtifactIntegrityError as exc:
             error = OptimizationRunIntegrityError(
                 "Latest optimization checkpoint attachment failed integrity verification"
@@ -3125,6 +3564,15 @@ class OptimizationRunReportService:
         if terminal_status == "failed":
             return self.fail("Optimization run finalized as failed")
         try:
+            latest_revision = self._latest_revision(state.report)
+            if (
+                isinstance(latest_revision, Mapping)
+                and str(latest_revision.get("milestone") or "") == "finalization"
+                and latest_revision.get("detail_status") != "complete"
+            ):
+                raise OptimizationRunRetryablePublicationError(
+                    "Final stakeholder detail enrichment is still pending"
+                )
             task_metadata = _metadata(getattr(state.task, "metadata", {}))
             task_metadata["optimization_run_final_status"] = terminal_status
             state.report.update(output=self._render_report_manifest(
@@ -3413,6 +3861,8 @@ class OptimizationRunReportService:
             "evidence_checksum": revision.evidence_checksum, "workbook_checksum": revision.workbook_checksum,
             "row_counts": dict(revision.row_counts),
             "overview": dict(revision.overview),
+            "detail_status": revision.detail_status,
+            "detail_source_revision": revision.detail_source_revision,
         }
         evidence_descriptor = next(
             (
@@ -3446,6 +3896,72 @@ class OptimizationRunReportService:
         task_metadata["optimization_run_key"] = self.run_key
         task_metadata["latest_revision"] = latest
         task_metadata.pop("optimization_publication_draft", None)
+        state.task.update(metadata=json.dumps(task_metadata))
+
+    def _record_detail_enrichment(
+        self,
+        *,
+        core_revision: PublishedRevision,
+        detail_manifest: Mapping[str, Any],
+        detail_presentation: Mapping[str, Any],
+    ) -> None:
+        """Mark one already-committed core revision as detail-complete."""
+        state = self._require_state()
+        parameters = _metadata(getattr(state.report, "parameters", {}))
+        run = dict(parameters.get("optimization_run") or {})
+        latest = dict(run.get("latest_revision") or {})
+        if int(latest.get("number") or -1) != core_revision.number:
+            raise OptimizationRunIntegrityError(
+                "detail enrichment no longer targets the latest core revision"
+            )
+        if str(latest.get("milestone") or "") != core_revision.milestone:
+            raise OptimizationRunIntegrityError(
+                "detail enrichment milestone conflicts with its core revision"
+            )
+        latest.update({
+            "detail_status": "complete",
+            "detail_source_revision": core_revision.number,
+            "detail_manifest": dict(detail_manifest),
+            "detail_presentation": dict(detail_presentation),
+        })
+        revisions = list(run.get("revisions") or [])
+        updated = False
+        for index, item in enumerate(revisions):
+            if isinstance(item, Mapping) and int(item.get("number") or -1) == core_revision.number:
+                revisions[index] = dict(latest)
+                updated = True
+                break
+        if not updated:
+            raise OptimizationRunIntegrityError(
+                "detail enrichment core revision is absent from Report history"
+            )
+        run["latest_revision"] = latest
+        run["revisions"] = revisions
+        parameters["optimization_run"] = run
+        self._update_block(state.blocks["status"], str(detail_manifest["object_key"]), {
+            "type": "optimization_run_status",
+            "status": "details_published",
+            "summary": {
+                "revision": core_revision.number,
+                "milestone": core_revision.milestone,
+                "overview": dict(core_revision.overview),
+                "presentation": dict(detail_presentation),
+                "detail_status": "complete",
+                "detail_source_revision": core_revision.number,
+            },
+        })
+        state.report.update(
+            parameters=parameters,
+            output=self._render_report_manifest(
+                "RUNNING",
+                latest,
+                identity=state.operator_identity,
+                execution_mode=state.run_spec.get("execution_mode"),
+            ),
+        )
+        task_metadata = _metadata(getattr(state.task, "metadata", {}))
+        task_metadata["optimization_run_key"] = self.run_key
+        task_metadata["latest_revision"] = latest
         state.task.update(metadata=json.dumps(task_metadata))
 
     def _download_task_attachment(
@@ -3562,6 +4078,13 @@ class OptimizationRunReportService:
                 f"Latest durable revision: {revision.get('number')}",
                 f"Milestone: {milestone}",
             ])
+            detail_status = safe(revision.get("detail_status"))
+            if detail_status:
+                detail_source_revision = revision.get("detail_source_revision")
+                detail_line = f"Score and scorecard details: {detail_status.replace('_', ' ')}"
+                if detail_source_revision is not None:
+                    detail_line += f" (source revision {detail_source_revision})"
+                lines.append(detail_line + ".")
         lines.extend([
             "",
             "```block",

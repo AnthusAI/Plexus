@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e97625df-2d7a-4421-8fc4-cb305cdf537f",
+  "issue_id": "plx-fa32c959-09c1-41c7-9a54-c27f104b6c66",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-03T18:12:27.964Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Keep detailed report artifacts off the optimization critical path",
+    "description": "As an optimization operator, I want authoritative milestone decisions published before detailed artifact enrichment, so that report generation does not delay diagnosis or execution.\n\nFeature: Core-first milestone publication\n\nScenario: An intermediate milestone advances\n  Given decision evidence, the stakeholder workbook, and aggregate presentation are valid\n  When the milestone is published\n  Then the immutable core revision becomes authoritative\n  And the procedure may continue before score-level and scorecard-level artifacts are generated\n\nScenario: Final detail enrichment fails\n  Given optimizer evidence is already durable\n  When final detail enrichment cannot complete\n  Then optimizer evidence remains preserved\n  And the run is visibly incomplete and retryable\n  And the Report is not labeled complete",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

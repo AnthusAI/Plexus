@@ -985,7 +985,7 @@ def test_interrupted_publication_retry_reuses_verified_artifacts_for_the_same_lo
     assert json.loads(service._state.task.metadata).get("optimization_run_final_status") is None
     draft = json.loads(service._state.task.metadata)["optimization_publication_draft"]
     assert draft["generated_at"] == "2026-07-29T12:00:00Z"
-    assert any(
+    assert not any(
         path.rsplit("/", 1)[-1].startswith("optimization-publication-draft-r0001-")
         for path in service._state.task.attachedFiles
     )
@@ -1021,11 +1021,14 @@ def test_interrupted_publication_retry_reuses_verified_artifacts_for_the_same_lo
         request.filename for request, _content in store.uploads
         if request.filename.startswith(("score-", "scorecard-"))
     ]
-    assert len(score_artifact_names) == 4
+    # Ranking is a core-only revision.  Per-score and per-scorecard artifacts
+    # are intentionally deferred until finalization, so an interrupted core
+    # retry must not create either set of detail uploads.
+    assert score_artifact_names == []
     retry_download_names = [
         request.filename for request in store.downloads[downloads_before_retry:]
     ]
-    assert any(
+    assert not any(
         name.startswith("optimization-publication-draft-r0001-")
         for name in retry_download_names
     )
@@ -1329,7 +1332,7 @@ def test_automatic_execution_projection_reconciles_counts_and_keeps_opaque_ids_o
         }]},
     }
 
-    service.publish_milestone("approval", evidence, stakeholder_view=view)
+    service.publish_milestone("finalization", evidence, stakeholder_view=view)
 
     manifest = json.loads(uploaded["optimization-revision-r0001-test.json"])
     assert manifest["overview"]["execution_mode"] == "automatic"
@@ -1597,7 +1600,7 @@ def test_missing_execution_fields_freeze_the_conservative_approval_required_mode
     service._artifact_uploader = lambda task_id, name, content: (
         uploaded.__setitem__(name, content) or f"tasks/{task_id}/{name}"
     )
-    service.start_or_resume({"scope": {}})
+    state = service.start_or_resume({"scope": {}})
     service.publish_milestone("approval", {"coverage": {"complete": True}}, stakeholder_view=_safe_view())
 
     manifest = json.loads(uploaded["optimization-revision-r0001-test.json"])
@@ -1676,13 +1679,14 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     second_row = dict(view["portfolio"][0])
     second_row.update({
         "scorecard_ref": "safe-ref-two",
+        "scorecard_name": "Second Portfolio",
         "score_name": "Second Score",
         "valid_feedback_count": 75,
     })
     view["portfolio"].append(second_row)
 
     revision = service.publish_milestone(
-        "assessment",
+        "finalization",
         {"coverage": {"complete": True}},
         stakeholder_view=view,
     )
@@ -1720,9 +1724,17 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
         for row in distribution
     )
     assert presentation_artifact["object_key"] in state.task.attachedFiles
+    detail_manifest_descriptor = state.report.parameters["optimization_run"]["latest_revision"]["detail_manifest"]
+    detail_manifest = json.loads(uploaded[detail_manifest_descriptor["object_key"].rsplit("/", 1)[-1]])
+    detail_presentation_artifact = next(
+        artifact for artifact in detail_manifest["artifacts"]
+        if artifact["kind"] == "stakeholder_detail_presentation"
+    )
     status_envelope = json.loads(state.blocks["status"].output)
     assert status_envelope["preview"]["type"] == "optimization_run_status"
-    assert status_envelope["preview"]["summary"]["presentation"] == presentation_artifact
+    assert status_envelope["preview"]["summary"]["presentation"] == detail_presentation_artifact
+    assert status_envelope["preview"]["summary"]["detail_status"] == "complete"
+    manifest = detail_manifest
     scorecard_artifacts = [
         artifact for artifact in manifest["artifacts"]
         if artifact["scope"] == "scorecard"
@@ -1733,10 +1745,12 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
         "scorecard_presentation",
     }
     assert len(scorecard_artifacts) == 6
-    assert manifest["scorecard_count"] == 2
-    assert manifest["score_count"] == 2
+    assert len({artifact["scorecard_name"] for artifact in scorecard_artifacts}) == 2
     assert all(artifact["source_revision"] == 1 for artifact in scorecard_artifacts)
-    assert {artifact["scorecard_name"] for artifact in scorecard_artifacts} == {"Example Portfolio"}
+    assert {artifact["scorecard_name"] for artifact in scorecard_artifacts} == {
+        "Example Portfolio",
+        "Second Portfolio",
+    }
     assert len({artifact["logical_id"] for artifact in scorecard_artifacts}) == 6
     assert all(artifact["sha256"] and artifact["size_bytes"] > 0 for artifact in scorecard_artifacts)
     assert all(artifact["task_id"] == state.task.id for artifact in scorecard_artifacts)
@@ -1749,7 +1763,7 @@ def test_publish_milestone_indexes_revisioned_scorecard_markdown_and_csv_without
     )
     assert all(artifact["object_key"].startswith(f"tasks/{state.task.id}/") for artifact in scorecard_artifacts)
     assert all(artifact["object_key"] not in state.task.attachedFiles for artifact in scorecard_artifacts)
-    assert len(revision.artifacts) == len(manifest["artifacts"])
+    assert len(revision.artifacts) > len(manifest["artifacts"])
     assert revision.row_counts["portfolio"] == len(view["portfolio"])
     assert revision.row_counts["questions_and_issues"] == len(view["questions_and_issues"])
     assert revision.row_counts["optimization_outcomes"] == len(view["optimization_outcomes"])
@@ -2032,10 +2046,8 @@ def test_a_later_milestone_creates_a_new_score_brief_when_it_first_becomes_relev
     second = service.publish_milestone(
         "diagnosis", {"coverage": {"complete": True}}, stakeholder_view=later,
     )
-    score_briefs = [artifact for artifact in second.artifacts if artifact["kind"] == "score_brief"]
-    assert len(score_briefs) == 1
-    assert score_briefs[0]["score_name"] == "Priority Score"
-    assert score_briefs[0]["source_revision"] == 2
+    assert not [artifact for artifact in second.artifacts if artifact["kind"] == "score_brief"]
+    assert second.detail_status == "pending"
 
 
 def test_report_artifact_base_url_rejects_non_https_or_non_origin_values(monkeypatch):
@@ -2064,13 +2076,184 @@ def test_multiple_milestones_preserve_full_revision_history(monkeypatch):
     state = service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
 
     service.publish_milestone("ranking", {"coverage": {"complete": True}}, stakeholder_view=_safe_view())
-    service.publish_milestone("assessment", {"coverage": {"complete": True}}, stakeholder_view=_safe_view())
+    service.publish_milestone("finalization", {"coverage": {"complete": True}}, stakeholder_view=_safe_view())
 
     history = state.report.parameters["optimization_run"]["revisions"]
     assert [revision["number"] for revision in history] == [1, 2]
-    assert [revision["milestone"] for revision in history] == ["ranking", "assessment"]
+    assert [revision["milestone"] for revision in history] == ["ranking", "finalization"]
     assert all(revision["evidence_path"].startswith("tasks/task-1/") for revision in history)
     assert len(state.blocks["workbook"].attachedFiles) == 3
+
+
+def test_intermediate_milestone_commits_the_core_revision_without_score_details(monkeypatch):
+    """Ranking/assessment must not hold analysis behind per-score uploads."""
+    from plexus.optimization import run_report
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    store = _ArtifactStore()
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="core-first",
+        report_configuration_id="config-1", artifact_store=store,
+        publication_id_factory=lambda: "ranking",
+        task_lookup=lambda _: None, report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
+    )
+    state = service.start_or_resume({"scope": {}})
+
+    revision = service.publish_milestone(
+        "ranking", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+    )
+
+    assert revision.detail_status == "pending"
+    assert revision.detail_source_revision is None
+    assert not any(artifact["scope"] in {"score", "scorecard"} for artifact in revision.artifacts)
+    latest = state.report.parameters["optimization_run"]["latest_revision"]
+    assert latest["detail_status"] == "pending"
+    uploaded = [request.filename for request, _content in store.uploads]
+    assert not any(name.startswith(("score-", "scorecard-")) for name in uploaded)
+    assert any(name.startswith("optimization-revision-r0001-") for name in uploaded)
+    presentation_upload = next(
+        content for request, content in store.uploads
+        if request.filename.startswith("optimization-presentation-r0001-")
+    )
+    presentation = json.loads(presentation_upload)
+    assert presentation["detail_status"] == "pending"
+    assert presentation["detail_source_revision"] is None
+    assert presentation["scorecards"][0]["detail_status"] == "pending"
+    assert presentation["scorecards"][0]["detail_source_revision"] is None
+
+
+def test_finalization_commits_core_before_detail_enrichment_and_exposes_its_source(monkeypatch):
+    from plexus.optimization import run_report
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    store = _ArtifactStore()
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="final-details",
+        report_configuration_id="config-1", artifact_store=store,
+        publication_id_factory=lambda: "finalization",
+        task_lookup=lambda _: None, report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
+    )
+    state = service.start_or_resume({"scope": {}})
+
+    revision = service.publish_milestone(
+        "finalization", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+    )
+
+    assert revision.detail_status == "complete"
+    assert revision.detail_source_revision == revision.number
+    assert any(artifact["scope"] == "score" for artifact in revision.artifacts)
+    assert any(artifact["scope"] == "scorecard" for artifact in revision.artifacts)
+    latest = state.report.parameters["optimization_run"]["latest_revision"]
+    assert latest["detail_status"] == "complete"
+    assert latest["detail_source_revision"] == 1
+    assert latest["detail_manifest"]["kind"] == "detail_manifest"
+    detail_presentation_upload = next(
+        content for request, content in store.uploads
+        if request.filename.startswith("optimization-detail-presentation-r0001-")
+    )
+    detail_presentation = json.loads(detail_presentation_upload)
+    assert detail_presentation["detail_status"] == "complete"
+    assert detail_presentation["detail_source_revision"] == 1
+    assert detail_presentation["scorecards"][0]["detail_status"] == "complete"
+    assert detail_presentation["scorecards"][0]["detail_source_revision"] == 1
+    upload_names = [request.filename for request, _content in store.uploads]
+    assert next(index for index, name in enumerate(upload_names) if name.startswith("optimization-revision-r0001-")) < next(
+        index for index, name in enumerate(upload_names) if name.startswith("score-")
+    )
+
+
+def test_final_detail_failure_keeps_the_committed_core_retryable_and_unfinalized(monkeypatch):
+    from plexus.optimization import run_report
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    store = _ArtifactStore()
+    service = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="detail-failure",
+        report_configuration_id="config-1", artifact_store=store,
+        publication_id_factory=lambda: "finalization",
+        task_lookup=lambda _: None, report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
+    )
+    state = service.start_or_resume({"scope": {}})
+    original_uploader = service._artifact_uploader
+
+    def fail_score_detail(task_id, name, content):
+        if name.startswith("score-"):
+            raise RuntimeError("detail transfer unavailable")
+        return original_uploader(task_id, name, content)
+
+    service._artifact_uploader = fail_score_detail
+    with pytest.raises(run_report.OptimizationRunRetryablePublicationError, match="finalization"):
+        service.publish_milestone(
+            "finalization", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+        )
+
+    latest = state.report.parameters["optimization_run"]["latest_revision"]
+    assert latest["milestone"] == "finalization"
+    assert latest["detail_status"] == "pending"
+    assert state.task.status == "RUNNING"
+    assert "optimization_run_final_status" not in json.loads(state.task.metadata)
+
+
+def test_recovery_finishes_pending_final_details_from_the_immutable_core_input(monkeypatch):
+    from plexus.optimization import run_report
+
+    monkeypatch.setattr(run_report, "Task", _Task)
+    monkeypatch.setattr(run_report, "Report", _Report)
+    monkeypatch.setattr(run_report, "ReportBlock", _Block)
+    monkeypatch.setattr(run_report, "TaskStage", _TaskStage)
+    store = _ArtifactStore()
+    first = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="recover-details",
+        report_configuration_id="config-1", artifact_store=store,
+        publication_id_factory=lambda: "first",
+        task_lookup=lambda _: None, report_lookup=lambda _: None, block_lookup=lambda _: [],
+        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
+    )
+    state = first.start_or_resume({"scope": {}})
+    original_uploader = first._artifact_uploader
+    first._artifact_uploader = lambda task_id, name, content: (
+        (_ for _ in ()).throw(RuntimeError("detail transfer unavailable"))
+        if name.startswith("score-") else original_uploader(task_id, name, content)
+    )
+    with pytest.raises(run_report.OptimizationRunRetryablePublicationError):
+        first.publish_milestone(
+            "finalization", {
+                "run_key": "recover-details", "run_spec": {
+                    "scope": {}, "execution_mode": "approval_required",
+                },
+                "coverage": {"complete": True},
+            }, stakeholder_view=_safe_view(),
+        )
+
+    recovered = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(), account_id="account-1", run_key="recover-details",
+        report_configuration_id="config-1", artifact_store=store,
+        publication_id_factory=lambda: "recovered",
+        task_lookup=lambda _: state.task, report_lookup=lambda _: state.report,
+        block_lookup=lambda _: list(_Block.created),
+        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
+    )
+    recovered.start_or_resume({"scope": {}})
+    checkpoint = recovered.load_latest_checkpoint()
+
+    assert checkpoint["milestone"] == "finalization"
+    latest = state.report.parameters["optimization_run"]["latest_revision"]
+    assert latest["detail_status"] == "complete"
+    assert latest["detail_source_revision"] == 1
+    recovered.finalize()
+    assert state.task.status == "COMPLETED"
 
 
 def test_default_artifact_path_uses_only_task_graphql_tickets_without_direct_s3(monkeypatch):
@@ -2114,19 +2297,16 @@ def test_default_artifact_path_uses_only_task_graphql_tickets_without_direct_s3(
     assert {
         request.content_type for request in requests
         if request.filename.endswith((".md", ".csv"))
-    } == {
-        "text/markdown",
-        "text/csv",
-    }
+    } == set()
     assert all(path.startswith(f"tasks/{state.task.id}/") for path in state.task.attachedFiles)
     child_paths = {
         f"tasks/{state.task.id}/{request.filename}"
         for request in requests
         if request.filename.startswith(("scorecard-", "score-"))
     }
-    assert child_paths
+    assert not child_paths
     assert child_paths.isdisjoint(state.task.attachedFiles)
-    assert len(state.task.attachedFiles) == len(store.uploads) - len(child_paths)
+    assert len(state.task.attachedFiles) == len(store.uploads)
     assert all(
         json.loads(block.output)["output_attachment"].startswith(f"tasks/{state.task.id}/")
         for block in state.blocks.values()
@@ -2454,16 +2634,16 @@ def test_assessment_artifact_publication_has_a_distinct_safe_live_phase(monkeypa
     assert service._latest_revision_number(state.report) == 1
     assert all(update["unit"] == "artifacts" for update in publication)
     assert publication[0]["current"] == 0
-    assert publication[0]["total"] == 8
-    assert publication[-1]["current"] == 8
+    assert publication[0]["total"] == 4
+    assert publication[-1]["current"] == 4
     assert publication[-1]["next_checkpoint"] == "Publishing the assessment milestone."
     assert publication[-1]["artifact_counts"] == {
         "decision_evidence": {"completed": 1, "total": 1},
         "stakeholder_workbook": {"completed": 1, "total": 1},
-        "score_briefs": {"completed": 1, "total": 1},
-        "scorecard_summaries": {"completed": 1, "total": 1},
-        "scorecard_spreadsheets": {"completed": 1, "total": 1},
-        "scorecard_presentations": {"completed": 1, "total": 1},
+        "score_briefs": {"completed": 0, "total": 0},
+        "scorecard_summaries": {"completed": 0, "total": 0},
+        "scorecard_spreadsheets": {"completed": 0, "total": 0},
+        "scorecard_presentations": {"completed": 0, "total": 0},
         "stakeholder_presentation": {"completed": 1, "total": 1},
         "revision_manifest": {"completed": 1, "total": 1},
     }
@@ -2471,7 +2651,7 @@ def test_assessment_artifact_publication_has_a_distinct_safe_live_phase(monkeypa
     assert all("diagnosis" not in update["message"].lower() for update in publication)
 
 
-def test_large_artifact_publication_advances_durable_progress_at_a_bounded_cadence(monkeypatch):
+def test_large_portfolio_core_publication_does_not_start_detail_artifacts(monkeypatch):
     service = _service(monkeypatch)
     service.start_or_resume({"scope": {}})
     view = deepcopy(_safe_view())
@@ -2506,9 +2686,8 @@ def test_large_artifact_publication_advances_durable_progress_at_a_bounded_caden
         for update in updates
         if update["phase"] == "publication"
     ]
-    assert 25 in score_brief_counts
-    assert score_brief_counts[-1] == 30
-    assert sorted(set(score_brief_counts)) == [0, 25, 30]
+    assert score_brief_counts
+    assert set(score_brief_counts) == {0}
 
 
 def test_unchanged_score_artifacts_are_reused_from_the_latest_committed_revision(monkeypatch):
@@ -2534,16 +2713,33 @@ def test_unchanged_score_artifacts_are_reused_from_the_latest_committed_revision
             stage for stage in _TaskStage.created if stage.taskId == task.id
         ],
     )
-    service.start_or_resume({"scope": {}})
+    state = service.start_or_resume({"scope": {}})
     first = service.publish_milestone(
-        "ranking",
+        "finalization",
         {"run_key": "reuse-unchanged-artifacts", "coverage": {"complete": True}},
         stakeholder_view=_safe_view(),
     )
     uploads_after_first = len(store.uploads)
 
-    second = service.publish_milestone(
-        "assessment",
+    # Simulate a new process. Reuse must load the completed detail manifest,
+    # not rely on the first service's in-memory artifact cache.
+    recovered = run_report.OptimizationRunReportService(
+        client=SimpleNamespace(),
+        account_id="account-1",
+        run_key="reuse-unchanged-artifacts",
+        report_configuration_id="config-1",
+        artifact_store=store,
+        publication_id_factory=lambda: next(publication_ids),
+        task_lookup=lambda _: state.task,
+        report_lookup=lambda _: state.report,
+        block_lookup=lambda _: list(_Block.created),
+        stage_lookup=lambda task: [
+            stage for stage in _TaskStage.created if stage.taskId == task.id
+        ],
+    )
+    recovered.start_or_resume({"scope": {}})
+    second = recovered.publish_milestone(
+        "finalization",
         {
             "run_key": "reuse-unchanged-artifacts",
             "coverage": {"complete": True},
@@ -2557,7 +2753,6 @@ def test_unchanged_score_artifacts_are_reused_from_the_latest_committed_revision
         "scorecard_summary",
         "scorecard_portfolio_csv",
         "scorecard_presentation",
-        "stakeholder_presentation",
     }
     first_by_id = {
         artifact["logical_id"]: artifact
@@ -2578,6 +2773,18 @@ def test_unchanged_score_artifacts_are_reused_from_the_latest_committed_revision
         for logical_id, artifact in first_by_id.items()
     }
     assert all(artifact["source_revision"] == 1 for artifact in second_by_id.values())
+    # Individual drill-downs are checksum-identical, but the aggregate detail
+    # presentation records the current core revision it completes.
+    first_detail_presentation = next(
+        artifact for artifact in first.artifacts
+        if artifact["kind"] == "stakeholder_detail_presentation"
+    )
+    second_detail_presentation = next(
+        artifact for artifact in second.artifacts
+        if artifact["kind"] == "stakeholder_detail_presentation"
+    )
+    assert second_detail_presentation["object_key"] != first_detail_presentation["object_key"]
+    assert second_detail_presentation["source_revision"] == 2
 
     second_upload_names = [
         request.filename for request, _content in store.uploads[uploads_after_first:]
@@ -2585,6 +2792,7 @@ def test_unchanged_score_artifacts_are_reused_from_the_latest_committed_revision
     assert not any(name.startswith("score-") for name in second_upload_names)
     assert not any(name.startswith("scorecard-") for name in second_upload_names)
     assert not any(name.startswith("optimization-presentation-") for name in second_upload_names)
+    assert any(name.startswith("optimization-detail-presentation-") for name in second_upload_names)
 
 
 def test_changed_score_content_republishes_dependent_presentation_but_reuses_unchanged_csv(monkeypatch):
@@ -2607,12 +2815,12 @@ def test_changed_score_content_republishes_dependent_presentation_but_reuses_unc
     )
     service.start_or_resume({"scope": {}})
     first = service.publish_milestone(
-        "ranking", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+        "finalization", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
     )
     changed_view = deepcopy(_safe_view())
     changed_view["questions_and_issues"][0]["finding"] = "A clarified stakeholder question."
     second = service.publish_milestone(
-        "diagnosis", {"coverage": {"complete": True}}, stakeholder_view=changed_view,
+        "finalization", {"coverage": {"complete": True}}, stakeholder_view=changed_view,
     )
 
     first_by_kind = {artifact["kind"]: artifact for artifact in first.artifacts}
@@ -2650,7 +2858,7 @@ def test_corrupt_reuse_candidate_is_replaced_instead_of_becoming_current(monkeyp
     )
     state = first_service.start_or_resume({"scope": {}})
     first = first_service.publish_milestone(
-        "ranking", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+        "finalization", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
     )
     first_score_brief = next(
         artifact for artifact in first.artifacts if artifact["kind"] == "score_brief"
@@ -2670,7 +2878,7 @@ def test_corrupt_reuse_candidate_is_replaced_instead_of_becoming_current(monkeyp
     )
     recovered.start_or_resume({"scope": {}})
     second = recovered.publish_milestone(
-        "assessment", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+        "finalization", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
     )
     second_score_brief = next(
         artifact for artifact in second.artifacts if artifact["kind"] == "score_brief"

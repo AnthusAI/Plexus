@@ -28,10 +28,34 @@
       "author": "ryan.porter",
       "text": "Live follow-up observation found that a zero-launch decision could render during initial ranking because launch count is naturally zero before diagnosis. Added a terminal-or-diagnosis-evidence gate and regression coverage so the decision card appears only when a decision can honestly be stated. Dashboard component tests now pass 31/31 and Node typecheck passes.",
       "created_at": "2026-08-03T17:45:39.785902Z"
+    },
+    {
+      "id": "4bc2e8d7-afa8-45ed-a177-284d23b46332",
+      "author": "ryan.porter",
+      "text": "Feature: Decision-first optimization reports\n\nScenario: Analysis has not reached a decision\n  Given portfolio assessment or diagnosis is still pending\n  When an operator opens the living Report\n  Then the conclusion states that no optimization decision exists yet\n  And zero selected or launched targets are not presented as a terminal outcome\n\nScenario: Shared findings become one open workstream\n  Given multiple scores share the same canonical next action and dominant issue\n  When the stakeholder presentation is published\n  Then each score contributes to exactly one primary workstream\n  And workstream counts reconcile to the underlying scores\n  And affected scorecards and scores remain expandable\n\nScenario: Realtime evidence refreshes during operator review\n  Given an operator has expanded workstreams and scrolled into the Report\n  When a newer Report revision arrives\n  Then compatible expansion and filter state are preserved\n  And the viewport does not jump because unrelated content re-rendered",
+      "created_at": "2026-08-03T18:12:27.708474Z"
+    },
+    {
+      "id": "85ee444f-246b-4bd4-b238-d0e573c56d17",
+      "author": "ryan.porter",
+      "text": "Implementation started after baseline dogfood observation. The existing run assessed the full eligible portfolio and scheduled bounded diagnosis, but repeated a 549-artifact publication batch before computation could advance. Backend behavior specs now fail/pass for deterministic mutually exclusive workstreams and provisional decision summaries. Dashboard and core-publication changes are in progress; no additional run, deployment, push, or promotion has occurred.",
+      "created_at": "2026-08-03T18:15:38.260613Z"
+    },
+    {
+      "id": "f3a0c264-c6d2-4aea-892d-214ce1a7afc5",
+      "author": "ryan.porter",
+      "text": "Decision-first dashboard implementation now leads with the backend conclusion, renders exactly four score-count cards, groups open workstreams by next action, and keeps monitor/history reachable through a persistent status filter. Compatible realtime rerenders preserve component state and no longer clear the last committed presentation while a new artifact loads. Focused dashboard tests and full typecheck pass. No client-specific information is recorded here.",
+      "created_at": "2026-08-03T18:30:02.555050Z"
+    },
+    {
+      "id": "42e851af-6937-46c8-9950-14c9d2ae8e9f",
+      "author": "ryan.porter",
+      "text": "Implementation validation update: the stakeholder presentation now leads with a backend-authored conclusion, reconciled mutually exclusive score workstreams, four aggregate action cards, and Open/Monitor/History progressive disclosure. Visual acceptance found and corrected an internally inconsistent demo fixture so its 12 score assignments, five workstreams, execution funnel, and validated outcome reconcile. Focused backend tests: 103 passed. Focused dashboard tests: 33 passed. Storybook Chromium: 91 suites and 704 tests passed. Python 3.11 and 3.12 full suites, dashboard coverage/typecheck, and Tactus regression are green. The existing bounded pilot remains nonterminal in its legacy report-publication retry loop; no new pilot has been started.",
+      "created_at": "2026-08-03T18:56:44.308929Z"
     }
   ],
   "created_at": "2026-08-03T17:27:21.565910Z",
-  "updated_at": "2026-08-03T17:45:39.785902Z",
+  "updated_at": "2026-08-03T18:56:44.308929Z",
   "closed_at": null,
   "custom": {}
 }
