@@ -3750,6 +3750,7 @@ def test_default_optimization_rank_uses_frozen_complete_window_and_inventory_met
         }, "scorecards": [{
             "scorecard_id": "sc-1", "scorecard_name": "One", "scores": [
                 {"score_id": "s-live", "score_name": "Live", "total_items": 4, "disagreements": 2,
+                 "feedback_watermark": "2026-07-01T00:00:00Z",
                  "class_distribution": [{"label": "Yes", "count": 3}], "predicted_class_distribution": [{"label": "Yes", "count": 4}]},
                 {"score_id": "s-off", "score_name": "Off", "total_items": 4, "disagreements": 4},
             ],
@@ -3773,6 +3774,7 @@ def test_default_optimization_rank_uses_frozen_complete_window_and_inventory_met
     )
     assert result["ranked"][0]["score_id"] == "s-live"
     assert result["ranked"][0]["valid_feedback_count"] == 4
+    assert result["ranked"][0]["feedback_watermark"] == "2026-07-01T00:00:00Z"
     assert result["ranked"][0]["class_distribution"] == [{"label": "Yes", "count": 3}]
     assert result["ranked"][0]["evidence_rank"] == 2
     assert result["ranked"][0]["candidate_rank"] == 1
@@ -4056,8 +4058,9 @@ def test_portfolio_assessment_marks_only_a_mismatched_exact_target_incomplete(
             "coverage": {"complete": True},
             "scope": {"scorecard_id": "scorecard-opaque", "score_id": "score-opaque"},
             "window": {"start": "2026-04-01T00:00:00Z", "end": "2026-06-30T00:00:00Z"},
-            "valid_feedback_count": 250,
-            "champion_version": "version-opaque",
+                "valid_feedback_count": 250,
+                "champion_version": "version-opaque",
+                "feedback_watermark": "2026-06-30T00:00:00Z",
         },
         "_portfolio_assessment_context": module._new_portfolio_assessment_context(),
     })
@@ -4100,8 +4103,9 @@ def test_portfolio_assessment_rejects_a_scorecard_from_another_account(
             "coverage": {"complete": True},
             "scope": {"scorecard_id": "scorecard-opaque", "score_id": "score-opaque"},
             "window": {"start": "2026-04-01T00:00:00Z", "end": "2026-06-30T00:00:00Z"},
-            "valid_feedback_count": 250,
-            "champion_version": "version-opaque",
+                "valid_feedback_count": 250,
+                "champion_version": "version-opaque",
+                "feedback_watermark": "2026-06-30T00:00:00Z",
         },
         "_portfolio_assessment_context": module._new_portfolio_assessment_context(),
     })
@@ -4142,8 +4146,9 @@ def test_portfolio_assessment_rejects_a_champion_changed_since_frozen_ranking(
             "coverage": {"complete": True},
             "scope": {"scorecard_id": "scorecard-opaque", "score_id": "score-opaque"},
             "window": {"start": "2026-04-01T00:00:00Z", "end": "2026-06-30T00:00:00Z"},
-            "valid_feedback_count": 250,
-            "champion_version": "frozen-version",
+                "valid_feedback_count": 250,
+                "champion_version": "frozen-version",
+                "feedback_watermark": "2026-06-30T00:00:00Z",
         },
         "_portfolio_assessment_context": module._new_portfolio_assessment_context(),
     })
@@ -4185,8 +4190,9 @@ def test_portfolio_assessment_rejects_a_champion_relation_without_its_id(
             "coverage": {"complete": True},
             "scope": {"scorecard_id": "scorecard-opaque", "score_id": "score-opaque"},
             "window": {"start": "2026-04-01T00:00:00Z", "end": "2026-06-30T00:00:00Z"},
-            "valid_feedback_count": 250,
-            "champion_version": "frozen-version",
+                "valid_feedback_count": 250,
+                "champion_version": "frozen-version",
+                "feedback_watermark": "2026-06-30T00:00:00Z",
         },
         "_portfolio_assessment_context": module._new_portfolio_assessment_context(),
     })
@@ -4218,6 +4224,7 @@ def test_optimization_assess_exact_ids_compose_canonical_frozen_rank_evidence() 
             "scorecard_id": "sc-1",
             "scores": [{
                 "score_id": "s-1", "champion_version": "v-1",
+                "feedback_watermark": "2026-07-01T00:00:00Z",
                 "total_items": 250, "disagreements": 100,
                 "class_distribution": [{"label": "Yes", "count": 200}],
                 "weekly_disagreement_rates": [0.4] * 4,
@@ -4232,7 +4239,39 @@ def test_optimization_assess_exact_ids_compose_canonical_frozen_rank_evidence() 
     assert alignment_calls[0]["scorecards"] == ["sc-1"]
     assert alignment_calls[0]["window_start"].endswith("T00:00:00Z")
     assert result["coverage"]["complete"] is True
+    assert result["feedback_watermark"] == "2026-07-01T00:00:00Z"
     assert result["readiness_state"] == "insufficient_evidence"
+
+
+def test_optimization_assess_fails_closed_without_frozen_feedback_watermark() -> None:
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-runtime-assess-watermark-required"),
+        score_info=lambda _args: {
+            "championVersionId": "v-1",
+            "code": "classifier",
+            "guidelines": "# Guidelines",
+        },
+        guidelines_validator=lambda _text: {"is_valid": True},
+        terminal_class_resolver=lambda _code: {"classes": ["Yes", "No"]},
+    )
+
+    result = module.optimization.assess({
+        "scorecard_id": "sc-1",
+        "score_id": "s-1",
+        "rank_evidence": {
+            "coverage": {"complete": True},
+            "scope": {"scorecard_id": "sc-1", "score_id": "s-1"},
+            "window": {
+                "start": "2026-04-01T00:00:00Z",
+                "end": "2026-06-30T00:00:00Z",
+            },
+            "valid_feedback_count": 250,
+            "champion_version": "v-1",
+        },
+    })
+
+    assert result["coverage"]["complete"] is False
+    assert "frozen feedback watermark is required" in result["coverage"]["failures"]
 
 
 def test_default_optimization_diagnose_marks_dependency_failure_incomplete_without_mutating() -> None:
@@ -9864,6 +9903,7 @@ def test_feedback_alignment_window_aggregates_pages_without_retaining_raw_items(
                                 "initialAnswerValue": "No",
                                 "finalAnswerValue": "Yes",
                                 "isInvalid": False,
+                                "updatedAt": "2026-07-01T00:00:00Z",
                             },
                             {
                                 "scorecardId": "card-1",
@@ -9871,6 +9911,7 @@ def test_feedback_alignment_window_aggregates_pages_without_retaining_raw_items(
                                 "initialAnswerValue": "No",
                                 "finalAnswerValue": "Yes",
                                 "isInvalid": True,
+                                "updatedAt": "2026-07-03T00:00:00Z",
                             },
                         ],
                         "nextToken": "page-2",
@@ -9885,20 +9926,50 @@ def test_feedback_alignment_window_aggregates_pages_without_retaining_raw_items(
                             "initialAnswerValue": "Yes",
                             "finalAnswerValue": "Yes",
                             "isInvalid": False,
+                            "updatedAt": "2026-07-02T00:00:00Z",
                         },
                     ],
                     "nextToken": None,
                 }
             }
 
-    aggregates = execute._aggregate_feedback_alignment_window(
+    pair_counts, feedback_watermarks = execute._aggregate_feedback_alignment_window(
         FakeClient(), account_id="account-1", days=14
     )
 
     assert requests == [None, "page-2"]
-    assert aggregates == {
+    assert pair_counts == {
         ("card-1", "score-1"): {("Yes", "No"): 1, ("Yes", "Yes"): 1}
     }
+    assert feedback_watermarks == {
+        ("card-1", "score-1"): "2026-07-03T00:00:00Z"
+    }
+
+
+def test_feedback_alignment_batch_preserves_frozen_per_score_watermark() -> None:
+    result = execute._default_feedback_alignment_batch(
+        {"scorecard": "card-1", "days": 90},
+        _prefetched_feedback_pair_counts={
+            ("card-1", "score-1"): {("Yes", "No"): 1},
+        },
+        _prefetched_feedback_watermarks={
+            ("card-1", "score-1"): "2026-07-03T00:00:00Z",
+        },
+        _prefetched_account_id="account-1",
+        _prefetched_scorecard_data={
+            "id": "card-1",
+            "name": "Example Scorecard",
+            "sections": {
+                "items": [{
+                    "scores": {
+                        "items": [{"id": "score-1", "name": "Example Score"}],
+                    },
+                }],
+            },
+        },
+    )
+
+    assert result["scores"][0]["feedback_watermark"] == "2026-07-03T00:00:00Z"
 
 
 def test_feedback_alignment_batch_accepts_bounded_scorecard_list(monkeypatch) -> None:

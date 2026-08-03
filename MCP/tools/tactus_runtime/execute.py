@@ -2319,7 +2319,10 @@ def _aggregate_feedback_alignment_window(
     days: int,
     window_start: str | None = None,
     window_end: str | None = None,
-) -> dict[tuple[str, str], dict[tuple[str, str], int]]:
+) -> tuple[
+    dict[tuple[str, str], dict[tuple[str, str], int]],
+    dict[tuple[str, str], str],
+]:
     """Stream one complete feedback window into compact per-score pair counts.
 
     Portfolio analysis needs only final/predicted label pairs.  Keeping raw
@@ -2348,6 +2351,7 @@ def _aggregate_feedback_alignment_window(
                 initialAnswerValue
                 finalAnswerValue
                 isInvalid
+                updatedAt
             }
             nextToken
         }
@@ -2373,6 +2377,7 @@ def _aggregate_feedback_alignment_window(
         "nextToken": None,
     }
     aggregates: dict[tuple[str, str], Counter[tuple[str, str]]] = defaultdict(Counter)
+    feedback_watermarks: dict[tuple[str, str], tuple[datetime, str]] = {}
 
     while True:
         response = client.execute(query, variables)
@@ -2398,17 +2403,36 @@ def _aggregate_feedback_alignment_window(
                 "plexus.feedback.alignment_batch feedback-window data was missing"
             )
         for item in page.get("items") or []:
-            if not isinstance(item, dict) or item.get("isInvalid"):
+            if not isinstance(item, dict):
                 continue
             scorecard_id = str(item.get("scorecardId") or "").strip()
             score_id = str(item.get("scoreId") or "").strip()
+            target_key = (scorecard_id, score_id)
+            updated_at = item.get("updatedAt")
+            if scorecard_id and score_id and isinstance(updated_at, str) and updated_at:
+                try:
+                    parsed_updated_at = datetime.fromisoformat(
+                        updated_at.replace("Z", "+00:00")
+                    ).astimezone(timezone.utc)
+                except (TypeError, ValueError):
+                    parsed_updated_at = None
+                if parsed_updated_at is not None and (
+                    target_key not in feedback_watermarks
+                    or parsed_updated_at > feedback_watermarks[target_key][0]
+                ):
+                    feedback_watermarks[target_key] = (parsed_updated_at, updated_at)
+            if item.get("isInvalid"):
+                continue
             initial = item.get("initialAnswerValue")
             final = item.get("finalAnswerValue")
             if scorecard_id and score_id and initial is not None and final is not None:
-                aggregates[(scorecard_id, score_id)][(final, initial)] += 1
+                aggregates[target_key][(final, initial)] += 1
         next_token = page.get("nextToken")
         if not next_token:
-            return {key: dict(counts) for key, counts in aggregates.items()}
+            return (
+                {key: dict(counts) for key, counts in aggregates.items()},
+                {key: value for key, (_parsed, value) in feedback_watermarks.items()},
+            )
         variables["nextToken"] = next_token
 
 
@@ -2419,6 +2443,7 @@ def _default_feedback_alignment_batch(
     _prefetched_feedback_pair_counts: dict[
         tuple[str, str], dict[tuple[str, str], int]
     ] | None = None,
+    _prefetched_feedback_watermarks: dict[tuple[str, str], str] | None = None,
     _prefetched_account_id: str | None = None,
     _prefetched_scorecard_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -2574,7 +2599,10 @@ def _default_feedback_alignment_batch(
             args,
             "plexus.feedback.alignment_batch",
         )
-        portfolio_feedback_pair_counts = _aggregate_feedback_alignment_window(
+        (
+            portfolio_feedback_pair_counts,
+            portfolio_feedback_watermarks,
+        ) = _aggregate_feedback_alignment_window(
             portfolio_client,
             account_id=portfolio_account_id,
             days=int(float(args.get("days", 7))),
@@ -2601,6 +2629,7 @@ def _default_feedback_alignment_batch(
                 return _default_feedback_alignment_batch(
                     {**single_args, "scorecard": identifier},
                     _prefetched_feedback_pair_counts=portfolio_feedback_pair_counts,
+                    _prefetched_feedback_watermarks=portfolio_feedback_watermarks,
                     _prefetched_account_id=portfolio_account_id,
                     _prefetched_scorecard_data=prefetched_scorecards_by_id.get(identifier),
                 )
@@ -2873,6 +2902,13 @@ def _default_feedback_alignment_batch(
             for (item_scorecard_id, score_id), counts in _prefetched_feedback_pair_counts.items()
             if item_scorecard_id == scorecard_id
         }
+    prefetched_watermarks_by_score: dict[str, str] = {
+        score_id: watermark
+        for (item_scorecard_id, score_id), watermark in (
+            _prefetched_feedback_watermarks or {}
+        ).items()
+        if item_scorecard_id == scorecard_id
+    }
 
     async def analyze_scores() -> list[dict[str, Any] | None]:
         semaphore = asyncio.Semaphore(FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY)
@@ -2972,6 +3008,7 @@ def _default_feedback_alignment_batch(
                     "disagreements": disagreements,
                     "disagreement_rate": disagreement_rate,
                     "reviewed_error_opportunity": reviewed_error_opportunity,
+                    "feedback_watermark": prefetched_watermarks_by_score.get(score_id),
                     # These distributions are computed after invalid rows and
                     # incomplete initial/final label pairs are excluded by the
                     # shared analyzer.  Preserve them for investment policy.
@@ -10606,6 +10643,8 @@ class PlexusRuntimeModule:
             for key in ("valid_feedback_count", "total_items", "totalItems")
         ):
             failures.append("frozen feedback metrics are required")
+        if not evidence.get("feedback_watermark"):
+            failures.append("frozen feedback watermark is required")
         context = args.get("_portfolio_assessment_context")
         frozen_champion_version = str(
             evidence.get("champion_version")
