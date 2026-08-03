@@ -95,7 +95,6 @@ def _async_stack(
         environment="test",
         score_processor_repository_name="plexus/score-processor-artifacts-test",
         score_processor_image_uri=image_uri,
-        image_source_reference="/plexus/images/test",
         runtime_config_secret_name="example/test/runtime-config",
         alert_topic=operations.alert_topic,
         read_bucket_parameters={"Input": "/example/input-bucket"},
@@ -127,6 +126,7 @@ def test_async_scoring_stack_requires_deploy_time_immutable_image() -> None:
         "AWS::Lambda::Function",
         {"Code": {"ImageUri": {"Ref": "ScoreProcessorImageUri"}}},
     )
+    assert "ScoreProcessorImageUriParameterName" not in template.to_json()["Outputs"]
 
 
 def test_async_scoring_stack_accepts_only_digest_image_uris() -> None:
@@ -171,7 +171,6 @@ def test_reusable_platform_stacks_synthesize_with_consumer_configuration() -> No
         environment="test",
         score_processor_repository_name="plexus/score-processor-artifacts-test",
         score_processor_image_uri=None,
-        image_source_reference="/plexus/images/test",
         runtime_config_secret_name="example/test/runtime-config",
         alert_topic=operations.alert_topic,
         read_bucket_parameters={},
