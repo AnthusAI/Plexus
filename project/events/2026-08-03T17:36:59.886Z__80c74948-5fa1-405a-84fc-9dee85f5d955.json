@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "80c74948-5fa1-405a-84fc-9dee85f5d955",
+  "issue_id": "plx-39614d99-a561-4250-991b-0dd4e23c3887",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-03T17:36:59.886Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Provide a reusable, client-neutral AWS infrastructure surface for deploying the complete asynchronous scoring service substrate. Definition of done: network, scoring, integration hosting, scheduled worker hosting, operations, artifact repository, and observability stacks are configurable; consumers supply behavior and configuration; existing legacy deployments remain untouched; immutable score-processor artifacts are deployed exactly as validated.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Reusable asynchronous scoring service infrastructure"
+  }
+}
