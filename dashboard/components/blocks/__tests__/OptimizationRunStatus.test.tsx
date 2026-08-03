@@ -1043,7 +1043,7 @@ describe('OptimizationRunStatus', () => {
       ],
     }
 
-    render(
+    const { rerender } = render(
       <OptimizationRunStatusPresentation
         presentation={presentation}
         scorecardDetails={{
@@ -1059,6 +1059,23 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getByText('Fixture score one')).toBeInTheDocument()
     expect(screen.getByText('Fixture score two')).toBeInTheDocument()
     expect(mockReadTaskArtifact).not.toHaveBeenCalled()
+
+    rerender(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          ...presentation,
+          overview: { ...presentation.overview, current_activity: 'A compatible realtime update arrived.' },
+        }}
+        scorecardDetails={{
+          'fixture-one': { scorecard_name: 'Fixture group one', questions_and_issues: [], scores: [{ score_name: 'Fixture score one', artifacts: [] }] },
+          'fixture-two': { scorecard_name: 'Fixture group two', questions_and_issues: [], scores: [{ score_name: 'Fixture score two', artifacts: [] }] },
+        }}
+      />,
+    )
+
+    expect(screen.getByText('A compatible realtime update arrived.')).toBeInTheDocument()
+    expect(screen.getByText('Fixture score one')).toBeInTheDocument()
+    expect(screen.getByText('Fixture score two')).toBeInTheDocument()
   })
 
   it('shows automatic execution counts and score decisions without an approval-pending message', async () => {
@@ -1274,5 +1291,125 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getByText(/human optimization-approval checkpoint/i)).toBeInTheDocument()
     expect(screen.getByText(/champion promotion remains manual/i)).toBeInTheDocument()
     expect(screen.queryByText('Automatic execution')).not.toBeInTheDocument()
+  })
+
+  it('leads with the backend conclusion and groups four open workstreams by next action', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: { lifecycle_status: 'complete' },
+          decision_summary: {
+            state: 'repair_required',
+            headline: 'Repair score definitions before optimization',
+            explanation: 'The evidence found repair work but no target that is safe to optimize automatically.',
+            next_action: 'repair_score_definition',
+          },
+          action_counts: {
+            repair_score_definition: 8,
+            collect_targeted_feedback: 4,
+            monitor_recent_activity: 2,
+            resolve_stakeholder_question: 1,
+          },
+          action_workstreams: [
+            { id: 'repair', next_action: 'repair_score_definition', score_count: 8, rationale: 'Resolve guideline and code conflicts.' },
+            { id: 'feedback', next_action: 'collect_targeted_feedback', score_count: 4, rationale: 'Collect the missing terminal classes.' },
+            { id: 'monitor', queue_state: 'monitor', next_action: 'monitor_recent_activity', score_count: 2, rationale: 'Wait for the activity cooldown.' },
+            { id: 'question', next_action: 'resolve_stakeholder_question', score_count: 1, rationale: 'Clarify the policy boundary.' },
+          ],
+          score_count: 15,
+          scorecard_count: 3,
+          primary_decision_mix: {}, secondary_issue_counts: {}, attention_queue: [],
+          questions_and_issues: [], optimization_outcomes: [], opportunity_distribution: [], top_priorities: [], scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'Repair score definitions before optimization' })).toBeInTheDocument()
+    expect(screen.getByText(/no target that is safe to optimize automatically/i)).toBeInTheDocument()
+    expect(screen.getAllByTestId('optimization-action-card')).toHaveLength(4)
+    expect(screen.getAllByText('Repairs and evidence').length).toBeGreaterThan(0)
+    expect(screen.getByText('Resolve guideline and code conflicts.')).toBeInTheDocument()
+  })
+
+  it('defaults to open work and lets operators inspect monitor and history queues', async () => {
+    const user = userEvent.setup()
+    mockReadTaskArtifact.mockReset().mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({
+      overview: { lifecycle_status: 'complete' },
+      decision_summary: {
+        state: 'repair_required',
+        headline: 'Resolve the current definition repairs',
+        explanation: 'The report is ready for repair work, not optimizer launch.',
+        next_action: 'repair_score_definition',
+      },
+      action_counts: {
+        automatic_work: 0, human_decisions: 1, repairs_and_evidence: 3, monitor_later: 2, no_action: 9,
+      },
+      action_workstreams: [
+        {
+          id: 'open-repair', action_group: 'repairs_and_evidence', title: 'Definition repair', owner_role: 'score_author',
+          queue_state: 'open', score_count: 3, scorecard_count: 1, evidence_count: 27,
+          next_action: 'repair_score_definition', dominant_issue: 'guideline_or_code_repair',
+          rationale: 'Repair the conflicting definition.', consequence_of_inaction: 'The portfolio remains blocked.',
+          representative_rows: [{
+            scorecard_name: 'Representative portfolio', score_name: 'Representative score',
+            primary_disposition: 'guideline_or_code_repair', evidence_count: 27,
+            rationale: 'The score needs the definition repaired.', next_action: 'repair_score_definition',
+          }],
+        },
+        {
+          id: 'monitor-later', action_group: 'monitor_later', title: 'Cooldown monitor', owner_role: 'operator',
+          queue_state: 'monitor', score_count: 2, scorecard_count: 1, evidence_count: 18,
+          next_action: 'wait_for_cooldown', dominant_issue: 'recent_score_activity',
+          rationale: 'Wait for recent score activity to age out.', consequence_of_inaction: 'The cooldown remains active.', representative_rows: [],
+        },
+        {
+          id: 'old-history', action_group: 'no_action', title: 'Completed history', owner_role: 'operator',
+          queue_state: 'history', score_count: 9, scorecard_count: 2, evidence_count: 0,
+          next_action: 'none', dominant_issue: 'none', rationale: 'Already resolved.', consequence_of_inaction: 'None.', representative_rows: [],
+        },
+      ],
+      score_count: 12, scorecard_count: 2,
+      primary_disposition_counts: { guideline_or_code_repair: 3 }, primary_decision_mix: {}, secondary_issue_counts: {},
+      attention_queue: [{
+        scorecard_name: 'Representative portfolio', score_name: 'Legacy attention row',
+        primary_disposition: 'guideline_or_code_repair', evidence_count: 27,
+        rationale: 'This must not duplicate the backend workstream queue.', next_action: 'repair_score_definition',
+      }],
+      questions_and_issues: [], optimization_outcomes: [{
+        scorecard_name: 'Representative portfolio', score_name: 'Not-run score',
+        primary_disposition: 'not_selected', outcome: 'not_run', rationale: 'No execution evidence exists.',
+      }], opportunity_distribution: [], top_priorities: [],
+      scorecards: [{
+        scorecard_ref: 'detail-revision', scorecard_name: 'Detail revision fixture', score_count: 1,
+        detail_status: 'ready', detail_source_revision: 4, reviewed_error_opportunity: 0, artifacts: [],
+      }],
+    }))))
+
+    render(<OptimizationRunStatus id="block-1" type="OptimizationRunStatus" name="Run Status" position={0} config={{}}
+      output={{ output_compacted: true, preview: { summary: { presentation: presentationDescriptor } } }} />)
+
+    expect(await screen.findByRole('heading', { name: 'Resolve the current definition repairs' })).toBeInTheDocument()
+    expect(screen.getAllByTestId('optimization-action-card')).toHaveLength(4)
+    expect(screen.getByText('Definition repair')).toBeInTheDocument()
+    expect(screen.queryByText('Completed history')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cooldown monitor')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Human attention queue' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Optimization progress and outcomes' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('lifecycle-review-pending').closest('details')).toBeInTheDocument()
+    expect(screen.getByText('Definition repair').closest('details')).not.toHaveAttribute('open')
+
+    await user.click(screen.getByText('Definition repair'))
+    expect(screen.getByText('Definition repair').closest('details')).toHaveAttribute('open')
+    expect(screen.getByText((_, element) => element?.textContent === 'Owner: Score author')).toBeInTheDocument()
+    expect(screen.getByText('The portfolio remains blocked.')).toBeInTheDocument()
+    expect(screen.getByText('Representative score')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Monitor (1)' }))
+    expect(screen.getByText('Cooldown monitor')).toBeInTheDocument()
+    expect(screen.queryByText('Definition repair')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'History (1)' }))
+    expect(screen.getByText('Completed history')).toBeInTheDocument()
+    expect(screen.queryByText('Cooldown monitor')).not.toBeInTheDocument()
   })
 })

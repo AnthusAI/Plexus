@@ -23,20 +23,20 @@ const genericPortfolio = 'Example portfolio'
 
 const presentation = {
   overview: {
-    lifecycle_status: 'incomplete',
+    lifecycle_status: 'complete_with_unresolved_actions',
     inventory_coverage_status: 'complete',
-    analysis_coverage_status: 'incomplete',
+    analysis_coverage_status: 'complete',
     scorecards_inspected: 3,
     scorecards_in_scope: 2,
     evidence_ranked_score_count: 12,
     ranked_score_count: 8,
     cooldown_excluded_count: 1,
     assessment_progress: '12 of 12 scores assessed',
-    diagnosis_coverage: '6 of 7 scheduled diagnoses completed',
+    diagnosis_coverage: '7 of 7 scheduled diagnoses completed',
     diagnosis_selected_count: 7,
     diagnosis_scheduled_count: 7,
-    diagnosis_incomplete_count: 1,
-    diagnosis_deferred_count: 1,
+    diagnosis_incomplete_count: 0,
+    diagnosis_deferred_count: 0,
     diagnosis_max_count: 12,
     priority_display_limit: 6,
     priority_displayed_count: 6,
@@ -44,10 +44,120 @@ const presentation = {
     priority_cutoff_opportunity: 9,
     ranked_below_priority_cutoff: 2,
     pending_approval_count: 2,
-    current_activity: 'The run ended with incomplete analysis and still has stakeholder decisions to resolve.',
-    notes: 'One selected review did not complete; the remaining inventory is reconciled.',
-    next_checkpoint: 'Retry the incomplete diagnosis with complete evidence before relying on the run.',
+    execution_selected_count: 6,
+    execution_launched_count: 6,
+    execution_evaluated_count: 6,
+    optimizer_review_count: 6,
+    current_activity: 'The run validated one improvement and still has stakeholder decisions to resolve.',
+    notes: 'The portfolio and execution evidence are complete; champion promotion remains manual.',
+    next_checkpoint: 'Review the promotion evidence and resolve the remaining stakeholder actions.',
   },
+  decision_summary: {
+    state: 'validated_improvement',
+    headline: '1 validated improvement requires review',
+    explanation: 'Evaluation evidence supports improvement, but champion promotion remains a separate human decision.',
+    next_action: 'review_promotion_evidence',
+  },
+  action_counts: {
+    automatic_work: 0,
+    human_decisions: 2,
+    repairs_and_evidence: 5,
+    monitor_later: 1,
+    no_action: 4,
+  },
+  action_workstreams: [
+    {
+      id: 'stakeholder-decision',
+      action_group: 'stakeholder_decision',
+      title: 'Resolve policy decisions',
+      owner_role: 'stakeholder',
+      queue_state: 'open',
+      score_count: 2,
+      scorecard_count: 2,
+      evidence_count: 27,
+      next_action: 'resolve_stakeholder_questions',
+      dominant_issue: 'policy_contradiction',
+      rationale: 'Two scores need a policy answer before their next operational step.',
+      consequence_of_inaction: 'The affected scores remain blocked at their current decision checkpoint.',
+      representative_rows: [
+        {
+          scorecard_name: 'Example group A',
+          score_name: 'Policy question',
+          evidence_count: 14,
+          rationale: 'Observed feedback and the written policy imply different outcomes.',
+          next_action: 'resolve_stakeholder_questions',
+        },
+      ],
+    },
+    {
+      id: 'repair-definition',
+      action_group: 'technical_repair',
+      title: 'Repair score definitions',
+      owner_role: 'score_maintainer',
+      queue_state: 'open',
+      score_count: 3,
+      scorecard_count: 1,
+      evidence_count: 41,
+      next_action: 'repair_score_definition',
+      dominant_issue: 'guideline_or_code_repair',
+      rationale: 'Guideline and code alignment blocks safe optimization.',
+      consequence_of_inaction: 'The affected scores cannot become optimization candidates.',
+      representative_rows: [
+        {
+          scorecard_name: 'Example group B',
+          score_name: 'Definition repair candidate',
+          evidence_count: 17,
+          rationale: 'The guideline and executable score logic disagree.',
+          next_action: 'repair_score_definition',
+        },
+      ],
+    },
+    {
+      id: 'feedback-evidence',
+      action_group: 'feedback_investment',
+      title: 'Collect targeted feedback',
+      owner_role: 'feedback_owner',
+      queue_state: 'open',
+      score_count: 2,
+      scorecard_count: 1,
+      evidence_count: 19,
+      next_action: 'collect_targeted_feedback',
+      dominant_issue: 'insufficient_evidence',
+      rationale: 'The current evidence is too thin to support a safe optimization decision.',
+      consequence_of_inaction: 'The affected scores remain inconclusive.',
+      representative_rows: [],
+    },
+    {
+      id: 'monitor-cooldown',
+      action_group: 'monitor',
+      title: 'Monitor recent score activity',
+      owner_role: 'operator',
+      queue_state: 'monitor',
+      score_count: 1,
+      scorecard_count: 1,
+      evidence_count: 14,
+      next_action: 'wait_for_cooldown',
+      dominant_issue: 'recent_score_activity',
+      rationale: 'Recent score activity starts a fixed cooldown to prevent churn.',
+      consequence_of_inaction: 'A repeated optimization attempt would waste review and compute.',
+      representative_rows: [],
+    },
+    {
+      id: 'no-action',
+      action_group: 'no_action',
+      title: 'No follow-up supported',
+      owner_role: 'operator',
+      queue_state: 'history',
+      score_count: 4,
+      scorecard_count: 2,
+      evidence_count: 33,
+      next_action: 'retain_current_state',
+      dominant_issue: 'none',
+      rationale: 'Current evidence does not support additional work.',
+      consequence_of_inaction: 'No immediate consequence is expected.',
+      representative_rows: [],
+    },
+  ],
   score_count: 12,
   scorecard_count: 2,
   primary_disposition_counts: {
@@ -224,30 +334,33 @@ export const StakeholderAcceptance: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    await expect(canvas.getByText('Incomplete · Inventory complete · Analysis incomplete')).toBeInTheDocument()
-    await expect(canvas.getByRole('heading', { name: 'Why this run is incomplete' })).toBeInTheDocument()
-    await expect(canvas.getByText(/1 diagnosis result was incomplete/)).toBeInTheDocument()
-    await expect(canvas.getByText((_, element) => (
-      element?.tagName.toLowerCase() === 'p'
-      && element.textContent === 'Next: Retry the incomplete diagnosis with complete evidence before relying on the run.'
-    ))).toBeInTheDocument()
+    await expect(canvas.getByText('Complete with unresolved actions · Inventory complete · Analysis complete')).toBeInTheDocument()
+    await expect(canvas.getByRole('heading', { name: '1 validated improvement requires review' })).toBeInTheDocument()
+    await expect(canvas.getByText('Resolve policy decisions')).toBeInTheDocument()
+    await expect(canvas.getByText('Repair score definitions')).toBeInTheDocument()
+    await expect(canvas.getByText('Collect targeted feedback')).toBeInTheDocument()
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Monitor (1)' }))
+    await expect(canvas.getByText('Monitor recent score activity')).toBeInTheDocument()
+    await userEvent.click(canvas.getByRole('button', { name: 'History (1)' }))
+    await expect(canvas.getByText('No follow-up supported')).toBeInTheDocument()
+    await userEvent.click(canvas.getByRole('button', { name: 'Open (3)' }))
+    await expect(canvas.getByText('Repair score definitions')).toBeInTheDocument()
+
+    await userEvent.click(canvas.getByText('Evidence, priorities, and scorecards'))
     await expect(canvas.getByTestId('lifecycle-total')).toHaveTextContent('12 of 12 scores')
     await expect(canvas.getByText('Promotion ready: 1')).toBeInTheDocument()
     await expect(canvas.getByText('Failed or incomplete: 1')).toBeInTheDocument()
     await expect(canvas.getByText('Policy: Cooldown · Recent score activity')).toBeInTheDocument()
     await expect(canvas.getByText('Eligible after: 2026-08-15T00:00:00Z')).toBeInTheDocument()
 
-    await userEvent.click(canvas.getByRole('button', { name: 'Show all attention queue entries (6)' }))
     await userEvent.click(canvas.getByRole('button', { name: 'Show all issues (6)' }))
     await userEvent.click(canvas.getByRole('button', { name: 'Show all outcomes (6)' }))
-    await expect(canvas.getByText('Attention item 6')).toBeInTheDocument()
     await expect(canvas.getByText('Stakeholder clarification is needed for question 6.')).toBeInTheDocument()
     await expect(canvas.getByText('Evidence review continues for outcome 6.')).toBeInTheDocument()
 
-    await userEvent.click(canvas.getByRole('button', { name: 'Collapse attention queue entries' }))
     await userEvent.click(canvas.getByRole('button', { name: 'Collapse issues' }))
     await userEvent.click(canvas.getByRole('button', { name: 'Collapse outcomes' }))
-    await expect(canvas.queryByText('Attention item 6')).not.toBeInTheDocument()
     await expect(canvas.queryByText('Stakeholder clarification is needed for question 6.')).not.toBeInTheDocument()
     await expect(canvas.queryByText('Evidence review continues for outcome 6.')).not.toBeInTheDocument()
 

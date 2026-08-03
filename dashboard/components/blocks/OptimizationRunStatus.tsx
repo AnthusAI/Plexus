@@ -104,10 +104,35 @@ type ScorecardCard = {
   scorecard_ref: string
   scorecard_name: string
   score_count: number
+  detail_status?: string
+  detail_source_revision?: number | null
   primary_disposition_counts?: Record<string, number>
   primary_decision_mix: Record<string, number>
   reviewed_error_opportunity: number
   artifacts: ArtifactDescriptor[]
+}
+
+type DecisionSummary = {
+  state?: string
+  headline?: string
+  explanation?: string
+  next_action?: string
+}
+
+type ActionWorkstream = {
+  id?: string
+  action_group?: string
+  owner_role?: string
+  queue_state?: 'open' | 'monitor' | 'history'
+  score_count?: number
+  scorecard_count?: number
+  evidence_count?: number
+  next_action: string
+  title?: string
+  dominant_issue?: string
+  rationale?: string
+  consequence_of_inaction?: string
+  representative_rows?: AttentionRow[]
 }
 
 type PrimaryDisposition =
@@ -158,6 +183,9 @@ type OptimizationOutcome = {
 
 export type StakeholderPresentation = {
   overview: PresentationOverview
+  decision_summary?: DecisionSummary
+  action_counts?: Record<string, number>
+  action_workstreams?: ActionWorkstream[]
   score_count: number
   scorecard_count: number
   primary_disposition_counts?: Record<string, number>
@@ -847,6 +875,42 @@ function FeedbackCompositionSignal({
   )
 }
 
+function parseDecisionSummary(value: unknown): DecisionSummary | undefined {
+  if (value === undefined) return undefined
+  const summary = record(value)
+  if (!summary) throw new Error('Stakeholder presentation contains a malformed decision summary.')
+  validateOptionalStrings(summary, ['state', 'headline', 'explanation', 'next_action'], 'Stakeholder presentation contains a malformed decision summary')
+  return summary as DecisionSummary
+}
+
+function parseActionWorkstreams(value: unknown): ActionWorkstream[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) throw new Error('Stakeholder presentation contains a malformed action workstream list.')
+  return value.map(raw => {
+    const workstream = record(raw)
+    if (!workstream || typeof workstream.next_action !== 'string' || workstream.next_action.trim() === '') {
+      throw new Error('Stakeholder presentation contains a malformed action workstream.')
+    }
+    if (workstream.queue_state != null && !['open', 'monitor', 'history'].includes(workstream.queue_state)) {
+      throw new Error('Stakeholder presentation contains an invalid action workstream queue state.')
+    }
+    validateOptionalStrings(workstream, [
+      'id', 'action_group', 'title', 'owner_role', 'queue_state', 'next_action',
+      'dominant_issue', 'rationale', 'consequence_of_inaction',
+    ], 'Stakeholder presentation contains a malformed action workstream')
+    validateOptionalNumbers(workstream, ['score_count', 'scorecard_count', 'evidence_count'], 'Stakeholder presentation contains a malformed action workstream')
+    if (workstream.representative_rows != null && !Array.isArray(workstream.representative_rows)) {
+      throw new Error('Stakeholder presentation contains malformed action-workstream representative rows.')
+    }
+    return {
+      ...workstream,
+      representative_rows: Array.isArray(workstream.representative_rows)
+        ? workstream.representative_rows.map(parseAttentionRow)
+        : undefined,
+    } as ActionWorkstream
+  })
+}
+
 function parsePresentation(value: unknown): StakeholderPresentation {
   const parsed = typeof value === 'string' ? JSON.parse(value) : value
   const data = record(parsed)
@@ -857,6 +921,9 @@ function parsePresentation(value: unknown): StakeholderPresentation {
   )
   const primaryDecisionMix = countMap(data?.primary_decision_mix, 'primary_decision_mix')
   const secondaryIssueCounts = countMap(data?.secondary_issue_counts, 'secondary_issue_counts')
+  const decisionSummary = parseDecisionSummary(data?.decision_summary)
+  const actionCounts = countMap(data?.action_counts, 'action_counts')
+  const actionWorkstreams = parseActionWorkstreams(data?.action_workstreams)
   if (
     !data ||
     !record(data.overview) ||
@@ -888,10 +955,18 @@ function parsePresentation(value: unknown): StakeholderPresentation {
     if (finiteNonNegativeNumber(item.score_count) === null || finiteNonNegativeNumber(item.reviewed_error_opportunity) === null) {
       throw new Error('Stakeholder presentation contains an invalid scorecard count.')
     }
+    if (item.detail_status != null && typeof item.detail_status !== 'string') {
+      throw new Error('Stakeholder presentation contains an invalid scorecard detail status.')
+    }
+    if (item.detail_source_revision != null && finiteNonNegativeNumber(item.detail_source_revision) === null) {
+      throw new Error('Stakeholder presentation contains an invalid scorecard detail source revision.')
+    }
     return {
       scorecard_ref: String(item.scorecard_ref || item.scorecard_name),
       scorecard_name: item.scorecard_name,
       score_count: item.score_count,
+      detail_status: item.detail_status,
+      detail_source_revision: item.detail_source_revision,
       primary_disposition_counts: scorecardDispositionCounts || undefined,
       primary_decision_mix: scorecardDecisionMix || {},
       reviewed_error_opportunity: item.reviewed_error_opportunity,
@@ -938,6 +1013,9 @@ function parsePresentation(value: unknown): StakeholderPresentation {
 
   return {
     overview: data.overview as PresentationOverview,
+    decision_summary: decisionSummary,
+    action_counts: actionCounts || undefined,
+    action_workstreams: actionWorkstreams,
     score_count: data.score_count,
     scorecard_count: data.scorecard_count,
     primary_disposition_counts: primaryDispositionCounts || undefined,
@@ -1086,10 +1164,24 @@ function AttentionQueue({ rows }: { rows: AttentionRow[] }) {
 function DecisionBrief({
   overview,
   dispositionCounts,
+  decisionSummary,
 }: {
   overview: PresentationOverview
   dispositionCounts: Record<string, number>
+  decisionSummary?: DecisionSummary
 }) {
+  if (decisionSummary?.headline) {
+    return (
+      <div className="mt-5 rounded-lg bg-primary/10 p-5">
+        <div className="text-xs font-medium uppercase tracking-wide text-primary">
+          {decisionSummary.state ? label(decisionSummary.state) : 'Current conclusion'}
+        </div>
+        <h3 className="mt-1 text-xl font-semibold">{decisionSummary.headline}</h3>
+        {decisionSummary.explanation && <p className="mt-2 max-w-4xl text-sm">{decisionSummary.explanation}</p>}
+        {decisionSummary.next_action && <p className="mt-3 text-sm font-medium">Next: {label(decisionSummary.next_action)}</p>}
+      </div>
+    )
+  }
   const automatic = overview.execution_mode === 'automatic'
   const launched = finiteNonNegative(overview.execution_launched_count)
   const selected = finiteNonNegative(overview.execution_selected_count)
@@ -1124,13 +1216,40 @@ function DecisionBrief({
 function ActionOverview({
   overview,
   dispositionCounts,
+  actionCounts,
+  actionWorkstreams,
 }: {
   overview: PresentationOverview
   dispositionCounts: Record<string, number>
+  actionCounts?: Record<string, number>
+  actionWorkstreams?: ActionWorkstream[]
 }) {
+  const [queueFilter, setQueueFilter] = useState<'open' | 'monitor' | 'history'>('open')
+  const backendActionCards = actionCounts
+    ? [
+        ['automatic_work', 'Automatic work'],
+        ['human_decisions', 'Human decisions'],
+        ['repairs_and_evidence', 'Repairs and evidence'],
+        ['monitor_later', 'Monitor later'],
+      ].map(([key, title]) => ({
+        key,
+        title,
+        count: finiteNonNegative(actionCounts[key]),
+        detail: key === 'automatic_work'
+          ? 'Safe work that the published policy may run without a human decision.'
+          : key === 'human_decisions'
+            ? 'Questions or approvals that require a human response.'
+            : key === 'repairs_and_evidence'
+              ? 'Definition repairs or evidence work needed before another decision.'
+              : 'Recent or stable work that should be revisited later rather than churned now.',
+        next: title,
+        tone: 'bg-primary/5',
+      }))
+    : undefined
   const deferred = finiteNonNegative(overview.diagnosis_deferred_count)
-  const workstreams = [
+  const fallbackWorkstreams = [
     {
+      key: 'finish-analysis',
       title: 'Finish analysis',
       count: deferred,
       detail: 'Selected candidates still need semantic diagnosis before any optimizer may launch.',
@@ -1138,6 +1257,7 @@ function ActionOverview({
       tone: 'bg-amber-500/10',
     },
     {
+      key: 'repair-score-definitions',
       title: 'Repair score definitions',
       count: finiteNonNegative(dispositionCounts.guideline_or_code_repair),
       detail: 'Guideline, champion, structure, or code alignment blocks safe optimization.',
@@ -1145,6 +1265,7 @@ function ActionOverview({
       tone: 'bg-rose-500/10',
     },
     {
+      key: 'improve-feedback-evidence',
       title: 'Improve feedback evidence',
       count: finiteNonNegative(dispositionCounts.targeted_feedback_collection)
         + finiteNonNegative(dispositionCounts.insufficient_evidence)
@@ -1154,6 +1275,7 @@ function ActionOverview({
       tone: 'bg-sky-500/10',
     },
     {
+      key: 'monitor-recent-work',
       title: 'Monitor recent work',
       count: finiteNonNegative(dispositionCounts.cooldown),
       detail: 'Recent score activity prevents churn but remains visible for monitoring.',
@@ -1161,6 +1283,7 @@ function ActionOverview({
       tone: 'bg-violet-500/10',
     },
     {
+      key: 'stakeholder-decisions',
       title: 'Stakeholder decisions',
       count: finiteNonNegative(dispositionCounts.stakeholder_decision_required)
         + finiteNonNegative(dispositionCounts.stakeholder_clarification_required),
@@ -1169,17 +1292,27 @@ function ActionOverview({
       tone: 'bg-orange-500/10',
     },
   ].filter(item => item.count > 0)
+  const actionCards = backendActionCards || fallbackWorkstreams
+  const visibleWorkstreams = (actionWorkstreams || [])
+    .filter(workstream => (workstream.queue_state || 'open') === queueFilter)
+    .sort((left, right) => finiteNonNegative(right.score_count) - finiteNonNegative(left.score_count)
+      || (left.title || left.next_action).localeCompare(right.title || right.next_action))
+  const queueCounts = (actionWorkstreams || []).reduce((counts, workstream) => {
+    const queueState = workstream.queue_state || 'open'
+    counts[queueState] += 1
+    return counts
+  }, { open: 0, monitor: 0, history: 0 })
 
-  if (workstreams.length === 0) return null
+  if (actionCards.length === 0 && (actionWorkstreams || []).length === 0) return null
   return (
     <section className="rounded-lg bg-card p-6">
-      <h3 className="text-lg font-semibold">What needs attention next</h3>
+      <h3 className="text-lg font-semibold">Actions at a glance</h3>
       <p className="text-sm text-muted-foreground">
-        Counts are workstreams, not a thousand equally urgent tickets. Open the score-level evidence only when you need to assign or investigate a specific item.
+        Card counts are scores assigned to one mutually exclusive workstream. Open a grouped workstream only when you need to assign or investigate its supporting scores.
       </p>
-      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {workstreams.map(item => (
-          <article key={item.title} className={cn('rounded-md p-4', item.tone)}>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {actionCards.map(item => (
+          <article key={item.key} data-testid="optimization-action-card" className={cn('rounded-md p-4', item.tone)}>
             <div className="flex items-center justify-between gap-3">
               <h4 className="font-medium">{item.title}</h4>
               <span className="text-2xl font-semibold tabular-nums">{item.count}</span>
@@ -1189,6 +1322,80 @@ function ActionOverview({
           </article>
         ))}
       </div>
+      {(actionWorkstreams || []).length > 0 && (
+        <div className="mt-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h4 className="font-medium">Workstreams by next action</h4>
+            <div className="flex flex-wrap gap-2" aria-label="Workstream status filter">
+              {([
+                ['open', 'Open'],
+                ['monitor', 'Monitor'],
+                ['history', 'History'],
+              ] as const).map(([state, title]) => (
+                <button
+                  key={state}
+                  type="button"
+                  aria-pressed={queueFilter === state}
+                  className={cn(
+                    'rounded-full px-3 py-1 text-xs font-medium',
+                    queueFilter === state
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:text-foreground',
+                  )}
+                  onClick={() => setQueueFilter(state)}
+                >
+                  {title} ({queueCounts[state]})
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mt-3 space-y-2">
+            {visibleWorkstreams.map(workstream => (
+              <details key={workstream.id || `${workstream.next_action}-${workstream.title || ''}`} className="rounded-md bg-muted/30 p-4 text-sm">
+                <summary className="cursor-pointer">
+                  <span className="flex flex-wrap items-start justify-between gap-3">
+                    <span>
+                      <span className="font-medium">{workstream.title || label(workstream.next_action)}</span>
+                      <span className="mt-1 block text-xs text-muted-foreground">Next: {label(workstream.next_action)}</span>
+                    </span>
+                    <span className="text-right text-xs text-muted-foreground">
+                      <span className="block">{finiteNonNegative(workstream.score_count)} scores</span>
+                      <span className="block">{finiteNonNegative(workstream.evidence_count)} feedback items</span>
+                    </span>
+                  </span>
+                </summary>
+                <div className="mt-3 space-y-3">
+                  {workstream.owner_role && <p><span className="text-muted-foreground">Owner:</span> {label(workstream.owner_role)}</p>}
+                  {workstream.rationale && <p>{workstream.rationale}</p>}
+                  {workstream.dominant_issue && <p className="text-muted-foreground">{label(workstream.dominant_issue)}</p>}
+                  {workstream.consequence_of_inaction && (
+                    <p><span className="text-muted-foreground">If deferred:</span> {workstream.consequence_of_inaction}</p>
+                  )}
+                  {workstream.representative_rows && workstream.representative_rows.length > 0 && (
+                    <div className="rounded-md bg-card p-3">
+                      <div className="font-medium">Representative scores</div>
+                      <ul className="mt-2 space-y-2">
+                        {workstream.representative_rows.map((row, index) => (
+                          <li key={`${row.scorecard_name}-${row.score_name}-${index}`}>
+                            <span className="font-medium">{row.score_name || 'Unlabeled score'}</span>
+                            <span className="text-muted-foreground"> · {row.scorecard_name || 'Unlabeled scorecard'}</span>
+                            {row.rationale && <p className="mt-1 text-muted-foreground">{row.rationale}</p>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </details>
+            ))}
+            {visibleWorkstreams.length === 0 && (
+              <p className="rounded-md bg-muted/30 p-4 text-sm text-muted-foreground">
+                No {queueFilter} workstreams in this revision.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </section>
   )
 }
@@ -1365,8 +1572,18 @@ function ScorecardSection({
   const [details, setDetails] = useState<ScorecardPresentation | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const detailArtifact = scorecard.artifacts.find(artifact => artifact.kind === 'scorecard_presentation')
   const summaryArtifact = scorecard.artifacts.find(artifact => artifact.kind === 'scorecard_summary')
   const csvArtifact = scorecard.artifacts.find(artifact => artifact.kind === 'scorecard_portfolio_csv')
+  const detailRevision = scorecard.detail_source_revision ?? detailArtifact?.source_revision ?? null
+
+  // Keep an expanded scorecard open during compatible presentation updates.
+  // A changed detail revision intentionally drops only its cached evidence;
+  // the user can reopen the same card to read the new immutable revision.
+  useEffect(() => {
+    setDetails(null)
+    setError(null)
+  }, [detailRevision])
 
   const toggle = async () => {
     const opening = !expanded
@@ -1406,6 +1623,9 @@ function ScorecardSection({
             {summaryArtifact && <ArtifactLink descriptor={summaryArtifact} reportId={reportId}>Summary artifact</ArtifactLink>}
             {csvArtifact && <ArtifactLink descriptor={csvArtifact} reportId={reportId}>Quantitative CSV</ArtifactLink>}
           </div>
+          {scorecard.detail_status && (
+            <p className="text-xs text-muted-foreground">Detail status: {label(scorecard.detail_status)}</p>
+          )}
           {loading && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading score details…
@@ -1536,7 +1756,6 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
       return
     }
     setError(null)
-    setPresentation(null)
     void loadJsonArtifact(stableDescriptor)
       .then(value => {
         if (!cancelled) setPresentation(parsePresentation(value))
@@ -1635,6 +1854,8 @@ export function OptimizationRunStatusPresentation({
     ['Evaluated', evaluatedCount],
     ['Improved', improvedCount],
   ] as const
+  const hasExecutionEvidence = launchedCount > 0 || evaluatedCount > 0 || improvedCount > 0
+  const hasBackendWorkstreams = presentation.action_workstreams !== undefined
   const runHasIncompleteCoverage = inventoryCoverageStatus === 'incomplete' || analysisCoverageStatus === 'incomplete'
   const reconciledLiveProgress = reconcileLiveProgress(liveProgress, overview, durableMilestone)
   const maximumPriorityFeedback = Math.max(
@@ -1662,7 +1883,11 @@ export function OptimizationRunStatusPresentation({
           </div>
         </div>
 
-        <DecisionBrief overview={overview} dispositionCounts={dispositionCounts} />
+        <DecisionBrief
+          overview={overview}
+          dispositionCounts={dispositionCounts}
+          decisionSummary={presentation.decision_summary}
+        />
 
         <div className="mt-5">
           <div className="text-sm font-medium">From opportunity survey to validated improvement</div>
@@ -1779,7 +2004,12 @@ export function OptimizationRunStatusPresentation({
         </div>
       </section>
 
-      <ActionOverview overview={overview} dispositionCounts={dispositionCounts} />
+      <ActionOverview
+        overview={overview}
+        dispositionCounts={dispositionCounts}
+        actionCounts={presentation.action_counts}
+        actionWorkstreams={presentation.action_workstreams}
+      />
 
       {runHasIncompleteCoverage && (
         <section className="rounded-lg bg-amber-500/10 p-5">
@@ -1806,11 +2036,19 @@ export function OptimizationRunStatusPresentation({
         </section>
       )}
 
-      <AttentionQueue rows={presentation.attention_queue} />
+      {hasExecutionEvidence && <OptimizationOutcomes outcomes={presentation.optimization_outcomes} />}
 
+      {!hasBackendWorkstreams && <AttentionQueue rows={presentation.attention_queue} />}
+
+      <details className="rounded-lg bg-card p-6">
+        <summary className="cursor-pointer text-lg font-semibold">Evidence, priorities, and scorecards</summary>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Expand to inspect ranking methodology, contradictions, individual outcomes, and scorecard-level evidence.
+        </p>
+        <div className="mt-6 space-y-6">
       {usesCanonicalDispositions && <OptimizationLifecycle counts={dispositionCounts} />}
 
-      <section className="rounded-lg bg-card p-6">
+      <section className="rounded-lg bg-muted/30 p-6">
         <h3 className="text-lg font-semibold">How priorities were selected</h3>
         <p className="text-sm text-muted-foreground">The ranking and the deeper semantic review use related but different boundaries.</p>
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
@@ -1877,8 +2115,6 @@ export function OptimizationRunStatusPresentation({
 
       <IssuesSummary issues={presentation.questions_and_issues} />
 
-      <OptimizationOutcomes outcomes={presentation.optimization_outcomes} />
-
       <section className="rounded-lg bg-card p-6">
         <h3 className="text-lg font-semibold">Top priorities</h3>
         <p className="text-sm text-muted-foreground">Shown in original evidence order. Every feedback bar uses the largest visible feedback total as the same maximum: bar length shows reviewed volume, green shows agreements, and red shows disagreements. Cooldown and other policy gates remain visible and do not renumber the list.</p>
@@ -1939,6 +2175,8 @@ export function OptimizationRunStatusPresentation({
           ))}
         </div>
       </section>
+        </div>
+      </details>
     </div>
   )
 }
