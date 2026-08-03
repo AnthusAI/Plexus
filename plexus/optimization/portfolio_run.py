@@ -3658,6 +3658,11 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             "coverage_status": inventory_coverage_status,
             "inventory_coverage_status": inventory_coverage_status,
             "analysis_coverage_status": analysis_coverage_status,
+            "execution_decision_status": (
+                "complete"
+                if milestone in {"approval", "optimization", "review", "finalization"}
+                else "pending"
+            ),
             "ranking_window": str(rank.get("window") or "pending"),
             "scorecards_inspected": scope_coverage.get("total_scorecards_inspected", coverage.get("scorecards_discovered", 0)),
             "scorecards_in_scope": scope_coverage.get("matched_scorecard_count", 0),

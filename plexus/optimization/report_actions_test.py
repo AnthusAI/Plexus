@@ -100,6 +100,43 @@ def test_decision_summary_reports_terminal_zero_target_and_validated_improvement
     assert improved["headline"] == "1 validated improvement requires review"
 
 
+def test_decision_summary_reports_zero_target_after_execution_policy_finishes():
+    summary = build_decision_summary(
+        {
+            "lifecycle_status": "running",
+            "analysis_coverage_status": "complete",
+            "execution_decision_status": "complete",
+            "execution_selected_count": 0,
+            "execution_launched_count": 0,
+        },
+        {"guideline_or_code_repair": 4},
+    )
+
+    assert summary["state"] == "no_safe_target"
+    assert summary["headline"] == "No score was safe to optimize automatically"
+
+
+def test_not_selected_score_cannot_become_automatic_work_from_a_stale_next_action():
+    projection = build_action_projection([
+        {
+            "scorecard_name": "Example portfolio",
+            "score_name": "Example score",
+            "primary_disposition": "not_selected",
+            "next_action": "run_approved_optimization",
+            "valid_feedback_count": 12,
+        },
+    ])
+
+    assert projection["action_counts"] == {
+        "automatic_work": 0,
+        "human_decisions": 0,
+        "repairs_and_evidence": 0,
+        "monitor_later": 0,
+        "no_action": 1,
+    }
+    assert projection["action_workstreams"][0]["action_group"] == "no_action"
+
+
 def test_decision_summary_treats_completed_with_unresolved_actions_as_terminal():
     summary = build_decision_summary(
         {

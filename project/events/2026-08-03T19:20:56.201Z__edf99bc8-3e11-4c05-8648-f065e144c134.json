@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "edf99bc8-3e11-4c05-8648-f065e144c134",
+  "issue_id": "plx-003e6976-eea6-48d2-b9df-6acbbf9afd1c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-03T19:20:56.201Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Publish zero-target execution decisions after successful diagnosis",
+    "description": "As an optimization operator, I need a bounded portfolio run with no safe optimizer target to publish its execution decision and finalize cleanly, so that a valid no-target outcome is not reported as a platform failure.\n\nFeature: Zero-target execution decision publication\n\nScenario: Diagnosis finds no safe optimization target\n  Given exhaustive ranking and assessment are complete\n  And every bounded semantic diagnosis resolves to a repair or non-executable disposition\n  When automatic execution policy selects zero targets\n  Then the approval or execution-decision core milestone publishes successfully\n  And the same Report states that no safe target was selected\n  And no optimizer child Procedure or Task is created\n  And final detail reconciliation may proceed normally\n\nScenario: Core decision publication fails\n  Given diagnosis evidence is already durably published\n  When the next authoritative decision milestone cannot publish\n  Then the run fails closed with the underlying failure class visible in sanitized diagnostics\n  And no optimizer child is launched",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

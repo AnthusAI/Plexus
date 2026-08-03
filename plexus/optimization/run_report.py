@@ -186,6 +186,7 @@ _ROW_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
 _OVERVIEW_KEYS = {
     "headline", "lifecycle_status", "current_activity", "next_checkpoint",
     "coverage_status", "inventory_coverage_status", "analysis_coverage_status",
+    "execution_decision_status",
     "ranking_window", "scorecards_inspected",
     "scorecards_in_scope", "evidence_ranked_score_count",
     "ranked_score_count", "unranked_score_count", "cooldown_excluded_count",
@@ -2217,6 +2218,7 @@ class OptimizationRunReportService:
         revision_number = self._latest_revision_number(state.report) + 1
         publication_counts: dict[str, dict[str, int]] = {}
         active_artifact_kind = "revision_manifest"
+        active_operation_category = "prepare_core"
         publication_started_at: Optional[datetime] = None
         core_committed = False
 
@@ -2296,6 +2298,7 @@ class OptimizationRunReportService:
                 _publish_artifact_progress(kind)
 
         try:
+            active_operation_category = "decision_projection"
             publication_id = self._publication_id_factory()
             if (
                 not isinstance(publication_id, str)
@@ -2310,7 +2313,9 @@ class OptimizationRunReportService:
                 decision_evidence,
                 expected_execution_mode=str(state.run_spec.get("execution_mode") or ""),
             )
+            active_operation_category = "stakeholder_view_validation"
             _validate_view(stakeholder_view)
+            active_operation_category = "artifact_reuse_index"
             committed_artifacts = self._latest_committed_artifact_index()
             draft_artifacts: dict[str, dict[str, Any]] = {}
 
@@ -2363,12 +2368,14 @@ class OptimizationRunReportService:
             raw_evidence = _json(decision_evidence)
             evidence_checksum = sha256(raw_evidence).hexdigest()
             stakeholder_view_checksum = sha256(_json(stakeholder_view)).hexdigest()
+            active_operation_category = "publication_checkpoint"
             generated_at = self._publication_generated_at(
                 revision_number=revision_number,
                 milestone=milestone,
                 evidence_checksum=evidence_checksum,
                 stakeholder_view_checksum=stakeholder_view_checksum,
             )
+            active_operation_category = "draft_recovery"
             draft_artifacts = self._load_publication_draft_artifacts(
                 revision_number=revision_number,
                 milestone=milestone,
@@ -2376,9 +2383,11 @@ class OptimizationRunReportService:
                 stakeholder_view_checksum=stakeholder_view_checksum,
                 generated_at=generated_at,
             )
+            active_operation_category = "stakeholder_workbook"
             active_artifact_kind = "stakeholder_workbook"
             _publish_artifact_progress("stakeholder_workbook")
             workbook = build_stakeholder_workbook(stakeholder_view, revision_number=revision_number, generated_at=generated_at)
+            active_operation_category = "decision_evidence"
             active_artifact_kind = "decision_evidence"
             _publish_artifact_progress("decision_evidence")
             raw_filename = (
@@ -2403,6 +2412,7 @@ class OptimizationRunReportService:
             self._attach_task_file(state.task, raw_path)
             _publish_artifact_progress("decision_evidence", completed=True)
             active_artifact_kind = "stakeholder_workbook"
+            active_operation_category = "stakeholder_workbook"
             workbook_filename = (
                 f"optimization-workbook-r{revision_number:04d}-{publication_id}.xlsx"
             )
@@ -2486,6 +2496,7 @@ class OptimizationRunReportService:
             # material.  Ranking, assessment, diagnosis, and optimizer launch
             # can continue as soon as this compact revision is authoritative.
             active_artifact_kind = "stakeholder_presentation"
+            active_operation_category = "stakeholder_presentation"
             _publish_artifact_progress("stakeholder_presentation")
             core_detail_status = "pending"
             presentation = build_stakeholder_presentation(
@@ -2555,6 +2566,7 @@ class OptimizationRunReportService:
             manifest_bytes = _json(manifest)
             manifest_checksum = sha256(manifest_bytes).hexdigest()
             active_artifact_kind = "revision_manifest"
+            active_operation_category = "revision_manifest"
             _publish_artifact_progress("revision_manifest")
             manifest_path = self._artifact_uploader(
                 state.task.id,
@@ -2644,8 +2656,12 @@ class OptimizationRunReportService:
                     )
                 except Exception:
                     pass
+                safe_exception_class = type(exc).__name__
+                if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", safe_exception_class) is None:
+                    safe_exception_class = "Exception"
                 raise OptimizationRunPublicationError(
-                    f"Could not publish core optimization milestone {milestone}"
+                    f"Could not publish core optimization milestone {milestone} "
+                    f"(operation={active_operation_category}, error={safe_exception_class})"
                 ) from exc
             # The immutable finalization core is already authoritative.  A
             # later detail failure must preserve optimizer evidence and remain
@@ -3636,6 +3652,29 @@ class OptimizationRunReportService:
             ))
         except Exception:
             # The Task failure is the canonical safety signal if the report view is unavailable.
+            pass
+        try:
+            status_block = state.blocks["status"]
+            raw_output = getattr(status_block, "output", None)
+            payload = json.loads(raw_output) if isinstance(raw_output, str) else dict(raw_output or {})
+            preview = dict(payload.get("preview") or {})
+            summary = dict(preview.get("summary") or {})
+            summary["run_failure"] = {
+                "state": "failure",
+                "headline": "The optimization run could not complete",
+                "explanation": str(message),
+            }
+            preview["status"] = "failed"
+            preview["summary"] = summary
+            payload["status"] = "failed"
+            payload["preview"] = preview
+            status_block.update(
+                output=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                log="Run failed; the latest durable revision remains attached.",
+            )
+        except Exception:
+            # The Task and Report cover page remain the canonical failure
+            # signals if the mutable status block cannot be updated.
             pass
         return state
 

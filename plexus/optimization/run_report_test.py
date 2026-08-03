@@ -974,7 +974,10 @@ def test_core_publication_failure_is_fatal_and_does_not_advance_the_revision(mon
     run_spec = {"scope": {}, "execution_mode": "automatic"}
     state = service.start_or_resume(run_spec)
 
-    with pytest.raises(run_report.OptimizationRunPublicationError):
+    with pytest.raises(
+        run_report.OptimizationRunPublicationError,
+        match=r"operation=revision_manifest, error=RuntimeError",
+    ):
         service.publish_milestone(
             "ranking", {"run_key": "daily-v1-2026-07-29", "coverage": {"complete": True}},
             stakeholder_view=_safe_view(),
@@ -985,6 +988,13 @@ def test_core_publication_failure_is_fatal_and_does_not_advance_the_revision(mon
         == "failed"
     )
     assert state.report.parameters["optimization_run"]["latest_revision"] is None
+    failed_status = json.loads(state.blocks["status"].output)
+    assert failed_status["status"] == "failed"
+    assert failed_status["preview"]["summary"]["run_failure"] == {
+        "state": "failure",
+        "headline": "The optimization run could not complete",
+        "explanation": "Core optimization Report publication failed during ranking",
+    }
     assert not any(
         path.rsplit("/", 1)[-1].startswith("optimization-publication-draft-r0001-")
         for path in service._state.task.attachedFiles

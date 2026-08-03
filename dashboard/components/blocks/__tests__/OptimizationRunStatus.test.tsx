@@ -1331,6 +1331,34 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getByText('Resolve guideline and code conflicts.')).toBeInTheDocument()
   })
 
+  it('surfaces a run failure above the last durable pre-failure presentation', async () => {
+    mockReadTaskArtifact.mockReset().mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({
+      overview: { lifecycle_status: 'running', analysis_coverage_status: 'complete' },
+      decision_summary: {
+        state: 'analysis_pending', headline: 'No optimization decision yet',
+        explanation: 'The execution policy is still being evaluated.', next_action: 'Continue.',
+      },
+      action_counts: { automatic_work: 0, human_decisions: 0, repairs_and_evidence: 1, monitor_later: 0, no_action: 0 },
+      action_workstreams: [], score_count: 1, scorecard_count: 1,
+      primary_disposition_counts: { guideline_or_code_repair: 1 }, primary_decision_mix: {},
+      secondary_issue_counts: {}, attention_queue: [], questions_and_issues: [],
+      optimization_outcomes: [], opportunity_distribution: [], top_priorities: [], scorecards: [],
+    }))))
+
+    render(<OptimizationRunStatus id="block-1" type="OptimizationRunStatus" name="Run Status" position={0} config={{}}
+      output={{ output_compacted: true, preview: { summary: {
+        milestone: 'diagnosis', presentation: presentationDescriptor,
+        run_failure: {
+          state: 'failure', headline: 'The optimization run could not complete',
+          explanation: 'Core milestone publication failed.',
+        },
+      } } }} />)
+
+    expect(await screen.findByRole('heading', { name: 'The optimization run could not complete' })).toBeInTheDocument()
+    expect(screen.getByText('Core milestone publication failed.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No optimization decision yet' })).not.toBeInTheDocument()
+  })
+
   it('defaults to open work and lets operators inspect monitor and history queues', async () => {
     const user = userEvent.setup()
     mockReadTaskArtifact.mockReset().mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({

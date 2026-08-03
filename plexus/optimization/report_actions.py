@@ -87,36 +87,56 @@ def _count(value: Any) -> int:
 def _action_group(row: Mapping[str, Any]) -> str:
     disposition = str(row.get("primary_disposition") or "")
     action = str(row.get("next_action") or row.get("primary_next_action") or "")
-    if disposition in _AUTOMATIC_DISPOSITIONS or action in {
+    # The canonical disposition is the authority.  A stale assessment action
+    # must never turn a later ``not_selected`` or repair disposition back into
+    # automatic work merely because the earlier packet said to run it.
+    if disposition in _AUTOMATIC_DISPOSITIONS:
+        return "automatic_work"
+    if disposition in _HUMAN_DISPOSITIONS:
+        return "stakeholder_decision"
+    if disposition in _TECHNICAL_DISPOSITIONS:
+        return "technical_repair"
+    if disposition in _FEEDBACK_DISPOSITIONS:
+        return "feedback_investment"
+    if disposition in _MONITOR_DISPOSITIONS:
+        return "monitor"
+    if disposition in _INCOMPLETE_DISPOSITIONS:
+        return "incomplete_evidence"
+    if disposition == "not_selected":
+        return "no_action"
+
+    # Compatibility fallback for older presentations that predate canonical
+    # primary dispositions and carry only a next-action value.
+    if action in {
         "run_approved_optimization",
         "dispatch_approved_targets",
         "continue_optimization",
         "await_optimizer_review",
     }:
         return "automatic_work"
-    if disposition in _HUMAN_DISPOSITIONS or action in {
+    if action in {
         "request_optimization_approval",
         "request_promotion_approval",
         "resolve_stakeholder_questions",
         "request_stakeholder_clarification",
     }:
         return "stakeholder_decision"
-    if disposition in _TECHNICAL_DISPOSITIONS or action.startswith("repair_guideline"):
+    if action.startswith("repair_guideline"):
         return "technical_repair"
-    if disposition in _FEEDBACK_DISPOSITIONS or action in {
+    if action in {
         "review_feedback_curation",
         "collect_targeted_feedback",
         "increase_feedback_collection",
     }:
         return "feedback_investment"
-    if disposition in _MONITOR_DISPOSITIONS or action in {
+    if action in {
         "wait_for_cooldown",
         "retain_champion",
         "monitor",
         "periodic_monitoring",
     }:
         return "monitor"
-    if disposition in _INCOMPLETE_DISPOSITIONS or action.startswith("repair_"):
+    if action.startswith("repair_"):
         return "incomplete_evidence"
     return "no_action"
 
@@ -291,6 +311,18 @@ def build_decision_summary(
             "state": "safe_target_selected",
             "headline": f"{selected} score{'s are' if selected != 1 else ' is'} selected for optimization",
             "explanation": "The selected targets passed the current automatic execution policy and await launch-time checks.",
+            "next_action": next_action,
+        }
+    if (
+        str(overview.get("execution_decision_status") or "").lower() == "complete"
+        and analysis == "complete"
+        and selected == 0
+        and launched == 0
+    ):
+        return {
+            "state": "no_safe_target",
+            "headline": "No score was safe to optimize automatically",
+            "explanation": "The run found portfolio work, but no target passed every execution policy gate.",
             "next_action": next_action,
         }
     if terminal and launched > 0:

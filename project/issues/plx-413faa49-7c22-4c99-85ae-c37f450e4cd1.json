@@ -52,10 +52,22 @@
       "author": "ryan.porter",
       "text": "Implementation validation update: the stakeholder presentation now leads with a backend-authored conclusion, reconciled mutually exclusive score workstreams, four aggregate action cards, and Open/Monitor/History progressive disclosure. Visual acceptance found and corrected an internally inconsistent demo fixture so its 12 score assignments, five workstreams, execution funnel, and validated outcome reconcile. Focused backend tests: 103 passed. Focused dashboard tests: 33 passed. Storybook Chromium: 91 suites and 704 tests passed. Python 3.11 and 3.12 full suites, dashboard coverage/typecheck, and Tactus regression are green. The existing bounded pilot remains nonterminal in its legacy report-publication retry loop; no new pilot has been started.",
       "created_at": "2026-08-03T18:56:44.308929Z"
+    },
+    {
+      "id": "28111eed-bd81-457e-ba8c-89eb353b61a6",
+      "author": "ryan.porter",
+      "text": "Production dogfood reached complete ranking, 700/700 assessment, and four of four bounded diagnoses using only four core artifacts per milestone. All four diagnoses produced repair/code-conflict dispositions, so no optimizer was safe to launch. Browser review exposed two decision-brief defects: three canonical not-selected scores were grouped as automatic work from stale next actions, and a core publication failure remained visually beneath a provisional conclusion. Both now have regression coverage and fixes; full local validation is in progress. No client-specific details are recorded here.",
+      "created_at": "2026-08-03T19:37:31.262117Z"
+    },
+    {
+      "id": "8d4e9085-3f06-47e2-94ad-df5806c24df5",
+      "author": "ryan.porter",
+      "text": "Final local validation is green for the decision-first follow-up. Python 3.11 isolated CI: 4519 passed, 41 skipped, 13 deselected, 3 expected failures; Python 3.12 previously matched those results. Focused backend: 255 passed. Dashboard report component: 34 passed. Dashboard coverage: 776 passed. Typecheck passed. Storybook Chromium: 91 suites and 704 tests passed. Lock, version, diff, and zero-resource checks passed. The implementation adds no Amplify schema, backend resource, Lambda, IAM, storage, index, association, or Tactus API change. The bounded pilot selected no safe optimizer target, launched no optimizer child, and made no score or champion mutation. Follow-up source is ready to commit but remains unpushed pending review.",
+      "created_at": "2026-08-03T19:54:11.323241Z"
     }
   ],
   "created_at": "2026-08-03T17:27:21.565910Z",
-  "updated_at": "2026-08-03T18:56:44.308929Z",
+  "updated_at": "2026-08-03T19:54:11.323241Z",
   "closed_at": null,
   "custom": {}
 }

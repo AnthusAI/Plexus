@@ -266,6 +266,7 @@ type CompactStatus = {
   presentation: ArtifactDescriptor | null
   liveProgress: LiveProgress | null
   durableMilestone: string | null
+  runFailure: DecisionSummary | null
 }
 
 const DECISION_COLORS = [
@@ -606,12 +607,26 @@ function parseCompactStatus(output: ReportBlockProps['output']): CompactStatus {
     try {
       parsed = JSON.parse(output)
     } catch {
-      return { presentation: null, liveProgress: null, durableMilestone: null }
+      return { presentation: null, liveProgress: null, durableMilestone: null, runFailure: null }
     }
   }
   const envelope = record(parsed)
   const preview = record(envelope?.preview)
   const summary = record(preview?.summary)
+  const rawRunFailure = record(summary?.run_failure)
+  const runFailure = rawRunFailure
+    && rawRunFailure.state === 'failure'
+    && typeof rawRunFailure.headline === 'string'
+    && typeof rawRunFailure.explanation === 'string'
+    ? {
+        state: 'failure',
+        headline: rawRunFailure.headline,
+        explanation: rawRunFailure.explanation,
+        next_action: typeof rawRunFailure.next_action === 'string'
+          ? rawRunFailure.next_action
+          : 'Review the failure evidence and retry the run after the publication path is healthy.',
+      }
+    : null
   const rawProgress = record(summary?.live_progress)
   const durableMilestone = typeof summary?.milestone === 'string'
     ? summary.milestone.trim().toLowerCase()
@@ -661,6 +676,7 @@ function parseCompactStatus(output: ReportBlockProps['output']): CompactStatus {
   return {
     presentation: parseArtifactDescriptor(summary?.presentation),
     durableMilestone,
+    runFailure,
     liveProgress: isValidProgress
       ? {
           phase,
@@ -1748,6 +1764,14 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
   const [presentation, setPresentation] = useState<StakeholderPresentation | null>(null)
   const [error, setError] = useState<string | null>(null)
   const reportId = reportIdFromLocation()
+  const effectivePresentation = useMemo(() => {
+    if (!presentation || !compactStatus.runFailure) return presentation
+    return {
+      ...presentation,
+      overview: { ...presentation.overview, lifecycle_status: 'failed' },
+      decision_summary: compactStatus.runFailure,
+    }
+  }, [presentation, compactStatus.runFailure])
 
   useEffect(() => {
     let cancelled = false
@@ -1779,7 +1803,7 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
     )
   }
 
-  if (!presentation) {
+  if (!effectivePresentation) {
     return (
       <section className="flex min-h-40 items-center justify-center rounded-lg bg-card text-muted-foreground">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading optimization overview…
@@ -1789,7 +1813,7 @@ const OptimizationRunStatus: BlockComponent = ({ output, name }: ReportBlockProp
 
   return (
     <OptimizationRunStatusPresentation
-      presentation={presentation}
+      presentation={effectivePresentation}
       liveProgress={compactStatus.liveProgress}
       durableMilestone={compactStatus.durableMilestone}
       reportId={reportId}
