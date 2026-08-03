@@ -3,16 +3,23 @@
   "title": "Provide reusable asynchronous scoring and integration hosting stacks",
   "description": "Implement immutable-image async scoring plus configurable request-state, authenticated API hosting, and response-worker infrastructure while keeping runtime handlers consumer-owned.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-39614d99-a561-4250-991b-0dd4e23c3887",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "6d52648a-9b42-456c-8bfa-09814714c25a",
+      "author": "derek.norrbom",
+      "text": "Implemented digest-only asynchronous scoring and generic authenticated API/response hosting while leaving runtime handlers, routes, environment bindings, and data behavior consumer-owned.",
+      "created_at": "2026-08-03T18:01:36.506853Z"
+    }
+  ],
   "created_at": "2026-08-03T17:37:13.039579Z",
-  "updated_at": "2026-08-03T17:37:22.167792Z",
-  "closed_at": null,
+  "updated_at": "2026-08-03T18:01:36.647168Z",
+  "closed_at": "2026-08-03T18:01:36.647168Z",
   "custom": {}
 }
