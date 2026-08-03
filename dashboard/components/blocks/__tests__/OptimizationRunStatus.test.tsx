@@ -1175,6 +1175,27 @@ describe('OptimizationRunStatus', () => {
     expect(screen.queryByText(/699 not selected/i)).not.toBeInTheDocument()
   })
 
+  it('does not announce a zero-launch decision before diagnosis evidence exists', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: {
+            lifecycle_status: 'running',
+            execution_mode: 'automatic',
+            execution_selected_count: 0,
+            execution_launched_count: 0,
+          },
+          score_count: 0, scorecard_count: 0,
+          primary_disposition_counts: {}, primary_decision_mix: {}, secondary_issue_counts: {},
+          attention_queue: [], questions_and_issues: [], optimization_outcomes: [],
+          opportunity_distribution: [], top_priorities: [], scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.queryByRole('heading', { name: 'No automatic optimizations launched' })).not.toBeInTheDocument()
+  })
+
   it('shows the full opportunity-survey funnel without implying that completion means improvement', () => {
     render(
       <OptimizationRunStatusPresentation

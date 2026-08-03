@@ -1097,8 +1097,11 @@ function DecisionBrief({
   const diagnosed = finiteNonNegative(overview.diagnosis_completed_count)
   const deferred = finiteNonNegative(overview.diagnosis_deferred_count)
   const repaired = finiteNonNegative(dispositionCounts.guideline_or_code_repair)
+  const terminal = ['completed', 'complete', 'incomplete', 'blocked', 'failed']
+    .includes(String(overview.lifecycle_status || '').toLowerCase())
+  const hasDecisionEvidence = terminal || diagnosisSelected > 0 || diagnosed > 0 || deferred > 0
 
-  if (!automatic || launched > 0) return null
+  if (!automatic || launched > 0 || !hasDecisionEvidence) return null
 
   return (
     <div className="mt-5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-5">

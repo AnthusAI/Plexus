@@ -22,10 +22,16 @@
       "author": "ryan.porter",
       "text": "Dogfood reproduction confirmed the Report presented an exhaustive inventory as an action queue, conflated policy non-selection with launch rejection, and allowed missing semantic diagnosis to retain a premature execution action. Added failing behavior tests, implemented a decision-first outcome card and grouped workstreams, capped representative action evidence at 25 rows, and changed missing-diagnosis projection to request diagnosis instead of execution. Validation: 235 focused Python tests passed; 30 dashboard component tests passed; dashboard typecheck passed; Python flake8 passed. Direct ESLint invocation is currently blocked by the repository AJV configuration under the active Node runtime and will be rerun through the supported Node 20 CI path.",
       "created_at": "2026-08-03T17:36:58.163507Z"
+    },
+    {
+      "id": "6f60c834-0659-4a51-8ef2-7edff71a71d8",
+      "author": "ryan.porter",
+      "text": "Live follow-up observation found that a zero-launch decision could render during initial ranking because launch count is naturally zero before diagnosis. Added a terminal-or-diagnosis-evidence gate and regression coverage so the decision card appears only when a decision can honestly be stated. Dashboard component tests now pass 31/31 and Node typecheck passes.",
+      "created_at": "2026-08-03T17:45:39.785902Z"
     }
   ],
   "created_at": "2026-08-03T17:27:21.565910Z",
-  "updated_at": "2026-08-03T17:36:58.163507Z",
+  "updated_at": "2026-08-03T17:45:39.785902Z",
   "closed_at": null,
   "custom": {}
 }
