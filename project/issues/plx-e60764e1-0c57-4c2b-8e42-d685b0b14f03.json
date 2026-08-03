@@ -3,16 +3,23 @@
   "title": "Ship self-contained score processor container build resource",
   "description": "Add a packaged Dockerfile and resource locator. The Dockerfile must install Plexus scoring dependencies from an explicit immutable revision using BuildKit secret authentication and must not COPY source from a repository checkout. Verify wheel and sdist contents.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-87050e14-4888-45ec-89ef-0a4e38f00f7b",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "1c12ae07-de15-4889-8f3b-a41a0d580978",
+      "author": "derek.norrbom",
+      "text": "Self-contained Dockerfile resource ships in the wheel, requires an immutable SHA, uses the committed lockfile, and exposes credentials only as an ephemeral build secret.",
+      "created_at": "2026-08-03T20:21:17.333752Z"
+    }
+  ],
   "created_at": "2026-08-03T19:15:04.922569Z",
-  "updated_at": "2026-08-03T19:17:56.398513Z",
-  "closed_at": null,
+  "updated_at": "2026-08-03T20:21:17.357728Z",
+  "closed_at": "2026-08-03T20:21:17.357728Z",
   "custom": {}
 }

@@ -3,7 +3,7 @@
   "title": "Distributable score processor runtime image",
   "description": "Purpose: make the reusable score processor runtime build definition a versioned part of the Plexus Python distribution so consumers can build and validate an image from the same immutable Plexus revision they deploy.\n\nDefinition of Done:\n- The Lambda handler is importable from the installed Plexus package.\n- A self-contained container build definition is shipped in wheel and sdist artifacts.\n- Builds require an explicit immutable Plexus source revision and do not depend on a Plexus repository checkout.\n- Existing first-party score processor image builds remain functional.\n- Reusable repository infrastructure can provision independently named runtime repositories.",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -28,10 +28,16 @@
       "author": "derek.norrbom",
       "text": "Removed the new reusable async stack’s mutable image-source reference contract. Consumers now supply only a digest-pinned image URI; the existing independent artifact pipeline remains unchanged for legacy consumers.",
       "created_at": "2026-08-03T19:32:04.282595Z"
+    },
+    {
+      "id": "6fd9b529-737b-42b0-854d-85f179d01763",
+      "author": "derek.norrbom",
+      "text": "Implementation is complete, validated, committed, and pushed for review. Existing production processor files and pipelines remain unchanged.",
+      "created_at": "2026-08-03T20:21:17.481825Z"
     }
   ],
   "created_at": "2026-08-03T19:14:51.448935Z",
-  "updated_at": "2026-08-03T19:32:04.282595Z",
-  "closed_at": null,
+  "updated_at": "2026-08-03T20:21:17.505820Z",
+  "closed_at": "2026-08-03T20:21:17.505820Z",
   "custom": {}
 }

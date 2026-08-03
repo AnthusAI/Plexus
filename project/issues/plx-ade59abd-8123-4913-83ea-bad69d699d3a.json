@@ -3,16 +3,23 @@
   "title": "Support independently named runtime repositories",
   "description": "Add a reusable, configurable container repository stack suitable for independently versioned scoring runtimes, with lifecycle, scan, encryption, and synth coverage while preserving existing repository stack behavior.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "plx-87050e14-4888-45ec-89ef-0a4e38f00f7b",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "b53fc13d-1095-4578-a9df-d2fb882e41b2",
+      "author": "derek.norrbom",
+      "text": "Configurable retained ECR repository stack implemented with immutable tags, cache exception, scan-on-push, lifecycle rules, and synth coverage.",
+      "created_at": "2026-08-03T20:21:17.382811Z"
+    }
+  ],
   "created_at": "2026-08-03T19:15:04.909847Z",
-  "updated_at": "2026-08-03T19:17:56.421707Z",
-  "closed_at": null,
+  "updated_at": "2026-08-03T20:21:17.408439Z",
+  "closed_at": "2026-08-03T20:21:17.408439Z",
   "custom": {}
 }
