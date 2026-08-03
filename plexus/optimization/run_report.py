@@ -2624,23 +2624,34 @@ class OptimizationRunReportService:
                 pass
             raise
         except Exception as exc:
-            # A failed upload/update has not crossed the Report.latest_revision
-            # commit point.  Its partial attachments are intentionally ignored
-            # on replay, so marking this Task failed would destroy the only safe
-            # recovery path for ordinary auth/publication interruptions.
-            if publication_counts and not core_committed:
+            if not core_committed:
+                # The procedure must never continue while its authoritative
+                # stakeholder state is behind.  Partial core attachments are
+                # uncommitted evidence, so preserve them for audit but fail the
+                # attempt instead of scheduling an unbounded publication loop.
                 try:
-                    _publish_artifact_progress(
-                        active_artifact_kind,
-                        progress_state="failed",
-                        failure_class=type(exc).__name__,
+                    if publication_counts:
+                        _publish_artifact_progress(
+                            active_artifact_kind,
+                            progress_state="failed",
+                            failure_class=type(exc).__name__,
+                        )
+                except Exception:
+                    pass
+                try:
+                    self.fail(
+                        f"Core optimization Report publication failed during {milestone}"
                     )
                 except Exception:
-                    # The original failure remains authoritative if the live
-                    # status write itself is unavailable.
                     pass
+                raise OptimizationRunPublicationError(
+                    f"Could not publish core optimization milestone {milestone}"
+                ) from exc
+            # The immutable finalization core is already authoritative.  A
+            # later detail failure must preserve optimizer evidence and remain
+            # retryable until stakeholder drill-down artifacts reconcile.
             raise OptimizationRunRetryablePublicationError(
-                f"Could not publish optimization milestone {milestone}"
+                f"Could not publish final optimization detail for {milestone}"
             ) from exc
 
     def _publish_final_detail_enrichment(

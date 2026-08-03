@@ -943,7 +943,7 @@ def test_recovery_loads_the_latest_durable_evidence_through_the_authorized_task_
     assert store.downloads[-1].artifact_type == "TASK_ATTACHMENT"
 
 
-def test_interrupted_publication_retry_reuses_verified_artifacts_for_the_same_logical_revision(monkeypatch):
+def test_core_publication_failure_is_fatal_and_does_not_advance_the_revision(monkeypatch):
     from plexus.optimization import run_report
 
     monkeypatch.setattr(run_report, "Task", _Task)
@@ -979,63 +979,21 @@ def test_interrupted_publication_retry_reuses_verified_artifacts_for_the_same_lo
             "ranking", {"run_key": "daily-v1-2026-07-29", "coverage": {"complete": True}},
             stakeholder_view=_safe_view(),
         )
-    # A manifest upload interruption has not crossed latest_revision, so this
-    # remains the same active attempt rather than a failed/replaced Task.
-    assert service._state.task.status == "RUNNING"
-    assert json.loads(service._state.task.metadata).get("optimization_run_final_status") is None
-    draft = json.loads(service._state.task.metadata)["optimization_publication_draft"]
-    assert draft["generated_at"] == "2026-07-29T12:00:00Z"
+    assert service._state.task.status == "FAILED"
+    assert (
+        json.loads(service._state.task.metadata)["optimization_run_final_status"]
+        == "failed"
+    )
+    assert state.report.parameters["optimization_run"]["latest_revision"] is None
     assert not any(
         path.rsplit("/", 1)[-1].startswith("optimization-publication-draft-r0001-")
         for path in service._state.task.attachedFiles
     )
-    recovered = run_report.OptimizationRunReportService(
-        client=SimpleNamespace(), account_id="account-1", run_key="daily-v1-2026-07-29",
-        report_configuration_id="config-1", artifact_store=store,
-        publication_id_factory=lambda: "publication-b",
-        now=lambda: datetime(2026, 7, 29, 12, 5, tzinfo=timezone.utc),
-        task_lookup=lambda _: state.task,
-        report_lookup=lambda _: state.report,
-        block_lookup=lambda _: list(_Block.created),
-        stage_lookup=lambda task: [stage for stage in _TaskStage.created if stage.taskId == task.id],
-    )
-    recovered.start_or_resume(run_spec)
-    downloads_before_retry = len(store.downloads)
-    recovered.publish_milestone(
-        "ranking", {"run_key": "daily-v1-2026-07-29", "coverage": {"complete": True}},
-        stakeholder_view=_safe_view(),
-    )
-    assert "optimization_publication_draft" not in json.loads(state.task.metadata)
-
-    evidence_names = [
-        request.filename for request, _content in store.uploads
-        if request.filename.startswith("optimization-evidence-r0001")
-    ]
-    assert evidence_names == ["optimization-evidence-r0001-publication-a.json"]
-    workbook_names = [
-        request.filename for request, _content in store.uploads
-        if request.filename.startswith("optimization-workbook-r0001")
-    ]
-    assert workbook_names == ["optimization-workbook-r0001-publication-a.xlsx"]
     score_artifact_names = [
         request.filename for request, _content in store.uploads
         if request.filename.startswith(("score-", "scorecard-"))
     ]
-    # Ranking is a core-only revision.  Per-score and per-scorecard artifacts
-    # are intentionally deferred until finalization, so an interrupted core
-    # retry must not create either set of detail uploads.
     assert score_artifact_names == []
-    retry_download_names = [
-        request.filename for request in store.downloads[downloads_before_retry:]
-    ]
-    assert not any(
-        name.startswith("optimization-publication-draft-r0001-")
-        for name in retry_download_names
-    )
-    assert not any(
-        name.startswith(("score-", "scorecard-"))
-        for name in retry_download_names
-    )
 
 
 @pytest.mark.parametrize(
@@ -2969,7 +2927,7 @@ def test_stage_initialization_interruption_keeps_the_attempt_active_after_publis
     assert "Status: running" in _Report.created[0].output
 
 
-def test_publish_interruption_keeps_task_active_and_raises_without_silent_progress(monkeypatch):
+def test_core_block_pointer_interruption_fails_the_attempt_without_silent_progress(monkeypatch):
     class _FailingBlock(_Block):
         def update(self, **values):
             if self.name == "Decision Evidence" and "r0001" in str(values.get("output", "")):
@@ -2984,9 +2942,10 @@ def test_publish_interruption_keeps_task_active_and_raises_without_silent_progre
     with pytest.raises(OptimizationRunPublicationError, match="assessment"):
         service.publish_milestone("assessment", {"coverage": {"complete": True}}, stakeholder_view=_safe_view())
 
-    assert state.task.status == "RUNNING"
-    assert not any(update.get("status") == "FAILED" for update in state.task.updates)
-    assert all(stage.status != "FAILED" for stage in _TaskStage.created)
+    assert state.task.status == "FAILED"
+    assert any(update.get("status") == "FAILED" for update in state.task.updates)
+    assert any(stage.status == "FAILED" for stage in _TaskStage.created)
+    assert state.report.parameters["optimization_run"]["latest_revision"] is None
 
 
 def test_initialization_write_interruption_keeps_the_same_attempt_active(monkeypatch):

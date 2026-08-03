@@ -28,10 +28,16 @@
       "author": "ryan.porter",
       "text": "Performance-fix validation update: intermediate milestones now commit only decision evidence, workbook, aggregate presentation, and the core manifest before stage advancement. Score and scorecard enrichment is deferred to final detail publication with pending/complete source-revision labels, checksum reuse, and retry recovery that preserves terminal optimizer evidence. Focused report tests include large-portfolio core-first ordering, enrichment failure, cross-process resume, and final reconciliation; 103 focused backend tests passed. The existing legacy pilot still retries its old large artifact publication path and is being retained as baseline evidence.",
       "created_at": "2026-08-03T18:56:44.500233Z"
+    },
+    {
+      "id": "1ca0f4e5-bdf1-4cb9-bcab-e501c12bffb4",
+      "author": "ryan.porter",
+      "text": "Follow-up found during production baseline review: the existing pilot remained in an unbounded five-minute core-publication retry loop even after its 549 artifacts completed. The service now enforces the planned boundary: any pre-commit core milestone failure marks the attempt failed and raises a terminal publication error; only post-core final detail enrichment remains retryable and incomplete. Focused report, portfolio-run, action-projection, and integration tests now pass 253/253, including fatal manifest/block-pointer interruption and retryable final-detail recovery.",
+      "created_at": "2026-08-03T19:02:32.680915Z"
     }
   ],
   "created_at": "2026-08-03T18:12:27.964740Z",
-  "updated_at": "2026-08-03T18:56:44.500233Z",
+  "updated_at": "2026-08-03T19:02:32.680915Z",
   "closed_at": null,
   "custom": {}
 }
