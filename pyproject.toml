@@ -16,6 +16,7 @@ include = [
     "plexus/py.typed",
     "plexus/scores/*.py",
     "plexus/rubric_memory/procedures/*.tac",
+    "plexus/runtime/async_score_processor/Dockerfile",
 ]
 
 [tool.poetry.dependencies]

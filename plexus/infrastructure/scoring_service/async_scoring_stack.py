@@ -34,7 +34,6 @@ class ScoringServiceAsyncScoringStack(Stack):
         environment: str,
         score_processor_repository_name: str,
         score_processor_image_uri: str | None,
-        image_source_reference: str,
         runtime_config_secret_name: str,
         alert_topic: sns.ITopic,
         read_bucket_parameters: Mapping[str, str],
@@ -132,11 +131,6 @@ class ScoringServiceAsyncScoringStack(Stack):
             "ScoreProcessorFunctionName",
             value=self.function.function_name,
             export_name=f"{resource_prefix}-scoring-{environment}-function-name",
-        )
-        CfnOutput(
-            self,
-            "ScoreProcessorImageUriParameterName",
-            value=image_source_reference,
         )
 
     def _override_lambda_image_uri(self, *, image_uri: str) -> None:

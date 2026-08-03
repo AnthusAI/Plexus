@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6724037b-9dee-421a-957d-4909bcce6459",
+  "issue_id": "plx-c0ac7dab-1556-4e80-9db6-3c6e6b44eb1b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-03T19:15:04.907Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "As a scoring-platform consumer, I want the handler and container build definition to come from one immutable Plexus revision, so that the image I validate is the image implementation I deploy.\n\nFeature: Immutable distributable score processor runtime\n\nScenario: Build from an installed Plexus distribution\nGiven a consumer installs an exact Plexus revision\nWhen the consumer locates the score processor container build definition\nThen the resource is present without a Plexus repository checkout\nAnd the resulting handler entry point is importable from the installed package\n\nScenario: Reject an ambiguous source build\nGiven no immutable Plexus revision is supplied\nWhen the container build is attempted\nThen the build fails before producing a runnable image\n\nScenario: Preserve existing first-party builds\nGiven an existing score processor build uses the repository compatibility entry point\nWhen it imports the Lambda handler\nThen it resolves to the packaged handler implementation.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-87050e14-4888-45ec-89ef-0a4e38f00f7b",
+    "priority": 1,
+    "status": "open",
+    "title": "Consumers build the runtime from one immutable package revision"
+  }
+}
