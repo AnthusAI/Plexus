@@ -944,13 +944,13 @@ describe('OptimizationRunStatus', () => {
     expect(screen.queryByText('Issue finding 6')).not.toBeInTheDocument()
     expect(screen.queryByText('Outcome rationale 6')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Show all attention queue entries (6)' }))
+    await user.click(screen.getByRole('button', { name: 'Show up to 25 examples (of 6)' }))
     await user.click(screen.getByRole('button', { name: 'Show all issues (6)' }))
     await user.click(screen.getByRole('button', { name: 'Show all outcomes (6)' }))
     expect(screen.getByText('Attention 6')).toBeInTheDocument()
     expect(screen.getByText('Issue finding 6')).toBeInTheDocument()
     expect(screen.getByText('Outcome rationale 6')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Collapse attention queue entries' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Collapse examples' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /Example Portfolio/ }))
     await user.click(screen.getAllByText('Ranked score').at(-1)!)
@@ -1120,6 +1120,59 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getByText('Not selected automatically')).toBeInTheDocument()
     expect(screen.getByText('Meets the automatic policy.')).toBeInTheDocument()
     expect(screen.getByText('Outside the safety cap.')).toBeInTheDocument()
+  })
+
+  it('leads an incomplete automatic run with its decision and grouped next actions', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: {
+            lifecycle_status: 'incomplete',
+            inventory_coverage_status: 'complete',
+            analysis_coverage_status: 'incomplete',
+            execution_mode: 'automatic',
+            evidence_ranked_score_count: 1105,
+            assessed_score_count: 699,
+            diagnosis_selected_count: 4,
+            diagnosis_scheduled_count: 1,
+            diagnosis_completed_count: 1,
+            diagnosis_deferred_count: 3,
+            execution_selected_count: 0,
+            execution_launched_count: 0,
+            execution_rejected_count: 699,
+          },
+          score_count: 1105,
+          scorecard_count: 51,
+          primary_disposition_counts: {
+            guideline_or_code_repair: 960,
+            insufficient_evidence: 82,
+            targeted_feedback_collection: 13,
+            cooldown: 47,
+            not_selected: 3,
+          },
+          primary_decision_mix: {},
+          secondary_issue_counts: { potential_code_conflict: 1 },
+          attention_queue: [{
+            scorecard_name: 'Example Portfolio',
+            score_name: 'Deferred Score',
+            primary_disposition: 'not_selected',
+            evidence_count: 200,
+            severity: 1,
+            rationale: 'Semantic diagnosis is required.',
+            next_action: 'await_semantic_diagnosis',
+          }],
+          questions_and_issues: [], optimization_outcomes: [], opportunity_distribution: [], top_priorities: [],
+          scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'No automatic optimizations launched' })).toBeInTheDocument()
+    expect(screen.getByText(/found work, but did not prove a safe automatic optimization/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/complete 3 deferred diagnoses/i).length).toBeGreaterThan(0)
+    expect(screen.getByText('Finish analysis')).toBeInTheDocument()
+    expect(screen.getByText('Repair score definitions')).toBeInTheDocument()
+    expect(screen.queryByText(/699 not selected/i)).not.toBeInTheDocument()
   })
 
   it('shows the full opportunity-survey funnel without implying that completion means improvement', () => {

@@ -49,10 +49,16 @@
       "author": "ryan.porter",
       "text": "Phase-two delivery began under the software delivery team workflow. Recorded behavior stories for exactly-once launch, terminal child waiting, deterministic outcome and contradiction classification, and one-Report lifecycle continuation. Implementation is sequenced as recovery hardening plus an upstream host-neutral wait contract, followed by idempotent child creation and Plexus wait integration, then outcome projection and presentation, independent review, and local/sandbox validation. No schema resources, automatic operational mutation, production optimizer run, commit, push, or deployment is authorized.",
       "created_at": "2026-07-30T22:47:07.469031Z"
+    },
+    {
+      "id": "c793087f-96fb-4ee1-b0e4-a11e032c6524",
+      "author": "ryan.porter",
+      "text": "Started a sanitized decision-first Report refinement after dogfood evidence showed that exhaustive inventory rows obscured the run conclusion and next actions. The change will separate action aggregates from evidence exploration, distinguish diagnosis deferral from execution rejection, and prevent deferred diagnoses from appearing execution-ready.",
+      "created_at": "2026-08-03T17:27:32.389135Z"
     }
   ],
   "created_at": "2026-07-27T20:52:49.335291Z",
-  "updated_at": "2026-07-30T22:47:07.469031Z",
+  "updated_at": "2026-08-03T17:27:32.389135Z",
   "closed_at": null,
   "custom": {
     "source": "shared",

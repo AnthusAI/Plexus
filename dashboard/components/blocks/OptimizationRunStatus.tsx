@@ -1043,10 +1043,10 @@ function AttentionQueue({ rows }: { rows: AttentionRow[] }) {
     <section className="rounded-lg bg-card p-6">
       <h3 className="text-lg font-semibold">Human attention queue</h3>
       <p className="text-sm text-muted-foreground">
-        The most important open decisions and issues, ordered by severity and supporting feedback volume.
+        Representative score-level evidence for the grouped workstreams above. The complete inventory remains available by scorecard and in the workbook.
       </p>
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        {(showAll ? ranked : ranked.slice(0, 5)).map((row, index) => (
+        {ranked.slice(0, showAll ? Math.min(25, ranked.length) : 5).map((row, index) => (
           <article key={`${row.scorecard_name}-${row.score_name}-${index}`} className="rounded-md bg-muted/30 p-4 text-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -1076,9 +1076,116 @@ function AttentionQueue({ rows }: { rows: AttentionRow[] }) {
           className="mt-4 text-sm text-primary hover:underline"
           onClick={() => setShowAll(value => !value)}
         >
-          {showAll ? 'Collapse attention queue entries' : `Show all attention queue entries (${ranked.length})`}
+          {showAll ? 'Collapse examples' : `Show up to 25 examples (of ${ranked.length})`}
         </button>
       )}
+    </section>
+  )
+}
+
+function DecisionBrief({
+  overview,
+  dispositionCounts,
+}: {
+  overview: PresentationOverview
+  dispositionCounts: Record<string, number>
+}) {
+  const automatic = overview.execution_mode === 'automatic'
+  const launched = finiteNonNegative(overview.execution_launched_count)
+  const selected = finiteNonNegative(overview.execution_selected_count)
+  const diagnosisSelected = finiteNonNegative(overview.diagnosis_selected_count)
+  const diagnosed = finiteNonNegative(overview.diagnosis_completed_count)
+  const deferred = finiteNonNegative(overview.diagnosis_deferred_count)
+  const repaired = finiteNonNegative(dispositionCounts.guideline_or_code_repair)
+
+  if (!automatic || launched > 0) return null
+
+  return (
+    <div className="mt-5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-5">
+      <div className="text-xs font-medium uppercase tracking-wide text-amber-800 dark:text-amber-200">Run decision</div>
+      <h3 className="mt-1 text-xl font-semibold">No automatic optimizations launched</h3>
+      <p className="mt-2 max-w-4xl text-sm">
+        This run found work, but did not prove a safe automatic optimization. {diagnosisSelected} scores warranted deeper diagnosis; {diagnosed} completed and {deferred} were deferred by the safety cap. {selected} targets passed the automatic execution policy.
+      </p>
+      <p className="mt-3 text-sm font-medium">
+        {deferred > 0
+          ? `Next: Complete ${deferred} deferred ${deferred === 1 ? 'diagnosis' : 'diagnoses'} while keeping the optimizer launch limit bounded.`
+          : repaired > 0
+            ? `Next: Triage the highest-impact score-definition repairs before another automatic run.`
+            : 'Next: Review the evidence and collection recommendations before another automatic run.'}
+      </p>
+    </div>
+  )
+}
+
+function ActionOverview({
+  overview,
+  dispositionCounts,
+}: {
+  overview: PresentationOverview
+  dispositionCounts: Record<string, number>
+}) {
+  const deferred = finiteNonNegative(overview.diagnosis_deferred_count)
+  const workstreams = [
+    {
+      title: 'Finish analysis',
+      count: deferred,
+      detail: 'Selected candidates still need semantic diagnosis before any optimizer may launch.',
+      next: deferred > 0 ? `Complete ${deferred} deferred ${deferred === 1 ? 'diagnosis' : 'diagnoses'}` : 'No deferred diagnoses',
+      tone: 'bg-amber-500/10',
+    },
+    {
+      title: 'Repair score definitions',
+      count: finiteNonNegative(dispositionCounts.guideline_or_code_repair),
+      detail: 'Guideline, champion, structure, or code alignment blocks safe optimization.',
+      next: 'Triage by evidence impact; do not treat each row as a separate urgent ticket',
+      tone: 'bg-rose-500/10',
+    },
+    {
+      title: 'Improve feedback evidence',
+      count: finiteNonNegative(dispositionCounts.targeted_feedback_collection)
+        + finiteNonNegative(dispositionCounts.insufficient_evidence)
+        + finiteNonNegative(dispositionCounts.feedback_curation_review),
+      detail: 'More targeted, stable, or curated evidence is required for a safe decision.',
+      next: 'Review collection recommendations',
+      tone: 'bg-sky-500/10',
+    },
+    {
+      title: 'Monitor recent work',
+      count: finiteNonNegative(dispositionCounts.cooldown),
+      detail: 'Recent score activity prevents churn but remains visible for monitoring.',
+      next: 'Revisit after each eligibility timestamp',
+      tone: 'bg-violet-500/10',
+    },
+    {
+      title: 'Stakeholder decisions',
+      count: finiteNonNegative(dispositionCounts.stakeholder_decision_required)
+        + finiteNonNegative(dispositionCounts.stakeholder_clarification_required),
+      detail: 'Policy or rubric questions require a human answer before execution.',
+      next: 'Resolve the highest-evidence questions first',
+      tone: 'bg-orange-500/10',
+    },
+  ].filter(item => item.count > 0)
+
+  if (workstreams.length === 0) return null
+  return (
+    <section className="rounded-lg bg-card p-6">
+      <h3 className="text-lg font-semibold">What needs attention next</h3>
+      <p className="text-sm text-muted-foreground">
+        Counts are workstreams, not a thousand equally urgent tickets. Open the score-level evidence only when you need to assign or investigate a specific item.
+      </p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {workstreams.map(item => (
+          <article key={item.title} className={cn('rounded-md p-4', item.tone)}>
+            <div className="flex items-center justify-between gap-3">
+              <h4 className="font-medium">{item.title}</h4>
+              <span className="text-2xl font-semibold tabular-nums">{item.count}</span>
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
+            <p className="mt-3 text-sm font-medium">{item.next}</p>
+          </article>
+        ))}
+      </div>
     </section>
   )
 }
@@ -1552,6 +1659,8 @@ export function OptimizationRunStatusPresentation({
           </div>
         </div>
 
+        <DecisionBrief overview={overview} dispositionCounts={dispositionCounts} />
+
         <div className="mt-5">
           <div className="text-sm font-medium">From opportunity survey to validated improvement</div>
           <div
@@ -1600,7 +1709,8 @@ export function OptimizationRunStatusPresentation({
           <div className={cn('mt-4 rounded-md p-4 text-sm', launchedCount > 0 ? 'bg-emerald-500/10' : 'bg-muted/30')}>
             <div className="font-medium">Automatic execution</div>
             <p className="mt-1 text-muted-foreground">
-              {overview.execution_selected_count ?? 0} policy-selected · {overview.execution_launched_count ?? 0} launched · {overview.execution_rejected_count ?? 0} not selected
+              {overview.execution_selected_count ?? 0} policy-selected · {overview.execution_launched_count ?? 0} launched
+              {(overview.execution_selected_count ?? 0) > 0 && <> · {overview.execution_rejected_count ?? 0} policy not selected</>}
             </p>
             <p className="mt-2 text-muted-foreground">
               Safe, policy-selected targets may launch automatically. Champion promotion remains manual.
@@ -1666,9 +1776,7 @@ export function OptimizationRunStatusPresentation({
         </div>
       </section>
 
-      {usesCanonicalDispositions && <OptimizationLifecycle counts={dispositionCounts} />}
-
-      <AttentionQueue rows={presentation.attention_queue} />
+      <ActionOverview overview={overview} dispositionCounts={dispositionCounts} />
 
       {runHasIncompleteCoverage && (
         <section className="rounded-lg bg-amber-500/10 p-5">
@@ -1694,6 +1802,10 @@ export function OptimizationRunStatusPresentation({
           {overview.next_checkpoint && <p className="mt-2 text-sm"><span className="font-medium">Next:</span> {overview.next_checkpoint}</p>}
         </section>
       )}
+
+      <AttentionQueue rows={presentation.attention_queue} />
+
+      {usesCanonicalDispositions && <OptimizationLifecycle counts={dispositionCounts} />}
 
       <section className="rounded-lg bg-card p-6">
         <h3 className="text-lg font-semibold">How priorities were selected</h3>

@@ -640,6 +640,10 @@ def _stakeholder_execution_projection(
                 "execution_status": (
                     "automatic_launched"
                     if status == "automatic_selected" and target_identity(raw_row) in durable_launched_targets
+                    else "diagnosis_required"
+                    if status == "automatic_rejected"
+                    and decision_text(raw_row, "reason", "decision_reason", "rejection_reason")
+                    == "missing_diagnosis"
                     else status
                 ),
                 "execution_reason": decision_text(raw_row, "reason", "decision_reason", "rejection_reason"),
@@ -658,6 +662,18 @@ def _stakeholder_execution_projection(
             decision = execution_by_score.get((row.get("scorecard_name"), row.get("score_name")))
             if decision:
                 row.update(decision)
+                if decision["execution_status"] == "diagnosis_required":
+                    row.update({
+                        "readiness": "incomplete",
+                        "state": "incomplete",
+                        "coverage_status": "incomplete",
+                        "next_action": "await_semantic_diagnosis",
+                        "rationale": (
+                            "Deterministic assessment found a possible opportunity, "
+                            "but semantic diagnosis is not complete. This score is not "
+                            "approved or ready for automatic optimization."
+                        ),
+                    })
 
     # A policy-rejected target can legitimately have no portfolio row. Keep
     # its safe name and deterministic reason visible in Optimization Outcomes,
@@ -794,6 +810,7 @@ def _stakeholder_execution_status_text(value: Any) -> str:
         "automatic_selected": "selected automatically",
         "automatic_launched": "launched automatically",
         "automatic_rejected": "not selected automatically",
+        "diagnosis_required": "requires semantic diagnosis",
     }.get(str(value or ""), str(value or "not applicable"))
 
 

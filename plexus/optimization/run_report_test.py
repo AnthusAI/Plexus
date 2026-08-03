@@ -1379,6 +1379,51 @@ def test_automatic_execution_projection_reconciles_counts_and_keeps_opaque_ids_o
     assert "opaque-selected-id" not in summary
 
 
+def test_automatic_missing_diagnosis_is_presented_as_analysis_work_not_approved_execution():
+    from plexus.optimization.run_report import _stakeholder_execution_projection
+
+    view = _safe_view()
+    view["portfolio"][0].update({
+        "readiness": "ready_to_optimize",
+        "next_action": "run_approved_optimization",
+    })
+    view["priorities"][0]["next_action"] = "run_approved_optimization"
+    view["optimization_outcomes"] = [{
+        "scorecard_name": "Example Portfolio",
+        "score_name": "Priority Score",
+        "readiness": "ready_to_optimize",
+        "next_action": "run_approved_optimization",
+    }]
+    evidence = {
+        "execution_mode": "automatic",
+        "execution_decisions": {
+            "mode": "automatic",
+            "selected_count": 0,
+            "launched_count": 0,
+            "rejected_count": 1,
+            "selected_targets": [],
+            "rejected_targets": [{
+                "scorecard_name": "Example Portfolio",
+                "score_name": "Priority Score",
+                "reason": "missing_diagnosis",
+                "authorization_source": "published_policy",
+            }],
+        },
+    }
+
+    projected = _stakeholder_execution_projection(
+        view,
+        evidence,
+        expected_execution_mode="automatic",
+    )
+
+    for section in ("portfolio", "priorities", "optimization_outcomes"):
+        row = projected[section][0]
+        assert row["execution_status"] == "diagnosis_required"
+        assert row["next_action"] == "await_semantic_diagnosis"
+        assert "diagnosis" in row["rationale"].lower()
+
+
 def test_automatic_execution_marks_detail_incomplete_for_unnamed_targets_and_launch_mismatch(monkeypatch):
     uploaded: dict[str, bytes] = {}
     service = _service(monkeypatch)
