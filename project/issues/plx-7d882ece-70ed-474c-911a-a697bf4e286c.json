@@ -3,16 +3,23 @@
   "title": "Validate phase-two optimization reporting end to end",
   "description": "Run focused outside-in specifications, complete Python and dashboard gates, workbook reconciliation and visual checks, zero-resource diff proof, and a model-backed sandbox lifecycle from approval through terminal child review. Production mutation, deployment, push, and champion promotion remain out of scope.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "66823385-4d69-41fb-a9fb-ca19572b40a3",
+      "author": "ryan.porter",
+      "text": "Release integration resumed after the required Tactus package was published. Tactus 0.52.0 is available from PyPI. Next steps: fast-forward Plexus develop from main, merge refreshed develop into the living-report integration branch, upgrade the dependency and lock, resolve integration conflicts, and run the disabled-hosted-CI workflow locally before release review.",
+      "created_at": "2026-08-03T16:38:49.052397Z"
+    }
+  ],
   "created_at": "2026-07-30T22:44:50.487464Z",
-  "updated_at": "2026-07-30T22:44:50.487464Z",
+  "updated_at": "2026-08-03T16:38:49.052397Z",
   "closed_at": null,
   "custom": {}
 }
