@@ -1,0 +1,31 @@
+{
+  "id": "plx-c2a81e76-c7e6-4f0f-9188-59712ee5cedd",
+  "title": "Bound automatic portfolio launches by an explicit top-K limit",
+  "description": "",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "54906c8a-0f1d-45bf-a6f8-f433da59b9a3",
+      "author": "ryan.porter",
+      "text": "Feature: Frozen automatic execution top-K\n\n  Scenario: Diagnose several candidates but launch only one\n    Given an automatic portfolio run has multiple complete diagnosis-ready targets\n    And max_execution_targets is one\n    When execution policy is applied\n    Then only the highest-priority ready target is selected\n    And remaining ready targets stay visible as deferred by the execution limit\n    And no more than one optimizer child is dispatched\n\n  Scenario: Reject an unsafe execution limit\n    Given max_execution_targets is zero, negative, non-integral, or greater than five\n    When the portfolio run freezes its specification\n    Then it fails closed before optimizer dispatch\n\n  Scenario: Resume with the same frozen limit\n    Given a portfolio run checkpoint records max_execution_targets\n    When the run resumes\n    Then a changed limit is rejected as a different run specification",
+      "created_at": "2026-08-03T17:38:02.847966Z"
+    },
+    {
+      "id": "d2653837-40f9-4b89-b131-328d86ea28fe",
+      "author": "ryan.porter",
+      "text": "Implemented the frozen max_execution_targets contract. The Tactus portfolio procedure defaults to five and callers may explicitly choose one through five; direct legacy runner calls without the field retain prior uncapped batching behavior. Deterministic rank order is preserved, over-limit ready targets remain visible with execution_target_limit evidence, and stakeholder projections label them as later-run deferrals rather than launch failures. Validation: new red/green top-one and invalid-limit tests plus the full 245-test portfolio/report/YAML suite pass; Python flake8 and diff checks pass.",
+      "created_at": "2026-08-03T17:41:30.792817Z"
+    }
+  ],
+  "created_at": "2026-08-03T17:37:54.920098Z",
+  "updated_at": "2026-08-03T17:41:30.792817Z",
+  "closed_at": null,
+  "custom": {}
+}

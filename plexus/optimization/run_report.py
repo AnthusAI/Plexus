@@ -636,17 +636,20 @@ def _stakeholder_execution_projection(
             score_name = raw_row.get("score_name")
             if not isinstance(scorecard_name, str) or not scorecard_name or not isinstance(score_name, str) or not score_name:
                 continue
+            reason = decision_text(
+                raw_row, "reason", "decision_reason", "rejection_reason"
+            )
             execution_by_score[(scorecard_name, score_name)] = {
                 "execution_status": (
                     "automatic_launched"
                     if status == "automatic_selected" and target_identity(raw_row) in durable_launched_targets
                     else "diagnosis_required"
-                    if status == "automatic_rejected"
-                    and decision_text(raw_row, "reason", "decision_reason", "rejection_reason")
-                    == "missing_diagnosis"
+                    if status == "automatic_rejected" and reason == "missing_diagnosis"
+                    else "execution_limit_deferred"
+                    if status == "automatic_rejected" and reason == "execution_target_limit"
                     else status
                 ),
-                "execution_reason": decision_text(raw_row, "reason", "decision_reason", "rejection_reason"),
+                "execution_reason": reason,
                 "execution_authorization_source": decision_text(raw_row, "authorization_source", "authorization"),
             }
 
@@ -672,6 +675,15 @@ def _stakeholder_execution_projection(
                             "Deterministic assessment found a possible opportunity, "
                             "but semantic diagnosis is not complete. This score is not "
                             "approved or ready for automatic optimization."
+                        ),
+                    })
+                elif decision["execution_status"] == "execution_limit_deferred":
+                    row.update({
+                        "next_action": "consider_next_portfolio_run",
+                        "rationale": (
+                            "This target was ready under the automatic policy but fell "
+                            "outside this run's frozen top-K execution limit. It was not "
+                            "a launch failure and remains eligible for a later run."
                         ),
                     })
 
@@ -811,6 +823,7 @@ def _stakeholder_execution_status_text(value: Any) -> str:
         "automatic_launched": "launched automatically",
         "automatic_rejected": "not selected automatically",
         "diagnosis_required": "requires semantic diagnosis",
+        "execution_limit_deferred": "deferred by the execution limit",
     }.get(str(value or ""), str(value or "not applicable"))
 
 

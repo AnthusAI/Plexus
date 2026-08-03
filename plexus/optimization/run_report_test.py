@@ -1424,6 +1424,44 @@ def test_automatic_missing_diagnosis_is_presented_as_analysis_work_not_approved_
         assert "diagnosis" in row["rationale"].lower()
 
 
+def test_automatic_top_k_deferral_is_presented_as_next_run_work_not_launch_failure():
+    from plexus.optimization.run_report import _stakeholder_execution_projection
+
+    view = _safe_view()
+    view["portfolio"][0]["next_action"] = "run_approved_optimization"
+    view["priorities"][0]["next_action"] = "run_approved_optimization"
+    view["optimization_outcomes"] = [{
+        "scorecard_name": "Example Portfolio",
+        "score_name": "Priority Score",
+        "next_action": "run_approved_optimization",
+    }]
+    projected = _stakeholder_execution_projection(
+        view,
+        {
+            "execution_mode": "automatic",
+            "execution_decisions": {
+                "mode": "automatic",
+                "selected_count": 0,
+                "launched_count": 0,
+                "rejected_count": 1,
+                "selected_targets": [],
+                "rejected_targets": [{
+                    "scorecard_name": "Example Portfolio",
+                    "score_name": "Priority Score",
+                    "reason": "execution_target_limit",
+                }],
+            },
+        },
+        expected_execution_mode="automatic",
+    )
+
+    for section in ("portfolio", "priorities", "optimization_outcomes"):
+        row = projected[section][0]
+        assert row["execution_status"] == "execution_limit_deferred"
+        assert row["next_action"] == "consider_next_portfolio_run"
+        assert "top-k" in row["rationale"].lower()
+
+
 def test_automatic_execution_marks_detail_incomplete_for_unnamed_targets_and_launch_mismatch(monkeypatch):
     uploaded: dict[str, bytes] = {}
     service = _service(monkeypatch)

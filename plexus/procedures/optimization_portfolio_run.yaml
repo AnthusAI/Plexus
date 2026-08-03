@@ -2,7 +2,7 @@ name: Optimization Portfolio Run
 version: 1.0.0
 class: Tactus
 procedure_type: Portfolio Optimization
-description: "Creates one living report, analyzes a frozen score portfolio, and waits for structured human decisions before any optimizer launch."
+description: "Creates one living report, analyzes a frozen score portfolio, and applies the configured automatic or human-approved optimizer launch policy."
 
 params:
   account_id:
@@ -25,6 +25,11 @@ params:
     type: string
     required: true
     description: "Exact decimal-string run-wide cap for semantic diagnosis, separate from optimizer cost."
+  max_execution_targets:
+    type: number
+    required: false
+    default: 5
+    description: "Frozen top-K cap on optimizer targets selected for this run, from one through five."
   max_samples:
     type: number
     required: true
@@ -142,6 +147,7 @@ code: |
       max_cost_usd = params.max_cost_usd,
       max_semantic_diagnoses = params.max_semantic_diagnoses,
       max_semantic_cost_usd = params.max_semantic_cost_usd,
+      max_execution_targets = params.max_execution_targets,
       max_samples = params.max_samples,
       max_iterations = params.max_iterations,
       max_concurrency = params.max_concurrency,

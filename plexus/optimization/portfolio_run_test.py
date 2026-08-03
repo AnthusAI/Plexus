@@ -2438,6 +2438,62 @@ def test_automatic_mode_dispatches_a_complete_target_without_an_optimization_app
     assert not any(action.get("kind") == "promotion_approval" for action in result["actions"])
 
 
+def test_automatic_mode_diagnoses_multiple_candidates_but_obeys_frozen_top_k_execution_limit():
+    from plexus.optimization.portfolio_run import OptimizationPortfolioRunner
+
+    dispatches: list[dict[str, Any]] = []
+    report = _ReportService()
+    runner = OptimizationPortfolioRunner(_dependencies(
+        rank=lambda _request: {"coverage": {"complete": True}, "ranked": [
+            {"scorecard_id": "card", "score_id": "first"},
+            {"scorecard_id": "card", "score_id": "second"},
+        ]},
+        assess=lambda request: _assessment(request["scorecard_id"], request["score_id"]),
+        diagnose=lambda request: request["assessment"],
+        summary=lambda _request: {"coverage": {"complete": True}},
+        dispatch=lambda request: dispatches.append(request) or {
+            "accepted": True,
+            "accepted_targets": list(request["targets"]),
+            "rejected": [],
+        },
+        review=lambda _request: {}, report=report,
+        human_review=lambda _request: (_ for _ in ()).throw(
+            AssertionError("automatic mode must not request optimization approval")
+        ),
+    ))
+
+    result = runner.run({
+        "account_id": "account-1",
+        "run_key": "automatic-top-one",
+        "execution_mode": "automatic",
+        "max_execution_targets": 1,
+        "max_semantic_diagnoses": 2,
+        "max_semantic_cost_usd": "1",
+        "limits": {
+            "max_cost_usd": 1.0,
+            "max_samples": 1,
+            "max_iterations": 1,
+            "max_concurrency": 1,
+        },
+    })
+
+    assert [[target["score_id"] for target in call["targets"]] for call in dispatches] == [["first"]]
+    assert result["execution_decisions"]["selected_count"] == 1
+    assert any(
+        row["score_id"] == "second" and row["reason"] == "execution_target_limit"
+        for row in result["execution_decisions"]["rejected_targets"]
+    )
+    assert report.started[0]["max_execution_targets"] == 1
+
+
+@pytest.mark.parametrize("value", [0, -1, 1.5, 6, True, "not-a-number"])
+def test_execution_target_limit_rejects_values_outside_one_through_five(value):
+    from plexus.optimization.portfolio_run import _max_execution_targets
+
+    with pytest.raises(ValueError, match="one through five"):
+        _max_execution_targets({"max_execution_targets": value})
+
+
 @pytest.mark.parametrize(("phase", "procedure_id", "task_id", "expected"), [
     (None, None, None, 0),
     ("dispatch_outcome_unknown", "procedure-1", "task-1", 0),

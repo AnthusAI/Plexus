@@ -30,6 +30,7 @@ from tactus.core.exceptions import ProcedureWaitingForHuman
 
 
 MAX_APPROVAL_TARGETS = 5
+DEFAULT_MAX_EXECUTION_TARGETS: int | None = None
 MAX_PRIORITY_DIAGNOSES = 10
 DEFAULT_MAX_SEMANTIC_DIAGNOSES = 25
 DIAGNOSIS_SCOPE_POLICY_VERSION = "portfolio-diagnosis-scope-v2"
@@ -764,6 +765,19 @@ class OptimizationPortfolioRunner:
                         {"reason": "portfolio_diagnosis_incomplete"},
                         fallback_targets=[target],
                     )
+            max_execution_targets = _max_execution_targets(request)
+            execution_limit_deferred = (
+                ready[max_execution_targets:]
+                if max_execution_targets is not None else []
+            )
+            if max_execution_targets is not None:
+                ready = ready[:max_execution_targets]
+            if execution_limit_deferred:
+                _append_execution_rejection(
+                    execution_decisions,
+                    {"reason": "execution_target_limit"},
+                    fallback_targets=execution_limit_deferred,
+                )
             execution_decisions["selected_targets"] = [
                 {
                     **_execution_target_row(target, reason="eligible_for_launch"),
@@ -1435,6 +1449,7 @@ def _run_key(request: Mapping[str, Any]) -> str:
         "toolchain_version": _toolchain_version(request.get("toolchain_version")),
         "semantic_budget": _semantic_budget_spec(request),
         "execution_mode": _execution_mode(request.get("execution_mode")),
+        "max_execution_targets": _max_execution_targets(request),
     }
     return "optimization-" + sha256(json.dumps(normalized, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()[:24]
 
@@ -1457,6 +1472,7 @@ def _run_spec(request: Mapping[str, Any], *, account_id: str, run_key: str) -> d
             if key in request
         }),
         "execution_mode": _execution_mode(request.get("execution_mode")),
+        "max_execution_targets": _max_execution_targets(request),
     }
     semantic_budget = _semantic_budget_spec(request)
     if semantic_budget is not None:
@@ -1781,6 +1797,23 @@ def _max_semantic_diagnoses(request: Mapping[str, Any]) -> int:
         raise ValueError("max_semantic_diagnoses must be a non-negative integer") from exc
     if result < 0 or result != value:
         raise ValueError("max_semantic_diagnoses must be a non-negative integer")
+    return result
+
+
+def _max_execution_targets(request: Mapping[str, Any]) -> int | None:
+    value = request.get("max_execution_targets", DEFAULT_MAX_EXECUTION_TARGETS)
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError("max_execution_targets must be an integer from one through five")
+    try:
+        result = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "max_execution_targets must be an integer from one through five"
+        ) from exc
+    if result != value or not 1 <= result <= MAX_APPROVAL_TARGETS:
+        raise ValueError("max_execution_targets must be an integer from one through five")
     return result
 
 
