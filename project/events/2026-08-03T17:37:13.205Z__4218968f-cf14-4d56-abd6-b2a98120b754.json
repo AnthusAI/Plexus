@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4218968f-cf14-4d56-abd6-b2a98120b754",
+  "issue_id": "plx-fdc4a9fc-e1c4-47ed-a2aa-fa33e0512544",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-03T17:37:13.205Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implement configurable container repositories, scheduled container orchestration, and service observability driven entirely by consumer-supplied resource names and references.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-39614d99-a561-4250-991b-0dd4e23c3887",
+    "priority": 1,
+    "status": "open",
+    "title": "Provide reusable scheduled worker, repository, and monitoring stacks"
+  }
+}

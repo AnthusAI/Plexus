@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "32c0ff3d-f797-4eb5-9c75-01dbcf06aa4d",
+  "issue_id": "plx-128d6087-aabb-42c0-9598-97a711fdd836",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-03T17:37:12.899Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implement configurable network, retained NAT address, endpoint, flow-log, alert-topic, and pipeline-notification stacks without client-specific defaults.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-39614d99-a561-4250-991b-0dd4e23c3887",
+    "priority": 1,
+    "status": "open",
+    "title": "Provide reusable network and operations stacks"
+  }
+}

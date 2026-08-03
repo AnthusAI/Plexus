@@ -1,0 +1,25 @@
+{
+  "id": "plx-128d6087-aabb-42c0-9598-97a711fdd836",
+  "title": "Provide reusable network and operations stacks",
+  "description": "Implement configurable network, retained NAT address, endpoint, flow-log, alert-topic, and pipeline-notification stacks without client-specific defaults.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-39614d99-a561-4250-991b-0dd4e23c3887",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "262127a6-8389-4e6b-8ce2-eb06ae37779f",
+      "author": "derek.norrbom",
+      "text": "Implemented configurable network and operations stacks with retained NAT addresses, private service endpoints, flow logs, encrypted alert delivery, and consumer-supplied naming.",
+      "created_at": "2026-08-03T18:01:36.213337Z"
+    }
+  ],
+  "created_at": "2026-08-03T17:37:12.899095Z",
+  "updated_at": "2026-08-03T18:01:36.359715Z",
+  "closed_at": "2026-08-03T18:01:36.359715Z",
+  "custom": {}
+}

@@ -1,0 +1,37 @@
+{
+  "id": "plx-39614d99-a561-4250-991b-0dd4e23c3887",
+  "title": "Reusable asynchronous scoring service infrastructure",
+  "description": "Provide a reusable, client-neutral AWS infrastructure surface for deploying the complete asynchronous scoring service substrate. Definition of done: network, scoring, integration hosting, scheduled worker hosting, operations, artifact repository, and observability stacks are configurable; consumers supply behavior and configuration; existing legacy deployments remain untouched; immutable score-processor artifacts are deployed exactly as validated.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "421091af-9261-4121-b797-26b6055561ef",
+      "author": "derek.norrbom",
+      "text": "Implementation started. The migration will use reusable Stack subclasses with consumer-supplied configuration, preserve existing construct identifiers for adopters, keep all runtime behavior outside Plexus, and reject mutable score-processor image resolution. Legacy infrastructure entry points are out of scope and must remain unchanged.",
+      "created_at": "2026-08-03T17:37:22.639586Z"
+    },
+    {
+      "id": "2b5fa011-4e44-4efc-b5b7-74bd66bfaf10",
+      "author": "derek.norrbom",
+      "text": "Reusable stack implementations are complete for networking, operations, asynchronous scoring, authenticated integration hosting, container repositories, scheduled workers, and monitoring. Consumer-specific names, handlers, routes, environment variables, and worker definitions are supplied through constructor properties. The asynchronous scoring stack now accepts only an explicit digest URI or a required CloudFormation parameter with a sha256 pattern. Validation: python -m flake8 plexus/infrastructure/scoring_service infrastructure/tests/unit/test_scoring_service_platform_stacks.py; python -m pytest infrastructure/tests/unit -q.",
+      "created_at": "2026-08-03T17:49:01.775810Z"
+    },
+    {
+      "id": "bfbfb606-122f-4587-b56c-755cc303f749",
+      "author": "derek.norrbom",
+      "text": "Reusable asynchronous scoring service infrastructure is implemented on feature/reusable-async-scoring-infrastructure and pushed at commit 7991b3300455bec8a2f98e0ba9bf49920ed4ab9e.",
+      "created_at": "2026-08-03T18:01:37.704590Z"
+    }
+  ],
+  "created_at": "2026-08-03T17:36:59.886520Z",
+  "updated_at": "2026-08-03T18:01:37.849807Z",
+  "closed_at": "2026-08-03T18:01:37.849807Z",
+  "custom": {}
+}
