@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2b715ad4-6d34-4bc9-80d4-6508f2d92482",
+  "issue_id": "plx-4a06bcfe-d426-477b-969c-7703f2bde37a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-04T19:45:41.013Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implement the first isolated foundation for stories plx-287b0f and plx-04e73b: a provider-neutral command envelope, transport and lifecycle interfaces, deterministic lease model, worker orchestration core, and in-memory adapters with executable specifications. Do not integrate AWS, modify the existing Celery path, or deploy infrastructure in this task.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement the portable command lifecycle foundation"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4ca57ab8-12f3-4a59-a46b-153f8dfeac89",
+  "issue_id": "plx-f41a40d8-e22d-42c5-9ec2-fbae24ea605c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-04T19:45:27.747Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "As a platform operator, I want the AWS command transport and worker service provisioned explicitly, so that runtime startup does not create infrastructure or depend on static cloud credentials.\n\nFeature: Managed AWS command transport\n  Scenario: The AWS worker service starts\n    Given its queue, dead-letter queue, roles, logs, and service were deployed through infrastructure as code\n    When a worker starts with its workload identity\n    Then it consumes only its configured queue\n    And it does not create queues or result tables\n    And it does not require static cloud access keys",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "AWS command transport uses explicitly managed infrastructure"
+  }
+}

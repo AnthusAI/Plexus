@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "50ab5d16-4a99-41dc-8b2c-bca2d965b16c",
+  "issue_id": "plx-cc5f1612-ba3c-42a8-9c10-0e14804858e4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-04T19:45:17.030Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "As an operator, I want interrupted commands to become recoverable after their execution lease expires, so that worker failure cannot silently lose long-running work.\n\nFeature: Recover interrupted commands\n  Scenario: A worker disappears during execution\n    Given a running command with a renewable execution lease\n    And the worker stops heartbeating before completion\n    When the lease expires\n    Then the command becomes eligible for a controlled retry\n    And a stale worker cannot complete the superseded attempt\n    And the task history records the interruption and retry",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Expired command leases recover without silent loss"
+  }
+}

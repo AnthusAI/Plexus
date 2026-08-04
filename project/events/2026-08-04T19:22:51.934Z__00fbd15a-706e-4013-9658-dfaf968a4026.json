@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "00fbd15a-706e-4013-9658-dfaf968a4026",
+  "issue_id": "plx-68515df0-0b75-4174-9373-c9297357bb33",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-04T19:22:51.934Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Trace the current command lifecycle from dashboard interaction through API dispatch, broker or queue creation, Celery integration, worker execution, status updates, cancellation, retries, and infrastructure provisioning. Produce evidence-backed findings and identify contracts, coupling, failure modes, and migration decisions. This is a read-only investigation; it does not authorize implementation changes.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Map the current interactive command execution flow"
+  }
+}
