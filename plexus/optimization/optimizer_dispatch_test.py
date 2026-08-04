@@ -210,6 +210,32 @@ def test_happy_path_persists_each_phase_holds_then_releases_once() -> None:
     assert backend.tasks[0]["metadata"]["dispatch_policy"] == "held_once"
 
 
+def test_terminal_child_observation_does_not_reinterpret_changed_optimizer_source_as_a_relaunch() -> None:
+    backend = _Backend()
+    published = _Publisher()
+    request = _request()
+    waiting = _launch(backend, request, published)
+    backend.tasks[0]["status"] = "COMPLETED"
+    backend.tasks[0]["dispatchStatus"] = "DISPATCHED"
+
+    changed_request = deepcopy(request)
+    changed_request["optimizer_yaml"] += "# later local repair\n"
+
+    from plexus.optimization.optimizer_dispatch import OptimizerTaskDispatchService
+
+    observed = OptimizerTaskDispatchService(backend).step(
+        changed_request,
+        waiting,
+        may_mutate=True,
+    )
+
+    assert observed["phase"] == "terminal"
+    assert observed["task"]["status"] == "COMPLETED"
+    assert observed["launch_spec"] == waiting["launch_spec"]
+    assert backend.create_procedure_calls == 1
+    assert backend.create_task_calls == 1
+
+
 @pytest.mark.parametrize("max_cost_usd", [0, -0.01, float("inf"), float("nan")])
 def test_invalid_cost_limit_rejects_before_creating_optimizer_children(max_cost_usd) -> None:
     backend = _Backend()
@@ -330,6 +356,21 @@ def test_dispatching_without_celery_id_is_unknown_and_never_released_again() -> 
     assert observed["phase"] == "dispatch_outcome_unknown"
     assert observed["reason"] == "dispatching_without_celery_id"
     assert backend.release_calls == 0
+
+
+def test_completed_procedure_overrides_a_stale_dispatcher_task_failure() -> None:
+    backend = _Backend()
+    first = _launch(backend, _request(), _Publisher())
+    backend.tasks[0]["status"] = "FAILED"
+    backend.tasks[0]["dispatchStatus"] = "ERROR"
+    backend.procedures[0]["status"] = "COMPLETED"
+
+    observed = _launch(backend, _request(), _Publisher(), resume_state=first)
+
+    assert observed["phase"] == "terminal"
+    assert observed["task"]["status"] == "FAILED"
+    assert observed["procedure"]["status"] == "COMPLETED"
+    assert observed["completion_source"] == "procedure"
 
 
 @pytest.mark.parametrize(

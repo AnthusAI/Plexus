@@ -13,7 +13,10 @@ The service handles:
 """
 
 import logging
-from typing import Optional, Dict, Any, List, Tuple
+import json
+from math import isfinite
+from numbers import Real
+from typing import Optional, Dict, Any, List, Mapping, Tuple
 from dataclasses import dataclass
 from contextlib import nullcontext
 from pathlib import Path
@@ -34,6 +37,49 @@ from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id, get
 from plexus.attribution.actor_context import resolve_actor_context, set_runtime_actor_context
 
 logger = logging.getLogger(__name__)
+
+
+def _frozen_optimizer_runtime_limits(procedure: Any) -> dict[str, Real] | None:
+    """Project an immutable optimizer launch spec onto Tactus parameters."""
+    raw_metadata = getattr(procedure, "metadata", None)
+    if isinstance(raw_metadata, str):
+        try:
+            metadata = json.loads(raw_metadata)
+        except json.JSONDecodeError as exc:
+            raise ValueError("optimizer child Procedure metadata is not valid JSON") from exc
+    elif isinstance(raw_metadata, Mapping):
+        metadata = dict(raw_metadata)
+    elif raw_metadata in (None, ""):
+        return None
+    else:
+        raise ValueError("optimizer child Procedure metadata is malformed")
+    if not isinstance(metadata, Mapping):
+        raise ValueError("optimizer child Procedure metadata is malformed")
+    launch_spec = metadata.get("optimizer_launch_spec")
+    if launch_spec is None:
+        return None
+    if not isinstance(launch_spec, Mapping) or not isinstance(launch_spec.get("limits"), Mapping):
+        raise ValueError("optimizer child launch limits are malformed")
+    limits = dict(launch_spec["limits"])
+    required = ("max_cost_usd", "max_samples", "max_iterations", "max_concurrency")
+    missing = [key for key in required if key not in limits]
+    if missing:
+        raise ValueError(
+            "optimizer child launch limits are incomplete: " + ", ".join(missing)
+        )
+    for key in required:
+        value = limits[key]
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, Real)
+            or not isfinite(float(value))
+            or float(value) <= 0
+        ):
+            raise ValueError(f"optimizer child launch limit {key} must be positive and finite")
+    for key in ("max_samples", "max_iterations", "max_concurrency"):
+        if not isinstance(limits[key], int):
+            raise ValueError(f"optimizer child launch limit {key} must be an integer")
+    return {key: limits[key] for key in required}
 
 def _validate_yaml_template(template_data):
     """Validate that a YAML template has required sections for procedures."""
@@ -930,6 +976,24 @@ class ProcedureService:
                                 or 'optimizer' in procedure_id.lower()
                             ),
                         }
+                        # Stored procedures carry authoritative Scorecard/Score
+                        # associations separately from their Tactus parameter
+                        # values.  A durable optimizer child is normally run by
+                        # ID, without CLI --set arguments, so project those
+                        # associations onto the legacy parameter names expected
+                        # by the procedure.  Prefer resolved display names for
+                        # stakeholder-facing messages, while retaining the exact
+                        # opaque IDs above for validation and tool calls.
+                        scorecard_parameter = (
+                            procedure_info.scorecard_name if procedure_info else None
+                        ) or scorecard_id
+                        score_parameter = (
+                            procedure_info.score_name if procedure_info else None
+                        ) or score_id
+                        if scorecard_parameter:
+                            context['scorecard'] = scorecard_parameter
+                        if score_parameter:
+                            context['score'] = score_parameter
                         if account_id:
                             context['account_id'] = account_id
 
@@ -970,6 +1034,25 @@ class ProcedureService:
                             context['dry_run'] = bool(options['dry_run'])
                         if options.get('max_iterations') is not None:
                             context['max_iterations'] = int(options['max_iterations'])
+
+                        frozen_limits = _frozen_optimizer_runtime_limits(
+                            procedure_info.procedure if procedure_info else None
+                        )
+                        if frozen_limits is not None:
+                            runtime_limits = {
+                                'max_cost_usd': frozen_limits['max_cost_usd'],
+                                'max_samples': frozen_limits['max_samples'],
+                                'max_iterations': frozen_limits['max_iterations'],
+                                'max_parallel_evaluations': frozen_limits['max_concurrency'],
+                            }
+                            for parameter, frozen_value in runtime_limits.items():
+                                supplied_value = context.get(parameter)
+                                if supplied_value is not None and supplied_value != frozen_value:
+                                    raise ValueError(
+                                        f"runtime parameter {parameter} conflicts with the frozen "
+                                        "optimizer child launch limit"
+                                    )
+                                context[parameter] = frozen_value
 
                         # Expose task_id so the Stage.set() MCP tool can update the dashboard
                         task_id_for_tracking = options.get('_task_id_for_stage_tracking')

@@ -2810,6 +2810,7 @@ def test_default_portfolio_runtime_constructs_the_graphql_optimizer_child_dispat
         "scorecard_id": "scorecard-opaque",
         "score_id": "score-opaque",
         "assessment_fingerprint": "assessment-opaque",
+        "execution_candidate_policy": "promotion_ready",
         "limits": {
             "max_cost_usd": 1.0,
             "max_samples": 10,
@@ -2833,6 +2834,7 @@ def test_default_portfolio_runtime_constructs_the_graphql_optimizer_child_dispat
         "scorecard_id": "scorecard-opaque",
         "score_id": "score-opaque",
         "assessment_fingerprint": "assessment-opaque",
+        "execution_candidate_policy": "promotion_ready",
         "limits": {
             "max_cost_usd": 1.0,
             "max_samples": 10,
@@ -4346,6 +4348,27 @@ def test_default_optimization_diagnose_preserves_ready_assessment_when_semantics
     assert result["states"]["readiness"] == "ready_to_optimize"
 
 
+def test_default_optimization_diagnose_preserves_the_exact_guideline_code_conflict_claim() -> None:
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-runtime-diagnose-conflict-claim"),
+        score_info=lambda _args: {"championVersionId": "v-1"},
+        score_contradictions=lambda _args: {
+            "status": "potential_conflict",
+            "paragraph": "The guideline requires an explicit confirmation, but the score code accepts an implied answer.",
+        },
+        rubric_memory_recent_entries=lambda _args: {"entries": []},
+        rubric_memory_evidence_pack=lambda _args: {"evidence": []},
+        rubric_memory_sme_question_gate=lambda _args: {"questions": []},
+    )
+
+    result = module.optimization.diagnose({"scorecard_id": "sc-1", "score_id": "s-1"})
+
+    assert result["guideline_state"] == "potential_code_conflict"
+    assert result["guideline_code_conflict_claim"] == (
+        "The guideline requires an explicit confirmation, but the score code accepts an implied answer."
+    )
+
+
 def test_optimization_diagnose_threads_rubric_evidence_and_version_into_sme_gate() -> None:
     gate_calls: list[dict] = []
     rubric_context = {
@@ -4455,6 +4478,33 @@ def test_optimization_run_accepts_actual_assessment_packet_fingerprint_when_live
     })
     assert rejected["accepted_targets"] == []
     assert rejected["rejected"][0]["reason"] == "assessment_freshness_mismatch"
+
+
+def test_optimization_run_accepts_equivalent_feedback_watermark_precision() -> None:
+    """GraphQL timestamp formatting must not make unchanged evidence stale."""
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-equivalent-feedback-watermark-precision"),
+        score_info=lambda _args: _old_live_score_info("v-1"),
+        feedback_latest_update=lambda _args: {
+            "latest_feedback_updated_at": "2026-07-01T00:00:00.155000Z"
+        },
+    )
+    target = _ready_optimization_target(
+        "sc-1", "s-1", "v-1", "2026-07-01T00:00:00.155Z"
+    )
+
+    result = module._optimization_run_validator({
+        "run_key": "frozen-run-equivalent-watermark",
+        "approved": True,
+        "targets": [target],
+        "max_cost_usd": 1.0,
+        "max_samples": 20,
+        "max_iterations": 2,
+        "max_concurrency": 1,
+    })
+
+    assert result["accepted_targets"] == [target]
+    assert result["rejected"] == []
 
 
 def test_alignment_batch_preserves_honest_complete_monday_week_metrics_from_valid_pairs() -> None:

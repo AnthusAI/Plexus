@@ -109,14 +109,14 @@ class GraphQLOptimizerDispatchBackend:
     def procedure_pages_for_account(self, account_id: str) -> Iterator[dict[str, Any]]:
         yield from self._account_pages(
             account_id,
-            field="listProcedureByAccountIdUpdatedAt",
+            field="listProcedureByAccountIdAndUpdatedAt",
             resource="procedure account",
             query=f"""
               query ListProcedureByAccountIdUpdatedAt(
-                $accountId: String!, $updatedAt: ModelStringInput,
+                $accountId: String!, $updatedAt: ModelStringKeyConditionInput,
                 $sortDirection: ModelSortDirection, $limit: Int, $nextToken: String
               ) {{
-                listProcedureByAccountIdUpdatedAt(
+                listProcedureByAccountIdAndUpdatedAt(
                   accountId: $accountId, updatedAt: $updatedAt,
                   sortDirection: $sortDirection, limit: $limit, nextToken: $nextToken
                 ) {{ items {{ {_PROCEDURE_FIELDS} }} nextToken }}
@@ -127,14 +127,14 @@ class GraphQLOptimizerDispatchBackend:
     def task_pages_for_account(self, account_id: str) -> Iterator[dict[str, Any]]:
         yield from self._account_pages(
             account_id,
-            field="listTaskByAccountIdUpdatedAt",
+            field="listTaskByAccountIdAndUpdatedAt",
             resource="task account",
             query=f"""
               query ListTaskByAccountIdUpdatedAt(
-                $accountId: String!, $updatedAt: ModelStringInput,
+                $accountId: String!, $updatedAt: ModelStringKeyConditionInput,
                 $sortDirection: ModelSortDirection, $limit: Int, $nextToken: String
               ) {{
-                listTaskByAccountIdUpdatedAt(
+                listTaskByAccountIdAndUpdatedAt(
                   accountId: $accountId, updatedAt: $updatedAt,
                   sortDirection: $sortDirection, limit: $limit, nextToken: $nextToken
                 ) {{ items {{ {_TASK_FIELDS} }} nextToken }}

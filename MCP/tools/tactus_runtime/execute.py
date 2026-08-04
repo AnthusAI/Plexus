@@ -49,6 +49,23 @@ OPTIMIZATION_RANK_INVENTORY_PAGE_SIZE = 100
 OPTIMIZATION_RANK_PROGRESS_INTERVAL = 5
 
 
+def _same_iso_timestamp(left: Any, right: Any) -> bool:
+    """Compare equivalent ISO-8601 instants, not their wire formatting."""
+    if left == right:
+        return True
+    if not isinstance(left, str) or not isinstance(right, str):
+        return False
+    try:
+        from datetime import datetime, timezone
+
+        return (
+            datetime.fromisoformat(left.replace("Z", "+00:00")).astimezone(timezone.utc)
+            == datetime.fromisoformat(right.replace("Z", "+00:00")).astimezone(timezone.utc)
+        )
+    except ValueError:
+        return False
+
+
 PLEXUS_DOCS_DIR = os.path.normpath(
     os.path.join(
         os.path.dirname(__file__),
@@ -10830,6 +10847,12 @@ class PlexusRuntimeModule:
             failures.append(str(exc))
         contradictions = results.get("contradictions") or {}
         sme = results.get("sme_gate") or {}
+        conflict_claim = (
+            str(contradictions.get("paragraph") or "").strip()
+            if isinstance(contradictions, dict)
+            and contradictions.get("status") == "potential_conflict"
+            else ""
+        )
         stakeholder_questions: list[str] = []
         if isinstance(sme, dict):
             # The typed SME gate publishes final agenda items, not a generic
@@ -10844,7 +10867,7 @@ class PlexusRuntimeModule:
                 question = str(item.get("final_text") or item.get("original_text") or "").strip()
                 if question:
                     stakeholder_questions.append(question)
-        return {
+        payload = {
             "account_id": args.get("account_id"), "scorecard_id": scorecard_id, "score_id": score_id,
             "scope": {"scorecard_id": scorecard_id, "score_id": score_id},
             "assessment": args.get("assessment") or args.get("assessment_packet") or {},
@@ -10862,6 +10885,12 @@ class PlexusRuntimeModule:
             "coverage_complete": not failures, "coverage_failures": failures,
             "evidence_ids": [value.get("id") for value in results.values() if isinstance(value, dict) and value.get("id")],
         }
+        if conflict_claim:
+            # This is the model's stakeholder-safe diagnosis paragraph, not
+            # raw feedback or an opaque artifact reference. Preserve it so a
+            # later repair workstream can state the actual detected conflict.
+            payload["guideline_code_conflict_claim"] = conflict_claim
+        return payload
 
     def _optimization_review_payload(self, args: dict[str, Any]) -> dict[str, Any]:
         procedure_id = str(args.get("procedure_id") or "")
@@ -10953,7 +10982,10 @@ class PlexusRuntimeModule:
                         continue
                     if (
                         source.get("champion_version") != current["champion_version"]
-                        or source.get("feedback_watermark") != current["feedback_watermark"]
+                        or not _same_iso_timestamp(
+                            source.get("feedback_watermark"),
+                            current["feedback_watermark"],
+                        )
                     ):
                         # Retain the target for the common public validator so
                         # it returns the precise stale-assessment reason rather
@@ -10991,7 +11023,13 @@ class PlexusRuntimeModule:
                     continue
                 if (
                     target.get("champion_version") not in (None, current["champion_version"])
-                    or target.get("feedback_watermark") not in (None, current["feedback_watermark"])
+                    or (
+                        target.get("feedback_watermark") is not None
+                        and not _same_iso_timestamp(
+                            target.get("feedback_watermark"),
+                            current["feedback_watermark"],
+                        )
+                    )
                 ):
                     rejected.append({"target": target, "reason": "stale_assessment"})
                     continue

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 
 def _utc_timestamp(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -204,11 +206,16 @@ def test_refresh_target_freshness_freezes_one_activity_time_for_the_batch() -> N
     assert len({row["activity_as_of"] for row in evidence.values()}) == 1
 
 
-def _completed_evaluation(evaluation_id: str, baseline_id: str) -> dict:
+def _completed_evaluation(
+    evaluation_id: str,
+    baseline_id: str,
+    *,
+    version_id: str = "candidate",
+) -> dict:
     return {
         "id": evaluation_id,
         "status": "COMPLETED",
-        "score_version_id": "candidate",
+        "score_version_id": version_id,
         "baseline_evaluation_id": baseline_id,
         "total_items": 100,
         "processed_items": 100,
@@ -265,6 +272,10 @@ def test_indexed_review_requires_exact_terminal_matched_safe_evidence() -> None:
     assert evidence["rca_complete"] is True
     assert evidence["artifacts_complete"] is True
     assert evidence["measurable_safe_improvement"] is True
+    assert evidence["alignment_evidence"] == {
+        "recent": {"baseline": 0.60, "candidate": 0.72, "delta": 0.12},
+        "regression": {"baseline": 0.75, "candidate": 0.76, "delta": 0.01},
+    }
 
 
 def test_indexed_review_unknown_or_mismatched_evidence_fails_closed() -> None:
@@ -304,3 +315,441 @@ def test_indexed_review_unknown_or_mismatched_evidence_fails_closed() -> None:
     assert evidence["rca_complete"] is False
     assert evidence["artifacts_complete"] is False
     assert evidence["measurable_safe_improvement"] is False
+
+
+def test_indexed_review_uses_winning_candidate_accuracy_reference_after_stale_best_baseline() -> None:
+    from plexus.optimization.decision import classify_post_run_review
+    from plexus.optimization.orchestration import (
+        build_indexed_optimizer_review_evidence,
+    )
+
+    indexed = {
+        "summary": {"effective_status": "COMPLETED"},
+        "baseline": {
+            "version_id": "champion",
+            "original_feedback_evaluation_id": "recent-baseline",
+            "original_accuracy_evaluation_id": "historical-baseline",
+            "feedback_alignment": 0.60,
+            "accuracy_alignment": 0.75,
+        },
+        "best": {
+            "winning_version_id": "winner",
+            "best_feedback_evaluation_id": "winner-recent",
+            "best_accuracy_evaluation_id": "historical-baseline",
+            "feedback_alignment": 0.72,
+            "accuracy_alignment": 0.75,
+        },
+        "cycles": [{
+            "cycle": 1,
+            "status": "accepted",
+            "accepted": True,
+            "candidates": [{
+                "version_id": "winner",
+                "accuracy_evaluation_id": "winner-historical",
+            }],
+        }],
+        "review_artifacts": {"artifacts_complete": True, "rca_complete": True},
+    }
+    evaluations = {
+        "winner-recent": _completed_evaluation(
+            "winner-recent", "recent-baseline", version_id="winner"
+        ),
+        "historical-baseline": _completed_evaluation(
+            "historical-baseline", "prior-historical", version_id="champion"
+        ),
+        "winner-historical": _completed_evaluation(
+            "winner-historical", "historical-baseline", version_id="winner"
+        ),
+    }
+    evaluation_calls: list[str] = []
+
+    evidence = build_indexed_optimizer_review_evidence(
+        indexed,
+        procedure_id="procedure",
+        read_evaluation=lambda evaluation_id: evaluation_calls.append(evaluation_id)
+        or evaluations[evaluation_id],
+    )
+    review = classify_post_run_review(evidence)
+
+    assert evaluation_calls == ["winner-recent", "winner-historical"]
+    assert evidence["historical_regression_evidence"] is True
+    assert evidence["measurable_safe_improvement"] is True
+    assert review["post_run_state"] == "promotion_ready"
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        {},
+        {"version_id": "other", "accuracy_evaluation_id": "winner-historical"},
+    ],
+    ids=["missing_candidate", "mismatched_candidate_version"],
+)
+def test_indexed_review_stale_best_baseline_without_exact_winner_candidate_fails_closed(
+    candidate: dict,
+) -> None:
+    from plexus.optimization.orchestration import (
+        build_indexed_optimizer_review_evidence,
+    )
+
+    indexed = {
+        "summary": {"effective_status": "COMPLETED"},
+        "baseline": {
+            "version_id": "champion",
+            "original_feedback_evaluation_id": "recent-baseline",
+            "original_accuracy_evaluation_id": "historical-baseline",
+            "feedback_alignment": 0.60,
+            "accuracy_alignment": 0.75,
+        },
+        "best": {
+            "winning_version_id": "winner",
+            "best_feedback_evaluation_id": "winner-recent",
+            "best_accuracy_evaluation_id": "historical-baseline",
+            "feedback_alignment": 0.72,
+            "accuracy_alignment": 0.75,
+        },
+        "cycles": [{"candidates": [candidate]}],
+        "review_artifacts": {"artifacts_complete": True, "rca_complete": True},
+    }
+    evaluations = {
+        "winner-recent": _completed_evaluation(
+            "winner-recent", "recent-baseline", version_id="winner"
+        ),
+        "historical-baseline": _completed_evaluation(
+            "historical-baseline", "prior-historical", version_id="champion"
+        ),
+    }
+
+    evidence = build_indexed_optimizer_review_evidence(
+        indexed,
+        procedure_id="procedure",
+        read_evaluation=evaluations.__getitem__,
+    )
+
+    assert evidence["measurable_safe_improvement"] is False
+    assert evidence["historical_regression_evidence"] is False
+
+
+def _already_good_indexed() -> dict:
+    return {
+        "summary": {
+            "effective_status": "COMPLETED",
+            "completion_reason": "baselines_already_good",
+            "stop_reason": "already_good",
+            "completed_cycles": 0,
+        },
+        "procedure": {"status": "COMPLETED", "task_status": "COMPLETED"},
+        "baseline": {
+            "version_id": "champion",
+            "original_feedback_evaluation_id": "recent-baseline",
+            "original_accuracy_evaluation_id": "historical-baseline",
+            "feedback_alignment": 0.99,
+            "accuracy_alignment": 0.99,
+        },
+        "best": {
+            "winning_version_id": "champion",
+            "last_accepted_version_id": "champion",
+        },
+        "cycles": [],
+        "review_artifacts": {"artifacts_complete": True, "rca_complete": True},
+    }
+
+
+def _already_good_evaluations() -> dict[str, dict]:
+    return {
+        "recent-baseline": _completed_evaluation(
+            "recent-baseline", "prior-recent", version_id="champion"
+        ),
+        "historical-baseline": _completed_evaluation(
+            "historical-baseline", "prior-historical", version_id="champion"
+        ),
+    }
+
+
+def test_indexed_review_classifies_exact_completed_already_good_baselines_as_no_safe_improvement() -> None:
+    from plexus.optimization.decision import classify_post_run_review
+    from plexus.optimization.orchestration import (
+        build_indexed_optimizer_review_evidence,
+    )
+
+    evidence = build_indexed_optimizer_review_evidence(
+        _already_good_indexed(),
+        procedure_id="procedure",
+        read_evaluation=_already_good_evaluations().__getitem__,
+    )
+    review = classify_post_run_review(evidence)
+
+    assert evidence["measurable_safe_improvement"] is False
+    assert review["post_run_state"] == "no_safe_improvement"
+
+
+def test_indexed_review_classifies_legacy_completed_already_good_baselines_as_no_safe_improvement() -> None:
+    from plexus.optimization.decision import classify_post_run_review
+    from plexus.optimization.orchestration import (
+        build_indexed_optimizer_review_evidence,
+    )
+
+    indexed = _already_good_indexed()
+    indexed["summary"]["completion_reason"] = "legacy_baselines_already_good"
+    indexed["summary"].pop("stop_reason")
+    evidence = build_indexed_optimizer_review_evidence(
+        indexed,
+        procedure_id="procedure",
+        read_evaluation=_already_good_evaluations().__getitem__,
+    )
+    review = classify_post_run_review(evidence)
+
+    assert evidence["measurable_safe_improvement"] is False
+    assert review["post_run_state"] == "no_safe_improvement"
+
+
+@pytest.mark.parametrize(
+    ("mutate_indexed", "mutate_evaluations"),
+    [
+        (
+            lambda indexed: indexed["summary"].update(
+                {"completion_reason": "converged", "stop_reason": "converged"}
+            ),
+            lambda _evaluations: None,
+        ),
+        (
+            lambda indexed: (
+                indexed["summary"].pop("completion_reason"),
+                indexed["summary"].update(
+                    {"procedure_summary": "The baselines are already good."}
+                ),
+            ),
+            lambda _evaluations: None,
+        ),
+        (
+            lambda indexed: indexed["procedure"].update({"task_status": "RUNNING"}),
+            lambda _evaluations: None,
+        ),
+        (
+            lambda indexed: indexed["baseline"].update({"accuracy_alignment": 0.98}),
+            lambda _evaluations: None,
+        ),
+        (
+            lambda indexed: indexed["baseline"].update(
+                {"original_accuracy_evaluation_id": None}
+            ),
+            lambda _evaluations: None,
+        ),
+        (
+            lambda _indexed: None,
+            lambda evaluations: evaluations["historical-baseline"].update(
+                {"score_version_id": "wrong-version"}
+            ),
+        ),
+        (
+            lambda _indexed: None,
+            lambda evaluations: evaluations["historical-baseline"].update(
+                {"status": "RUNNING", "processed_items": 99}
+            ),
+        ),
+    ],
+    ids=[
+        "generic_converged",
+        "prose_without_marker",
+        "incomplete_task",
+        "baseline_below_threshold",
+        "regression_baseline_unavailable",
+        "mismatched_baseline_version",
+        "incomplete_baseline_evaluation",
+    ],
+)
+def test_indexed_review_already_good_counterexamples_fail_closed(
+    mutate_indexed,
+    mutate_evaluations,
+) -> None:
+    from plexus.optimization.decision import classify_post_run_review
+    from plexus.optimization.orchestration import (
+        build_indexed_optimizer_review_evidence,
+    )
+
+    indexed = _already_good_indexed()
+    evaluations = _already_good_evaluations()
+    mutate_indexed(indexed)
+    mutate_evaluations(evaluations)
+
+    evidence = build_indexed_optimizer_review_evidence(
+        indexed,
+        procedure_id="procedure",
+        read_evaluation=evaluations.__getitem__,
+    )
+    review = classify_post_run_review(evidence)
+
+    assert evidence["measurable_safe_improvement"] is None
+    assert review["post_run_state"] == "failed_or_incomplete"
+
+
+def _all_rejected_indexed(
+    *,
+    stop_reason: str = "max_iterations",
+    completed_cycles: int = 1,
+) -> dict:
+    return {
+        "summary": {
+            "effective_status": "COMPLETED",
+            "completed_cycles": completed_cycles,
+            "stop_reason": stop_reason,
+        },
+        "baseline": {
+            "version_id": "champion",
+            "original_feedback_evaluation_id": "recent-baseline",
+            "original_accuracy_evaluation_id": "historical-baseline",
+            "feedback_alignment": 0.60,
+            "accuracy_alignment": 0.75,
+        },
+        "best": {
+            "winning_version_id": "champion",
+            "last_accepted_version_id": "champion",
+            "best_feedback_evaluation_id": "champion-recent",
+            "best_accuracy_evaluation_id": "champion-historical",
+            "feedback_alignment": 0.60,
+            "accuracy_alignment": 0.75,
+        },
+        "cycles": [{
+            "cycle": 1,
+            "status": "rejected",
+            "accepted": False,
+            "candidates": [
+                {
+                    "version_id": "candidate-a",
+                    "feedback_evaluation_id": "candidate-a-recent",
+                    "accuracy_evaluation_id": "candidate-a-historical",
+                },
+                {
+                    "version_id": "candidate-b",
+                    "feedback_evaluation_id": "candidate-b-recent",
+                    "accuracy_evaluation_id": "candidate-b-historical",
+                },
+            ],
+        }],
+        "review_artifacts": {"artifacts_complete": True, "rca_complete": True},
+    }
+
+
+def _all_rejected_evaluations() -> dict[str, dict]:
+    return {
+        "champion-recent": _completed_evaluation(
+            "champion-recent", "recent-baseline", version_id="champion"
+        ),
+        "champion-historical": _completed_evaluation(
+            "champion-historical", "historical-baseline", version_id="champion"
+        ),
+        "candidate-a-recent": _completed_evaluation(
+            "candidate-a-recent", "recent-baseline", version_id="candidate-a"
+        ),
+        "candidate-a-historical": _completed_evaluation(
+            "candidate-a-historical", "historical-baseline", version_id="candidate-a"
+        ),
+        "candidate-b-recent": _completed_evaluation(
+            "candidate-b-recent", "recent-baseline", version_id="candidate-b"
+        ),
+        "candidate-b-historical": _completed_evaluation(
+            "candidate-b-historical", "historical-baseline", version_id="candidate-b"
+        ),
+    }
+
+
+def test_indexed_review_classifies_terminal_all_rejected_candidates_as_no_safe_improvement() -> None:
+    from plexus.optimization.decision import classify_post_run_review
+    from plexus.optimization.orchestration import (
+        build_indexed_optimizer_review_evidence,
+    )
+
+    evaluation_calls: list[str] = []
+    evaluations = _all_rejected_evaluations()
+
+    evidence = build_indexed_optimizer_review_evidence(
+        _all_rejected_indexed(),
+        procedure_id="procedure",
+        read_evaluation=lambda evaluation_id: evaluation_calls.append(evaluation_id)
+        or evaluations[evaluation_id],
+    )
+    review = classify_post_run_review(evidence)
+
+    assert evaluation_calls == [
+        "candidate-a-recent",
+        "candidate-a-historical",
+        "candidate-b-recent",
+        "candidate-b-historical",
+    ]
+    assert evidence["terminal"] is True
+    assert evidence["incomplete"] is False
+    assert evidence["measurable_safe_improvement"] is False
+    assert review["post_run_state"] == "no_safe_improvement"
+    assert review["primary_next_action"] == "retain_champion"
+
+
+@pytest.mark.parametrize(
+    ("stop_reason", "completed_cycles", "mutate_evaluations"),
+    [
+        ("user_stopped", 1, lambda _evaluations: None),
+        ("dry_run", 1, lambda _evaluations: None),
+        ("error", 1, lambda _evaluations: None),
+        ("interrupted", 1, lambda _evaluations: None),
+        ("partial_failure", 1, lambda _evaluations: None),
+        ("unknown", 1, lambda _evaluations: None),
+        ("max_iterations", 2, lambda _evaluations: None),
+        (
+            "max_iterations",
+            1,
+            lambda evaluations: evaluations["candidate-b-historical"].update(
+                {"status": "RUNNING", "processed_items": 99}
+            ),
+        ),
+        (
+            "max_iterations",
+            1,
+            lambda evaluations: evaluations["candidate-b-recent"].update(
+                {"score_version_id": "champion"}
+            ),
+        ),
+        (
+            "max_iterations",
+            1,
+            lambda evaluations: evaluations["candidate-b-historical"].update(
+                {"baseline_evaluation_id": "wrong-historical-baseline"}
+            ),
+        ),
+    ],
+    ids=[
+        "user_stopped",
+        "dry_run",
+        "error",
+        "interrupted",
+        "partial_failure",
+        "unknown_stop_reason",
+        "completed_cycle_count_mismatch",
+        "incomplete_candidate_evaluation",
+        "wrong_candidate_version",
+        "mismatched_frozen_baseline",
+    ],
+)
+def test_indexed_review_all_rejected_counterexamples_fail_closed(
+    stop_reason: str,
+    completed_cycles: int,
+    mutate_evaluations,
+) -> None:
+    from plexus.optimization.decision import classify_post_run_review
+    from plexus.optimization.orchestration import (
+        build_indexed_optimizer_review_evidence,
+    )
+
+    evaluations = _all_rejected_evaluations()
+    mutate_evaluations(evaluations)
+
+    evidence = build_indexed_optimizer_review_evidence(
+        _all_rejected_indexed(
+            stop_reason=stop_reason,
+            completed_cycles=completed_cycles,
+        ),
+        procedure_id="procedure",
+        read_evaluation=evaluations.__getitem__,
+    )
+    review = classify_post_run_review(evidence)
+
+    assert evidence["measurable_safe_improvement"] is None
+    assert review["post_run_state"] == "failed_or_incomplete"

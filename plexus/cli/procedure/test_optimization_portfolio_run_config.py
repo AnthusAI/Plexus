@@ -46,6 +46,13 @@ def test_portfolio_run_procedure_uses_the_single_runtime_orchestrator_and_struct
         "description": "Launch policy: automatic for deterministic safe targets, or approval_required for Human.review.",
     }
     assert "execution_mode = params.execution_mode" in parsed["code"]
+    assert parsed["params"]["execution_candidate_policy"] == {
+        "type": "string",
+        "required": False,
+        "default": "promotion_ready",
+        "description": "Frozen candidate policy: promotion_ready executes only promotion-ready scores; promotion_ready_plus_bounded_diagnostic additionally permits up to three structurally safe, evidence-bounded diagnostic experiments.",
+    }
+    assert "execution_candidate_policy = params.execution_candidate_policy" in parsed["code"]
     assert parsed["params"]["toolchain_version"] == {
         "type": "string",
         "required": False,

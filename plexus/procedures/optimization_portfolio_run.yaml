@@ -47,6 +47,11 @@ params:
     required: false
     default: automatic
     description: "Launch policy: automatic for deterministic safe targets, or approval_required for Human.review."
+  execution_candidate_policy:
+    type: string
+    required: false
+    default: promotion_ready
+    description: "Frozen candidate policy: promotion_ready executes only promotion-ready scores; promotion_ready_plus_bounded_diagnostic additionally permits up to three structurally safe, evidence-bounded diagnostic experiments."
   toolchain_version:
     type: string
     required: false
@@ -152,6 +157,7 @@ code: |
       max_iterations = params.max_iterations,
       max_concurrency = params.max_concurrency,
       execution_mode = params.execution_mode,
+      execution_candidate_policy = params.execution_candidate_policy,
       toolchain_version = params.toolchain_version,
       approval_responses = approval_responses,
       optimizer_child_snapshots = optimizer_child_snapshots

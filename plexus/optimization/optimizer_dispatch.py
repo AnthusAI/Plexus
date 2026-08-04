@@ -13,6 +13,8 @@ from math import isfinite
 from numbers import Real
 from typing import Any, Mapping
 
+from plexus.optimization.decision import normalize_execution_candidate_policy
+
 
 TERMINAL_PHASES = frozenset({
     "waiting", "running", "terminal", "dispatch_outcome_unknown",
@@ -53,6 +55,9 @@ def _launch_spec(request: Mapping[str, Any]) -> dict[str, Any]:
         "scorecard_id": str(request.get("scorecard_id") or ""),
         "score_id": str(request.get("score_id") or ""),
         "assessment_fingerprint": str(request.get("assessment_fingerprint") or ""),
+        "execution_candidate_policy": normalize_execution_candidate_policy(
+            request.get("execution_candidate_policy")
+        ),
         "limits": {key: limits[key] for key in required_limits},
         "optimizer_yaml_sha256": sha256(optimizer_yaml.encode("utf-8")).hexdigest(),
     }
@@ -107,6 +112,14 @@ class OptimizerTaskDispatchService:
                 "complete": False,
                 "launch_spec": _launch_spec(request),
             }
+        # A terminal Task is immutable observation evidence, not a request to
+        # launch again.  Reconcile it from the frozen state before comparing
+        # the caller's current optimizer source; the local source may have
+        # changed while an already-provisioned child was running.
+        if state.get("task_id") and state.get("phase") in TERMINAL_PHASES:
+            observed = self._observe_task(state)
+            if observed.get("phase") == "terminal":
+                return observed
         expected_spec = _launch_spec(request)
         if state.get("launch_spec") != expected_spec:
             raise ValueError("optimizer launch state does not match the frozen request")
@@ -399,7 +412,45 @@ class OptimizerTaskDispatchService:
         task_status = str(task.get("status") or "").upper()
         observed = {**state, "task": dict(task), "complete": False}
         if task_status in {"COMPLETED", "FAILED", "CANCELED", "CANCELLED"}:
-            return {**observed, "phase": "terminal", "complete": True}
+            if task_status == "COMPLETED":
+                return {
+                    **observed,
+                    "phase": "terminal",
+                    "complete": True,
+                    "completion_source": "task",
+                }
+            # A dispatcher may fail its Task before a local recovery runner
+            # completes the exact Procedure.  The immutable launch identity
+            # lets us distinguish that successful recovery from a genuine
+            # optimizer failure without trusting the stale Task transport
+            # status.
+            try:
+                procedure = self._backend.get_procedure(str(state["procedure_id"]))
+            except Exception:
+                return _unknown(observed, "procedure_terminal_readback_failed")
+            failure = self._validate_procedure_record(
+                procedure,
+                state,
+                allowed_statuses={"RUNNING", "COMPLETED", "FAILED", "CANCELED", "CANCELLED"},
+            )
+            if failure:
+                return _unknown(observed, failure)
+            procedure_status = str(procedure.get("status") or "").upper()
+            terminal = {
+                **observed,
+                "procedure": dict(procedure),
+                "phase": "terminal",
+                "complete": True,
+                "completion_source": "procedure",
+            }
+            if procedure_status == "COMPLETED":
+                return terminal
+            if procedure_status in {"FAILED", "CANCELED", "CANCELLED"}:
+                return terminal
+            return _unknown(
+                {**observed, "procedure": dict(procedure)},
+                "task_failed_before_procedure_terminal",
+            )
         if dispatch_status == "DISPATCHING" and not task.get("celeryTaskId"):
             return _unknown(observed, "dispatching_without_celery_id")
         if dispatch_status == "PENDING":
@@ -412,7 +463,10 @@ class OptimizerTaskDispatchService:
 
     @staticmethod
     def _validate_procedure_record(
-        procedure: Any, state: Mapping[str, Any],
+        procedure: Any,
+        state: Mapping[str, Any],
+        *,
+        allowed_statuses: set[str] | None = None,
     ) -> str | None:
         if not isinstance(procedure, Mapping) or not procedure.get("id"):
             return "malformed_procedure_record"
@@ -429,9 +483,11 @@ class OptimizerTaskDispatchService:
             "version": _PROCEDURE_VERSION,
             "featured": False,
             "isTemplate": False,
-            "status": "RUNNING",
         }
         if any(procedure.get(key) != value for key, value in expected.items()):
+            return "procedure_identity_mismatch"
+        statuses = allowed_statuses or {"RUNNING"}
+        if str(procedure.get("status") or "").upper() not in statuses:
             return "procedure_identity_mismatch"
         if metadata.get("optimizer_launch_spec") != state["launch_spec"]:
             return "procedure_launch_spec_mismatch"

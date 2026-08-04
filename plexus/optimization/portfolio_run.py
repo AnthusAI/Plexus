@@ -20,7 +20,13 @@ import os
 from decimal import Decimal
 from typing import Any, Callable, Mapping, Sequence
 
-from plexus.optimization.decision import validate_run_limits
+from plexus.optimization.decision import (
+    DEFAULT_EXECUTION_CANDIDATE_POLICY,
+    EXECUTION_CANDIDATE_POLICY_PROMOTION_READY_PLUS_BOUNDED_DIAGNOSTIC,
+    bounded_diagnostic_assessment_failure,
+    normalize_execution_candidate_policy,
+    validate_run_limits,
+)
 from plexus.optimization.run_report import (
     OptimizationRunIntegrityError,
     OptimizationRunPublicationError,
@@ -30,10 +36,11 @@ from tactus.core.exceptions import ProcedureWaitingForHuman
 
 
 MAX_APPROVAL_TARGETS = 5
+MAX_BOUNDED_DIAGNOSTIC_TARGETS = 3
 DEFAULT_MAX_EXECUTION_TARGETS: int | None = None
 MAX_PRIORITY_DIAGNOSES = 10
 DEFAULT_MAX_SEMANTIC_DIAGNOSES = 25
-DIAGNOSIS_SCOPE_POLICY_VERSION = "portfolio-diagnosis-scope-v2"
+DIAGNOSIS_SCOPE_POLICY_VERSION = "portfolio-diagnosis-scope-v3"
 SEMANTIC_FAILURE_CATEGORIES = frozenset({
     "budget_exhausted",
     "outcome_unknown",
@@ -46,6 +53,7 @@ _RETRYABLE_PUBLICATION_REASON = "retryable_report_publication"
 _OPTIMIZER_CHILD_OBSERVED_PHASES = frozenset({
     "waiting", "running", "terminal", "dispatch_outcome_unknown",
 })
+OPTIMIZER_REVIEW_CONTRACT_VERSION = "portfolio-optimizer-review-v1"
 
 
 def _retryable_publication_directive(*, now: datetime | None = None) -> dict[str, str]:
@@ -238,6 +246,9 @@ class OptimizationPortfolioRunner:
         request = dict(request)
         account_id = _required_text(request, "account_id")
         execution_mode = _execution_mode(request.get("execution_mode"))
+        execution_candidate_policy = normalize_execution_candidate_policy(
+            request.get("execution_candidate_policy")
+        )
         run_key = str(request.get("run_key") or _run_key(request))
         limits = dict(request.get("limits") or {
             key: request.get(key)
@@ -260,6 +271,7 @@ class OptimizationPortfolioRunner:
             "actions": [],
             "approval_requests": [],
             "execution_mode": execution_mode,
+            "execution_candidate_policy": execution_candidate_policy,
             "execution_decisions": _empty_execution_decisions(execution_mode),
             "promotion_candidates": [],
             "notification_failures": [],
@@ -300,19 +312,33 @@ class OptimizationPortfolioRunner:
                 checkpoint_milestone = str(checkpoint.get("milestone") or "")
                 if checkpoint_milestone == "finalization":
                     terminal_status = str(state.get("terminal_status") or "INCOMPLETE")
-                    if checkpoint.get("task_terminal") is not True:
-                        _finalize(service, terminal_status)
-                    self._notify(
-                        state,
-                        event="completed",
-                        milestone="COMPLETED",
-                        title="Optimization portfolio run completed",
-                        summary=(
-                            f"Terminal state: "
-                            f"{terminal_status.lower().replace('_', ' ')}."
-                        ),
-                    )
-                    return self._result(terminal_status, state)
+                    if (
+                        terminal_status == "INCOMPLETE"
+                        and (
+                            _has_retryable_optimizer_review(state)
+                            or _has_legacy_optimizer_review(state)
+                        )
+                    ):
+                        # A prior finalization only recorded that exact-child
+                        # review evidence was inconclusive. Re-enter at the
+                        # review milestone so a later terminal indexed read
+                        # can replace an inconclusive or legacy row; all
+                        # current-version conclusive reviews stay closed.
+                        checkpoint_milestone = "optimization_review"
+                    else:
+                        if checkpoint.get("task_terminal") is not True:
+                            _finalize(service, terminal_status)
+                        self._notify(
+                            state,
+                            event="completed",
+                            milestone="COMPLETED",
+                            title="Optimization portfolio run completed",
+                            summary=(
+                                f"Terminal state: "
+                                f"{terminal_status.lower().replace('_', ' ')}."
+                            ),
+                        )
+                        return self._result(terminal_status, state)
             else:
                 self._publish(service, "started", state)
                 self._notify(
@@ -746,7 +772,12 @@ class OptimizationPortfolioRunner:
                     if isinstance(row, Mapping)
                 ]
             independently_ready, execution_decisions = _execution_selection(
-                execution_mode, assessment_rows, diagnosis_rows,
+                execution_mode,
+                execution_candidate_policy,
+                assessment_rows,
+                diagnosis_rows,
+                ranked_rows=ranked_rows,
+                max_samples=limits.get("max_samples"),
             )
             if execution_mode == "automatic":
                 # A deferred sibling remains visible in execution_decisions but
@@ -766,18 +797,22 @@ class OptimizationPortfolioRunner:
                         fallback_targets=[target],
                     )
             max_execution_targets = _max_execution_targets(request)
-            execution_limit_deferred = (
-                ready[max_execution_targets:]
-                if max_execution_targets is not None else []
-            )
-            if max_execution_targets is not None:
-                ready = ready[:max_execution_targets]
-            if execution_limit_deferred:
-                _append_execution_rejection(
-                    execution_decisions,
-                    {"reason": "execution_target_limit"},
-                    fallback_targets=execution_limit_deferred,
+            if execution_mode == "automatic":
+                # Freshness is checked by dispatch.  Do not spend the frozen
+                # accepted-target slots until that check succeeds.
+                ready = list(ready)
+            else:
+                # Backfill cannot safely cross a human approval boundary: a
+                # later candidate has not been approved.  Retain the existing
+                # approval-required selection semantics, including the
+                # bounded-diagnostic accepted-target policy.
+                ready, deferred = _limit_execution_candidates(
+                    ready, max_execution_targets=max_execution_targets,
                 )
+                for rejection, targets in deferred:
+                    _append_execution_rejection(
+                        execution_decisions, rejection, fallback_targets=targets,
+                    )
             execution_decisions["selected_targets"] = [
                 {
                     **_execution_target_row(target, reason="eligible_for_launch"),
@@ -872,7 +907,14 @@ class OptimizationPortfolioRunner:
                     })
             state["approval_requests"] = pending_approval_requests
             state["actions"] = action_rows
-            state["approved_targets"] = list(approvals)
+            # Automatic candidates are eligible for validation, not yet
+            # accepted for launch.  Persist only validator-accepted targets
+            # below so report/replay evidence never calls the whole pool
+            # approved.
+            if execution_mode != "automatic":
+                state["approved_targets"] = list(approvals)
+            elif not isinstance(state.get("dispatch"), Mapping):
+                state["approved_targets"] = []
             if pending_approval_requests and len(pending_approval_requests) != len(review_requests):
                 self._publish(service, "approval", state)
 
@@ -899,6 +941,19 @@ class OptimizationPortfolioRunner:
                     dict(row) for row in dispatch_state.get("children") or []
                     if isinstance(row, Mapping)
                 ]
+                if execution_mode == "automatic":
+                    approvals = [
+                        dict(row) for row in state.get("approved_targets") or []
+                        if isinstance(row, Mapping)
+                    ]
+                    execution_decisions["selected_targets"] = [
+                        {
+                            **_execution_target_row(target, reason="eligible_for_launch"),
+                            "launch_status": "selected",
+                        }
+                        for target in approvals
+                    ]
+                    execution_decisions["selected_count"] = len(approvals)
             elif approvals:
                 validation_batches = []
                 rejected = []
@@ -922,40 +977,118 @@ class OptimizationPortfolioRunner:
                         execution_decisions, rejection, fallback_targets=approvals,
                     )
                 else:
-                    for batch in _chunks(approvals, MAX_APPROVAL_TARGETS):
-                        validation = dict(self._dependencies.dispatch({
-                            "account_id": account_id,
-                            # The launch adapter derives an idempotent child
-                            # identity from this frozen parent-run key.  Never
-                            # substitute a wall-clock retry identifier here.
-                            "run_key": run_key,
-                            "approved": True,
-                            "execution_mode": execution_mode,
-                            "authorization": {
-                                "mode": execution_mode,
-                                "source": (
-                                    "deterministic_policy"
-                                    if execution_mode == "automatic" else "human_review"
-                                ),
-                            },
-                            "targets": batch,
-                            "persist": False,
-                            **limits,
-                        }))
-                        validation_batches.append(validation)
-                        rejected.extend(
-                            dict(item) for item in (validation.get("rejected") or [])
-                            if isinstance(item, Mapping)
-                        )
-                        for item in validation.get("rejected") or []:
-                            if isinstance(item, Mapping):
+                    if execution_mode == "automatic":
+                        candidates = list(approvals)
+                        accepted_bounded_diagnostic_count = 0
+                        for index, candidate in enumerate(candidates):
+                            if (
+                                max_execution_targets is not None
+                                and len(accepted_for_launch) >= max_execution_targets
+                            ):
                                 _append_execution_rejection(
-                                    execution_decisions, item, fallback_targets=batch,
+                                    execution_decisions,
+                                    {"reason": "execution_target_limit"},
+                                    fallback_targets=candidates[index:],
                                 )
-                        accepted_for_launch.extend(
-                            dict(item) for item in (validation.get("accepted_targets") or [])
-                            if isinstance(item, Mapping)
-                        )
+                                break
+                            if (
+                                candidate.get("candidate_kind") == "bounded_diagnostic"
+                                and accepted_bounded_diagnostic_count
+                                >= MAX_BOUNDED_DIAGNOSTIC_TARGETS
+                            ):
+                                _append_execution_rejection(
+                                    execution_decisions,
+                                    {"reason": "bounded_diagnostic_target_limit"},
+                                    fallback_targets=[candidate],
+                                )
+                                continue
+                            validation = dict(self._dependencies.dispatch({
+                                "account_id": account_id,
+                                # The launch adapter derives an idempotent child
+                                # identity from this frozen parent-run key.  Never
+                                # substitute a wall-clock retry identifier here.
+                                "run_key": run_key,
+                                "approved": True,
+                                "execution_mode": execution_mode,
+                                "execution_candidate_policy": execution_candidate_policy,
+                                "authorization": {
+                                    "mode": execution_mode,
+                                    "source": "deterministic_policy",
+                                },
+                                # One deterministic target per validation makes
+                                # a freshness rejection unambiguously backfill
+                                # from the next evidence-ranked candidate.
+                                "targets": [candidate],
+                                "persist": False,
+                                **limits,
+                            }))
+                            validation_batches.append(validation)
+                            rejected.extend(
+                                dict(item) for item in (validation.get("rejected") or [])
+                                if isinstance(item, Mapping)
+                            )
+                            for item in validation.get("rejected") or []:
+                                if isinstance(item, Mapping):
+                                    _append_execution_rejection(
+                                        execution_decisions, item, fallback_targets=[candidate],
+                                    )
+                            accepted = [
+                                {**candidate, **dict(item)}
+                                for item in (validation.get("accepted_targets") or [])
+                                if isinstance(item, Mapping)
+                                and _target_key(item) == _target_key(candidate)
+                            ]
+                            accepted_for_launch.extend(accepted)
+                            accepted_bounded_diagnostic_count += sum(
+                                target.get("candidate_kind") == "bounded_diagnostic"
+                                for target in accepted
+                            )
+                        execution_decisions["selected_targets"] = [
+                            {
+                                **_execution_target_row(target, reason="eligible_for_launch"),
+                                "launch_status": "selected",
+                            }
+                            for target in accepted_for_launch
+                        ]
+                        execution_decisions["selected_count"] = len(accepted_for_launch)
+                    else:
+                        for batch in _chunks(approvals, MAX_APPROVAL_TARGETS):
+                            validation = dict(self._dependencies.dispatch({
+                                "account_id": account_id,
+                                # The launch adapter derives an idempotent child
+                                # identity from this frozen parent-run key.  Never
+                                # substitute a wall-clock retry identifier here.
+                                "run_key": run_key,
+                                "approved": True,
+                                "execution_mode": execution_mode,
+                                "execution_candidate_policy": execution_candidate_policy,
+                                "authorization": {
+                                    "mode": execution_mode,
+                                    "source": "human_review",
+                                },
+                                "targets": batch,
+                                "persist": False,
+                                **limits,
+                            }))
+                            validation_batches.append(validation)
+                            rejected.extend(
+                                dict(item) for item in (validation.get("rejected") or [])
+                                if isinstance(item, Mapping)
+                            )
+                            for item in validation.get("rejected") or []:
+                                if isinstance(item, Mapping):
+                                    _append_execution_rejection(
+                                        execution_decisions, item, fallback_targets=batch,
+                                    )
+                            accepted_for_launch.extend(
+                                dict(item) for item in (validation.get("accepted_targets") or [])
+                                if isinstance(item, Mapping)
+                            )
+                if execution_mode == "automatic":
+                    # Children may be launched only for validator acceptance;
+                    # this is the durable approval boundary for automatic mode.
+                    approvals = list(accepted_for_launch)
+                    state["approved_targets"] = list(approvals)
                 children = [
                     {
                         "target": {
@@ -992,7 +1125,11 @@ class OptimizationPortfolioRunner:
                 state["dispatch"] = dispatch_state
                 for rejection in rejected:
                     _append_execution_rejection(
-                        execution_decisions, rejection, fallback_targets=approvals,
+                        execution_decisions,
+                        rejection,
+                        fallback_targets=(
+                            ready if execution_mode == "automatic" else approvals
+                        ),
                     )
 
             if children and (
@@ -1046,6 +1183,7 @@ class OptimizationPortfolioRunner:
                         "assessment_fingerprint": str(
                             approved_target.get("assessment_fingerprint") or ""
                         ),
+                        "execution_candidate_policy": execution_candidate_policy,
                         "limits": dict(limits),
                         "target": approved_target,
                     }
@@ -1054,7 +1192,7 @@ class OptimizationPortfolioRunner:
                     )
                     for identity_field in (
                         "account_id", "run_key", "scorecard_id", "score_id",
-                        "assessment_fingerprint",
+                        "assessment_fingerprint", "execution_candidate_policy",
                     ):
                         if child_request.get(identity_field) != base_request[identity_field]:
                             raise OptimizationRunPublicationError(
@@ -1133,9 +1271,12 @@ class OptimizationPortfolioRunner:
             _reconcile_execution_launch_evidence(execution_decisions, children)
             state["execution_decisions"] = execution_decisions
 
-            # Review each newly successful terminal child independently. A
-            # rejected or failed sibling cannot suppress a valid review, and a
-            # durable processed key prevents duplicate review on replay.
+            # Review every valid terminal child independently. A failed child
+            # remains fail-closed for finalization, but its terminal evidence
+            # still needs a durable review record. A processed key prevents
+            # duplicate review on replay; the one exception is a checkpointed
+            # failed_or_incomplete review, which recorded an inconclusive read
+            # and may be reread for that exact child on a later resume.
             review_rows = [
                 dict(row) for row in state.get("reviews") or []
                 if isinstance(row, Mapping)
@@ -1144,12 +1285,31 @@ class OptimizationPortfolioRunner:
                 str(value) for value in dispatch_state.get("processed_child_keys") or []
                 if str(value)
             }
-            for review_row in review_rows:
+            conclusive_review_keys = {
+                str(review_row.get("optimizer_child_key") or "")
+                for review_row in review_rows
+                if str(review_row.get("optimizer_child_key") or "")
+                and not _retryable_optimizer_review(review_row)
+                and not _legacy_optimizer_review(review_row)
+            }
+            retryable_review_indexes: dict[str, int] = {}
+            for index, review_row in enumerate(review_rows):
                 existing_key = str(review_row.get("optimizer_child_key") or "")
-                if existing_key:
+                if not existing_key:
+                    continue
+                if existing_key in conclusive_review_keys:
+                    processed_child_keys.add(existing_key)
+                    continue
+                if (
+                    _retryable_optimizer_review(review_row)
+                    or _legacy_optimizer_review(review_row)
+                ):
+                    retryable_review_indexes.setdefault(existing_key, index)
+                    processed_child_keys.discard(existing_key)
+                else:
                     processed_child_keys.add(existing_key)
             for child in children:
-                if not _optimizer_child_succeeded(child):
+                if not _optimizer_child_terminal(child):
                     continue
                 child_key = _optimizer_child_key(child)
                 if not child_key or child_key in processed_child_keys:
@@ -1177,13 +1337,29 @@ class OptimizationPortfolioRunner:
                     "scope": review_scope,
                     "procedure_id": procedure_id,
                     "optimizer_child_key": child_key,
+                    "optimizer_review_contract_version": OPTIMIZER_REVIEW_CONTRACT_VERSION,
+                    "optimizer_child_terminal_outcome": (
+                        "succeeded" if _optimizer_child_succeeded(child) else "failed"
+                    ),
                 }
-                review_rows.append(review_record)
-                processed_child_keys.add(child_key)
+                retryable_index = retryable_review_indexes.get(child_key)
+                if retryable_index is None:
+                    review_rows.append(review_record)
+                else:
+                    # Preserve review-row cardinality and replace only the
+                    # inconclusive record for this exact optimizer child.
+                    review_rows[retryable_index] = review_record
+                if _retryable_optimizer_review(review_record):
+                    processed_child_keys.discard(child_key)
+                else:
+                    processed_child_keys.add(child_key)
                 dispatch_state["processed_child_keys"] = sorted(processed_child_keys)
                 state["dispatch"] = dispatch_state
                 state["reviews"] = review_rows
-                if reviewed.get("promotion_ready") is True:
+                if (
+                    not _retryable_optimizer_review(review_record)
+                    and reviewed.get("promotion_ready") is True
+                ):
                     promotion_target = {
                         "scorecard_id": str(target.get("scorecard_id") or ""),
                         "score_id": str(target.get("score_id") or ""),
@@ -1449,6 +1625,9 @@ def _run_key(request: Mapping[str, Any]) -> str:
         "toolchain_version": _toolchain_version(request.get("toolchain_version")),
         "semantic_budget": _semantic_budget_spec(request),
         "execution_mode": _execution_mode(request.get("execution_mode")),
+        "execution_candidate_policy": normalize_execution_candidate_policy(
+            request.get("execution_candidate_policy")
+        ),
         "max_execution_targets": _max_execution_targets(request),
     }
     return "optimization-" + sha256(json.dumps(normalized, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()[:24]
@@ -1472,6 +1651,9 @@ def _run_spec(request: Mapping[str, Any], *, account_id: str, run_key: str) -> d
             if key in request
         }),
         "execution_mode": _execution_mode(request.get("execution_mode")),
+        "execution_candidate_policy": normalize_execution_candidate_policy(
+            request.get("execution_candidate_policy")
+        ),
         "max_execution_targets": _max_execution_targets(request),
     }
     semantic_budget = _semantic_budget_spec(request)
@@ -1539,6 +1721,8 @@ def _execution_target_row(
         value = target.get(field)
         if isinstance(value, str) and value.strip():
             row[field] = value
+    if target.get("candidate_kind") and target.get("candidate_kind") != "promotion_ready":
+        row["candidate_kind"] = str(target["candidate_kind"])
     return row
 
 
@@ -1627,19 +1811,34 @@ def _append_execution_rejection(
 
 def _execution_selection(
     mode: str,
+    execution_candidate_policy: str,
     assessments: Sequence[Mapping[str, Any]],
     diagnoses: Sequence[Mapping[str, Any]],
+    *,
+    ranked_rows: Sequence[Mapping[str, Any]],
+    max_samples: Any,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Select only independently complete targets and account for every sibling."""
+    """Select only independently complete, frozen-policy execution targets."""
     decisions = _empty_execution_decisions(mode)
     diagnosis_by_target = {
         _target_key(row): row for row in diagnoses if _target_key(row) is not None
     }
+    evidence_order = {
+        _target_key(row): (
+            int(row["evidence_rank"])
+            if isinstance(row.get("evidence_rank"), int)
+            else index
+        )
+        for index, row in enumerate(ranked_rows, start=1)
+        if _target_key(row) is not None
+    }
+    ordered_assessments = sorted(
+        (row for row in assessments if _target_key(row) is not None),
+        key=lambda row: evidence_order.get(_target_key(row), 10**9),
+    )
     selected: list[dict[str, Any]] = []
-    for assessment in assessments:
+    for assessment in ordered_assessments:
         key = _target_key(assessment)
-        if key is None:
-            continue
         diagnosis = diagnosis_by_target.get(key)
         candidate = {
             "scorecard_id": key[0], "score_id": key[1],
@@ -1650,22 +1849,128 @@ def _execution_selection(
             "score_name": assessment.get("score_name"),
             "assessment": dict(assessment),
         }
-        if not _is_ready(assessment):
-            _append_execution_rejection(decisions, {**candidate, "reason": "not_ready"})
-        elif diagnosis is None:
-            _append_execution_rejection(decisions, {**candidate, "reason": "missing_diagnosis"})
+        if isinstance(diagnosis, Mapping):
+            candidate["diagnosis"] = dict(diagnosis)
+        promotion_ready = _is_ready(assessment)
+        diagnostic_failure = None
+        if not promotion_ready:
+            if execution_candidate_policy != EXECUTION_CANDIDATE_POLICY_PROMOTION_READY_PLUS_BOUNDED_DIAGNOSTIC:
+                _append_execution_rejection(decisions, {**candidate, "reason": "not_ready"})
+                continue
+            diagnostic_failure = _bounded_diagnostic_failure(
+                assessment, diagnosis, max_samples=max_samples,
+            )
+            if diagnostic_failure:
+                _append_execution_rejection(decisions, {**candidate, "reason": diagnostic_failure})
+                continue
+            candidate["candidate_kind"] = "bounded_diagnostic"
+        else:
+            candidate["candidate_kind"] = "promotion_ready"
+
+        if diagnosis is None:
+            reason = (
+                "bounded_diagnostic_missing_diagnosis"
+                if not promotion_ready else "missing_diagnosis"
+            )
+            _append_execution_rejection(decisions, {**candidate, "reason": reason})
         elif not _coverage_complete(diagnosis):
-            _append_execution_rejection(decisions, {**candidate, "reason": "incomplete_diagnosis"})
+            reason = (
+                "bounded_diagnostic_incomplete_diagnosis"
+                if not promotion_ready else "incomplete_diagnosis"
+            )
+            _append_execution_rejection(decisions, {**candidate, "reason": reason})
         elif diagnosis.get("stakeholder_questions") or diagnosis.get("blockers"):
-            _append_execution_rejection(decisions, {**candidate, "reason": "diagnosis_requires_clarification"})
-        elif not _diagnosis_permits_launch(diagnosis):
-            _append_execution_rejection(decisions, {**candidate, "reason": "diagnosis_not_launchable"})
+            reason = (
+                "bounded_diagnostic_requires_clarification"
+                if not promotion_ready else "diagnosis_requires_clarification"
+            )
+            _append_execution_rejection(decisions, {**candidate, "reason": reason})
+        elif not (
+            _bounded_diagnosis_permits_launch(diagnosis)
+            if not promotion_ready else _diagnosis_permits_launch(diagnosis)
+        ):
+            reason = (
+                "bounded_diagnostic_diagnosis_not_launchable"
+                if not promotion_ready else "diagnosis_not_launchable"
+            )
+            _append_execution_rejection(decisions, {**candidate, "reason": reason})
         elif not isinstance(candidate["assessment_fingerprint"], str) or not candidate["assessment_fingerprint"]:
             _append_execution_rejection(decisions, {**candidate, "reason": "missing_assessment_fingerprint"})
         else:
             selected.append(candidate)
     decisions["rejected_count"] = len(decisions["rejected_targets"])
     return selected, decisions
+
+
+def _limit_execution_candidates(
+    candidates: Sequence[Mapping[str, Any]], *, max_execution_targets: int | None,
+) -> tuple[list[dict[str, Any]], list[tuple[dict[str, str], list[dict[str, Any]]]]]:
+    """Apply accepted-target caps where approval prevents automatic backfill."""
+    selected: list[dict[str, Any]] = []
+    deferred: list[tuple[dict[str, str], list[dict[str, Any]]]] = []
+    bounded_diagnostic_count = 0
+    for candidate_source in candidates:
+        candidate = dict(candidate_source)
+        if max_execution_targets is not None and len(selected) >= max_execution_targets:
+            deferred.append(({"reason": "execution_target_limit"}, [candidate]))
+        elif (
+            candidate.get("candidate_kind") == "bounded_diagnostic"
+            and bounded_diagnostic_count >= MAX_BOUNDED_DIAGNOSTIC_TARGETS
+        ):
+            deferred.append(({"reason": "bounded_diagnostic_target_limit"}, [candidate]))
+        else:
+            selected.append(candidate)
+            if candidate.get("candidate_kind") == "bounded_diagnostic":
+                bounded_diagnostic_count += 1
+    return selected, deferred
+
+
+def _bounded_diagnostic_failure(
+    assessment: Mapping[str, Any], diagnosis: Mapping[str, Any] | None, *, max_samples: Any,
+) -> str | None:
+    """Validate the narrower experiment path without weakening promotion gates."""
+    if isinstance(max_samples, bool) or not isinstance(max_samples, int) or max_samples <= 0:
+        return "bounded_diagnostic_invalid_sample_limit"
+    assessment_failure = bounded_diagnostic_assessment_failure(
+        assessment, max_samples=max_samples,
+    )
+    if assessment_failure:
+        return assessment_failure
+    if isinstance(diagnosis, Mapping):
+        diagnosis_states = diagnosis.get("states")
+        diagnosis_guideline = (
+            diagnosis_states.get("guideline_health")
+            if isinstance(diagnosis_states, Mapping)
+            else diagnosis.get("guideline_state")
+        )
+        if diagnosis_guideline != "consistent":
+            return "bounded_diagnostic_guideline_not_consistent"
+        diagnosis_feedback = (
+            diagnosis_states.get("feedback_rubric_health")
+            if isinstance(diagnosis_states, Mapping)
+            else diagnosis.get("feedback_rubric_state")
+        )
+        if diagnosis_feedback == "inconsistent":
+            return "bounded_diagnostic_feedback_rubric_conflict"
+    return None
+
+
+def _bounded_diagnosis_permits_launch(packet: Mapping[str, Any]) -> bool:
+    """Diagnostic experiments require a complete, consistent non-promotion diagnosis."""
+    if not _coverage_complete(packet):
+        return False
+    if packet.get("stakeholder_questions") or packet.get("blockers"):
+        return False
+    states = packet.get("states")
+    if not isinstance(states, Mapping):
+        return False
+    return (
+        states.get("guideline_health") == "consistent"
+        and states.get("feedback_rubric_health", states.get("feedback_rubric"))
+        != "inconsistent"
+        and states.get("optimization", states.get("readiness"))
+        == "insufficient_evidence"
+    )
 
 
 def _semantic_budget_spec(request: Mapping[str, Any]) -> dict[str, str] | None:
@@ -1836,12 +2141,11 @@ def _diagnosis_selection(
         for _row, assessment in paired
         if _is_monitoring_candidate(assessment)
     }
-    selected_keys = (top_priority_keys | monitoring_keys) - {None}
-    policy_selected = [
-        (row, assessment)
-        for row, assessment in paired
-        if _target_key(row) in selected_keys
-    ]
+    # The execution target limit is a result count, not a rank-window cutoff.
+    # Walk the entire ranked actionable set in evidence order so blocked
+    # leaders do not prevent lower-ranked safe targets from being considered.
+    # ``max_semantic_diagnoses`` remains the explicit cost/safety bound.
+    policy_selected = paired
     complete_candidates = [
         (row, assessment)
         for row, assessment in policy_selected
@@ -2275,10 +2579,65 @@ def _optimizer_child_succeeded(child: Mapping[str, Any]) -> bool:
     launch_state = child.get("launch_state")
     if not isinstance(launch_state, Mapping) or launch_state.get("phase") != "terminal":
         return False
+    procedure = launch_state.get("procedure")
+    if (
+        isinstance(procedure, Mapping)
+        and str(procedure.get("status") or "").upper() == "COMPLETED"
+    ):
+        return True
     task = launch_state.get("task")
     return (
         isinstance(task, Mapping)
         and str(task.get("status") or "").upper() == "COMPLETED"
+    )
+
+
+def _optimizer_child_terminal(child: Mapping[str, Any]) -> bool:
+    """Return whether a child has authoritative terminal evidence to review."""
+    launch_state = child.get("launch_state")
+    return isinstance(launch_state, Mapping) and launch_state.get("phase") == "terminal"
+
+
+def _retryable_optimizer_review(review: Mapping[str, Any]) -> bool:
+    """Return whether a persisted review is explicitly inconclusive.
+
+    Retries are deliberately limited to the public terminal-review disposition
+    and remain coupled to the exact successful child above. Missing, malformed,
+    or merely non-promoting review rows remain processed for compatibility and
+    cannot create a new review or promotion action on replay.
+    """
+    if review.get("optimizer_child_terminal_outcome") == "failed":
+        return False
+    states = review.get("states")
+    post_run_state = review.get("post_run_state")
+    if post_run_state is None and isinstance(states, Mapping):
+        post_run_state = states.get("post_run")
+    return str(post_run_state or "").strip().lower() == "failed_or_incomplete"
+
+
+def _legacy_optimizer_review(review: Mapping[str, Any]) -> bool:
+    """Return whether a durable child review predates the current contract."""
+    return bool(str(review.get("optimizer_child_key") or "")) and (
+        review.get("optimizer_review_contract_version")
+        != OPTIMIZER_REVIEW_CONTRACT_VERSION
+    )
+
+
+def _has_legacy_optimizer_review(state: Mapping[str, Any]) -> bool:
+    """Permit one incomplete-finalization repair for unversioned child reviews."""
+    return any(
+        isinstance(review, Mapping) and _legacy_optimizer_review(review)
+        for review in state.get("reviews") or []
+    )
+
+
+def _has_retryable_optimizer_review(state: Mapping[str, Any]) -> bool:
+    """Allow only exact-child inconclusive reviews to reopen finalization."""
+    return any(
+        isinstance(review, Mapping)
+        and bool(str(review.get("optimizer_child_key") or ""))
+        and _retryable_optimizer_review(review)
+        for review in state.get("reviews") or []
     )
 
 
@@ -2417,6 +2776,7 @@ def _evidence_snapshot(state: Mapping[str, Any]) -> dict[str, Any]:
         "approval_requests": list(state.get("approval_requests") or []),
         "approved_targets": list(state.get("approved_targets") or []),
         "execution_mode": state.get("execution_mode"),
+        "execution_candidate_policy": state.get("execution_candidate_policy"),
         "execution_decisions": dict(state.get("execution_decisions") or {}),
         "dispatch": state.get("dispatch"),
         "reviews": list(state.get("reviews") or []),
@@ -2450,6 +2810,9 @@ def _portfolio_evidence_fingerprint(state: Mapping[str, Any]) -> str:
     payload = {
         "run_key": state.get("run_key"),
         "execution_mode": _execution_mode(run_spec.get("execution_mode")),
+        "execution_candidate_policy": normalize_execution_candidate_policy(
+            run_spec.get("execution_candidate_policy")
+        ),
         "semantic_budget_policy": run_spec.get("semantic_budget"),
         "ledger_revision": evidence.get("ledger_revision"),
         "ledger_digest": evidence.get("evidence_digest"),
@@ -2475,7 +2838,18 @@ def _hydrate_durable_state(state: dict[str, Any], checkpoint: Mapping[str, Any])
             raise OptimizationRunPublicationError(
                 "Latest optimization checkpoint execution mode differs from this run"
             )
+        frozen_candidate_policy = normalize_execution_candidate_policy(
+            frozen_spec.get("execution_candidate_policy")
+        )
+        current_candidate_policy = normalize_execution_candidate_policy(
+            (state.get("run_spec") or {}).get("execution_candidate_policy")
+        )
+        if frozen_candidate_policy != current_candidate_policy:
+            raise OptimizationRunPublicationError(
+                "Latest optimization checkpoint execution candidate policy differs from this run"
+            )
         state["execution_mode"] = current_mode
+        state["execution_candidate_policy"] = current_candidate_policy
     for key in (
         "terminal_status", "rank", "dispatch", "summary",
     ):
@@ -2702,6 +3076,7 @@ def _stakeholder_dashboard_url(*packets: Mapping[str, Any]) -> str | None:
 # never silently change the displayed disposition.
 _TERMINAL_POST_RUN_DISPOSITIONS = frozenset({
     "promotion_ready",
+    "validated_improvement",
     "continue_optimization",
     "stakeholder_decision_required",
     "no_safe_improvement",
@@ -2863,6 +3238,9 @@ def _issue_rows(
     affected_disagreement_rate: Any,
     flags: list[str],
     guideline: Any,
+    guideline_code_conflict_claim: Any,
+    diagnosis_evidence_ids: Any,
+    diagnosis_evidence_fingerprint: Any,
     feedback_rubric: Any,
     stakeholder_questions: Any,
     readiness: Any,
@@ -2883,6 +3261,10 @@ def _issue_rows(
         "feedback_rubric_contradiction": "Reviewed feedback and the rubric are inconsistent.",
         "incomplete_evidence": "Evidence is incomplete, so conclusions are provisional.",
     }
+    evidence_tokens = [
+        *_stakeholder_diagnosis_evidence_aliases(diagnosis_evidence_fingerprint),
+        *_stakeholder_evidence_reference_tokens(diagnosis_evidence_ids),
+    ]
     rows: list[dict[str, Any]] = []
     for flag in flags:
         if flag == "stakeholder_question":
@@ -2900,21 +3282,40 @@ def _issue_rows(
                         "next_action": "answer_question", "dashboard_url": dashboard_url,
                     })
             continue
+        finding = findings[flag]
+        issue_next_action = next_action
+        issue_evidence_references = (
+            "diagnosis prerequisite check"
+            if flag == "required_evidence_unavailable"
+            else "decision packet"
+        )
+        if flag == "potential_code_conflict" and isinstance(
+            guideline_code_conflict_claim, str
+        ) and guideline_code_conflict_claim.strip():
+            finding = guideline_code_conflict_claim.strip()
+        if flag == "potential_code_conflict":
+            # This is a model claim for maintainer review, not an adjudicated
+            # defect.  Keep its exact wording but make the repair ownership
+            # and automatic-execution consequence deterministic.
+            issue_next_action = "review_and_repair_guideline_code_alignment"
+            issue_evidence_references = "; ".join(
+                ["semantic diagnosis packet", *evidence_tokens]
+            )
         rows.append({
             **base, "kind": "issue", "issue_flag": flag,
             "issue_severity": _ISSUE_SEVERITY[flag], "evidence_count": base.get("evidence_count"),
             "affected_evidence_count": base.get("evidence_count"),
             "affected_disagreement_rate": affected_disagreement_rate,
-            "evidence_references": (
-                "diagnosis prerequisite check"
-                if flag == "required_evidence_unavailable"
-                else "decision packet"
+            "evidence_references": issue_evidence_references,
+            **(
+                {"evidence_reference_tokens": evidence_tokens}
+                if flag == "potential_code_conflict" else {}
             ),
             "state": guideline if flag in {"missing_guidelines", "invalid_guidelines", "potential_code_conflict"} else readiness,
             "coverage_status": coverage_status, "guideline_state": guideline,
             "feedback_rubric_state": feedback_rubric,
-            "finding": findings[flag], "rationale": rationale,
-            "next_action": next_action, "dashboard_url": dashboard_url,
+            "finding": finding, "rationale": rationale,
+            "next_action": issue_next_action, "dashboard_url": dashboard_url,
         })
     return rows
 
@@ -2922,6 +3323,32 @@ def _issue_rows(
 def _stakeholder_opaque_ref(value: str | None) -> str | None:
     """Return a stable stakeholder-safe reference without exposing an opaque ID."""
     return sha256(value.encode("utf-8")).hexdigest()[:16] if value else None
+
+
+def _stakeholder_evidence_reference_tokens(value: Any) -> list[str]:
+    """Return deterministic safe aliases for restricted semantic evidence IDs."""
+    if not isinstance(value, (list, tuple)):
+        return []
+    tokens: list[str] = []
+    for source in value:
+        if not isinstance(source, str) or not source:
+            continue
+        token = "semantic-evidence-" + sha256(source.encode("utf-8")).hexdigest()[:16]
+        if token not in tokens:
+            tokens.append(token)
+    return tokens
+
+
+def _stakeholder_diagnosis_evidence_aliases(value: Any) -> list[str]:
+    """Return a safe alias for the immutable diagnosis decision packet.
+
+    The packet fingerprint changes whenever its frozen evidence changes.  The
+    stakeholder report may name a short derived alias, but never the raw
+    fingerprint or a restricted evidence identifier.
+    """
+    if not isinstance(value, str) or not value:
+        return []
+    return ["semantic-diagnosis-" + sha256(value.encode("utf-8")).hexdigest()[:16]]
 
 
 def _milestone_narrative(
@@ -3087,6 +3514,9 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
     execution_mode = _execution_mode(
         state.get("execution_mode") or run_spec.get("execution_mode")
     )
+    execution_candidate_policy = normalize_execution_candidate_policy(
+        run_spec.get("execution_candidate_policy")
+    )
     rank = state.get("rank") if isinstance(state.get("rank"), Mapping) else {}
     diagnosis_coverage = (
         state.get("diagnosis_coverage")
@@ -3169,6 +3599,7 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             eligible_for_optimization and _is_ready(assessment)
             and key in all_selected_keys
             and key not in diagnoses
+            and key not in reviews
             and milestone not in {"started", "ranking", "assessment"}
         )
         review = reviews.get(key, {})
@@ -3190,12 +3621,12 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             **(review.get("states") if isinstance(review.get("states"), Mapping) else {}),
         }
         readiness = states.get("optimization") or states.get("readiness") or assessment.get("readiness_state") or "inconclusive"
-        next_action = diagnosis.get("primary_next_action") or assessment.get("primary_next_action") or "review"
+        next_action = review.get("primary_next_action") or diagnosis.get("primary_next_action") or assessment.get("primary_next_action") or "review"
         collection = states.get("feedback_collection") or diagnosis.get("feedback_collection_state") or assessment.get("feedback_collection_state") or "inconclusive"
         guideline = states.get("guideline_health") or diagnosis.get("guideline_state") or assessment.get("guideline_state") or "inconclusive"
         feedback_rubric = states.get("feedback_rubric_health") or states.get("feedback_rubric") or diagnosis.get("feedback_rubric_state") or assessment.get("feedback_rubric_state") or "inconclusive"
         promotion = states.get("promotion_readiness") or review.get("post_run_state") or "not_evaluated"
-        rationale = diagnosis.get("rationale") or assessment.get("rationale") or "Evidence-based priority."
+        rationale = review.get("rationale") or diagnosis.get("rationale") or assessment.get("rationale") or "Evidence-based priority."
         coverage_status = _stakeholder_coverage(diagnosis, assessment, rank)
         semantic_diagnosis_status = _semantic_diagnosis_status(
             key=key,
@@ -3371,6 +3802,11 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             affected_disagreement_rate=row.get("disagreement_rate"),
             flags=secondary_issue_flags,
             guideline=guideline,
+            guideline_code_conflict_claim=diagnosis.get("guideline_code_conflict_claim"),
+            diagnosis_evidence_ids=diagnosis.get("evidence_ids"),
+            diagnosis_evidence_fingerprint=(
+                diagnosis.get("evidence_fingerprint") or diagnosis.get("fingerprint")
+            ),
             feedback_rubric=feedback_rubric,
             stakeholder_questions=stakeholder_questions,
             readiness=readiness,
@@ -3399,6 +3835,7 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             _is_ready(assessment)
             and key in all_selected_keys
             and key not in diagnoses
+            and key not in reviews
             and milestone not in {"started", "ranking", "assessment"}
         )
         review = reviews.get(key, {})
@@ -3513,6 +3950,8 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             "next_action": next_action,
             "dashboard_url": _stakeholder_dashboard_url(review, diagnosis, assessment, row),
         }
+        if isinstance(review.get("alignment_evidence"), Mapping):
+            outcome_row["alignment_evidence"] = dict(review["alignment_evidence"])
         if dispatch_rejection is not None:
             outcome_row["dispatch_rejection"] = dispatch_rejection
         outcomes.append(outcome_row)
@@ -3663,6 +4102,7 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
                 if milestone in {"approval", "optimization", "review", "finalization"}
                 else "pending"
             ),
+            "execution_candidate_policy": execution_candidate_policy,
             "ranking_window": str(rank.get("window") or "pending"),
             "scorecards_inspected": scope_coverage.get("total_scorecards_inspected", coverage.get("scorecards_discovered", 0)),
             "scorecards_in_scope": scope_coverage.get("matched_scorecard_count", 0),

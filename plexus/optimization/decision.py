@@ -38,6 +38,15 @@ SCORE_ACTIVITY_COOLDOWN_V1: dict[str, Any] = {
     "duration_hours": 168,
     "cutoff_inclusive": True,
 }
+EXECUTION_CANDIDATE_POLICY_PROMOTION_READY = "promotion_ready"
+EXECUTION_CANDIDATE_POLICY_PROMOTION_READY_PLUS_BOUNDED_DIAGNOSTIC = (
+    "promotion_ready_plus_bounded_diagnostic"
+)
+DEFAULT_EXECUTION_CANDIDATE_POLICY = EXECUTION_CANDIDATE_POLICY_PROMOTION_READY
+_EXECUTION_CANDIDATE_POLICIES = frozenset({
+    EXECUTION_CANDIDATE_POLICY_PROMOTION_READY,
+    EXECUTION_CANDIDATE_POLICY_PROMOTION_READY_PLUS_BOUNDED_DIAGNOSTIC,
+})
 _WILSON_Z_95 = 1.959963984540054
 _RANK_SELECTOR_FIELDS = ("scorecard_ids", "scorecard_name_prefixes")
 
@@ -54,6 +63,22 @@ def _jsonable(value: Any) -> Any:
 
 def _canonical(value: Any) -> str:
     return json.dumps(_jsonable(value), sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def normalize_execution_candidate_policy(value: Any) -> str:
+    """Return the explicit, frozen execution-candidate policy.
+
+    The conservative policy is deliberately the default for every public
+    caller.  Diagnostic optimization is a separately named opt-in; it never
+    changes promotion eligibility or the post-run promotion evidence gates.
+    """
+    policy = DEFAULT_EXECUTION_CANDIDATE_POLICY if value is None else str(value)
+    if policy not in _EXECUTION_CANDIDATE_POLICIES:
+        raise ValueError(
+            "execution_candidate_policy must be exactly 'promotion_ready' or "
+            "'promotion_ready_plus_bounded_diagnostic'"
+        )
+    return policy
 
 
 def _utc(value: datetime) -> datetime:
@@ -314,6 +339,12 @@ def _packet_result(stage: str, result: Mapping[str, Any], source: Mapping[str, A
     """Add the common packet envelope without removing legacy stage fields."""
     source = dict(source or {})
     legacy = dict(result)
+    if (
+        stage == "review"
+        and "alignment_evidence" not in legacy
+        and isinstance(source.get("alignment_evidence"), Mapping)
+    ):
+        legacy["alignment_evidence"] = dict(source["alignment_evidence"])
     source_coverage = dict(source.get("coverage") or {})
     complete = bool(legacy.get("coverage_complete", source_coverage.get("complete", source.get("coverage_complete", source.get("complete", False)))))
     failures = list(legacy.get("coverage_failures") or source_coverage.get("failures") or source.get("coverage_failures") or source.get("failures") or [])
@@ -802,6 +833,10 @@ def normalize_diagnosis(diagnosis: Mapping[str, Any] | None, *, context: Mapping
         feedback_rubric_state = "inconclusive"
     questions = list(diagnosis.get("stakeholder_questions") or [])
     blockers = list(diagnosis.get("blockers") or [])
+    guideline_code_conflict_claim = diagnosis.get("guideline_code_conflict_claim")
+    if not isinstance(guideline_code_conflict_claim, str):
+        guideline_code_conflict_claim = ""
+    guideline_code_conflict_claim = guideline_code_conflict_claim.strip()
     assessment = (
         diagnosis.get("assessment")
         if isinstance(diagnosis.get("assessment"), Mapping)
@@ -853,6 +888,8 @@ def normalize_diagnosis(diagnosis: Mapping[str, Any] | None, *, context: Mapping
         "complete": complete,
         "evidence_ids": list(diagnosis.get("evidence_ids") or []),
     }
+    if guideline_code_conflict_claim:
+        result["guideline_code_conflict_claim"] = guideline_code_conflict_claim
     return _packet_result("diagnose", result, diagnosis)
 
 
@@ -1013,12 +1050,18 @@ def _assessment(readiness: str, collection: str, blockers: Sequence[str], action
         "blockers": list(blockers),
         "coverage_complete": bool(data.get("coverage_complete", data.get("complete", False))),
         "class_counts": dict(data.get("final_label_counts") or data.get("reachable_class_counts") or {}),
+        "reachable_classes": list(data.get("reachable_classes") or []),
         "weekly_stability": dict(stability or {}),
         "cooldown_active": bool(data.get("cooldown_active")) or (
             isinstance(data.get("score_activity"), Mapping)
             and data["score_activity"].get("recent") is True
         ),
     }
+    # Preserve explicit structural evidence when supplied, but never fabricate
+    # affirmative fields: deployed assessment packets normally omit them.
+    for key in ("configuration_readable", "terminal_classes_resolved", "structural_state"):
+        if key in data:
+            result[key] = data[key]
     if isinstance(data.get("score_activity"), Mapping):
         result["score_activity"] = dict(data["score_activity"])
     if wilson is not None:
@@ -1085,7 +1128,120 @@ def _assessment_packet_fingerprint(packet: Mapping[str, Any]) -> str | None:
     )
 
 
-def _ready_target_provenance_failure(target: Mapping[str, Any]) -> str | None:
+def bounded_diagnostic_assessment_failure(
+    assessment: Mapping[str, Any], *, max_samples: int,
+) -> str | None:
+    """Fail closed unless a non-ready score is safe for a bounded experiment."""
+    readiness = _assessment_readiness(assessment)
+    if readiness != "insufficient_evidence":
+        return "bounded_diagnostic_not_eligible"
+    if assessment.get("primary_next_action") not in {
+        "collect_targeted_classes", "collect_stable_feedback", "collect_broad_feedback",
+    }:
+        return "bounded_diagnostic_not_class_or_stability_limited"
+    if not assessment.get("champion_version"):
+        return "bounded_diagnostic_missing_champion"
+    # Current production packets carry positive structural evidence in their
+    # readiness outcome, not as explicit booleans.  Honor a negative value if
+    # one is present, but do not reject packets merely because it is absent.
+    if assessment.get("configuration_readable") is False:
+        return "bounded_diagnostic_unreadable_configuration"
+    if assessment.get("terminal_classes_resolved") is False:
+        return "bounded_diagnostic_unresolved_terminal_classes"
+    guideline = _assessment_state(assessment, "guideline_health", "guideline_state")
+    if guideline != "consistent":
+        return "bounded_diagnostic_guideline_not_consistent"
+    feedback_rubric = _assessment_state(
+        assessment, "feedback_rubric_health", "feedback_rubric_state",
+    )
+    if feedback_rubric == "inconsistent":
+        return "bounded_diagnostic_feedback_rubric_conflict"
+    # Class-balance, volume, and weekly-stability packets correctly carry
+    # explanatory blockers.  Unknown blockers are structural/policy evidence
+    # and must remain outside the diagnostic experiment path.
+    if assessment.get("stakeholder_questions"):
+        return "bounded_diagnostic_requires_clarification"
+    allowed_blockers = (
+        "reachable class below minimum:",
+        "recent weekly metrics are insufficient or unstable",
+        "valid feedback count ",
+    )
+    blockers = assessment.get("blockers") or []
+    if not isinstance(blockers, list) or any(
+        not isinstance(blocker, str)
+        or not blocker.startswith(allowed_blockers)
+        for blocker in blockers
+    ):
+        return "bounded_diagnostic_structural_or_policy_blocker"
+    activity = assessment.get("evidence")
+    activity = activity.get("score_activity") if isinstance(activity, Mapping) else None
+    if (
+        assessment.get("cooldown_active") is True
+        or not isinstance(activity, Mapping)
+        or activity.get("complete") is not True
+        or activity.get("recent") is not False
+    ):
+        return "bounded_diagnostic_recent_score_activity"
+    class_counts_source = assessment.get("class_counts")
+    if not isinstance(class_counts_source, Mapping):
+        evidence = assessment.get("evidence")
+        class_counts_source = evidence.get("class_counts") if isinstance(evidence, Mapping) else None
+    if not isinstance(class_counts_source, Mapping):
+        return "bounded_diagnostic_class_evidence_required"
+    class_counts: list[int] = []
+    for value in class_counts_source.values():
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            return "bounded_diagnostic_class_evidence_required"
+        class_counts.append(value)
+    if len([count for count in class_counts if count > 0]) < 2:
+        return "bounded_diagnostic_insufficient_observed_classes"
+    if sum(class_counts) < max_samples:
+        return "bounded_diagnostic_insufficient_samples"
+    return None
+
+
+def _bounded_diagnostic_diagnosis_failure(target: Mapping[str, Any]) -> str | None:
+    """Require complete semantic evidence before accepting a diagnostic launch."""
+    diagnosis = target.get("diagnosis")
+    if not isinstance(diagnosis, Mapping):
+        return "bounded_diagnostic_diagnosis_required"
+    coverage = diagnosis.get("coverage")
+    if not isinstance(coverage, Mapping) or coverage.get("complete") is not True:
+        return "bounded_diagnostic_incomplete_diagnosis"
+    if diagnosis.get("stakeholder_questions") or diagnosis.get("blockers"):
+        return "bounded_diagnostic_requires_clarification"
+    guideline = _assessment_state(diagnosis, "guideline_health", "guideline_state")
+    if guideline != "consistent":
+        return "bounded_diagnostic_guideline_not_consistent"
+    feedback_rubric = _assessment_state(
+        diagnosis, "feedback_rubric_health", "feedback_rubric_state",
+    )
+    if feedback_rubric == "inconsistent":
+        return "bounded_diagnostic_feedback_rubric_conflict"
+    if _assessment_readiness(diagnosis) != "insufficient_evidence":
+        return "bounded_diagnostic_diagnosis_not_eligible"
+    return None
+
+
+def _assessment_state(assessment: Mapping[str, Any], state_key: str, legacy_key: str) -> Any:
+    states = assessment.get("states")
+    if isinstance(states, Mapping) and state_key in states:
+        return states.get(state_key)
+    return assessment.get(legacy_key)
+
+
+def _assessment_readiness(assessment: Mapping[str, Any]) -> Any:
+    states = assessment.get("states")
+    if isinstance(states, Mapping):
+        return states.get("optimization", states.get("readiness"))
+    return assessment.get("readiness_state")
+
+
+def _ready_target_provenance_failure(
+    target: Mapping[str, Any], *,
+    execution_candidate_policy: str = DEFAULT_EXECUTION_CANDIDATE_POLICY,
+    max_samples: int | None = None,
+) -> str | None:
     """Return one fail-closed reason when a launch target lacks provenance."""
     scorecard_id = str(target.get("scorecard_id") or "")
     score_id = str(target.get("score_id") or "")
@@ -1116,14 +1272,22 @@ def _ready_target_provenance_failure(target: Mapping[str, Any]) -> str | None:
         return "assessment_fingerprint_mismatch"
 
     coverage = assessment.get("coverage")
-    states = assessment.get("states")
-    readiness = (
-        states.get("optimization", states.get("readiness"))
-        if isinstance(states, Mapping)
-        else assessment.get("readiness_state")
-    )
-    if not isinstance(coverage, Mapping) or coverage.get("complete") is not True or readiness != "ready_to_optimize":
+    readiness = _assessment_readiness(assessment)
+    if not isinstance(coverage, Mapping) or coverage.get("complete") is not True:
         return "assessment_not_ready"
+    if readiness != "ready_to_optimize":
+        if execution_candidate_policy != EXECUTION_CANDIDATE_POLICY_PROMOTION_READY_PLUS_BOUNDED_DIAGNOSTIC:
+            return "assessment_not_ready"
+        if not isinstance(max_samples, int) or isinstance(max_samples, bool) or max_samples <= 0:
+            return "bounded_diagnostic_invalid_sample_limit"
+        diagnostic_failure = bounded_diagnostic_assessment_failure(
+            assessment, max_samples=max_samples,
+        )
+        if diagnostic_failure:
+            return diagnostic_failure
+        diagnostic_failure = _bounded_diagnostic_diagnosis_failure(target)
+        if diagnostic_failure:
+            return diagnostic_failure
 
     champion_version = assessment.get("champion_version")
     feedback_watermark = assessment.get("feedback_watermark")
@@ -1145,12 +1309,20 @@ def _ready_target_provenance_failure(target: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _validate_ready_targets(targets: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+def _validate_ready_targets(
+    targets: Sequence[Mapping[str, Any]], *,
+    execution_candidate_policy: str = DEFAULT_EXECUTION_CANDIDATE_POLICY,
+    max_samples: int | None = None,
+) -> list[dict[str, Any]]:
     """Return explicit provenance failures for public optimizer dispatch."""
     rejected: list[dict[str, Any]] = []
     for target_source in targets:
         target = dict(target_source)
-        reason = _ready_target_provenance_failure(target)
+        reason = _ready_target_provenance_failure(
+            target,
+            execution_candidate_policy=execution_candidate_policy,
+            max_samples=max_samples,
+        )
         if reason:
             rejected.append({"target": target, "reason": reason})
     return rejected
@@ -1160,6 +1332,10 @@ def validate_public_run_dispatch(payload: Mapping[str, Any]) -> dict[str, Any]:
     """Apply limits and assessment provenance before lower-level batch checks."""
     data = dict(payload)
     targets = list(data.get("targets") or [])
+    candidate_policy = normalize_execution_candidate_policy(
+        data.get("execution_candidate_policy")
+    )
+    data["execution_candidate_policy"] = candidate_policy
     limits = validate_run_limits(data)
     if not limits["valid"]:
         result = {
@@ -1171,7 +1347,11 @@ def validate_public_run_dispatch(payload: Mapping[str, Any]) -> dict[str, Any]:
             "blockers": ["invalid_run_limits"],
         }
         return _packet_result("run", result, data)
-    provenance_rejections = _validate_ready_targets(targets)
+    provenance_rejections = _validate_ready_targets(
+        targets,
+        execution_candidate_policy=candidate_policy,
+        max_samples=limits["limits"]["max_samples"],
+    )
     if provenance_rejections:
         result = {
             "accepted": False,
@@ -1186,13 +1366,15 @@ def validate_public_run_dispatch(payload: Mapping[str, Any]) -> dict[str, Any]:
         targets,
         approved=bool(data.get("approved")),
         current_fingerprints=data.get("current_fingerprints"),
+        execution_candidate_policy=candidate_policy,
+        max_samples=limits["limits"]["max_samples"],
         context=data,
     )
     result["run_limits"] = limits
     return result
 
 
-def validate_approved_batch(targets: Sequence[Mapping[str, Any]], *, approved: bool, current_fingerprints: Mapping[str, str] | None = None, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def validate_approved_batch(targets: Sequence[Mapping[str, Any]], *, approved: bool, current_fingerprints: Mapping[str, str] | None = None, execution_candidate_policy: str = DEFAULT_EXECUTION_CANDIDATE_POLICY, max_samples: int | None = None, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Validate an explicit <=5 target approval and reject stale targets individually."""
     targets = list(targets)
     rejected: list[dict[str, Any]] = []
@@ -1211,7 +1393,11 @@ def validate_approved_batch(targets: Sequence[Mapping[str, Any]], *, approved: b
         scorecard_id, score_id = str(target.get("scorecard_id") or ""), str(target.get("score_id") or "")
         key = (scorecard_id, score_id)
         printable = f"{scorecard_id}:{score_id}"
-        provenance_failure = _ready_target_provenance_failure(target)
+        provenance_failure = _ready_target_provenance_failure(
+            target,
+            execution_candidate_policy=execution_candidate_policy,
+            max_samples=max_samples,
+        )
         current_fingerprint = current_fingerprints.get(printable)
         if provenance_failure:
             rejected.append({"target": target, "reason": provenance_failure})
@@ -1243,25 +1429,46 @@ def classify_post_run_review(evidence: Mapping[str, Any], *, context: Mapping[st
         return _packet_result("review", {"post_run_state": "stakeholder_decision_required", "promotion_ready": False, "primary_next_action": "resolve_stakeholder_questions", "stakeholder_questions": list(data.get("stakeholder_questions") or [])}, data)
     if data.get("prediction_collapse") is True or data.get("measurable_safe_improvement") is False:
         return _packet_result("review", {"post_run_state": "no_safe_improvement", "promotion_ready": False, "primary_next_action": "retain_champion"}, data)
-    required = (
+    core_required = (
         "indexed_optimizer_review",
         "candidate_version_id",
         "matched_recent_evaluation",
         "historical_regression_evidence",
         "class_specific_metrics",
         "prediction_collapse",
-        "rca_complete",
         "artifacts_complete",
         "measurable_safe_improvement",
     )
-    missing = [
+    missing_core = [
         name
-        for name in required
+        for name in core_required
         if (data.get(name) is not False if name == "prediction_collapse" else not data.get(name))
     ]
-    if not missing:
+    if missing_core:
+        return _packet_result(
+            "review",
+            {
+                "post_run_state": "failed_or_incomplete",
+                "promotion_ready": False,
+                "primary_next_action": "complete_or_repair_evaluation",
+                "missing_evidence": missing_core,
+                "blockers": missing_core,
+            },
+            data,
+        )
+    if data.get("rca_complete"):
         return _packet_result("review", {"post_run_state": "promotion_ready", "promotion_ready": True, "primary_next_action": "request_promotion_approval", "missing_evidence": []}, data)
-    return _packet_result("review", {"post_run_state": "continue_optimization", "promotion_ready": False, "primary_next_action": "continue_optimization", "missing_evidence": missing, "blockers": missing}, data)
+    return _packet_result(
+        "review",
+        {
+            "post_run_state": "validated_improvement",
+            "promotion_ready": False,
+            "primary_next_action": "complete_promotion_evidence",
+            "missing_evidence": ["rca_complete"],
+            "blockers": ["rca_complete"],
+        },
+        data,
+    )
 
 
 review_optimizer_result = classify_post_run_review
