@@ -26,7 +26,16 @@ class Delivery(Protocol):
 
 
 class Transport(Protocol):
-    def receive(self) -> Delivery | None: ...
+    def receive(self, timeout: timedelta) -> Delivery | None: ...
+
+
+class DrainSignal(Protocol):
+    def is_requested(self) -> bool: ...
+
+    def wait(self, timeout: timedelta) -> bool:
+        """Wait until draining is requested or the timeout elapses."""
+
+        ...
 
 
 class LifecycleStore(Protocol):
