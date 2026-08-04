@@ -10,9 +10,16 @@
   "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "4e40ff4c-7c9b-46ce-99c4-6d456ba77f54",
+      "author": "derek.norrbom",
+      "text": "Additional behavior for this slice:\n\nFeature: Maintain ownership during long execution\n  Scenario: A healthy worker continues a long-running command\n    Given a worker holds an active command lease\n    When the configured heartbeat interval elapses during execution\n    Then the lifecycle lease is renewed before its expiry\n    And the broker delivery lease is extended\n    And completion uses the latest fencing token\n\n  Scenario: A worker loses its execution lease\n    Given a worker is executing a command\n    And another attempt supersedes its lease\n    When its next heartbeat is rejected\n    Then the stale worker is notified that ownership was lost\n    And it cannot report progress, complete, or acknowledge the delivery",
+      "created_at": "2026-08-04T20:13:08.738600Z"
+    }
+  ],
   "created_at": "2026-08-04T19:45:17.030122Z",
-  "updated_at": "2026-08-04T19:45:17.030122Z",
+  "updated_at": "2026-08-04T20:13:08.738600Z",
   "closed_at": null,
   "custom": {}
 }

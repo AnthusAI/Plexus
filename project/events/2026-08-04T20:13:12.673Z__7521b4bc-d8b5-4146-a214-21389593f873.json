@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7521b4bc-d8b5-4146-a214-21389593f873",
+  "issue_id": "plx-c81acdff-039f-43bd-8ac6-1af2fe2ed5e2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-04T20:13:12.673Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implement the provider-neutral heartbeat and lease-loss behavior for story plx-cc5f16. The worker must renew lifecycle ownership and broker delivery visibility while execution is active, propagate lost ownership cooperatively to the executor, fence stale mutations and acknowledgement, and remain deterministic under tests. Provider adapters, cancellation requests, deployment draining, and dashboard integration remain out of scope.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement command heartbeats and interruption recovery"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "id": "plx-c81acdff-039f-43bd-8ac6-1af2fe2ed5e2",
+  "title": "Implement command heartbeats and interruption recovery",
+  "description": "Implement the provider-neutral heartbeat and lease-loss behavior for story plx-cc5f16. The worker must renew lifecycle ownership and broker delivery visibility while execution is active, propagate lost ownership cooperatively to the executor, fence stale mutations and acknowledgement, and remain deterministic under tests. Provider adapters, cancellation requests, deployment draining, and dashboard integration remain out of scope.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e6d9d766-9cdd-4c17-afe4-f5086e4d0c72",
+      "author": "derek.norrbom",
+      "text": "Implementation started on feature/command-worker-recovery. Scope is limited to provider-neutral automatic heartbeats, delivery-lease extension, rotated fencing tokens, cooperative ownership-loss propagation, and deterministic behavior specifications. Cancellation, draining, provider adapters, dashboard integration, and infrastructure remain separate tasks.",
+      "created_at": "2026-08-04T20:14:23.880758Z"
+    },
+    {
+      "id": "06729bae-9f16-425b-afc0-fdba2372007e",
+      "author": "derek.norrbom",
+      "text": "## Completion and direct review\n\nImplemented provider-neutral automatic heartbeats and interruption recovery behavior:\n- lifecycle ownership renews before broker delivery extension;\n- renewal can rotate fencing tokens used by later progress and completion;\n- heartbeat activity settles before terminal mutation;\n- lifecycle rejection, delivery-extension failure, callback errors, or unsettled shutdown cause release without completion, failure, or acknowledgement;\n- executors can observe ownership loss cooperatively;\n- the standard scheduler uses a bounded daemon-thread shutdown;\n- tests use deterministic manual scheduling and clocks.\n\nDirect review required synchronization of ownership-loss publication and ensured process-level exceptions are not swallowed.\n\nValidation:\n- python -m behave tests/command_worker/features → 10 scenarios and 52 steps passed\n- python -m pytest -q tests/command_worker → 44 passed\n- python -m pytest -q plexus/cli/shared/command_dispatch_test.py plexus/cli/shared/command_tasks_test.py → 17 passed\n- ruff check plexus/command_worker tests/command_worker → passed\n- ruff format --check plexus/command_worker tests/command_worker → passed\n- provider-boundary check → no forbidden imports\n\nProvider adapters, durable attempt history, cancellation, deployment draining, subprocess isolation, and dashboard integration remain follow-up work.",
+      "created_at": "2026-08-04T20:23:28.439643Z"
+    }
+  ],
+  "created_at": "2026-08-04T20:13:12.672995Z",
+  "updated_at": "2026-08-04T20:23:32.620409Z",
+  "closed_at": "2026-08-04T20:23:32.620409Z",
+  "custom": {}
+}

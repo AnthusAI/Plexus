@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Protocol
@@ -20,6 +21,8 @@ class Delivery(Protocol):
     def acknowledge(self) -> None: ...
 
     def release(self) -> None: ...
+
+    def extend_lease(self, duration: timedelta) -> bool: ...
 
 
 class Transport(Protocol):
@@ -78,6 +81,11 @@ class ExecutionContext(Protocol):
 
     def renew_lease(self) -> Claim: ...
 
+    @property
+    def ownership_lost(self) -> bool: ...
+
+    def raise_if_lease_lost(self) -> None: ...
+
 
 class Executor(Protocol):
     def execute(
@@ -87,3 +95,16 @@ class Executor(Protocol):
 
 class Clock(Protocol):
     def now(self) -> datetime: ...
+
+
+class HeartbeatHandle(Protocol):
+    def stop(self) -> bool:
+        """Stop scheduling and synchronously settle activity when possible."""
+
+        ...
+
+
+class HeartbeatScheduler(Protocol):
+    def start(
+        self, interval: timedelta, callback: Callable[[], None]
+    ) -> HeartbeatHandle: ...
