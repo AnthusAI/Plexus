@@ -60,7 +60,16 @@ type PresentationOverview = {
   diagnosis_skipped_count?: number
   diagnosis_incomplete_count?: number
   diagnosis_completed_count?: number
+  diagnosis_execution_failure_count?: number
+  semantic_budget_failure_count?: number
+  diagnosis_prerequisite_failure_count?: number
   diagnosis_max_count?: number
+  diagnosis_limit_reached?: boolean
+  diagnosis_limit_type?: string | null
+  diagnosis_limit_explanation?: string | null
+  analysis_incomplete_reason?: string | null
+  semantic_budget_exhausted_count?: number
+  semantic_budget_deferred_count?: number
   pending_approval_count?: number
   execution_mode?: string
   execution_selected_count?: number
@@ -989,6 +998,65 @@ function parseDecisionSummary(value: unknown): DecisionSummary | undefined {
   return summary as DecisionSummary
 }
 
+function legacyConfiguredLimitDecisionSummary(
+  overview: PresentationOverview,
+  decisionSummary?: DecisionSummary,
+): DecisionSummary | undefined {
+  const genericLegacyHeadlines = new Set([
+    'the available evidence is incomplete',
+    'available evidence is incomplete',
+    'the evidence is incomplete',
+    'evidence is incomplete',
+    'incomplete evidence',
+  ])
+  const headline = decisionSummary?.headline
+    ?.trim()
+    .toLowerCase()
+    .replace(/[.!?]+$/, '')
+  const genericLegacyState = ['incomplete', 'incomplete_evidence'].includes(
+    String(decisionSummary?.state || '').toLowerCase(),
+  )
+  if (!headline || !genericLegacyState || !genericLegacyHeadlines.has(headline)) return undefined
+
+  const scheduled = finiteNonNegativeNumber(overview.diagnosis_scheduled_count)
+  const completed = finiteNonNegativeNumber(overview.diagnosis_completed_count)
+  const deferred = finiteNonNegativeNumber(overview.diagnosis_deferred_count)
+  const incomplete = finiteNonNegativeNumber(overview.diagnosis_incomplete_count)
+  const executionFailures = overview.diagnosis_execution_failure_count === undefined
+    ? finiteNonNegativeNumber(overview.semantic_budget_failure_count)
+    : finiteNonNegativeNumber(overview.diagnosis_execution_failure_count)
+  const prerequisiteFailures = finiteNonNegativeNumber(overview.diagnosis_prerequisite_failure_count)
+  const semanticBudgetExhausted = finiteNonNegativeNumber(overview.semantic_budget_exhausted_count)
+  const semanticBudgetDeferred = finiteNonNegativeNumber(overview.semantic_budget_deferred_count)
+  const isConfiguredLimitOnly = (
+    overview.inventory_coverage_status === 'complete'
+    && overview.analysis_coverage_status === 'incomplete'
+    && scheduled !== null
+    && completed !== null
+    && deferred !== null
+    && incomplete !== null
+    && executionFailures !== null
+    && prerequisiteFailures !== null
+    && semanticBudgetExhausted !== null
+    && semanticBudgetDeferred !== null
+    && deferred > 0
+    && completed >= scheduled
+    && incomplete === 0
+    && executionFailures === 0
+    && prerequisiteFailures === 0
+    && semanticBudgetExhausted === 0
+    && semanticBudgetDeferred === 0
+  )
+  if (!isConfiguredLimitOnly) return undefined
+
+  return {
+    state: decisionSummary?.state || 'incomplete_evidence',
+    headline: 'Diagnosis limit left selected candidates unexamined',
+    explanation: `Deterministic ranking completed and all ${scheduled} scheduled ${scheduled === 1 ? 'diagnosis' : 'diagnoses'} completed. ${deferred} selected ${deferred === 1 ? 'candidate was' : 'candidates were'} beyond the configured diagnosis limit and ${deferred === 1 ? 'was' : 'were'} not judged safe or unsafe.`,
+    next_action: 'increase the diagnosis limit or review deferred candidates in a follow-up run',
+  }
+}
+
 function parseActionWorkstreams(value: unknown): ActionWorkstream[] | undefined {
   if (value === undefined) return undefined
   if (!Array.isArray(value)) throw new Error('Stakeholder presentation contains a malformed action workstream list.')
@@ -1362,11 +1430,11 @@ function DecisionBrief({
       <div className="text-xs font-medium uppercase tracking-wide text-amber-800 dark:text-amber-200">Run decision</div>
       <h3 className="mt-1 text-xl font-semibold">No automatic optimizations launched</h3>
       <p className="mt-2 max-w-4xl text-sm">
-        This run found work, but did not prove a safe automatic optimization. {diagnosisSelected} scores warranted deeper diagnosis; {diagnosed} completed and {deferred} were deferred by the safety cap. {selected} targets passed the automatic execution policy.
+        This run found work, but did not prove a safe automatic optimization. {diagnosisSelected} scores warranted deeper diagnosis; {diagnosed} completed and {deferred} were not examined because of the configured diagnosis limit. Deferred candidates were not judged safe or unsafe. {selected} targets passed the automatic execution policy.
       </p>
       <p className="mt-3 text-sm font-medium">
         {deferred > 0
-          ? `Next: Complete ${deferred} deferred ${deferred === 1 ? 'diagnosis' : 'diagnoses'} while keeping the optimizer launch limit bounded.`
+          ? `Next: Increase the diagnosis limit or review the ${deferred} deferred ${deferred === 1 ? 'candidate' : 'candidates'} in a follow-up run.`
           : repaired > 0
             ? `Next: Triage the highest-impact score-definition repairs before another automatic run.`
             : 'Next: Review the evidence and collection recommendations before another automatic run.'}
@@ -2100,6 +2168,23 @@ export function OptimizationRunStatusPresentation({
   const hasExecutionEvidence = launchedCount > 0 || evaluatedCount > 0 || improvedCount > 0
   const hasBackendWorkstreams = presentation.action_workstreams !== undefined
   const runHasIncompleteCoverage = inventoryCoverageStatus === 'incomplete' || analysisCoverageStatus === 'incomplete'
+  const compatibilityDecisionSummary = legacyConfiguredLimitDecisionSummary(
+    overview,
+    presentation.decision_summary,
+  )
+  const configuredLimitOnly = (
+    overview.analysis_incomplete_reason === 'configured_count_limit'
+    || compatibilityDecisionSummary !== undefined
+  )
+  const currentActivity = compatibilityDecisionSummary
+    ? 'The configured diagnosis limit was reached after all scheduled diagnoses completed.'
+    : overview.current_activity
+  const nextCheckpoint = compatibilityDecisionSummary
+    ? 'Increase the diagnosis limit or review deferred candidates in a follow-up run.'
+    : overview.next_checkpoint
+  const diagnosisCoverage = compatibilityDecisionSummary
+    ? `${finiteNonNegative(overview.diagnosis_completed_count)} of ${finiteNonNegative(overview.diagnosis_scheduled_count)} scheduled diagnoses completed; ${finiteNonNegative(overview.diagnosis_deferred_count)} selected candidates were not examined because of the configured diagnosis limit.`
+    : overview.diagnosis_coverage
   const reconciledLiveProgress = reconcileLiveProgress(liveProgress, overview, durableMilestone)
   const maximumPriorityFeedback = Math.max(
     0,
@@ -2114,7 +2199,7 @@ export function OptimizationRunStatusPresentation({
             <p className="text-sm text-muted-foreground">
               {label(lifecycleStatus)} · Inventory {label(inventoryCoverageStatus).toLowerCase()} · Analysis {label(analysisCoverageStatus).toLowerCase()}
             </p>
-            {overview.current_activity && <p className="mt-2 max-w-3xl text-muted-foreground">{overview.current_activity}</p>}
+            {currentActivity && <p className="mt-2 max-w-3xl text-muted-foreground">{currentActivity}</p>}
           </div>
           <div className="rounded-md bg-primary/10 px-3 py-2 text-sm font-medium text-primary">
             {automaticExecution
@@ -2128,7 +2213,7 @@ export function OptimizationRunStatusPresentation({
         <DecisionBrief
           overview={overview}
           dispositionCounts={dispositionCounts}
-          decisionSummary={presentation.decision_summary}
+          decisionSummary={compatibilityDecisionSummary || presentation.decision_summary}
         />
 
         <GuidelineCodeConflictWorkstream
@@ -2256,7 +2341,7 @@ export function OptimizationRunStatusPresentation({
             : <div className="rounded-md bg-muted/30 p-4"><div className="text-xs uppercase tracking-wide text-muted-foreground">Assessment</div><div className="mt-1 text-sm">{overview.assessment_progress || 'Pending'}</div></div>}
           {reconciledLiveProgress?.phase === 'diagnosis'
             ? <LiveProgressCard progress={reconciledLiveProgress} />
-            : <div className="rounded-md bg-muted/30 p-4"><div className="text-xs uppercase tracking-wide text-muted-foreground">Diagnosis</div><div className="mt-1 text-sm">{overview.diagnosis_coverage || 'Pending'}</div></div>}
+            : <div className="rounded-md bg-muted/30 p-4"><div className="text-xs uppercase tracking-wide text-muted-foreground">Diagnosis</div><div className="mt-1 text-sm">{diagnosisCoverage || 'Pending'}</div></div>}
         </div>
       </section>
 
@@ -2278,17 +2363,23 @@ export function OptimizationRunStatusPresentation({
             </p>
             {analysisCoverageStatus === 'incomplete' && (
               <p>
-                {incompleteDiagnosisCount > 0
-                  ? `${incompleteDiagnosisCount} diagnosis ${incompleteDiagnosisCount === 1 ? 'result was' : 'results were'} incomplete.`
-                  : 'Semantic analysis did not complete.'}
-                {deferredDiagnosisCount > 0
-                  ? ` ${deferredDiagnosisCount} selected ${deferredDiagnosisCount === 1 ? 'diagnosis was' : 'diagnoses were'} deferred by the safety cap.`
-                  : ''}
+                {configuredLimitOnly
+                  ? (overview.diagnosis_limit_explanation || `${deferredDiagnosisCount} selected candidates were not examined because of the configured diagnosis limit. They were not judged safe or unsafe.`)
+                  : overview.analysis_incomplete_reason === 'budget_exhausted'
+                    ? 'The frozen semantic-analysis budget was exhausted before every selected candidate could be diagnosed. Unexamined candidates were not judged safe or unsafe.'
+                    : <>
+                        {incompleteDiagnosisCount > 0
+                          ? `${incompleteDiagnosisCount} diagnosis ${incompleteDiagnosisCount === 1 ? 'result was' : 'results were'} incomplete.`
+                          : 'Semantic analysis did not complete.'}
+                        {deferredDiagnosisCount > 0
+                          ? ` ${deferredDiagnosisCount} selected ${deferredDiagnosisCount === 1 ? 'candidate was' : 'candidates were'} not examined because of the configured diagnosis limit.`
+                          : ''}
+                      </>}
               </p>
             )}
             {overview.notes && <p className="text-muted-foreground">{overview.notes}</p>}
           </div>
-          {overview.next_checkpoint && <p className="mt-2 text-sm"><span className="font-medium">Next:</span> {overview.next_checkpoint}</p>}
+          {nextCheckpoint && <p className="mt-2 text-sm"><span className="font-medium">Next:</span> {nextCheckpoint}</p>}
         </section>
       )}
 
@@ -2325,7 +2416,7 @@ export function OptimizationRunStatusPresentation({
           <div className="rounded-md bg-muted/30 p-4">
             <div className="font-medium">{overview.diagnosis_selected_count ?? 0} selected for deeper review</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              The top {overview.diagnosis_top_priority_count ?? 0} eligible candidates plus {overview.diagnosis_monitoring_candidate_count ?? 0} monitoring candidates are selected, with overlap counted once. {overview.diagnosis_scheduled_count ?? overview.diagnosis_selected_count ?? 0} are scheduled in this run; {overview.diagnosis_deferred_count ?? 0} are deferred by the safety cap. {overview.diagnosis_skipped_count ?? 0} eligible candidates fall outside the diagnosis policy. Safety cap: {overview.diagnosis_max_count ?? 25}.
+              The top {overview.diagnosis_top_priority_count ?? 0} eligible candidates plus {overview.diagnosis_monitoring_candidate_count ?? 0} monitoring candidates are selected, with overlap counted once. {overview.diagnosis_scheduled_count ?? overview.diagnosis_selected_count ?? 0} are scheduled in this run; {overview.diagnosis_deferred_count ?? 0} are not scheduled because of the configured run limit. {overview.diagnosis_skipped_count ?? 0} eligible candidates fall outside the diagnosis policy. Configured diagnosis limit: {overview.diagnosis_max_count ?? 25}. Candidates outside this limit have not been judged safe or unsafe.
             </p>
           </div>
         </div>

@@ -93,7 +93,7 @@ describe('OptimizationRunStatus', () => {
           ranked_score_count: 3,
           cooldown_excluded_count: 1,
           assessment_progress: '3 of 3 ranked scores complete',
-          diagnosis_coverage: '1 of 1 scheduled diagnoses complete; 0 failed; 0 deferred by the safety cap',
+          diagnosis_coverage: '1 of 1 scheduled diagnoses complete; 0 failed; 0 deferred by the configured diagnosis limit',
           ranking_cutoff: 'none',
           priority_display_limit: 10,
           priority_displayed_count: 1,
@@ -293,7 +293,7 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getByText('Evidence rank before policy gates')).toBeInTheDocument()
     expect(screen.getByText(/Top 10 evidence ranks are highlighted/)).toBeInTheDocument()
     expect(screen.getByText(/1 selected for deeper review/)).toBeInTheDocument()
-    expect(screen.getByText(/1 are scheduled in this run; 0 are deferred by the safety cap/)).toBeInTheDocument()
+    expect(screen.getByText(/1 are scheduled in this run; 0 are not scheduled because of the configured run limit/)).toBeInTheDocument()
     expect(screen.getByText(/120 valid feedback/)).toBeInTheDocument()
     expect(screen.getByText('Reviewed errors show a safe opportunity.')).toBeInTheDocument()
     expect(screen.getByText('78 agreements')).toBeInTheDocument()
@@ -395,17 +395,25 @@ describe('OptimizationRunStatus', () => {
     )
   })
 
-  it('distinguishes complete inventory coverage from incomplete semantic analysis', async () => {
+  it('explains that a configured count limit is incomplete coverage rather than failure', async () => {
     mockReadTaskArtifact.mockReset().mockResolvedValueOnce(new Uint8Array(Buffer.from(JSON.stringify({
       overview: {
         lifecycle_status: 'incomplete',
         coverage_status: 'complete',
         inventory_coverage_status: 'complete',
         analysis_coverage_status: 'incomplete',
-        diagnosis_incomplete_count: 2,
+        diagnosis_selected_count: 10,
+        diagnosis_scheduled_count: 2,
+        diagnosis_completed_count: 2,
+        diagnosis_incomplete_count: 0,
         diagnosis_deferred_count: 8,
-        diagnosis_coverage: '2 of 2 scheduled diagnoses returned; 2 incomplete results; 0 execution failures; 8 deferred by the safety cap',
-        next_checkpoint: 'Review incomplete semantic findings.',
+        diagnosis_max_count: 2,
+        diagnosis_limit_reached: true,
+        diagnosis_limit_type: 'configured_count_limit',
+        diagnosis_limit_explanation: 'This run was configured to diagnose at most 2 candidates. The remaining 8 selected candidates were not examined and were not judged safe or unsafe.',
+        analysis_incomplete_reason: 'configured_count_limit',
+        diagnosis_coverage: '2 of 2 scheduled diagnoses returned; 0 incomplete results; 0 execution failures; 8 deferred by the configured diagnosis limit',
+        next_checkpoint: 'Increase the diagnosis limit or review deferred candidates.',
       },
       score_count: 0,
       scorecard_count: 0,
@@ -440,8 +448,132 @@ describe('OptimizationRunStatus', () => {
 
     expect(await screen.findByText('Incomplete · Inventory complete · Analysis incomplete')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Why this run is incomplete' })).toBeInTheDocument()
-    expect(screen.getByText(/2 diagnosis results were incomplete/)).toBeInTheDocument()
-    expect(screen.getByText(/8 selected diagnoses were deferred by the safety cap/)).toBeInTheDocument()
+    expect(screen.getByText(/configured to diagnose at most 2 candidates/)).toBeInTheDocument()
+    expect(screen.getByText(/not examined and were not judged safe or unsafe/)).toBeInTheDocument()
+  })
+
+  it('replaces only a legacy generic incomplete decision with the proven configured-limit conclusion', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: {
+            lifecycle_status: 'incomplete',
+            inventory_coverage_status: 'complete',
+            analysis_coverage_status: 'incomplete',
+            current_activity: 'The run ended with incomplete evidence.',
+            next_checkpoint: 'Review the documented coverage failures before relying on its conclusions.',
+            diagnosis_coverage: '2 of 2 scheduled diagnoses returned; 0 failures; 8 deferred by the safety cap',
+            diagnosis_scheduled_count: 2,
+            diagnosis_completed_count: 2,
+            diagnosis_deferred_count: 8,
+            diagnosis_incomplete_count: 0,
+            semantic_budget_failure_count: 0,
+            diagnosis_prerequisite_failure_count: 0,
+            semantic_budget_exhausted_count: 0,
+            semantic_budget_deferred_count: 0,
+          },
+          decision_summary: {
+            state: 'incomplete_evidence',
+            headline: 'The available evidence is incomplete',
+            explanation: 'The legacy report did not record the specific cause.',
+          },
+          score_count: 10,
+          scorecard_count: 1,
+          primary_decision_mix: {},
+          secondary_issue_counts: {},
+          attention_queue: [], questions_and_issues: [], optimization_outcomes: [],
+          opportunity_distribution: [], top_priorities: [], scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'Diagnosis limit left selected candidates unexamined' })).toBeInTheDocument()
+    expect(screen.getByText(/deterministic ranking completed and all 2 scheduled diagnoses completed/i)).toBeInTheDocument()
+    expect(screen.getByText(/8 selected candidates were beyond the configured diagnosis limit/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/not judged safe or unsafe/i)).toHaveLength(2)
+    expect(screen.getByText('The configured diagnosis limit was reached after all scheduled diagnoses completed.')).toBeInTheDocument()
+    expect(screen.getByText('Increase the diagnosis limit or review deferred candidates in a follow-up run.')).toBeInTheDocument()
+    expect(screen.getByText('2 of 2 scheduled diagnoses completed; 8 selected candidates were not examined because of the configured diagnosis limit.')).toBeInTheDocument()
+    expect(screen.queryByText('The available evidence is incomplete')).not.toBeInTheDocument()
+    expect(screen.queryByText('The run ended with incomplete evidence.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Review the documented coverage failures before relying on its conclusions.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/safety cap/)).not.toBeInTheDocument()
+  })
+
+  it('keeps a generic incomplete decision when an execution failure prevents a count-limit-only conclusion', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: {
+            lifecycle_status: 'incomplete',
+            inventory_coverage_status: 'complete',
+            analysis_coverage_status: 'incomplete',
+            current_activity: 'A diagnosis execution failed.',
+            next_checkpoint: 'Review the documented coverage failures before relying on its conclusions.',
+            diagnosis_scheduled_count: 2,
+            diagnosis_completed_count: 2,
+            diagnosis_deferred_count: 8,
+            diagnosis_incomplete_count: 0,
+            semantic_budget_failure_count: 1,
+            diagnosis_prerequisite_failure_count: 0,
+            semantic_budget_exhausted_count: 0,
+            semantic_budget_deferred_count: 0,
+          },
+          decision_summary: {
+            state: 'incomplete_evidence',
+            headline: 'The available evidence is incomplete',
+            explanation: 'A diagnosis execution failed.',
+          },
+          score_count: 10,
+          scorecard_count: 1,
+          primary_decision_mix: {},
+          secondary_issue_counts: {},
+          attention_queue: [], questions_and_issues: [], optimization_outcomes: [],
+          opportunity_distribution: [], top_priorities: [], scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'The available evidence is incomplete' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Diagnosis limit left selected candidates unexamined' })).not.toBeInTheDocument()
+    expect(screen.getAllByText('A diagnosis execution failed.')).toHaveLength(2)
+    expect(screen.getByText('Review the documented coverage failures before relying on its conclusions.')).toBeInTheDocument()
+  })
+
+  it('keeps a backend-specific conclusion authoritative even when the counts match the legacy compatibility case', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: {
+            lifecycle_status: 'incomplete',
+            inventory_coverage_status: 'complete',
+            analysis_coverage_status: 'incomplete',
+            diagnosis_scheduled_count: 2,
+            diagnosis_completed_count: 2,
+            diagnosis_deferred_count: 8,
+            diagnosis_incomplete_count: 0,
+            diagnosis_execution_failure_count: 0,
+            diagnosis_prerequisite_failure_count: 0,
+            semantic_budget_exhausted_count: 0,
+            semantic_budget_deferred_count: 0,
+          },
+          decision_summary: {
+            state: 'incomplete_evidence',
+            headline: 'Semantic diagnosis coverage is incomplete',
+            explanation: 'The backend has already provided the cause.',
+          },
+          score_count: 10,
+          scorecard_count: 1,
+          primary_decision_mix: {},
+          secondary_issue_counts: {},
+          attention_queue: [], questions_and_issues: [], optimization_outcomes: [],
+          opportunity_distribution: [], top_priorities: [], scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'Semantic diagnosis coverage is incomplete' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Diagnosis limit left selected candidates unexamined' })).not.toBeInTheDocument()
   })
 
   it('uses a newer live assessment count without rendering the stale durable count as current progress', async () => {
@@ -1194,7 +1326,7 @@ describe('OptimizationRunStatus', () => {
 
     expect(screen.getByRole('heading', { name: 'No automatic optimizations launched' })).toBeInTheDocument()
     expect(screen.getByText(/found work, but did not prove a safe automatic optimization/i)).toBeInTheDocument()
-    expect(screen.getAllByText(/complete 3 deferred diagnoses/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/increase the diagnosis limit or review the 3 deferred candidates/i).length).toBeGreaterThan(0)
     expect(screen.getByText('Finish analysis')).toBeInTheDocument()
     expect(screen.getByText('Repair score definitions')).toBeInTheDocument()
     expect(screen.queryByText(/699 not selected/i)).not.toBeInTheDocument()

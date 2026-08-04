@@ -16,7 +16,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from hashlib import sha256
 from io import BytesIO, StringIO
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, Sequence
 from urllib.parse import quote, urlencode, urlparse
 from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
@@ -29,6 +29,7 @@ from plexus.optimization.operator_identity import (
     OptimizationOperatorIdentity,
     optimization_operator_identity,
 )
+from plexus.optimization.agent_handoff import build_agent_handoff_artifacts
 from plexus.optimization.decision import normalize_execution_candidate_policy
 from plexus.optimization.report_actions import (
     build_action_projection,
@@ -101,6 +102,8 @@ _FINAL_STATES = {
 _ARTIFACT_PUBLICATION_KINDS = (
     "decision_evidence",
     "stakeholder_workbook",
+    "agent_handoff",
+    "scorecard_followups",
     "score_briefs",
     "scorecard_summaries",
     "scorecard_spreadsheets",
@@ -205,6 +208,8 @@ _OVERVIEW_KEYS = {
     "diagnosis_top_priority_count", "diagnosis_monitoring_candidate_count",
     "diagnosis_selected_count", "diagnosis_scheduled_count", "diagnosis_deferred_count",
     "diagnosis_skipped_count", "diagnosis_incomplete_count", "diagnosis_completed_count", "diagnosis_max_count",
+    "diagnosis_execution_failure_count", "diagnosis_limit_reached",
+    "diagnosis_limit_type", "diagnosis_limit_explanation", "analysis_incomplete_reason",
     "diagnosis_prerequisite_failure_count", "diagnosis_failure_category",
     "diagnosis_blockers",
     "approved_target_count", "dispatched_optimizer_count", "optimizer_review_count",
@@ -1026,6 +1031,93 @@ def _score_brief_portfolio_indexes(
     }
 
 
+def _score_brief_logical_ids_by_portfolio_index(
+    stakeholder_view: Mapping[str, Any],
+) -> dict[int, str]:
+    """Resolve the exact score-brief IDs used by final detail publication."""
+    relevant_score_indexes = _score_brief_portfolio_indexes(stakeholder_view)
+    grouped: dict[tuple[str, str], list[tuple[int, Mapping[str, Any]]]] = {}
+    for portfolio_index, row in enumerate(stakeholder_view.get("portfolio", [])):
+        if not isinstance(row, Mapping):
+            continue
+        scorecard_name = str(row.get("scorecard_name") or "Unlabeled scorecard")
+        stable_key = str(row.get("scorecard_ref") or scorecard_name)
+        grouped.setdefault((stable_key, scorecard_name), []).append(
+            (portfolio_index, row)
+        )
+    logical_ids: dict[int, str] = {}
+    for (_group_key, indexed_rows) in sorted(
+        grouped.items(), key=lambda item: item[0][1].casefold()
+    ):
+        stable_key = _group_key[0]
+        for row_index, (portfolio_index, row) in enumerate(indexed_rows):
+            if portfolio_index not in relevant_score_indexes:
+                continue
+            score_name = str(row.get("score_name") or "Unlabeled score")
+            score_hash = sha256(
+                f"{stable_key}\0{score_name}\0{row_index}".encode("utf-8")
+            ).hexdigest()[:16]
+            logical_ids[portfolio_index] = f"score_brief:{score_hash}"
+    return logical_ids
+
+
+def _agent_handoff_stakeholder_view(
+    stakeholder_view: Mapping[str, Any],
+    *,
+    include_final_detail_ids: bool,
+) -> dict[str, Any]:
+    """Add only publisher-resolved detail IDs to the private agent projection."""
+    result = dict(stakeholder_view)
+    logical_ids = (
+        _score_brief_logical_ids_by_portfolio_index(stakeholder_view)
+        if include_final_detail_ids
+        else {}
+    )
+    result["portfolio"] = [
+        {
+            **dict(row),
+            **(
+                {"artifact_logical_ids": [logical_ids[index]]}
+                if index in logical_ids
+                else {}
+            ),
+        }
+        if isinstance(row, Mapping)
+        else row
+        for index, row in enumerate(stakeholder_view.get("portfolio", []))
+    ]
+    return result
+
+
+def _agent_followup_for_score(
+    row: Mapping[str, Any],
+    agent_followups: Sequence[Mapping[str, Any]],
+) -> Mapping[str, Any] | None:
+    row_scorecard_ref = str(row.get("scorecard_ref") or "")
+    row_score_ref = str(row.get("score_ref") or "")
+    row_scorecard_name = str(row.get("scorecard_name") or "")
+    row_score_name = str(row.get("score_name") or "")
+    name_matches: list[Mapping[str, Any]] = []
+    for followup in agent_followups:
+        refs = followup.get("resource_refs")
+        refs = refs if isinstance(refs, Mapping) else {}
+        scorecard_id = str(refs.get("scorecard_id") or "")
+        score_id = str(refs.get("score_id") or "")
+        if (
+            scorecard_id
+            and score_id
+            and row_scorecard_ref == sha256(scorecard_id.encode("utf-8")).hexdigest()[:16]
+            and row_score_ref == sha256(score_id.encode("utf-8")).hexdigest()[:16]
+        ):
+            return followup
+        if (
+            str(followup.get("scorecard_name") or "") == row_scorecard_name
+            and str(followup.get("score_name") or "") == row_score_name
+        ):
+            name_matches.append(followup)
+    return name_matches[0] if len(name_matches) == 1 else None
+
+
 def _secondary_issue_flags_text(row: Mapping[str, Any]) -> str:
     """Render the canonical flag list while retaining older summary-only rows."""
     flags = row.get("secondary_issue_flags")
@@ -1038,6 +1130,8 @@ def _score_brief_markdown(
     scorecard_name: str,
     row: Mapping[str, Any],
     stakeholder_view: Mapping[str, Any],
+    *,
+    agent_followup: Mapping[str, Any] | None = None,
 ) -> bytes:
     score_name = str(row.get("score_name") or "Unlabeled score")
     lines = [
@@ -1071,6 +1165,42 @@ def _score_brief_markdown(
             )
             next_action = _markdown_text(issue.get("next_action") or "review")
             lines.append(f"- {finding} Next action: {next_action}.")
+    if isinstance(agent_followup, Mapping):
+        resource_refs = agent_followup.get("resource_refs")
+        resource_refs = resource_refs if isinstance(resource_refs, Mapping) else {}
+        gaps = agent_followup.get("evidence_gaps")
+        gaps = gaps if isinstance(gaps, (list, tuple)) else []
+        metrics = agent_followup.get("optimizer_metrics")
+        metrics = metrics if isinstance(metrics, Mapping) else {}
+        lines.extend([
+            "",
+            "## Agent follow-up",
+            "",
+            f"- Reference: {_markdown_text(agent_followup.get('reference') or 'not provided')}",
+            f"- Action: {_markdown_text(agent_followup.get('kind') or 'review')}",
+            f"- Candidate version: {_markdown_text(resource_refs.get('candidate_version_id') or 'not applicable')}",
+            f"- Optimizer Procedure: {_markdown_text(resource_refs.get('procedure_id') or 'not applicable')}",
+            f"- Optimizer Task: {_markdown_text(resource_refs.get('task_id') or 'not applicable')}",
+            "- Evaluations: " + _markdown_text(
+                ", ".join(str(value) for value in resource_refs.get("evaluation_ids") or [])
+                or "not applicable"
+            ),
+            "- Evidence gaps: " + _markdown_text(
+                ", ".join(str(value) for value in gaps) or "none"
+            ),
+        ])
+        if metrics:
+            lines.extend(["", "## Optimizer metrics", ""])
+            for cohort in ("recent", "regression"):
+                values = metrics.get(cohort)
+                if not isinstance(values, Mapping):
+                    continue
+                lines.append(
+                    f"- {_markdown_text(cohort.title())}: baseline "
+                    f"{_markdown_text(values.get('baseline'))}; candidate "
+                    f"{_markdown_text(values.get('candidate'))}; delta "
+                    f"{_markdown_text(values.get('delta'))}."
+                )
     lines.extend([
         "",
         "This brief contains stakeholder-safe findings only. The living Plexus Report is the cover page and lifecycle authority.",
@@ -1207,10 +1337,14 @@ def build_scorecard_artifacts(
     on_artifact_resolved: Optional[
         Callable[[str, Mapping[str, Any]], None]
     ] = None,
+    agent_followups: Sequence[Mapping[str, Any]] = (),
 ) -> list[dict[str, Any]]:
     """Publish one safe Markdown summary and quantitative CSV per scorecard."""
     _validate_view(stakeholder_view)
     relevant_score_indexes = _score_brief_portfolio_indexes(stakeholder_view)
+    score_brief_logical_ids = _score_brief_logical_ids_by_portfolio_index(
+        stakeholder_view
+    )
     grouped: dict[tuple[str, str], list[tuple[int, Mapping[str, Any]]]] = {}
     for portfolio_index, row in enumerate(stakeholder_view.get("portfolio", [])):
         scorecard_name = str(row.get("scorecard_name") or "Unlabeled scorecard")
@@ -1259,19 +1393,18 @@ def build_scorecard_artifacts(
                 score_artifacts.append([])
                 continue
             score_name = str(row.get("score_name") or "Unlabeled score")
-            score_hash = sha256(
-                f"{stable_key}\0{score_name}\0{row_index}".encode("utf-8")
-            ).hexdigest()[:16]
+            logical_id = score_brief_logical_ids[portfolio_index]
+            score_hash = logical_id.rsplit(":", 1)[-1]
             content = _score_brief_markdown(
                 scorecard_name,
                 row,
                 stakeholder_view,
+                agent_followup=_agent_followup_for_score(row, agent_followups),
             )
             filename = (
                 f"score-{score_hash}-brief-r{revision_number:04d}"
                 f"{publication_suffix}.md"
             )
-            logical_id = f"score_brief:{score_hash}"
             object_key, source_revision = resolve_artifact(
                 progress_kind="score_briefs",
                 logical_id=logical_id,
@@ -1366,6 +1499,8 @@ def build_scorecard_artifacts(
 
 def _artifact_publication_plan(
     stakeholder_view: Mapping[str, Any],
+    *,
+    followup_page_count: int = 0,
 ) -> dict[str, dict[str, int]]:
     """Return safe aggregate artifact counts before a milestone is uploaded.
 
@@ -1386,6 +1521,8 @@ def _artifact_publication_plan(
     totals = {
         "decision_evidence": 1,
         "stakeholder_workbook": 1,
+        "agent_handoff": 1,
+        "scorecard_followups": max(0, int(followup_page_count)),
         "score_briefs": len(_score_brief_portfolio_indexes(stakeholder_view)),
         "scorecard_summaries": scorecard_count,
         "scorecard_spreadsheets": scorecard_count,
@@ -2349,6 +2486,30 @@ class OptimizationRunReportService:
             )
             active_operation_category = "stakeholder_view_validation"
             _validate_view(stakeholder_view)
+            active_operation_category = "agent_handoff_projection"
+            agent_bundle = build_agent_handoff_artifacts(
+                decision_evidence=decision_evidence,
+                stakeholder_view=_agent_handoff_stakeholder_view(
+                    stakeholder_view,
+                    include_final_detail_ids=milestone == "finalization",
+                ),
+                report_metadata={
+                    "report_id": state.report.id,
+                    "revision": revision_number,
+                    "milestone": milestone,
+                },
+                finalized=milestone == "finalization",
+            )
+            agent_handoff = dict(agent_bundle["agent_handoff"])
+            followup_pages = [
+                dict(page) for page in agent_bundle["followup_pages"]
+            ]
+            agent_followups = [
+                dict(item)
+                for page in followup_pages
+                for item in page.get("items") or []
+                if isinstance(item, Mapping)
+            ]
             active_operation_category = "artifact_reuse_index"
             committed_artifacts = self._latest_committed_artifact_index()
             draft_artifacts: dict[str, dict[str, Any]] = {}
@@ -2388,7 +2549,10 @@ class OptimizationRunReportService:
                     source_revision=revision_number,
                 )
 
-            publication_counts = _artifact_publication_plan(stakeholder_view)
+            publication_counts = _artifact_publication_plan(
+                stakeholder_view,
+                followup_page_count=len(followup_pages),
+            )
             if milestone != "finalization":
                 for detail_kind in (
                     "score_briefs",
@@ -2497,6 +2661,103 @@ class OptimizationRunReportService:
                     source_revision=workbook_source_revision,
                 ),
             ]
+            active_artifact_kind = "agent_handoff"
+            active_operation_category = "agent_handoff"
+            _publish_artifact_progress("agent_handoff")
+            agent_handoff_bytes = _json(agent_handoff)
+            agent_handoff_filename = (
+                f"optimization-agent-handoff-r{revision_number:04d}-{publication_id}.json"
+            )
+            reusable_agent_handoff = _reuse_artifact(
+                "agent_handoff",
+                "agent_handoff",
+                "application/json",
+                agent_handoff_bytes,
+                agent_handoff_filename,
+            )
+            if isinstance(reusable_agent_handoff, Mapping):
+                agent_handoff_path = str(
+                    reusable_agent_handoff.get("object_key") or ""
+                )
+                agent_handoff_source_revision = int(
+                    reusable_agent_handoff.get("source_revision") or 0
+                )
+            else:
+                agent_handoff_path = self._artifact_uploader(
+                    state.task.id,
+                    agent_handoff_filename,
+                    agent_handoff_bytes,
+                )
+                agent_handoff_source_revision = revision_number
+            if not agent_handoff_path or agent_handoff_source_revision < 1:
+                raise OptimizationRunIntegrityError(
+                    "agent handoff artifact descriptor is incomplete"
+                )
+            self._attach_task_file(state.task, agent_handoff_path)
+            artifacts.append(_artifact_descriptor(
+                logical_id="agent_handoff",
+                kind="agent_handoff",
+                display_name="Coding-agent handoff",
+                scope="run",
+                content_type="application/json",
+                content=agent_handoff_bytes,
+                object_key=agent_handoff_path,
+                task_id=state.task.id,
+                source_revision=agent_handoff_source_revision,
+            ))
+            _publish_artifact_progress("agent_handoff", completed=True)
+            for page in followup_pages:
+                active_artifact_kind = "scorecard_followups"
+                active_operation_category = "scorecard_followups"
+                _publish_artifact_progress("scorecard_followups")
+                logical_id = str(page.get("logical_id") or "")
+                if not logical_id:
+                    raise OptimizationRunIntegrityError(
+                        "scorecard follow-up page has no logical ID"
+                    )
+                page_bytes = _json(page)
+                page_number = len([
+                    artifact for artifact in artifacts
+                    if artifact.get("kind") == "scorecard_followups"
+                ]) + 1
+                page_filename = (
+                    f"optimization-scorecard-followups-r{revision_number:04d}-"
+                    f"p{page_number:04d}-{publication_id}.json"
+                )
+                reusable_page = _reuse_artifact(
+                    logical_id,
+                    "scorecard_followups",
+                    "application/json",
+                    page_bytes,
+                    page_filename,
+                )
+                if isinstance(reusable_page, Mapping):
+                    page_path = str(reusable_page.get("object_key") or "")
+                    page_source_revision = int(
+                        reusable_page.get("source_revision") or 0
+                    )
+                else:
+                    page_path = self._artifact_uploader(
+                        state.task.id, page_filename, page_bytes,
+                    )
+                    page_source_revision = revision_number
+                if not page_path or page_source_revision < 1:
+                    raise OptimizationRunIntegrityError(
+                        "scorecard follow-up artifact descriptor is incomplete"
+                    )
+                self._attach_task_file(state.task, page_path)
+                artifacts.append(_artifact_descriptor(
+                    logical_id=logical_id,
+                    kind="scorecard_followups",
+                    display_name=f"Scorecard follow-ups page {page_number}",
+                    scope="run",
+                    content_type="application/json",
+                    content=page_bytes,
+                    object_key=page_path,
+                    task_id=state.task.id,
+                    source_revision=page_source_revision,
+                ))
+                _record_artifact_upload("scorecard_followups", True)
             if milestone == "finalization":
                 # This safe, immutable input lets a restarted local worker
                 # resume detail enrichment without rebuilding or re-running
@@ -2508,6 +2769,7 @@ class OptimizationRunReportService:
                     "evidence_checksum": evidence_checksum,
                     "stakeholder_view_checksum": stakeholder_view_checksum,
                     "stakeholder_view": stakeholder_view,
+                    "agent_followups": agent_followups,
                 })
                 detail_input_path = self._artifact_uploader(
                     state.task.id,
@@ -2662,6 +2924,7 @@ class OptimizationRunReportService:
                 evidence_checksum=evidence_checksum,
                 stakeholder_view_checksum=stakeholder_view_checksum,
                 generated_at=generated_at,
+                agent_followups=agent_followups,
             )
         except OptimizationRunIntegrityError as exc:
             try:
@@ -2714,6 +2977,7 @@ class OptimizationRunReportService:
         evidence_checksum: str,
         stakeholder_view_checksum: str,
         generated_at: datetime,
+        agent_followups: Sequence[Mapping[str, Any]] = (),
     ) -> PublishedRevision:
         """Attach final score details after the finalization core is durable.
 
@@ -2866,6 +3130,7 @@ class OptimizationRunReportService:
                 on_artifact_upload=record_progress_kind,
                 reuse_artifact=reuse_artifact,
                 on_artifact_resolved=record_artifact,
+                agent_followups=agent_followups,
             )
         except Exception as exc:
             try:
@@ -3013,6 +3278,13 @@ class OptimizationRunReportService:
         stakeholder_view = input_value.get("stakeholder_view")
         if not isinstance(stakeholder_view, Mapping):
             raise OptimizationRunIntegrityError("deferred final detail input lacks a stakeholder view")
+        agent_followups = input_value.get("agent_followups") or []
+        if not isinstance(agent_followups, list) or any(
+            not isinstance(item, Mapping) for item in agent_followups
+        ):
+            raise OptimizationRunIntegrityError(
+                "deferred final detail input has malformed agent follow-ups"
+            )
         _validate_view(stakeholder_view)
         stakeholder_view_checksum = str(input_value.get("stakeholder_view_checksum") or "")
         if sha256(_json(stakeholder_view)).hexdigest() != stakeholder_view_checksum:
@@ -3062,6 +3334,7 @@ class OptimizationRunReportService:
             evidence_checksum=evidence_checksum,
             stakeholder_view_checksum=stakeholder_view_checksum,
             generated_at=generated_at,
+            agent_followups=agent_followups,
         )
 
     def persist_semantic_budget_ledger(
@@ -3960,7 +4233,7 @@ class OptimizationRunReportService:
         revisions = list(run.get("revisions") or [])
         if any(int(item.get("number") or -1) == revision.number for item in revisions if isinstance(item, Mapping)):
             raise ValueError(f"revision {revision.number} already exists")
-        revisions.append(latest)
+        revisions = self._revision_history_with_latest_full(revisions, latest)
         run["latest_revision"] = latest
         run["revisions"] = revisions
         run["run_key"] = self.run_key
@@ -3981,6 +4254,44 @@ class OptimizationRunReportService:
         task_metadata["latest_revision"] = latest
         task_metadata.pop("optimization_publication_draft", None)
         state.task.update(metadata=json.dumps(task_metadata))
+
+    @staticmethod
+    def _revision_history_with_latest_full(
+        revisions: Sequence[Mapping[str, Any]], latest: Mapping[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Keep only the newest revision record verbose in Report parameters.
+
+        The immutable manifests retain the exhaustive revision information.  The
+        dashboard needs only this compact descriptor for historical revisions,
+        while the current revision remains a complete replay/checkpoint record.
+        Calling this during a new publication also normalizes reports created
+        before history compaction, without rewriting completed reports in bulk.
+        """
+        latest_number = int(latest.get("number") or -1)
+        history: list[dict[str, Any]] = []
+        for item in revisions:
+            if not isinstance(item, Mapping):
+                raise OptimizationRunIntegrityError(
+                    "Report revision history contains a non-object record"
+                )
+            if int(item.get("number") or -1) == latest_number:
+                # Detail enrichment already has the latest record in history;
+                # replace that mutable entry below rather than retaining a
+                # second copy.
+                continue
+            manifest = item.get("manifest")
+            if not isinstance(manifest, Mapping):
+                raise OptimizationRunIntegrityError(
+                    "Report revision history is missing its manifest descriptor"
+                )
+            history.append({
+                "number": item.get("number"),
+                "milestone": item.get("milestone"),
+                "published_at": item.get("published_at"),
+                "manifest": dict(manifest),
+            })
+        history.append(dict(latest))
+        return history
 
     def _record_detail_enrichment(
         self,
@@ -4020,7 +4331,9 @@ class OptimizationRunReportService:
                 "detail enrichment core revision is absent from Report history"
             )
         run["latest_revision"] = latest
-        run["revisions"] = revisions
+        # Detail enrichment updates the newest full revision in place, and also
+        # compacts any legacy verbose records retained from earlier publishes.
+        run["revisions"] = self._revision_history_with_latest_full(revisions, latest)
         parameters["optimization_run"] = run
         self._update_block(state.blocks["status"], str(detail_manifest["object_key"]), {
             "type": "optimization_run_status",

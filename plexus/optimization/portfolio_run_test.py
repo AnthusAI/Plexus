@@ -2365,10 +2365,22 @@ def test_semantic_diagnosis_limit_runs_the_highest_priority_subset_and_reports_d
     )
     assert diagnosis_view["overview"]["diagnosis_coverage"] == (
         "2 of 2 scheduled diagnoses returned; 0 incomplete results; "
-        "0 execution failures; 8 deferred by the safety cap"
+        "0 execution failures; 8 deferred by the configured diagnosis limit"
     )
     assert diagnosis_view["overview"]["diagnosis_scheduled_count"] == 2
     assert diagnosis_view["overview"]["diagnosis_deferred_count"] == 8
+    assert diagnosis_view["overview"]["diagnosis_limit_reached"] is True
+    assert diagnosis_view["overview"]["diagnosis_limit_type"] == "configured_count_limit"
+    assert diagnosis_view["overview"]["analysis_incomplete_reason"] == "configured_count_limit"
+    from plexus.optimization.run_report import build_stakeholder_presentation
+
+    presentation = build_stakeholder_presentation(
+        diagnosis_view,
+        scorecard_artifacts=[],
+    )
+    assert presentation["decision_summary"]["headline"] == (
+        "The configured run limit left 8 candidates unanalyzed"
+    )
 
 
 def test_zero_semantic_diagnosis_limit_defers_selected_work_without_invoking_a_model():
@@ -4378,8 +4390,9 @@ def test_stakeholder_overview_separates_complete_inventory_from_incomplete_diagn
     assert overview["diagnosis_incomplete_count"] == 1
     assert overview["diagnosis_coverage"] == (
         "1 of 1 scheduled diagnoses returned; 1 incomplete result; "
-        "0 execution failures; 0 deferred by the safety cap"
+        "0 execution failures; 0 deferred by the configured diagnosis limit"
     )
+    assert overview["analysis_incomplete_reason"] == "incomplete_diagnosis_evidence"
     _validate_view(incomplete)
 
     complete = _stakeholder_view({
@@ -5302,7 +5315,7 @@ def test_stakeholder_overview_explains_ranking_and_semantic_diagnosis_cutoffs():
     assert overview["diagnosis_max_count"] == 5
     assert overview["diagnosis_coverage"] == (
         "0 of 5 scheduled diagnoses returned; 0 incomplete results; "
-        "0 execution failures; 6 deferred by the safety cap"
+        "0 execution failures; 6 deferred by the configured diagnosis limit"
     )
     assert view["priorities"][0]["rank"] == 1
     assert view["priorities"][0]["disagreement_rate"] == 0.15

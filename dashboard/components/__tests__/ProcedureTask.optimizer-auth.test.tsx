@@ -513,6 +513,20 @@ describe('ProcedureTask optimizer auth flow', () => {
             metadata: JSON.stringify({
               procedure_type: 'Portfolio Optimization',
               optimization_run_final_status: 'incomplete',
+              latest_revision: {
+                overview: {
+                  inventory_coverage_status: 'complete',
+                  analysis_coverage_status: 'incomplete',
+                  diagnosis_scheduled_count: 4,
+                  diagnosis_completed_count: 4,
+                  diagnosis_deferred_count: 18,
+                  diagnosis_incomplete_count: 0,
+                  diagnosis_prerequisite_failure_count: 0,
+                  semantic_budget_failure_count: 0,
+                  semantic_budget_exhausted_count: 0,
+                  semantic_budget_deferred_count: 0,
+                },
+              },
               operator_identity: {
                 kind: 'scorecard_scoped_portfolio',
                 display_title: 'Scorecard-scoped optimization portfolio',
@@ -530,7 +544,7 @@ describe('ProcedureTask optimizer auth flow', () => {
       />
     )
 
-    expect(screen.getByText('Incomplete evidence')).toBeInTheDocument()
+    expect(screen.getByText('Analysis incomplete: configured run limit reached')).toBeInTheDocument()
     expect(screen.getByText('Incomplete')).toBeInTheDocument()
     expect(screen.queryByText(/^Complete$/)).not.toBeInTheDocument()
   })

@@ -104,6 +104,62 @@ const blockTypeMatches = (block: ReportBlock, blockClass: string): boolean =>
 const blockNameMatches = (block: ReportBlock, blockName: string): boolean =>
   normalizedBlockValue(block.name) === normalizedBlockValue(blockName);
 
+const finiteNonNegativeNumber = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+
+const linkedProcedureOverview = (metadata: unknown): Record<string, unknown> | null => {
+  try {
+    const parsed = typeof metadata === 'string' ? JSON.parse(metadata) : metadata
+    const latestRevision = parsed && typeof parsed === 'object'
+      ? (parsed as Record<string, unknown>).latest_revision
+      : null
+    const overview = latestRevision && typeof latestRevision === 'object'
+      ? (latestRevision as Record<string, unknown>).overview
+      : null
+    return overview && typeof overview === 'object' && !Array.isArray(overview)
+      ? overview as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+const hasConfiguredDiagnosisLimitEvidence = (metadata: unknown): boolean => {
+  const overview = linkedProcedureOverview(metadata)
+  if (!overview) return false
+  if (overview.analysis_incomplete_reason === 'configured_count_limit') return true
+
+  const scheduled = finiteNonNegativeNumber(overview.diagnosis_scheduled_count)
+  const completed = finiteNonNegativeNumber(overview.diagnosis_completed_count)
+  const deferred = finiteNonNegativeNumber(overview.diagnosis_deferred_count)
+  const incomplete = finiteNonNegativeNumber(overview.diagnosis_incomplete_count)
+  const executionFailures = overview.diagnosis_execution_failure_count === undefined
+    ? finiteNonNegativeNumber(overview.semantic_budget_failure_count)
+    : finiteNonNegativeNumber(overview.diagnosis_execution_failure_count)
+  const prerequisiteFailures = finiteNonNegativeNumber(overview.diagnosis_prerequisite_failure_count)
+  const semanticBudgetExhausted = finiteNonNegativeNumber(overview.semantic_budget_exhausted_count)
+  const semanticBudgetDeferred = finiteNonNegativeNumber(overview.semantic_budget_deferred_count)
+  return (
+    overview.inventory_coverage_status === 'complete'
+    && overview.analysis_coverage_status === 'incomplete'
+    && scheduled !== null
+    && completed !== null
+    && deferred !== null
+    && incomplete !== null
+    && executionFailures !== null
+    && prerequisiteFailures !== null
+    && semanticBudgetExhausted !== null
+    && semanticBudgetDeferred !== null
+    && deferred > 0
+    && completed >= scheduled
+    && incomplete === 0
+    && executionFailures === 0
+    && prerequisiteFailures === 0
+    && semanticBudgetExhausted === 0
+    && semanticBudgetDeferred === 0
+  )
+}
+
 const ReportTask: React.FC<ReportTaskProps> = ({ 
   variant, 
   task, 
@@ -238,6 +294,24 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   const linkedSurveyTitle = linkedProcedure?.displayTitle?.match(/^Feedback survey:/i)
     ? linkedProcedure.displayTitle
     : undefined;
+  const displayedReportOutput = useMemo(() => {
+    const output = task.data?.output || ''
+    const normalizedSafetyTerminology = linkedSurveyTitle
+      ? output
+        .replace(/deferred by the safety cap/gi, 'not examined because of the configured diagnosis limit')
+        .replace(/safety cap/gi, 'configured diagnosis limit')
+      : output
+    if (!hasConfiguredDiagnosisLimitEvidence(linkedProcedure?.task?.metadata)) return normalizedSafetyTerminology
+    return normalizedSafetyTerminology
+      .replace(
+        /The run ended with incomplete evidence\./g,
+        'The configured diagnosis limit was reached after all scheduled diagnoses completed.',
+      )
+      .replace(
+        /Review the documented coverage failures before relying on its conclusions\./g,
+        'Increase the diagnosis limit or review deferred candidates in a follow-up run.',
+      )
+  }, [linkedProcedure?.task?.metadata, linkedSurveyTitle, task.data?.output])
   const reportName = linkedSurveyTitle || task.data?.configName || task.data?.name || '';
   const reportDescription = getValueOrEmpty(task.data?.configDescription);
 
@@ -554,7 +628,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       <ReactMarkdown
         components={markdownComponents}
       >
-        {task.data?.output || ''}
+        {displayedReportOutput}
       </ReactMarkdown>
     </div>
   );
@@ -692,7 +766,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
                 <ReactMarkdown
                   components={markdownComponents}
                 >
-                  {task.data.output}
+                  {displayedReportOutput}
                 </ReactMarkdown>
               </div>
             </div>

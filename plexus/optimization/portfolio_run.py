@@ -3436,8 +3436,8 @@ def _terminal_narrative(status: str) -> tuple[str, str]:
             "Resolve the outstanding actions before approved work can continue.",
         ),
         "incomplete": (
-            "The run ended with incomplete evidence.",
-            "Review the documented coverage failures before relying on its conclusions.",
+            "The run ended with incomplete coverage or evidence.",
+            "Review whether a configured limit, budget, or incomplete diagnosis prevented full coverage.",
         ),
         "blocked": (
             "The run ended blocked by an unresolved dependency.",
@@ -4063,6 +4063,27 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
         state.get("semantic_budget_evidence"),
         diagnosis_coverage=diagnosis_coverage,
     )
+    diagnosis_limit_reached = diagnosis_deferred > 0
+    budget_exhausted_count = int(
+        semantic_budget.get("semantic_budget_exhausted_count") or 0
+    )
+    budget_deferred_count = int(
+        semantic_budget.get("semantic_budget_deferred_count") or 0
+    )
+    if inventory_coverage_status == "incomplete":
+        analysis_incomplete_reason = "inventory_incomplete"
+    elif diagnosis_prerequisite_failure_count > 0:
+        analysis_incomplete_reason = "diagnosis_prerequisite_failure"
+    elif budget_exhausted_count > 0 or budget_deferred_count > 0:
+        analysis_incomplete_reason = "budget_exhausted"
+    elif diagnosis_failed > 0:
+        analysis_incomplete_reason = "diagnosis_execution_failure"
+    elif diagnosis_incomplete > 0:
+        analysis_incomplete_reason = "incomplete_diagnosis_evidence"
+    elif diagnosis_limit_reached and diagnosis_completed >= diagnosis_scheduled:
+        analysis_incomplete_reason = "configured_count_limit"
+    else:
+        analysis_incomplete_reason = None
     semantic_reference = semantic_budget.get("semantic_budget_evidence_reference")
     for rows in (portfolio, priorities, feedback, questions, outcomes):
         for row in rows:
@@ -4116,10 +4137,11 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
                 f"{diagnosis_completed} of {diagnosis_scheduled} scheduled diagnoses returned; "
                 f"{diagnosis_incomplete} incomplete {incomplete_label}; "
                 f"{diagnosis_failed} execution failures; "
-                f"{diagnosis_deferred} deferred by the safety cap"
+                f"{diagnosis_deferred} deferred by the configured diagnosis limit"
             ),
             "diagnosis_incomplete_count": diagnosis_incomplete,
             "diagnosis_completed_count": diagnosis_completed,
+            "diagnosis_execution_failure_count": diagnosis_failed,
             "diagnosis_prerequisite_failure_count": diagnosis_prerequisite_failure_count,
             "diagnosis_failure_category": diagnosis_coverage.get("failure_category"),
             "diagnosis_blockers": list(diagnosis_coverage.get("blockers") or []),
@@ -4130,7 +4152,7 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             "priority_cutoff_rank": priority_displayed,
             "priority_cutoff_opportunity": priority_cutoff_row.get("reviewed_error_opportunity"),
             "ranked_below_priority_cutoff": max(evidence_ranked_count - priority_displayed, 0),
-            "diagnosis_selection_policy": "The highest-ranked actionable candidates plus every actionable monitoring candidate receive semantic diagnosis, subject to the safety cap. Deterministic repair cases remain visible but do not consume semantic diagnosis capacity.",
+            "diagnosis_selection_policy": "The highest-ranked actionable candidates plus every actionable monitoring candidate are selected for semantic diagnosis. The configured diagnosis limit determines how many are examined in this run. Deterministic repair cases remain visible but do not consume semantic diagnosis capacity.",
             "diagnosis_top_priority_count": diagnosis_top_priority,
             "diagnosis_monitoring_candidate_count": diagnosis_monitoring,
             "diagnosis_selected_count": diagnosis_selected,
@@ -4138,6 +4160,18 @@ def _stakeholder_view(state: Mapping[str, Any], *, milestone: str) -> dict[str, 
             "diagnosis_deferred_count": diagnosis_deferred,
             "diagnosis_skipped_count": diagnosis_skipped,
             "diagnosis_max_count": diagnosis_max,
+            "diagnosis_limit_reached": diagnosis_limit_reached,
+            "diagnosis_limit_type": (
+                "configured_count_limit" if diagnosis_limit_reached else None
+            ),
+            "diagnosis_limit_explanation": (
+                f"This run was configured to diagnose at most {diagnosis_max} candidates. "
+                f"The remaining {diagnosis_deferred} selected candidates were not examined "
+                "and were not judged safe or unsafe."
+                if diagnosis_limit_reached
+                else None
+            ),
+            "analysis_incomplete_reason": analysis_incomplete_reason,
             "pending_approval_count": len(state.get("approval_requests") or []),
             "approved_target_count": approved_target_count,
             "invalid_run_limit_target_count": invalid_run_limit_target_count,

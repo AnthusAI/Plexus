@@ -1123,8 +1123,62 @@ export default function ProcedureTask({
     if (raw === 'COMPLETED_WITH_UNRESOLVED_ACTIONS') return raw
     return undefined
   }, [procedure.status, taskMetadata])
+  const optimizationIncompleteReason = useMemo(() => {
+    const latestRevision = (taskMetadata as Record<string, any>).latest_revision
+    const overview = latestRevision && typeof latestRevision === 'object'
+      ? latestRevision.overview
+      : undefined
+    if (!overview || typeof overview !== 'object') return ''
+    const explicitReason = String(overview.analysis_incomplete_reason || '')
+    if (explicitReason) return explicitReason
+    const nonNegative = (value: unknown): number | null => (
+      typeof value === 'number' && Number.isFinite(value) && value >= 0
+        ? value
+        : null
+    )
+    const scheduled = nonNegative(overview.diagnosis_scheduled_count)
+    const completed = nonNegative(overview.diagnosis_completed_count)
+    const deferred = nonNegative(overview.diagnosis_deferred_count)
+    const incomplete = nonNegative(overview.diagnosis_incomplete_count)
+    const executionFailures = nonNegative(
+      overview.diagnosis_execution_failure_count
+      ?? overview.semantic_budget_failure_count,
+    )
+    const prerequisiteFailures = nonNegative(
+      overview.diagnosis_prerequisite_failure_count,
+    )
+    const budgetExhausted = nonNegative(overview.semantic_budget_exhausted_count)
+    const budgetDeferred = nonNegative(overview.semantic_budget_deferred_count)
+    if (
+      overview.inventory_coverage_status === 'complete'
+      && overview.analysis_coverage_status === 'incomplete'
+      && scheduled !== null
+      && completed !== null
+      && deferred !== null
+      && incomplete === 0
+      && executionFailures === 0
+      && prerequisiteFailures === 0
+      && budgetExhausted === 0
+      && budgetDeferred === 0
+      && deferred > 0
+      && completed >= scheduled
+    ) {
+      return 'configured_count_limit'
+    }
+    return ''
+  }, [taskMetadata])
   const optimizationStatusMessage = optimizationTerminalOutcome === 'INCOMPLETE'
-    ? 'Incomplete evidence'
+    ? optimizationIncompleteReason === 'configured_count_limit'
+      ? 'Analysis incomplete: configured run limit reached'
+      : optimizationIncompleteReason === 'budget_exhausted'
+        ? 'Analysis incomplete: semantic-analysis budget exhausted'
+        : optimizationIncompleteReason === 'inventory_incomplete'
+          ? 'Incomplete portfolio inventory'
+          : optimizationIncompleteReason === 'diagnosis_execution_failure'
+            || optimizationIncompleteReason === 'diagnosis_prerequisite_failure'
+            || optimizationIncompleteReason === 'incomplete_diagnosis_evidence'
+            ? 'Analysis incomplete: scheduled diagnoses need repair'
+            : 'Incomplete evidence'
     : optimizationTerminalOutcome === 'BLOCKED'
       ? 'Blocked pending resolution'
       : optimizationTerminalOutcome === 'COMPLETED_WITH_UNRESOLVED_ACTIONS'

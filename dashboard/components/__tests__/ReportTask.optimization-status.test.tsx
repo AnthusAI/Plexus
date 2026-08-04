@@ -20,10 +20,19 @@ jest.mock('react-markdown', () => {
       )
     }
     if (source.startsWith('# ')) {
-      return React.createElement(components.h1, {
-        node: { data: {} },
-        children: source.slice(2),
-      })
+      const [heading, ...paragraphs] = source.split('\n\n')
+      return React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(components.h1, {
+          node: { data: {} },
+          children: heading.slice(2),
+        }),
+        ...paragraphs.map((paragraph: string, index: number) => React.createElement(
+          components.p,
+          { key: index, node: { data: {} }, children: paragraph },
+        )),
+      )
     }
     return React.createElement(React.Fragment, null, children)
   }
@@ -193,7 +202,7 @@ describe('ReportTask optimization status integration', () => {
             id: 'report-1',
             title: 'Scorecard-scoped optimization portfolio',
             configName: 'Scorecard-scoped optimization portfolio',
-            output: '# Scorecard-scoped optimization portfolio',
+            output: '# Scorecard-scoped optimization portfolio\n\n18 candidates were deferred by the safety cap.',
             reportBlocks: [],
           },
         } as any}
@@ -205,9 +214,84 @@ describe('ReportTask optimization status integration', () => {
     )
     expect(screen.getByRole('heading', { name: 'Feedback survey: Example' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Scorecard-scoped optimization portfolio' })).not.toBeInTheDocument()
+    expect(screen.getByText('18 candidates were not examined because of the configured diagnosis limit.')).toBeInTheDocument()
+    expect(screen.queryByText(/safety cap/i)).not.toBeInTheDocument()
     expect(screen.getByTestId('report-detail-content')).not.toHaveClass('h-full')
     expect(screen.getByTestId('report-cover-content')).not.toHaveClass('overflow-y-auto')
     expect(screen.getByTestId('report-cover-content')).not.toHaveClass('flex-1')
+  })
+
+  it('normalizes only the two legacy cover sentences when object metadata proves a configured diagnosis limit', () => {
+    const linkedProcedure = {
+      id: 'procedure-1', displayTitle: 'Feedback survey: Example', featured: false,
+      createdAt: '2026-07-30T00:00:00.000Z', updatedAt: '2026-07-30T00:01:00.000Z',
+      task: {
+        id: 'task-1', type: 'Portfolio Optimization', status: 'COMPLETED', target: 'procedure/procedure-1', command: 'procedure run', stages: { items: [] },
+        metadata: { latest_revision: { overview: {
+          inventory_coverage_status: 'complete', analysis_coverage_status: 'incomplete',
+          diagnosis_scheduled_count: 2, diagnosis_completed_count: 2, diagnosis_deferred_count: 8,
+          diagnosis_incomplete_count: 0, semantic_budget_failure_count: 0,
+          diagnosis_prerequisite_failure_count: 0, semantic_budget_exhausted_count: 0,
+          semantic_budget_deferred_count: 0,
+        } } },
+      },
+    }
+
+    render(
+      <ReportTask
+        variant="detail"
+        linkedProcedure={linkedProcedure as any}
+        task={{
+          id: 'report-1', type: 'Report', name: '', description: '', scorecard: '', score: '',
+          time: '2026-07-30T00:00:00.000Z', status: 'COMPLETED',
+          data: {
+            id: 'report-1', title: 'Optimization portfolio', configName: 'Optimization portfolio', reportBlocks: [],
+            output: '# Optimization portfolio\n\nThe run ended with incomplete evidence.\n\nNext checkpoint: Review the documented coverage failures before relying on its conclusions.',
+          },
+        } as any}
+      />,
+    )
+
+    expect(screen.getByText('The configured diagnosis limit was reached after all scheduled diagnoses completed.')).toBeInTheDocument()
+    expect(screen.getByText('Next checkpoint: Increase the diagnosis limit or review deferred candidates in a follow-up run.')).toBeInTheDocument()
+    expect(screen.queryByText('The run ended with incomplete evidence.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Review the documented coverage failures/)).not.toBeInTheDocument()
+  })
+
+  it('preserves legacy cover sentences when string metadata records an execution or budget failure', () => {
+    const linkedProcedure = {
+      id: 'procedure-1', displayTitle: 'Feedback survey: Example', featured: false,
+      createdAt: '2026-07-30T00:00:00.000Z', updatedAt: '2026-07-30T00:01:00.000Z',
+      task: {
+        id: 'task-1', type: 'Portfolio Optimization', status: 'COMPLETED', target: 'procedure/procedure-1', command: 'procedure run', stages: { items: [] },
+        metadata: JSON.stringify({ latest_revision: { overview: {
+          inventory_coverage_status: 'complete', analysis_coverage_status: 'incomplete',
+          diagnosis_scheduled_count: 2, diagnosis_completed_count: 2, diagnosis_deferred_count: 8,
+          diagnosis_incomplete_count: 0, semantic_budget_failure_count: 1,
+          diagnosis_prerequisite_failure_count: 0, semantic_budget_exhausted_count: 1,
+          semantic_budget_deferred_count: 0,
+        } } }),
+      },
+    }
+
+    render(
+      <ReportTask
+        variant="detail"
+        linkedProcedure={linkedProcedure as any}
+        task={{
+          id: 'report-1', type: 'Report', name: '', description: '', scorecard: '', score: '',
+          time: '2026-07-30T00:00:00.000Z', status: 'COMPLETED',
+          data: {
+            id: 'report-1', title: 'Optimization portfolio', configName: 'Optimization portfolio', reportBlocks: [],
+            output: '# Optimization portfolio\n\nThe run ended with incomplete evidence.\n\nNext checkpoint: Review the documented coverage failures before relying on its conclusions.',
+          },
+        } as any}
+      />,
+    )
+
+    expect(screen.getByText('The run ended with incomplete evidence.')).toBeInTheDocument()
+    expect(screen.getByText('Next checkpoint: Review the documented coverage failures before relying on its conclusions.')).toBeInTheDocument()
+    expect(screen.queryByText(/configured diagnosis limit was reached/i)).not.toBeInTheDocument()
   })
 
   it('preserves expanded scorecard drill-in state when live progress refreshes', async () => {

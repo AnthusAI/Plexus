@@ -136,6 +136,101 @@ def test_decision_summary_never_claims_zero_result_while_analysis_is_pending():
     }
 
 
+def test_decision_summary_explains_a_configured_count_limit_without_implying_failure():
+    summary = build_decision_summary(
+        {
+            "lifecycle_status": "incomplete",
+            "inventory_coverage_status": "complete",
+            "analysis_coverage_status": "incomplete",
+            "diagnosis_selected_count": 22,
+            "diagnosis_scheduled_count": 4,
+            "diagnosis_completed_count": 4,
+            "diagnosis_deferred_count": 18,
+            "diagnosis_max_count": 4,
+            "diagnosis_incomplete_count": 0,
+            "diagnosis_execution_failure_count": 0,
+            "diagnosis_prerequisite_failure_count": 0,
+        },
+        {},
+    )
+
+    assert summary == {
+        "state": "incomplete_evidence",
+        "headline": "The configured run limit left 18 candidates unanalyzed",
+        "explanation": (
+            "Deterministic ranking and all 4 scheduled diagnoses completed. The run "
+            "selected 22 candidates, but its configured diagnosis limit was 4, so 18 "
+            "were deferred without being judged safe or unsafe."
+        ),
+        "next_action": (
+            "Increase the diagnosis limit or review the 18 deferred candidates in a "
+            "follow-up run."
+        ),
+    }
+
+
+def test_decision_summary_distinguishes_budget_exhaustion_from_a_count_limit():
+    summary = build_decision_summary(
+        {
+            "lifecycle_status": "incomplete",
+            "inventory_coverage_status": "complete",
+            "analysis_coverage_status": "incomplete",
+            "diagnosis_scheduled_count": 4,
+            "diagnosis_completed_count": 3,
+            "diagnosis_execution_failure_count": 1,
+            "semantic_budget_exhausted_count": 1,
+        },
+        {},
+    )
+
+    assert summary["headline"] == (
+        "The semantic-analysis budget ended diagnosis before full coverage"
+    )
+    assert "frozen budget left 1 diagnosis without complete evidence" in summary["explanation"]
+    assert "not judged safe or unsafe" in summary["explanation"]
+
+
+def test_decision_summary_distinguishes_incomplete_results_and_execution_failures():
+    incomplete = build_decision_summary(
+        {
+            "lifecycle_status": "incomplete",
+            "inventory_coverage_status": "complete",
+            "analysis_coverage_status": "incomplete",
+            "diagnosis_incomplete_count": 2,
+        },
+        {},
+    )
+    failed = build_decision_summary(
+        {
+            "lifecycle_status": "incomplete",
+            "inventory_coverage_status": "complete",
+            "analysis_coverage_status": "incomplete",
+            "diagnosis_execution_failure_count": 1,
+        },
+        {},
+    )
+
+    assert "2 returned incomplete evidence" in incomplete["explanation"]
+    assert "1 failed during execution" in failed["explanation"]
+    assert "configured run limit" not in incomplete["headline"]
+    assert "configured run limit" not in failed["headline"]
+
+
+def test_decision_summary_keeps_actual_run_failure_distinct_from_incomplete_coverage():
+    summary = build_decision_summary(
+        {
+            "lifecycle_status": "failed",
+            "inventory_coverage_status": "complete",
+            "analysis_coverage_status": "incomplete",
+            "diagnosis_deferred_count": 18,
+        },
+        {},
+    )
+
+    assert summary["state"] == "failure"
+    assert summary["headline"] == "The optimization run could not complete"
+
+
 def test_decision_summary_reports_terminal_zero_target_and_validated_improvement():
     zero = build_decision_summary(
         {"lifecycle_status": "complete", "analysis_coverage_status": "complete"},

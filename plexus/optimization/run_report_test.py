@@ -1245,6 +1245,188 @@ def test_publish_milestone_keeps_raw_evidence_restricted_and_points_to_latest_im
     assert "opaque-id" not in str(_Block.created[2].updates[-1])
 
 
+def test_publish_milestone_indexes_compact_agent_handoff_and_bounded_followup_pages(
+    monkeypatch,
+):
+    uploaded: dict[str, bytes] = {}
+    service = _service(monkeypatch)
+    service._artifact_uploader = lambda task_id, name, content: (
+        uploaded.__setitem__(name, content) or f"tasks/{task_id}/{name}"
+    )
+    state = service.start_or_resume({"scope": {}})
+    view = deepcopy(_safe_view())
+    view["overview"].update({
+        "lifecycle_status": "running",
+        "inventory_coverage_status": "complete",
+        "analysis_coverage_status": "complete",
+        "execution_decision_status": "complete",
+        "next_checkpoint": "Repair the blocking rubric evidence.",
+    })
+    view["portfolio"][0].update({
+        "scorecard_ref": sha256(b"card-1").hexdigest()[:16],
+        "score_ref": sha256(b"score-1").hexdigest()[:16],
+        "primary_disposition": "guideline_or_code_repair",
+        "secondary_issue_flags": ["potential_code_conflict"],
+        "secondary_issue_summary": "potential_code_conflict",
+        "rationale": "The implementation conflicts with the published rubric.",
+    })
+    evidence = {
+        "coverage": {"complete": True},
+        "diagnoses": [{
+            "scorecard_id": "card-1",
+            "score_id": "score-1",
+            "champion_version": "champion-1",
+            "feedback_watermark": "2026-07-01T00:00:00Z",
+            "configuration_digest": "a" * 64,
+            "guideline_digest": "b" * 64,
+            "evidence_fingerprint": "c" * 64,
+            "raw_feedback": "must remain restricted",
+            "prompt": "must remain restricted",
+        }],
+    }
+
+    revision = service.publish_milestone(
+        "diagnosis", evidence, stakeholder_view=view,
+    )
+
+    manifest = json.loads(uploaded[revision.manifest_path.rsplit("/", 1)[-1]])
+    handoff_descriptor = next(
+        artifact for artifact in manifest["artifacts"]
+        if artifact["kind"] == "agent_handoff"
+    )
+    page_descriptors = [
+        artifact for artifact in manifest["artifacts"]
+        if artifact["kind"] == "scorecard_followups"
+    ]
+    handoff_bytes = uploaded[handoff_descriptor["object_key"].rsplit("/", 1)[-1]]
+    handoff = json.loads(handoff_bytes)
+    pages = [
+        json.loads(uploaded[item["object_key"].rsplit("/", 1)[-1]])
+        for item in page_descriptors
+    ]
+    followups = [item for page in pages for item in page["items"]]
+
+    assert handoff["provisional"] is True
+    assert handoff["conclusion"]["state"] == "no_safe_target"
+    assert handoff["followup_page_logical_ids"] == [
+        descriptor["logical_id"] for descriptor in page_descriptors
+    ]
+    assert [item["kind"] for item in followups] == [
+        "resolve_guideline_code_conflict"
+    ]
+    assert followups[0]["resource_refs"] == {
+        "scorecard_id": "card-1",
+        "score_id": "score-1",
+        "champion_version_id": "champion-1",
+    }
+    assert len(handoff_bytes) < 20 * 1024
+    assert all(len(uploaded[item["object_key"].rsplit("/", 1)[-1]]) <= 24 * 1024 for item in page_descriptors)
+    assert all(item["sha256"] == sha256(uploaded[item["object_key"].rsplit("/", 1)[-1]]).hexdigest() for item in [handoff_descriptor, *page_descriptors])
+    assert all(item["task_id"] == state.task.id for item in [handoff_descriptor, *page_descriptors])
+    assert "must remain restricted" not in handoff_bytes.decode("utf-8")
+    assert "must remain restricted" not in json.dumps(pages)
+
+
+def test_final_agent_handoff_and_score_brief_reconcile_optimizer_followup_evidence(
+    monkeypatch,
+):
+    uploaded: dict[str, bytes] = {}
+    service = _service(monkeypatch)
+    service._artifact_uploader = lambda task_id, name, content: (
+        uploaded.__setitem__(name, content) or f"tasks/{task_id}/{name}"
+    )
+    state = service.start_or_resume({"scope": {}})
+    view = deepcopy(_safe_view())
+    view["overview"].update({
+        "lifecycle_status": "complete",
+        "inventory_coverage_status": "complete",
+        "analysis_coverage_status": "complete",
+        "execution_decision_status": "complete",
+        "optimizer_review_count": 1,
+        "next_checkpoint": "Complete the missing root-cause evidence.",
+    })
+    view["portfolio"][0].update({
+        "scorecard_ref": sha256(b"card-1").hexdigest()[:16],
+        "score_ref": sha256(b"score-1").hexdigest()[:16],
+        "primary_disposition": "validated_improvement",
+        "secondary_issue_flags": ["feedback_rubric_contradiction"],
+        "next_action": "complete_promotion_evidence",
+        "rationale": "The candidate improved alignment but RCA is incomplete.",
+    })
+    view["optimization_outcomes"] = [{
+        "scorecard_ref": view["portfolio"][0]["scorecard_ref"],
+        "score_ref": view["portfolio"][0]["score_ref"],
+        "scorecard_name": "Example Portfolio",
+        "score_name": "Priority Score",
+        "outcome": "validated_improvement",
+        "promotion_readiness": "validated_improvement",
+        "coverage_status": "complete",
+        "next_action": "complete_promotion_evidence",
+        "rationale": "RCA is incomplete.",
+    }]
+    evidence = {
+        "coverage": {"complete": True},
+        "assessments": [{
+            "scorecard_id": "card-1", "score_id": "score-1",
+            "champion_version": "champion-1",
+            "feedback_watermark": "2026-07-01T00:00:00Z",
+            "configuration_digest": "a" * 64,
+            "guideline_digest": "b" * 64,
+            "evidence_fingerprint": "c" * 64,
+        }],
+        "reviews": [{
+            "scorecard_id": "card-1", "score_id": "score-1",
+            "post_run_state": "validated_improvement",
+            "promotion_ready": False,
+            "primary_next_action": "complete_promotion_evidence",
+            "candidate_version_id": "candidate-1",
+            "procedure_id": "procedure-1",
+            "task_id": "optimizer-task-1",
+            "evidence_ids": ["procedure-1", "evaluation-recent", "evaluation-regression"],
+            "missing_evidence": ["rca_complete"],
+            "alignment_evidence": {
+                "recent": {"baseline": 0.61, "candidate": 0.76, "delta": 0.15},
+                "regression": {"baseline": 0.72, "candidate": 0.73, "delta": 0.01},
+            },
+        }],
+    }
+
+    revision = service.publish_milestone(
+        "finalization", evidence, stakeholder_view=view,
+    )
+
+    core_manifest = json.loads(uploaded[revision.manifest_path.rsplit("/", 1)[-1]])
+    handoff_descriptor = next(
+        item for item in core_manifest["artifacts"] if item["kind"] == "agent_handoff"
+    )
+    handoff = json.loads(uploaded[handoff_descriptor["object_key"].rsplit("/", 1)[-1]])
+    detail_descriptor = state.report.parameters["optimization_run"]["latest_revision"]["detail_manifest"]
+    detail_manifest = json.loads(uploaded[detail_descriptor["object_key"].rsplit("/", 1)[-1]])
+    score_brief = next(
+        item for item in detail_manifest["artifacts"] if item["kind"] == "score_brief"
+    )
+    brief_text = uploaded[score_brief["object_key"].rsplit("/", 1)[-1]].decode("utf-8")
+    followup_page = json.loads(uploaded[next(
+        item["object_key"].rsplit("/", 1)[-1]
+        for item in core_manifest["artifacts"]
+        if item["kind"] == "scorecard_followups"
+    )])
+    followup = followup_page["items"][0]
+
+    assert handoff["provisional"] is False
+    assert handoff["conclusion"]["state"] == "validated_improvement"
+    assert followup["kind"] == "complete_promotion_evidence"
+    assert followup["promotion_ready"] is False
+    assert followup["evidence_gaps"] == ["rca_complete"]
+    assert score_brief["logical_id"] in followup["artifact_logical_ids"]
+    assert "candidate-1" in brief_text
+    assert "evaluation-recent" in brief_text
+    assert "evaluation-regression" in brief_text
+    assert "rca_complete" in brief_text
+    assert "0.61" in brief_text and "0.76" in brief_text and "0.15" in brief_text
+    assert "feedback_rubric_contradiction" in brief_text
+
+
 def test_initial_automatic_report_identifies_the_policy_before_target_selection(monkeypatch):
     uploaded: dict[str, bytes] = {}
     service = _service(monkeypatch)
@@ -2062,18 +2244,95 @@ def test_report_artifact_base_url_comes_from_existing_account_settings():
     assert dashboard_base_url_from_account_settings(None) is None
 
 
-def test_multiple_milestones_preserve_full_revision_history(monkeypatch):
+def test_multiple_milestones_keep_only_the_latest_revision_full(monkeypatch):
     service = _service(monkeypatch)
     state = service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
 
-    service.publish_milestone("ranking", {"coverage": {"complete": True}}, stakeholder_view=_safe_view())
-    service.publish_milestone("finalization", {"coverage": {"complete": True}}, stakeholder_view=_safe_view())
+    first = service.publish_milestone(
+        "ranking", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+    )
+    second = service.publish_milestone(
+        "finalization", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+    )
 
-    history = state.report.parameters["optimization_run"]["revisions"]
+    run = state.report.parameters["optimization_run"]
+    history = run["revisions"]
     assert [revision["number"] for revision in history] == [1, 2]
     assert [revision["milestone"] for revision in history] == ["ranking", "finalization"]
-    assert all(revision["evidence_path"].startswith("tasks/task-1/") for revision in history)
+    assert history[0] == {
+        "number": first.number,
+        "milestone": first.milestone,
+        "published_at": first.published_at,
+        "manifest": {
+            "task_id": state.task.id,
+            "object_key": first.manifest_path,
+            "content_type": "application/json",
+            "size_bytes": first.manifest_size_bytes,
+            "sha256": first.manifest_checksum,
+        },
+    }
+    assert history[-1] == run["latest_revision"]
+    assert history[-1]["evidence_path"] == second.raw_evidence_path
     assert len(state.blocks["workbook"].attachedFiles) == 3
+
+
+def test_next_publication_normalizes_legacy_full_history_without_touching_latest(monkeypatch):
+    service = _service(monkeypatch)
+    state = service.start_or_resume({"window": {"start": "2026-04-30T00:00:00Z"}})
+    first = service.publish_milestone(
+        "ranking", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+    )
+    legacy = state.report.parameters["optimization_run"]["revisions"][0]
+    legacy["legacy_payload"] = "x" * 100_000
+    legacy["evidence_path"] = first.raw_evidence_path
+
+    second = service.publish_milestone(
+        "assessment", {"coverage": {"complete": True}}, stakeholder_view=_safe_view(),
+    )
+
+    run = state.report.parameters["optimization_run"]
+    assert set(run["revisions"][0]) == {
+        "number", "milestone", "published_at", "manifest",
+    }
+    assert run["revisions"][0]["number"] == first.number
+    assert run["latest_revision"]["number"] == second.number
+    assert run["latest_revision"]["evidence_path"] == second.raw_evidence_path
+
+
+def test_five_hundred_compact_revisions_keep_report_parameters_below_limit(monkeypatch):
+    from plexus.optimization.run_report import PublishedRevision
+
+    service = _service(monkeypatch)
+    state = service.start_or_resume({"window": {"start": {"at": "2026-04-30T00:00:00Z"}}})
+
+    for number in range(1, 501):
+        revision = PublishedRevision(
+            number=number,
+            milestone="assessment",
+            published_at=f"2026-04-30T00:00:{number:04d}Z",
+            raw_evidence_path=f"tasks/{state.task.id}/evidence-{number}.json",
+            workbook_path=f"tasks/{state.task.id}/workbook-{number}.xlsx",
+            manifest_path=f"tasks/{state.task.id}/manifest-{number}.json",
+            manifest_checksum="a" * 64,
+            manifest_size_bytes=1000,
+            evidence_checksum="b" * 64,
+            workbook_checksum="c" * 64,
+            row_counts={"Portfolio": number},
+            overview={"verbose": "x" * 10_000},
+            artifacts=(),
+            detail_status="pending",
+        )
+        service._record_latest_revision(state, revision)
+
+    run = state.report.parameters["optimization_run"]
+    assert len(run["revisions"]) == 500
+    assert all(
+        set(revision) == {"number", "milestone", "published_at", "manifest"}
+        for revision in run["revisions"][:-1]
+    )
+    assert run["revisions"][-1] == run["latest_revision"]
+    assert run["latest_revision"]["overview"]["verbose"] == "x" * 10_000
+    assert len(json.dumps(state.report.parameters, separators=(",", ":")).encode()) < 256 * 1024
 
 
 def test_intermediate_milestone_commits_the_core_revision_without_score_details(monkeypatch):
@@ -2628,12 +2887,16 @@ def test_assessment_artifact_publication_has_a_distinct_safe_live_phase(monkeypa
     assert service._latest_revision_number(state.report) == 1
     assert all(update["unit"] == "artifacts" for update in publication)
     assert publication[0]["current"] == 0
-    assert publication[0]["total"] == 4
-    assert publication[-1]["current"] == 4
+    # Decision evidence, workbook, agent handoff, presentation, and manifest
+    # are the fixed core set. Detailed score artifacts remain off this path.
+    assert publication[0]["total"] == 5
+    assert publication[-1]["current"] == 5
     assert publication[-1]["next_checkpoint"] == "Publishing the assessment milestone."
     assert publication[-1]["artifact_counts"] == {
         "decision_evidence": {"completed": 1, "total": 1},
         "stakeholder_workbook": {"completed": 1, "total": 1},
+        "agent_handoff": {"completed": 1, "total": 1},
+        "scorecard_followups": {"completed": 0, "total": 0},
         "score_briefs": {"completed": 0, "total": 0},
         "scorecard_summaries": {"completed": 0, "total": 0},
         "scorecard_spreadsheets": {"completed": 0, "total": 0},

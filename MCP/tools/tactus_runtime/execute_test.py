@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 import json
 import os
 import subprocess
@@ -1219,6 +1220,239 @@ def test_default_score_set_champion_serializes_champion_history_metadata(
     assert metadata["championHistory"][0]["scoreId"] == "score-1"
     assert metadata["championHistory"][0]["versionId"] == "version-1"
     assert metadata["championHistory"][0]["exitedAt"] is None
+
+
+def test_default_score_set_champion_promotes_when_expected_champion_matches(
+    monkeypatch,
+) -> None:
+    calls: list[str] = []
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            if "GetScoreVersionForChampionGuard" in query:
+                return {
+                    "getScore": {"id": "score-1", "championVersionId": "version-old"},
+                    "getScoreVersion": {
+                        "id": "version-new", "scoreId": "score-1",
+                        "configuration": "name: test", "metadata": None,
+                        "createdAt": "2026-05-01T00:00:00.000Z",
+                    },
+                }
+            if "GetScoreVersionForManagement" in query:
+                return {"getScoreVersion": {"id": "version-old", "metadata": None}}
+            if "GetCurrentChampionForPrecondition" in query:
+                calls.append("precondition")
+                return {"getScore": {"id": "score-1", "championVersionId": "version-old"}}
+            if "mutation UpdateScore(" in query:
+                calls.append("mutation")
+                assert "$condition: ModelScoreConditionInput" in query
+                assert "condition: $condition" in query
+                assert variables["condition"] == {
+                    "championVersionId": {"eq": "version-old"}
+                }
+                return {"updateScore": {"id": "score-1", "championVersionId": "version-new"}}
+            if "UpdateScoreVersionMetadata" in query:
+                return {"updateScoreVersion": {"id": variables["input"]["id"]}}
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+
+    result = execute._default_score_set_champion({
+        "score_id": "score-1",
+        "version_id": "version-new",
+        "expected_champion_version_id": "version-old",
+    })
+
+    assert result["success"] is True
+    assert calls == ["precondition", "mutation"]
+
+
+def test_default_score_set_champion_rejects_stale_expected_champion(
+    monkeypatch,
+) -> None:
+    mutation_called = False
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            nonlocal mutation_called
+            if "GetScoreVersionForChampionGuard" in query:
+                return {
+                    "getScore": {"id": "score-1", "championVersionId": "version-old"},
+                    "getScoreVersion": {
+                        "id": "version-new", "scoreId": "score-1",
+                        "configuration": "name: test", "metadata": None,
+                        "createdAt": "2026-05-01T00:00:00.000Z",
+                    },
+                }
+            if "GetScoreVersionForManagement" in query:
+                return {"getScoreVersion": {"id": "version-old", "metadata": None}}
+            if "GetCurrentChampionForPrecondition" in query:
+                return {"getScore": {"id": "score-1", "championVersionId": "version-newer"}}
+            if "mutation UpdateScore(" in query:
+                mutation_called = True
+                raise AssertionError("stale precondition must prevent mutation")
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+
+    result = execute._default_score_set_champion({
+        "score_id": "score-1",
+        "version_id": "version-new",
+        "expected_champion_version_id": "version-old",
+    })
+
+    assert result == {
+        "success": False,
+        "error": "CHAMPION_PRECONDITION_FAILED",
+        "message": "Cannot promote: the score's champion changed since this follow-up was created.",
+        "scoreId": "score-1",
+        "versionId": "version-new",
+    }
+    assert mutation_called is False
+
+
+def test_default_score_set_champion_fails_closed_when_current_champion_unavailable(
+    monkeypatch,
+) -> None:
+    mutation_called = False
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            nonlocal mutation_called
+            if "GetScoreVersionForChampionGuard" in query:
+                return {
+                    "getScore": {"id": "score-1", "championVersionId": "version-old"},
+                    "getScoreVersion": {
+                        "id": "version-new", "scoreId": "score-1",
+                        "configuration": "name: test", "metadata": None,
+                        "createdAt": "2026-05-01T00:00:00.000Z",
+                    },
+                }
+            if "GetScoreVersionForManagement" in query:
+                return {"getScoreVersion": {"id": "version-old", "metadata": None}}
+            if "GetCurrentChampionForPrecondition" in query:
+                return {"getScore": None}
+            if "mutation UpdateScore(" in query:
+                mutation_called = True
+                raise AssertionError("unknown precondition must prevent mutation")
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+
+    result = execute._default_score_set_champion({
+        "score_id": "score-1",
+        "version_id": "version-new",
+        "expected_champion_version_id": "version-old",
+    })
+
+    assert result == {
+        "success": False,
+        "error": "CHAMPION_PRECONDITION_UNAVAILABLE",
+        "message": "Cannot promote: the current champion could not be verified.",
+        "scoreId": "score-1",
+        "versionId": "version-new",
+    }
+    assert mutation_called is False
+
+
+def test_default_score_set_champion_fails_closed_when_conditional_write_loses_race(
+    monkeypatch,
+) -> None:
+    calls: list[str] = []
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            if "GetScoreVersionForChampionGuard" in query:
+                return {
+                    "getScore": {"id": "score-1", "championVersionId": "version-old"},
+                    "getScoreVersion": {
+                        "id": "version-new", "scoreId": "score-1",
+                        "configuration": "name: test", "metadata": None,
+                        "createdAt": "2026-05-01T00:00:00.000Z",
+                    },
+                }
+            if "GetScoreVersionForManagement" in query:
+                return {"getScoreVersion": {"id": "version-old", "metadata": None}}
+            if "GetCurrentChampionForPrecondition" in query:
+                calls.append("precondition")
+                return {"getScore": {"id": "score-1", "championVersionId": "version-old"}}
+            if "mutation UpdateScore(" in query:
+                calls.append("conditional_mutation")
+                assert variables["condition"] == {
+                    "championVersionId": {"eq": "version-old"}
+                }
+                raise Exception(
+                    "GraphQL query failed: DynamoDB:ConditionalCheckFailedException"
+                )
+            if "UpdateScoreVersionMetadata" in query:
+                calls.append("history_write")
+                raise AssertionError("conditional loser must not write champion history")
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+
+    result = execute._default_score_set_champion({
+        "score_id": "score-1",
+        "version_id": "version-new",
+        "expected_champion_version_id": "version-old",
+    })
+
+    assert result == {
+        "success": False,
+        "error": "CHAMPION_PRECONDITION_FAILED",
+        "message": "Cannot promote: the score's champion changed since this follow-up was created.",
+        "scoreId": "score-1",
+        "versionId": "version-new",
+    }
+    assert calls == ["precondition", "conditional_mutation"]
+
+
+def test_default_score_set_champion_keeps_legacy_behavior_without_precondition(
+    monkeypatch,
+) -> None:
+    mutation_called = False
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            nonlocal mutation_called
+            if "GetScoreVersionForChampionGuard" in query:
+                return {
+                    "getScore": {"id": "score-1", "championVersionId": "version-old"},
+                    "getScoreVersion": {
+                        "id": "version-new", "scoreId": "score-1",
+                        "configuration": "name: test", "metadata": None,
+                        "createdAt": "2026-05-01T00:00:00.000Z",
+                    },
+                }
+            if "GetScoreVersionForManagement" in query:
+                return {"getScoreVersion": {"id": "version-old", "metadata": None}}
+            if "GetCurrentChampionForPrecondition" in query:
+                raise AssertionError("unguarded promotion must preserve its existing read path")
+            if "mutation UpdateScore(" in query:
+                mutation_called = True
+                return {"updateScore": {"id": "score-1", "championVersionId": "version-new"}}
+            if "UpdateScoreVersionMetadata" in query:
+                return {"updateScoreVersion": {"id": variables["input"]["id"]}}
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+
+    result = execute._default_score_set_champion({
+        "score_id": "score-1", "version_id": "version-new",
+    })
+
+    assert result["success"] is True
+    assert mutation_called is True
 
 
 def test_default_score_update_serializes_attribution_metadata(monkeypatch) -> None:
@@ -2769,8 +3003,15 @@ def test_default_portfolio_runtime_constructs_the_graphql_optimizer_child_dispat
     """The real runtime never falls back to a local optimizer subprocess."""
     from hashlib import sha256
     from pathlib import Path
+    from plexus.auth import cognito
 
     captured: dict[str, object] = {}
+    authority_events: list[str] = []
+
+    class AvailableAuthority:
+        def get_access_token(self):
+            authority_events.append("access_token")
+            return "test-access-token"
 
     class CapturingRunner:
         def __init__(self, dependencies):
@@ -2783,6 +3024,7 @@ def test_default_portfolio_runtime_constructs_the_graphql_optimizer_child_dispat
     client = SimpleNamespace(execute=lambda *_args, **_kwargs: (_ for _ in ()).throw(
         AssertionError("constructing child dispatch must not perform a GraphQL mutation")
     ))
+    monkeypatch.setattr(cognito, "CognitoAuthService", AvailableAuthority)
     monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
     monkeypatch.setattr(
         "plexus.dashboard.api.models.account.Account.get_by_id",
@@ -2802,6 +3044,7 @@ def test_default_portfolio_runtime_constructs_the_graphql_optimizer_child_dispat
     assert module._default_optimization_portfolio_runner({
         "account_id": "account-opaque", "run_key": "frozen-run-opaque",
     }) == {"status": "captured"}
+    assert authority_events == ["access_token"]
 
     dependencies = captured["dependencies"]
     child_request = dependencies.optimizer_child_request({
@@ -3893,6 +4136,60 @@ def test_default_optimization_assess_composes_score_guidelines_classes_and_rank_
     assert result["feedback_watermark"] == "2026-07-01T00:00:00Z"
 
 
+def test_optimization_assessment_freezes_content_digests_without_exposing_content() -> None:
+    """Assessment handoffs retain exact-input preconditions, not their contents."""
+    rank_evidence = {
+        "coverage": {"complete": True},
+        "valid_feedback_count": 250,
+        "scope": {"scorecard_id": "sc-1", "score_id": "s-1"},
+        "window": {"start": "2026-04-01T00:00:00Z", "end": "2026-06-30T00:00:00Z"},
+        "feedback_watermark": "2026-07-01T00:00:00Z",
+    }
+
+    def assess(code: object, guidelines: object) -> dict:
+        return execute.PlexusRuntimeModule(
+            FastMCP("test-runtime-assessment-digests"),
+            score_info=lambda _args: {
+                "championVersionId": "v-1",
+                "code": code,
+                "guidelines": guidelines,
+            },
+            guidelines_validator=lambda _text: {"is_valid": True},
+            terminal_class_resolver=lambda _code: {"classes": ["Yes", "No"]},
+        ).optimization.assess({
+            "scorecard_id": "sc-1", "score_id": "s-1", "rank_evidence": rank_evidence,
+        })
+
+    first = assess("classifier: exact", "# Exact guidelines")
+    same = assess("classifier: exact", "# Exact guidelines")
+    changed_code = assess("classifier: changed", "# Exact guidelines")
+    changed_guidelines = assess("classifier: exact", "# Changed guidelines")
+    missing_guidelines = assess("classifier: exact", None)
+    missing_inputs = assess(None, None)
+
+    assert first["configuration_digest"] == sha256(b"classifier: exact").hexdigest()
+    assert first["guideline_digest"] == sha256(b"# Exact guidelines").hexdigest()
+    assert first["configuration_digest_state"] == "present"
+    assert first["guideline_digest_state"] == "present"
+    assert same["configuration_digest"] == first["configuration_digest"]
+    assert same["guideline_digest"] == first["guideline_digest"]
+    assert changed_code["configuration_digest"] != first["configuration_digest"]
+    assert changed_guidelines["guideline_digest"] != first["guideline_digest"]
+    assert changed_code["evidence_fingerprint"] != first["evidence_fingerprint"]
+    assert changed_guidelines["evidence_fingerprint"] != first["evidence_fingerprint"]
+    assert missing_guidelines["guideline_digest"] == sha256(
+        b"plexus:optimization:missing-guidelines:v1"
+    ).hexdigest()
+    assert missing_guidelines["guideline_digest_state"] == "missing"
+    assert missing_inputs["configuration_digest"] == sha256(
+        b"plexus:optimization:missing-configuration:v1"
+    ).hexdigest()
+    assert missing_inputs["configuration_digest_state"] == "missing"
+    serialized = json.dumps(first, sort_keys=True)
+    assert "classifier: exact" not in serialized
+    assert "# Exact guidelines" not in serialized
+
+
 def test_portfolio_assessment_reads_each_exact_score_configuration_directly_once(
     monkeypatch,
 ) -> None:
@@ -4751,6 +5048,701 @@ def test_planning_mode_allows_safe_analysis_and_procedure_inspection() -> None:
     assert seen["report_run"]["account_id"] == "acct-1"
     assert seen["report_list"]["account_id"] == "acct-1"
     assert seen["procedure_list"]["account_id"] == "acct-1"
+
+
+class _ReportArtifactReader:
+    def __init__(self, content_by_filename: dict[str, bytes]):
+        self.content_by_filename = content_by_filename
+        self.requests = []
+
+    def download_bytes(self, request):
+        self.requests.append(request)
+        return self.content_by_filename[request.filename]
+
+
+def _report_artifact_descriptor(
+    logical_id: str,
+    content: bytes,
+    *,
+    kind: str = "agent_handoff",
+    content_type: str = "application/json",
+    task_id: str = "task-1",
+    filename: str | None = None,
+) -> dict:
+    filename = filename or f"{logical_id.replace(':', '-')}.json"
+    return {
+        "logical_id": logical_id,
+        "kind": kind,
+        "display_name": logical_id,
+        "scope": "run",
+        "content_type": content_type,
+        "size_bytes": len(content),
+        "sha256": sha256(content).hexdigest(),
+        "task_id": task_id,
+        "object_key": f"tasks/{task_id}/{filename}",
+        "source_revision": 4,
+    }
+
+
+def _install_report_fixture(monkeypatch, report, *, listed=None):
+    from plexus.dashboard.api.models.report import Report
+
+    class FakeClient:
+        context = None
+
+        def generate_deep_link(self, path, values):
+            assert path == "/lab/reports/{reportId}"
+            return f"https://dashboard.example/lab/reports/{values['reportId']}"
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+    monkeypatch.setattr(
+        Report,
+        "get_by_id",
+        staticmethod(lambda report_id, _client: report if report_id == report.id else None),
+    )
+    monkeypatch.setattr(
+        Report,
+        "list_by_account_id",
+        staticmethod(lambda *_args, **_kwargs: list(listed or [report])),
+    )
+
+
+def test_report_list_returns_only_compact_metadata_without_parameters_or_output(
+    monkeypatch,
+) -> None:
+    report = SimpleNamespace(
+        id="report-1",
+        accountId="acct-1",
+        name="Optimization survey",
+        taskId="task-1",
+        reportConfigurationId="config-1",
+        parameters={
+            "large": "x" * 100_000,
+            "optimization_run": {
+                "run_key": "run-1",
+                "revisions": [{"raw": "y" * 100_000}],
+                "latest_revision": {
+                    "number": 4,
+                    "milestone": "finalization",
+                    "published_at": "2026-08-04T12:00:00Z",
+                    "detail_status": "complete",
+                    "overview": {"lifecycle_status": "complete"},
+                    "manifest": {"object_key": "tasks/task-1/manifest.json"},
+                },
+            },
+        },
+        output="z" * 100_000,
+        createdAt="2026-08-04T10:00:00Z",
+        updatedAt="2026-08-04T12:00:00Z",
+        createdByUserId="user-1",
+    )
+    _install_report_fixture(monkeypatch, report)
+
+    result = execute._default_report_list({"account_id": "acct-1"})
+
+    encoded = json.dumps(result)
+    assert result["count"] == 1
+    assert result["items"][0]["latest_revision"] == {
+        "number": 4,
+        "milestone": "finalization",
+        "published_at": "2026-08-04T12:00:00Z",
+        "detail_status": "complete",
+    }
+    assert result["items"][0]["lifecycle_status"] == "complete"
+    assert "parameters" not in encoded
+    assert "output" not in encoded
+    assert "revisions" not in encoded
+    assert len(encoded.encode()) < 4_000
+
+
+def test_report_info_returns_verified_parsed_agent_handoff_under_20kb(
+    monkeypatch,
+) -> None:
+    handoff = {
+        "schema_version": "optimization-agent-handoff/v1",
+        "report_id": "report-1",
+        "revision": 4,
+        "provisional": False,
+        "conclusion": {"state": "validated_improvement", "headline": "Review one candidate"},
+        "workstream_counts": {"complete_promotion_evidence": 1},
+        "followup_page_logical_ids": ["scorecard_followups:4:0001"],
+    }
+    handoff_bytes = json.dumps(handoff, separators=(",", ":")).encode()
+    handoff_descriptor = _report_artifact_descriptor("agent_handoff", handoff_bytes)
+    manifest = {
+        "revision": 4,
+        "milestone": "finalization",
+        "artifacts": [handoff_descriptor],
+    }
+    manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode()
+    manifest_descriptor = _report_artifact_descriptor(
+        "revision_manifest",
+        manifest_bytes,
+        kind="revision_manifest",
+        filename="manifest.json",
+    )
+    report = SimpleNamespace(
+        id="report-1", accountId="acct-1", name="Optimization survey",
+        taskId="task-1", reportConfigurationId="config-1",
+        parameters={"optimization_run": {
+            "run_key": "run-1",
+            "latest_revision": {
+                "number": 4, "milestone": "finalization",
+                "published_at": "2026-08-04T12:00:00Z",
+                "detail_status": "complete",
+                "overview": {"lifecycle_status": "complete"},
+                "manifest": manifest_descriptor,
+            },
+            "revisions": [{"raw": "x" * 250_000}],
+        }},
+        output="x" * 250_000, createdAt=None, updatedAt=None, createdByUserId=None,
+    )
+    _install_report_fixture(monkeypatch, report)
+    store = _ReportArtifactReader({
+        "manifest.json": manifest_bytes,
+        "agent_handoff.json": handoff_bytes,
+    })
+
+    result = execute._default_report_info(
+        {"id": "report-1", "account_id": "acct-1"},
+        _artifact_store=store,
+    )
+
+    assert result["agent_handoff"] == handoff
+    assert result["latest_revision"]["number"] == 4
+    assert "parameters" not in result
+    assert "output" not in result
+    assert len(json.dumps(result, separators=(",", ":")).encode()) < 20 * 1024
+    assert [request.filename for request in store.requests] == [
+        "manifest.json", "agent_handoff.json",
+    ]
+
+
+def test_report_info_explains_a_legacy_configured_diagnosis_limit_without_rewriting_handoff(
+    monkeypatch,
+) -> None:
+    handoff = {
+        "schema_version": "optimization-agent-handoff/v1",
+        "report_id": "report-1",
+        "revision": 4,
+        "provisional": False,
+        "conclusion": {
+            "state": "incomplete_evidence",
+            "headline": "The available evidence is incomplete",
+        },
+        "followup_page_logical_ids": [],
+    }
+    handoff_bytes = json.dumps(handoff, separators=(",", ":")).encode()
+    handoff_descriptor = _report_artifact_descriptor("agent_handoff", handoff_bytes)
+    manifest_bytes = json.dumps({
+        "revision": 4,
+        "milestone": "finalization",
+        "artifacts": [handoff_descriptor],
+    }, separators=(",", ":")).encode()
+    manifest_descriptor = _report_artifact_descriptor(
+        "revision_manifest",
+        manifest_bytes,
+        kind="revision_manifest",
+        filename="manifest.json",
+    )
+    report = SimpleNamespace(
+        id="report-1", accountId="acct-1", name="Optimization survey",
+        taskId="task-1", reportConfigurationId="config-1",
+        parameters={"optimization_run": {
+            "run_key": "run-1",
+            "latest_revision": {
+                "number": 4,
+                "milestone": "finalization",
+                "published_at": "2026-08-04T12:00:00Z",
+                "detail_status": "complete",
+                "overview": {
+                    "lifecycle_status": "incomplete",
+                    "inventory_coverage_status": "complete",
+                    "analysis_coverage_status": "incomplete",
+                    "diagnosis_selected_count": 22,
+                    "diagnosis_scheduled_count": 4,
+                    "diagnosis_completed_count": 4,
+                    "diagnosis_deferred_count": 18,
+                    "diagnosis_max_count": 4,
+                    "diagnosis_incomplete_count": 0,
+                    "diagnosis_prerequisite_failure_count": 0,
+                    "semantic_budget_failure_count": 0,
+                    "semantic_budget_exhausted_count": 0,
+                    "semantic_budget_deferred_count": 0,
+                },
+                "manifest": manifest_descriptor,
+            },
+        }},
+        output=None, createdAt=None, updatedAt=None, createdByUserId=None,
+    )
+    _install_report_fixture(monkeypatch, report)
+    store = _ReportArtifactReader({
+        "manifest.json": manifest_bytes,
+        "agent_handoff.json": handoff_bytes,
+    })
+
+    result = execute._default_report_info(
+        {"id": "report-1", "account_id": "acct-1"},
+        _artifact_store=store,
+    )
+
+    assert result["agent_handoff"] == handoff
+    assert result["decision_summary"] == {
+        "state": "incomplete_evidence",
+        "headline": "The configured run limit left 18 candidates unanalyzed",
+        "explanation": (
+            "Deterministic ranking and all 4 scheduled diagnoses completed. The run "
+            "selected 22 candidates, but its configured diagnosis limit was 4, so 18 "
+            "were deferred without being judged safe or unsafe."
+        ),
+        "next_action": (
+            "Increase the diagnosis limit or review the 18 deferred candidates in a "
+            "follow-up run."
+        ),
+    }
+
+
+def test_report_info_does_not_infer_a_count_limit_when_legacy_failure_counts_are_missing():
+    summary = execute._report_decision_summary({
+        "overview": {
+            "lifecycle_status": "incomplete",
+            "inventory_coverage_status": "complete",
+            "analysis_coverage_status": "incomplete",
+            "diagnosis_selected_count": 22,
+            "diagnosis_scheduled_count": 4,
+            "diagnosis_completed_count": 4,
+            "diagnosis_deferred_count": 18,
+            "diagnosis_max_count": 4,
+        },
+    })
+
+    assert summary is None
+
+
+def test_report_id_only_agent_handoff_finds_promotion_and_contradiction_work_without_bulk_content(
+    monkeypatch,
+) -> None:
+    page_logical_id = "scorecard_followups:9:0001"
+    followup_page = {
+        "logical_id": page_logical_id,
+        "report_id": "report-1",
+        "revision": 9,
+        "items": [
+            {
+                "reference": "followup:card-1:score-1",
+                "kind": "complete_promotion_evidence",
+                "scorecard_name": "Example card",
+                "score_name": "Candidate score",
+                "resource_refs": {
+                    "scorecard_id": "card-1",
+                    "score_id": "score-1",
+                    "candidate_version_id": "candidate-1",
+                    "evaluation_ids": ["evaluation-1"],
+                },
+            },
+            {
+                "reference": "followup:card-2:score-2",
+                "kind": "resolve_guideline_code_conflict",
+                "scorecard_name": "Second card",
+                "score_name": "Conflicted score",
+                "resource_refs": {
+                    "scorecard_id": "card-2",
+                    "score_id": "score-2",
+                },
+            },
+        ],
+    }
+    handoff = {
+        "schema_version": "optimization-agent-handoff/v1",
+        "report_id": "report-1",
+        "revision": 9,
+        "provisional": False,
+        "conclusion": {"state": "validated_improvement"},
+        "workstream_counts": {
+            "complete_promotion_evidence": 1,
+            "resolve_guideline_code_conflict": 1,
+        },
+        "followup_page_logical_ids": [page_logical_id],
+    }
+    handoff_bytes = json.dumps(handoff, separators=(",", ":")).encode()
+    page_bytes = json.dumps(followup_page, separators=(",", ":")).encode()
+    presentation_bytes = b"p" * (500 * 1024)
+    raw_evidence_bytes = b'{"raw_feedback":"restricted evidence"}'
+    artifacts = [
+        _report_artifact_descriptor(
+            "agent_handoff", handoff_bytes, filename="agent-handoff-9.json"
+        ),
+        _report_artifact_descriptor(
+            page_logical_id,
+            page_bytes,
+            kind="scorecard_followups",
+            filename="followups-9-1.json",
+        ),
+        _report_artifact_descriptor(
+            "stakeholder_presentation",
+            presentation_bytes,
+            kind="stakeholder_presentation",
+            filename="presentation-9.json",
+        ),
+        _report_artifact_descriptor(
+            "run_evidence",
+            raw_evidence_bytes,
+            kind="run_evidence",
+            filename="evidence-9.json",
+        ),
+    ]
+    manifest = {"revision": 9, "artifacts": artifacts}
+    manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode()
+    manifest_descriptor = _report_artifact_descriptor(
+        "revision_manifest",
+        manifest_bytes,
+        kind="revision_manifest",
+        filename="manifest-9.json",
+    )
+    report = SimpleNamespace(
+        id="report-1",
+        accountId="acct-1",
+        name="Optimization survey",
+        taskId="task-1",
+        reportConfigurationId="config-1",
+        parameters={
+            "raw_feedback": "must not reach the agent",
+            "optimization_run": {
+                "latest_revision": {
+                    "number": 9,
+                    "milestone": "finalization",
+                    "published_at": "now",
+                    "manifest": manifest_descriptor,
+                },
+                "revisions": [{"duplicated": "x" * 250_000}],
+            },
+        },
+        output="p" * (500 * 1024),
+        createdAt=None,
+        updatedAt=None,
+        createdByUserId=None,
+    )
+    _install_report_fixture(monkeypatch, report)
+    store = _ReportArtifactReader(
+        {
+            "manifest-9.json": manifest_bytes,
+            "agent-handoff-9.json": handoff_bytes,
+            "followups-9-1.json": page_bytes,
+            # Bulk presentation/evidence intentionally unavailable: the
+            # acceptance path must not try to download either one.
+        }
+    )
+
+    compact = execute._default_report_info(
+        {"id": "report-1", "account_id": "acct-1"},
+        _artifact_store=store,
+    )
+    selected_page_id = compact["agent_handoff"]["followup_page_logical_ids"][0]
+    page = execute._default_report_artifact(
+        {
+            "report_id": compact["id"],
+            "account_id": "acct-1",
+            "revision": compact["latest_revision"]["number"],
+            "logical_id": selected_page_id,
+        },
+        _artifact_store=store,
+    )
+
+    assert [item["kind"] for item in page["content"]["items"]] == [
+        "complete_promotion_evidence",
+        "resolve_guideline_code_conflict",
+    ]
+    combined_response = json.dumps({"report": compact, "page": page})
+    assert "must not reach the agent" not in combined_response
+    assert "restricted evidence" not in combined_response
+    assert "presentation-9.json" not in [
+        request.filename for request in store.requests
+    ]
+    assert "evidence-9.json" not in [request.filename for request in store.requests]
+
+
+def test_report_artifact_operations_paginate_filter_and_inline_only_safe_small_content(
+    monkeypatch,
+) -> None:
+    page_one = json.dumps({"items": [{"reference": "one"}]}).encode()
+    page_two = json.dumps({"items": [{"reference": "two"}]}).encode()
+    workbook = b"PK" + (b"x" * (33 * 1024))
+    artifacts = [
+        _report_artifact_descriptor(
+            "scorecard_followups:4:0001", page_one,
+            kind="scorecard_followups", filename="page-one.json",
+        ),
+        _report_artifact_descriptor(
+            "scorecard_followups:4:0002", page_two,
+            kind="scorecard_followups", filename="page-two.json",
+        ),
+        _report_artifact_descriptor(
+            "stakeholder_workbook", workbook, kind="stakeholder_workbook",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename="workbook.xlsx",
+        ),
+    ]
+    manifest = {"revision": 4, "milestone": "finalization", "artifacts": artifacts}
+    manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode()
+    manifest_descriptor = _report_artifact_descriptor(
+        "revision_manifest", manifest_bytes,
+        kind="revision_manifest", filename="manifest.json",
+    )
+    report = SimpleNamespace(
+        id="report-1", accountId="acct-1", name="Optimization survey",
+        taskId="task-1", reportConfigurationId="config-1",
+        parameters={"optimization_run": {"latest_revision": {
+            "number": 4, "milestone": "finalization", "published_at": "now",
+            "detail_status": "complete", "manifest": manifest_descriptor,
+        }, "revisions": []}}, output=None, createdAt=None, updatedAt=None,
+        createdByUserId=None,
+    )
+    _install_report_fixture(monkeypatch, report)
+    store = _ReportArtifactReader({
+        "manifest.json": manifest_bytes,
+        "page-one.json": page_one,
+        "page-two.json": page_two,
+        "workbook.xlsx": workbook,
+    })
+
+    first = execute._default_report_artifacts(
+        {"report_id": "report-1", "account_id": "acct-1", "revision": 4,
+         "kind": "scorecard_followups", "limit": 1},
+        _artifact_store=store,
+    )
+    second = execute._default_report_artifacts(
+        {"report_id": "report-1", "account_id": "acct-1", "revision": 4,
+         "kind": "scorecard_followups", "limit": 1, "cursor": first["next_cursor"]},
+        _artifact_store=store,
+    )
+    inline = execute._default_report_artifact(
+        {"report_id": "report-1", "account_id": "acct-1", "revision": 4,
+         "logical_id": "scorecard_followups:4:0001"},
+        _artifact_store=store,
+    )
+    binary = execute._default_report_artifact(
+        {"report_id": "report-1", "account_id": "acct-1", "revision": 4,
+         "logical_id": "stakeholder_workbook"},
+        _artifact_store=store,
+    )
+
+    assert [item["logical_id"] for item in first["artifacts"]] == [
+        "scorecard_followups:4:0001"
+    ]
+    assert [item["logical_id"] for item in second["artifacts"]] == [
+        "scorecard_followups:4:0002"
+    ]
+    assert second["next_cursor"] is None
+    assert inline["content"] == {"items": [{"reference": "one"}]}
+    assert inline["inlined"] is True
+    assert binary["inlined"] is False
+    assert "content" not in binary
+    assert binary["dashboard_url"].endswith(
+        "?revision=4&artifact=stakeholder_workbook"
+    )
+    assert "workbook.xlsx" not in [request.filename for request in store.requests]
+
+
+def test_report_artifact_operations_select_history_and_verified_detail_manifest(
+    monkeypatch,
+) -> None:
+    historical_page = json.dumps({"items": [{"reference": "historical"}]}).encode()
+    current_handoff = json.dumps({"report_id": "report-1", "revision": 5}).encode()
+    score_brief = b"# Current score brief\n\nVerified details.\n"
+
+    historical_artifact = _report_artifact_descriptor(
+        "scorecard_followups:4:0001",
+        historical_page,
+        kind="scorecard_followups",
+        filename="history-page.json",
+    )
+    historical_manifest = {"revision": 4, "artifacts": [historical_artifact]}
+    historical_manifest_bytes = json.dumps(
+        historical_manifest, separators=(",", ":")
+    ).encode()
+    historical_manifest_descriptor = _report_artifact_descriptor(
+        "revision_manifest:4",
+        historical_manifest_bytes,
+        kind="revision_manifest",
+        filename="manifest-4.json",
+    )
+
+    handoff_descriptor = _report_artifact_descriptor(
+        "agent_handoff", current_handoff, filename="agent-handoff-5.json"
+    )
+    current_manifest = {"revision": 5, "artifacts": [handoff_descriptor]}
+    current_manifest_bytes = json.dumps(
+        current_manifest, separators=(",", ":")
+    ).encode()
+    current_manifest_descriptor = _report_artifact_descriptor(
+        "revision_manifest:5",
+        current_manifest_bytes,
+        kind="revision_manifest",
+        filename="manifest-5.json",
+    )
+    brief_descriptor = _report_artifact_descriptor(
+        "score_brief:current",
+        score_brief,
+        kind="score_brief",
+        content_type="text/markdown",
+        filename="score-brief.md",
+    )
+    detail_manifest = {
+        "source_revision": 5,
+        "source_manifest_checksum": current_manifest_descriptor["sha256"],
+        "artifacts": [brief_descriptor],
+    }
+    detail_manifest_bytes = json.dumps(
+        detail_manifest, separators=(",", ":")
+    ).encode()
+    detail_manifest_descriptor = _report_artifact_descriptor(
+        "detail_manifest",
+        detail_manifest_bytes,
+        kind="detail_manifest",
+        filename="detail-manifest-5.json",
+    )
+
+    latest = {
+        "number": 5,
+        "milestone": "finalization",
+        "published_at": "now",
+        "manifest": current_manifest_descriptor,
+        "detail_status": "complete",
+        "detail_source_revision": 5,
+        "detail_manifest": detail_manifest_descriptor,
+    }
+    report = SimpleNamespace(
+        id="report-1",
+        accountId="acct-1",
+        name="Optimization survey",
+        taskId="task-1",
+        reportConfigurationId="config-1",
+        parameters={
+            "optimization_run": {
+                "latest_revision": latest,
+                "revisions": [
+                    {
+                        "number": 4,
+                        "milestone": "review",
+                        "published_at": "earlier",
+                        "manifest": historical_manifest_descriptor,
+                    },
+                    latest,
+                ],
+            }
+        },
+        output=None,
+        createdAt=None,
+        updatedAt=None,
+        createdByUserId=None,
+    )
+    _install_report_fixture(monkeypatch, report)
+    store = _ReportArtifactReader(
+        {
+            "manifest-4.json": historical_manifest_bytes,
+            "history-page.json": historical_page,
+            "manifest-5.json": current_manifest_bytes,
+            "agent-handoff-5.json": current_handoff,
+            "detail-manifest-5.json": detail_manifest_bytes,
+            "score-brief.md": score_brief,
+        }
+    )
+
+    historical = execute._default_report_artifact(
+        {
+            "report_id": "report-1",
+            "account_id": "acct-1",
+            "revision": 4,
+            "logical_id": "scorecard_followups:4:0001",
+        },
+        _artifact_store=store,
+    )
+    current = execute._default_report_artifact(
+        {
+            "report_id": "report-1",
+            "account_id": "acct-1",
+            "revision": 5,
+            "logical_id": "score_brief:current",
+        },
+        _artifact_store=store,
+    )
+
+    assert historical["content"] == {
+        "items": [{"reference": "historical"}]
+    }
+    assert current["content"] == score_brief.decode()
+    assert current["inlined"] is True
+
+
+def test_report_artifact_read_fails_closed_for_account_membership_and_checksum(
+    monkeypatch,
+) -> None:
+    content = b'{"safe":true}'
+    artifact = _report_artifact_descriptor("agent_handoff", content)
+    manifest = {"revision": 1, "artifacts": [artifact]}
+    manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode()
+    manifest_descriptor = _report_artifact_descriptor(
+        "revision_manifest", manifest_bytes,
+        kind="revision_manifest", filename="manifest.json",
+    )
+    report = SimpleNamespace(
+        id="report-1", accountId="acct-1", name="Survey", taskId="task-1",
+        reportConfigurationId="config-1",
+        parameters={"optimization_run": {"latest_revision": {
+            "number": 1, "milestone": "finalization", "published_at": "now",
+            "manifest": manifest_descriptor,
+        }, "revisions": []}},
+        output=None, createdAt=None, updatedAt=None, createdByUserId=None,
+    )
+    _install_report_fixture(monkeypatch, report)
+    corrupt_store = _ReportArtifactReader({
+        "manifest.json": manifest_bytes,
+        # Preserve the declared byte length so this fixture specifically
+        # exercises checksum verification rather than the preceding size gate.
+        "agent_handoff.json": b'{"safe":null}',
+    })
+
+    with pytest.raises(PermissionError):
+        execute._default_report_artifact(
+            {"report_id": "report-1", "account_id": "other",
+             "logical_id": "agent_handoff"},
+            _artifact_store=corrupt_store,
+        )
+    with pytest.raises(ValueError, match="not a member"):
+        execute._default_report_artifact(
+            {"report_id": "report-1", "account_id": "acct-1",
+             "logical_id": "not-present"},
+            _artifact_store=corrupt_store,
+        )
+    with pytest.raises(RuntimeError, match="checksum"):
+        execute._default_report_artifact(
+            {"report_id": "report-1", "account_id": "acct-1",
+             "logical_id": "agent_handoff"},
+            _artifact_store=corrupt_store,
+        )
+
+
+def test_report_info_is_compatible_with_historical_reports_without_handoff(
+    monkeypatch,
+) -> None:
+    report = SimpleNamespace(
+        id="report-old", accountId="acct-1", name="Historical report",
+        taskId="task-old", reportConfigurationId="config-old",
+        parameters={"legacy": True}, output="legacy output",
+        createdAt=None, updatedAt=None, createdByUserId=None,
+    )
+    _install_report_fixture(monkeypatch, report)
+
+    result = execute._default_report_info({
+        "id": "report-old", "account_id": "acct-1",
+    })
+
+    assert result["agent_handoff"] is None
+    assert result["latest_revision"] is None
+    assert "parameters" not in result
+    assert "output" not in result
 
 
 @pytest.mark.asyncio

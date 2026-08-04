@@ -371,6 +371,21 @@ def build_decision_summary(
     selected = _count(overview.get("execution_selected_count"))
     launched = _count(overview.get("execution_launched_count"))
     reviewed = _count(overview.get("optimizer_review_count"))
+    diagnosis_selected = _count(overview.get("diagnosis_selected_count"))
+    diagnosis_scheduled = _count(overview.get("diagnosis_scheduled_count"))
+    diagnosis_completed = _count(overview.get("diagnosis_completed_count"))
+    diagnosis_deferred = _count(overview.get("diagnosis_deferred_count"))
+    diagnosis_limit = _count(overview.get("diagnosis_max_count"))
+    diagnosis_incomplete = _count(overview.get("diagnosis_incomplete_count"))
+    diagnosis_failed = _count(
+        overview.get("diagnosis_execution_failure_count")
+        or overview.get("semantic_budget_failure_count")
+    )
+    diagnosis_prerequisite_failures = _count(
+        overview.get("diagnosis_prerequisite_failure_count")
+    )
+    budget_exhausted = _count(overview.get("semantic_budget_exhausted_count"))
+    budget_deferred = _count(overview.get("semantic_budget_deferred_count"))
     improved = (
         _count(disposition_counts.get("promotion_ready"))
         + _count(disposition_counts.get("validated_improvement"))
@@ -410,11 +425,96 @@ def build_decision_summary(
             "explanation": "Evaluation evidence supports improvement, but champion promotion remains a separate human decision.",
             "next_action": "Review the promotion evidence and decide whether to promote.",
         }
-    if lifecycle == "incomplete" or inventory == "incomplete" or analysis == "incomplete":
+    if inventory == "incomplete":
         return {
             "state": "incomplete_evidence",
-            "headline": "The available evidence is incomplete",
-            "explanation": "The run cannot claim an exact ranking or a safe automatic optimization decision.",
+            "headline": "Portfolio inventory is incomplete",
+            "explanation": (
+                "The run did not inspect enough of the requested scope to claim a "
+                "complete ranking or a full-portfolio optimization decision."
+            ),
+            "next_action": next_action,
+        }
+    count_limit_only = (
+        analysis == "incomplete"
+        and diagnosis_deferred > 0
+        and diagnosis_completed >= diagnosis_scheduled
+        and diagnosis_incomplete == 0
+        and diagnosis_failed == 0
+        and diagnosis_prerequisite_failures == 0
+        and budget_exhausted == 0
+        and budget_deferred == 0
+    )
+    if count_limit_only:
+        deferred_label = "candidate" if diagnosis_deferred == 1 else "candidates"
+        scheduled_label = "diagnosis" if diagnosis_completed == 1 else "diagnoses"
+        selected_text = (
+            f"The run selected {diagnosis_selected} candidates, but its configured "
+            f"diagnosis limit was {diagnosis_limit}, so {diagnosis_deferred} were"
+            if diagnosis_selected > 0
+            else f"Its configured diagnosis limit was {diagnosis_limit}, so {diagnosis_deferred} candidates were"
+        )
+        return {
+            "state": "incomplete_evidence",
+            "headline": (
+                f"The configured run limit left {diagnosis_deferred} "
+                f"{deferred_label} unanalyzed"
+            ),
+            "explanation": (
+                f"Deterministic ranking and all {diagnosis_completed} scheduled "
+                f"{scheduled_label} completed. {selected_text} deferred without being "
+                "judged safe or unsafe."
+            ),
+            "next_action": (
+                f"Increase the diagnosis limit or review the {diagnosis_deferred} "
+                f"deferred {deferred_label} in a follow-up run."
+            ),
+        }
+    if analysis == "incomplete" and (budget_exhausted > 0 or budget_deferred > 0):
+        affected = max(budget_exhausted + budget_deferred, 1)
+        return {
+            "state": "incomplete_evidence",
+            "headline": "The semantic-analysis budget ended diagnosis before full coverage",
+            "explanation": (
+                f"Deterministic ranking completed, but the frozen budget left {affected} "
+                f"diagnosis{'es' if affected != 1 else ''} without complete evidence. "
+                "Those candidates were not judged safe or unsafe."
+            ),
+            "next_action": "Review the budget evidence before authorizing additional semantic analysis.",
+        }
+    if analysis == "incomplete" and (
+        diagnosis_incomplete > 0
+        or diagnosis_failed > 0
+        or diagnosis_prerequisite_failures > 0
+    ):
+        causes: list[str] = []
+        if diagnosis_incomplete:
+            causes.append(
+                f"{diagnosis_incomplete} returned incomplete evidence"
+            )
+        if diagnosis_failed:
+            causes.append(f"{diagnosis_failed} failed during execution")
+        if diagnosis_prerequisite_failures:
+            causes.append(
+                f"{diagnosis_prerequisite_failures} could not start because required evidence was unavailable"
+            )
+        return {
+            "state": "incomplete_evidence",
+            "headline": "Some scheduled diagnoses did not produce complete evidence",
+            "explanation": (
+                "Deterministic ranking completed, but " + "; ".join(causes) + ". "
+                "Those candidates do not have a safe automatic optimization decision."
+            ),
+            "next_action": next_action,
+        }
+    if lifecycle == "incomplete" or analysis == "incomplete":
+        return {
+            "state": "incomplete_evidence",
+            "headline": "Semantic diagnosis coverage is incomplete",
+            "explanation": (
+                "Deterministic ranking completed, but deeper diagnosis did not cover "
+                "every selected candidate."
+            ),
             "next_action": next_action,
         }
     terminal = lifecycle in {

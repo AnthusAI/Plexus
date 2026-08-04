@@ -21,6 +21,7 @@ Use `plexus.docs.list({ namespace = "reports" })` to list every topic, then `ple
 
 Current canonical topics include:
 - `reports.reports-catalog` — user-facing report inventory, aliases, routing rules, and durable async patterns.
+- `reports.optimization-survey-handoff` — compact survey findings, verified attachment reads, live-state checks, and guarded follow-up.
 - `reports.feedback-overview` — composed feedback overview report guidance.
 - `reports.feedback-alignment` — feedback/prediction agreement and mismatch report.
 - `reports.feedback-alignment-timeline` — alignment/AC1 trend over time.
