@@ -1,4 +1,8 @@
-from plexus.optimization.report_actions import build_action_projection, build_decision_summary
+from plexus.optimization.report_actions import (
+    build_action_projection,
+    build_decision_summary,
+    build_guideline_code_conflict_workstream,
+)
 
 
 def _row(name, disposition, action, *, flags=(), evidence=0, scorecard="Portfolio"):
@@ -57,6 +61,59 @@ def test_action_projection_keeps_monitoring_and_history_out_of_open_queue():
     }
 
 
+def test_guideline_code_conflicts_become_a_stakeholder_safe_repair_workstream():
+    workstream = build_guideline_code_conflict_workstream([
+        {
+            "issue_flag": "potential_code_conflict",
+            "scorecard_name": "Example portfolio",
+            "score_name": "Eligibility score",
+            "finding": "The guideline requires an explicit confirmation, but the score code accepts an implied answer.",
+            "evidence_references": "semantic diagnosis",
+            "evidence_reference_tokens": ["semantic-evidence-1234abcd"],
+            "affected_evidence_count": 27,
+            "affected_disagreement_rate": 0.31,
+            "next_action": "repair_guideline_and_code_alignment",
+            "dashboard_url": "https://dashboard.example/lab/scores/example",
+        },
+        {
+            "issue_flag": "feedback_rubric_contradiction",
+            "scorecard_name": "Example portfolio",
+            "score_name": "Other score",
+            "finding": "Do not include this different issue type.",
+        },
+    ])
+
+    assert workstream == {
+        "title": "Potential guideline and code conflicts",
+        "conflict_count": 1,
+        "score_count": 1,
+        "why_optimization_is_blocked": (
+            "A potential mismatch between the guideline and score code blocks automatic "
+            "optimization until a score maintainer verifies it and either repairs the "
+            "definition or records why the behavior is intentional."
+        ),
+        "owner_role": "score_maintainer",
+        "next_action": "review_and_repair_guideline_code_alignment",
+        "items": [{
+            "scorecard_name": "Example portfolio",
+            "score_name": "Eligibility score",
+            "conflict_claim": "The guideline requires an explicit confirmation, but the score code accepts an implied answer.",
+            "supporting_evidence": "Model-backed comparison of the current ScoreVersion guideline and score configuration (semantic diagnosis).",
+            "evidence_references": ["semantic-evidence-1234abcd"],
+            "affected_evidence_count": 27,
+            "affected_disagreement_rate": 0.31,
+            "why_optimization_is_blocked": (
+                "A potential mismatch between the guideline and score code blocks automatic "
+                "optimization until a score maintainer verifies it and either repairs the "
+                "definition or records why the behavior is intentional."
+            ),
+            "owner_role": "score_maintainer",
+            "next_action": "review_and_repair_guideline_code_alignment",
+            "dashboard_url": "https://dashboard.example/lab/scores/example",
+        }],
+    }
+
+
 def test_decision_summary_never_claims_zero_result_while_analysis_is_pending():
     summary = build_decision_summary(
         {
@@ -98,6 +155,59 @@ def test_decision_summary_reports_terminal_zero_target_and_validated_improvement
     assert zero["headline"] == "No score was safe to optimize automatically"
     assert improved["state"] == "validated_improvement"
     assert improved["headline"] == "1 validated improvement requires review"
+
+
+def test_validated_improvement_is_repair_evidence_work_and_counts_as_an_improvement():
+    projection = build_action_projection([{
+        "scorecard_name": "Example portfolio",
+        "score_name": "Example score",
+        "primary_disposition": "validated_improvement",
+        "next_action": "complete_promotion_evidence",
+        "valid_feedback_count": 12,
+    }])
+    summary = build_decision_summary(
+        {
+            "lifecycle_status": "completed",
+            "analysis_coverage_status": "complete",
+            "execution_launched_count": 1,
+            "optimizer_review_count": 1,
+        },
+        {"validated_improvement": 1},
+    )
+
+    assert projection["action_counts"]["repairs_and_evidence"] == 1
+    assert projection["action_workstreams"][0]["action_group"] == "incomplete_evidence"
+    assert summary["state"] == "validated_improvement"
+    assert summary["headline"] == "1 validated improvement requires review"
+
+
+def test_decision_summary_leads_with_validated_improvement_when_other_terminal_outcomes_are_incomplete():
+    summary = build_decision_summary(
+        {
+            "lifecycle_status": "incomplete",
+            "analysis_coverage_status": "incomplete",
+            "execution_launched_count": 3,
+            "optimizer_review_count": 3,
+        },
+        {"validated_improvement": 1, "failed_or_incomplete": 2},
+    )
+
+    assert summary == {
+        "state": "validated_improvement",
+        "headline": "1 validated improvement requires review",
+        "explanation": (
+            "Evaluation evidence supports 1 improvement, while 2 other optimizer "
+            "outcomes require repair; the overall run remains incomplete. No champion "
+            "was promoted."
+        ),
+        "next_action": "Complete promotion evidence for the validated improvement and repair incomplete optimizer outcomes.",
+    }
+
+    singular = build_decision_summary(
+        {"lifecycle_status": "incomplete", "analysis_coverage_status": "incomplete"},
+        {"validated_improvement": 1, "failed_or_incomplete": 1},
+    )
+    assert "1 other optimizer outcome requires repair" in singular["explanation"]
 
 
 def test_decision_summary_reports_zero_target_after_execution_policy_finishes():

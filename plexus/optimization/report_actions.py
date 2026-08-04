@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from hashlib import sha256
+from math import isfinite
 from typing import Any
 
 
@@ -29,7 +30,9 @@ _MONITOR_DISPOSITIONS = {
     "cooldown",
     "no_safe_improvement",
 }
-_INCOMPLETE_DISPOSITIONS = {"insufficient_evidence", "failed_or_incomplete"}
+_INCOMPLETE_DISPOSITIONS = {
+    "insufficient_evidence", "failed_or_incomplete", "validated_improvement",
+}
 
 _ACTION_GROUP_METADATA = {
     "automatic_work": {
@@ -76,12 +79,111 @@ _ACTION_GROUP_METADATA = {
     },
 }
 
+_GUIDELINE_CODE_CONFLICT_BLOCKER = (
+    "A potential mismatch between the guideline and score code blocks automatic "
+    "optimization until a score maintainer verifies it and either repairs the "
+    "definition or records why the behavior is intentional."
+)
+
 
 def _count(value: Any) -> int:
     try:
         return max(0, int(value or 0))
     except (TypeError, ValueError):
         return 0
+
+
+def _rate(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if isfinite(number) and number >= 0 else None
+
+
+def build_guideline_code_conflict_workstream(
+    issues: Sequence[Mapping[str, Any]],
+) -> dict[str, Any] | None:
+    """Project diagnosed guideline/code conflicts into one actionable workstream.
+
+    The input is already the stakeholder-safe issue projection.  This function
+    deliberately preserves the diagnosis claim and supporting evidence rather
+    than collapsing the finding into the generic technical-repair bucket.
+    """
+    items: list[dict[str, Any]] = []
+    for source in issues:
+        if not isinstance(source, Mapping):
+            continue
+        flag = str(source.get("issue_flag") or "")
+        guideline_state = str(source.get("guideline_state") or "")
+        if flag != "potential_code_conflict" and guideline_state != "potential_code_conflict":
+            continue
+        scorecard_name = str(source.get("scorecard_name") or "Unlabeled scorecard")
+        score_name = str(source.get("score_name") or "Unlabeled score")
+        claim = str(source.get("finding") or "").strip()
+        if not claim:
+            claim = "A guideline/code conflict was identified during semantic diagnosis."
+        action = "review_and_repair_guideline_code_alignment"
+        evidence_reference = str(source.get("evidence_references") or "").strip()
+        evidence_tokens = [
+            value for value in (source.get("evidence_reference_tokens") or [])
+            if isinstance(value, str) and value
+        ]
+        supporting_evidence = (
+            "Model-backed comparison of the current ScoreVersion guideline and "
+            "score configuration"
+            + (f" ({evidence_reference})." if evidence_reference else ".")
+        )
+        dashboard_url = source.get("dashboard_url")
+        dashboard_url = dashboard_url if isinstance(dashboard_url, str) else None
+        items.append({
+            "scorecard_name": scorecard_name,
+            "score_name": score_name,
+            "conflict_claim": claim,
+            "supporting_evidence": supporting_evidence,
+            "evidence_references": evidence_tokens or ["semantic diagnosis"],
+            "affected_evidence_count": _count(
+                source.get("affected_evidence_count") or source.get("evidence_count")
+            ),
+            "affected_disagreement_rate": _rate(
+                source.get("affected_disagreement_rate")
+            ),
+            "why_optimization_is_blocked": _GUIDELINE_CODE_CONFLICT_BLOCKER,
+            # Account roles do not exist yet.  This assigns responsibility
+            # without inventing a person/permission record.
+            "owner_role": "score_maintainer",
+            "next_action": action,
+            "dashboard_url": dashboard_url,
+        })
+
+    if not items:
+        return None
+    items.sort(key=lambda item: (
+        -int(item["affected_evidence_count"]),
+        str(item["scorecard_name"]).casefold(),
+        str(item["score_name"]).casefold(),
+        str(item["conflict_claim"]),
+    ))
+    actions = {str(item["next_action"]) for item in items}
+    scores = {
+        (str(item["scorecard_name"]), str(item["score_name"]))
+        for item in items
+    }
+    return {
+        "title": "Potential guideline and code conflicts",
+        "conflict_count": len(items),
+        "score_count": len(scores),
+        "why_optimization_is_blocked": _GUIDELINE_CODE_CONFLICT_BLOCKER,
+        "owner_role": "score_maintainer",
+        "next_action": (
+            next(iter(actions))
+            if len(actions) == 1
+            else "review_and_repair_guideline_code_alignment"
+        ),
+        "items": items,
+    }
 
 
 def _action_group(row: Mapping[str, Any]) -> str:
@@ -269,7 +371,11 @@ def build_decision_summary(
     selected = _count(overview.get("execution_selected_count"))
     launched = _count(overview.get("execution_launched_count"))
     reviewed = _count(overview.get("optimizer_review_count"))
-    improved = _count(disposition_counts.get("promotion_ready"))
+    improved = (
+        _count(disposition_counts.get("promotion_ready"))
+        + _count(disposition_counts.get("validated_improvement"))
+    )
+    incomplete_outcomes = _count(disposition_counts.get("failed_or_incomplete"))
     next_action = str(overview.get("next_checkpoint") or "Review the latest Report evidence.")
 
     if lifecycle in {"failed", "blocked"}:
@@ -279,19 +385,37 @@ def build_decision_summary(
             "explanation": "A run-level failure prevents a reliable portfolio decision.",
             "next_action": next_action,
         }
+    if improved > 0:
+        if lifecycle == "incomplete" or inventory == "incomplete" or analysis == "incomplete":
+            other_outcomes = (
+                f"{incomplete_outcomes} other optimizer outcome"
+                f"{'s' if incomplete_outcomes != 1 else ''} "
+                f"{'requires' if incomplete_outcomes == 1 else 'require'} repair"
+                if incomplete_outcomes
+                else "other optimizer evidence requires repair"
+            )
+            return {
+                "state": "validated_improvement",
+                "headline": f"{improved} validated improvement{'s' if improved != 1 else ''} require{'s' if improved == 1 else ''} review",
+                "explanation": (
+                    f"Evaluation evidence supports {improved} improvement"
+                    f"{'s' if improved != 1 else ''}, while {other_outcomes}; "
+                    "the overall run remains incomplete. No champion was promoted."
+                ),
+                "next_action": "Complete promotion evidence for the validated improvement and repair incomplete optimizer outcomes.",
+            }
+        return {
+            "state": "validated_improvement",
+            "headline": f"{improved} validated improvement{'s' if improved != 1 else ''} require{'s' if improved == 1 else ''} review",
+            "explanation": "Evaluation evidence supports improvement, but champion promotion remains a separate human decision.",
+            "next_action": "Review the promotion evidence and decide whether to promote.",
+        }
     if lifecycle == "incomplete" or inventory == "incomplete" or analysis == "incomplete":
         return {
             "state": "incomplete_evidence",
             "headline": "The available evidence is incomplete",
             "explanation": "The run cannot claim an exact ranking or a safe automatic optimization decision.",
             "next_action": next_action,
-        }
-    if improved > 0:
-        return {
-            "state": "validated_improvement",
-            "headline": f"{improved} validated improvement{'s' if improved != 1 else ''} require{'s' if improved == 1 else ''} review",
-            "explanation": "Evaluation evidence supports improvement, but champion promotion remains a separate human decision.",
-            "next_action": "Review the promotion evidence and decide whether to promote.",
         }
     terminal = lifecycle in {
         "complete",

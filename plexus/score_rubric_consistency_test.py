@@ -45,6 +45,30 @@ def test_score_rubric_consistency_service_returns_compact_payload():
     assert result.diagnostics["rubric_characters"] > 0
 
 
+def test_consistency_prompt_evaluates_the_complete_graph_without_inventing_internal_class_conflicts():
+    captured = {}
+
+    def invoke(prompt: str, _model: str) -> str:
+        captured["prompt"] = prompt
+        return json.dumps({"status": "consistent", "paragraph": "The complete decision path matches."})
+
+    ScoreRubricConsistencyService(invoke_model=invoke, model="test-model").generate(
+        ScoreRubricConsistencyRequest(
+            scorecard_identifier="Example portfolio",
+            score_identifier="Repeated question",
+            score_version_id="version-1",
+            rubric_text="Return NA when the question was never asked.",
+            score_code="A binary eligibility node routes the absent branch to final NA.",
+        )
+    )
+
+    prompt = captured["prompt"]
+    assert "complete end-to-end decision path" in prompt
+    assert "internal classifier does not need to expose every final score label" in prompt
+    assert "supplemental deterministic gate" in prompt
+    assert "do not infer unsupported production input variants" in prompt
+
+
 def test_merge_consistency_result_into_parameters_preserves_existing_fields():
     service = ScoreRubricConsistencyService(
         invoke_model=lambda _prompt, _model: json.dumps(
@@ -251,7 +275,7 @@ def test_input_overflow_and_initial_publication_failure_make_zero_provider_calls
         overflow.generate(_request())
     assert overflow_calls == []
 
-    report = _SemanticReport(fail_commits={2})
+    report = _SemanticReport(fail_commits={2, 3})
     blocked, _coordinator, _report, blocked_calls = _budgeted_service(
         responses=[], report=report
     )

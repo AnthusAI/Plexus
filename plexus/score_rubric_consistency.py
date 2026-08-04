@@ -140,6 +140,16 @@ class ScoreRubricConsistencyService:
             "Compare the score code/prompt against the rubric text stored on the same ScoreVersion.\n"
             "Identify only meaningful policy mismatches that could affect evaluation results. "
             "Do not critique style, formatting, implementation architecture, or missing tests.\n\n"
+            "Evaluate the complete end-to-end decision path, including prompts, graph routing, "
+            "mappings, and final outputs. An internal classifier does not need to expose every "
+            "final score label when its branch mapping deliberately produces the final label; "
+            "for example, a binary eligibility node may route an absent question to final NA. "
+            "Do not confuse that internal label domain with the final score domain. A supplemental "
+            "deterministic gate may add narrow precision checks without replacing the broader "
+            "classifier prompt, so do not treat that gate as the whole policy. Evaluate all paths "
+            "together. Finally, do not infer unsupported production input variants, metadata keys, "
+            "or value formats. If a claimed mismatch depends on an unstated input contract, return "
+            "inconclusive and explain what a human must verify.\n\n"
             "Return ONLY JSON with exactly these keys:\n"
             '  "status": one of "consistent", "potential_conflict", "inconclusive"\n'
             '  "paragraph": one short paragraph, 2-4 sentences, no headings or bullets\n\n'

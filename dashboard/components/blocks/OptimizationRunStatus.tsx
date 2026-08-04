@@ -135,8 +135,33 @@ type ActionWorkstream = {
   representative_rows?: AttentionRow[]
 }
 
+type GuidelineCodeConflict = {
+  scorecard_name: string
+  score_name: string
+  conflict_claim: string
+  supporting_evidence: string
+  evidence_references?: string[]
+  affected_evidence_count?: number
+  affected_disagreement_rate?: number | null
+  why_optimization_is_blocked: string
+  owner_role?: string
+  next_action: string
+  dashboard_url?: string | null
+}
+
+type GuidelineCodeConflictWorkstream = {
+  title: string
+  conflict_count: number
+  score_count: number
+  why_optimization_is_blocked: string
+  owner_role?: string
+  next_action: string
+  items: GuidelineCodeConflict[]
+}
+
 type PrimaryDisposition =
   | 'promotion_ready'
+  | 'validated_improvement'
   | 'continue_optimization'
   | 'stakeholder_decision_required'
   | 'no_safe_improvement'
@@ -179,6 +204,16 @@ type OptimizationOutcome = {
   rationale?: string
   next_action?: string
   dashboard_url?: string | null
+  alignment_evidence?: {
+    recent?: AlignmentMetricEvidence
+    regression?: AlignmentMetricEvidence
+  }
+}
+
+type AlignmentMetricEvidence = {
+  baseline?: number | null
+  candidate?: number | null
+  delta?: number | null
 }
 
 export type StakeholderPresentation = {
@@ -186,6 +221,7 @@ export type StakeholderPresentation = {
   decision_summary?: DecisionSummary
   action_counts?: Record<string, number>
   action_workstreams?: ActionWorkstream[]
+  guideline_code_conflict_workstream?: GuidelineCodeConflictWorkstream | null
   score_count: number
   scorecard_count: number
   primary_disposition_counts?: Record<string, number>
@@ -281,6 +317,7 @@ const DECISION_COLORS = [
 
 const PRIMARY_DISPOSITION_LABELS: Record<PrimaryDisposition, string> = {
   promotion_ready: 'Promotion ready',
+  validated_improvement: 'Validated improvement',
   continue_optimization: 'Continue optimization',
   stakeholder_decision_required: 'Stakeholder decision required',
   no_safe_improvement: 'No safe improvement',
@@ -303,6 +340,7 @@ const PRIMARY_DISPOSITION_KEYS: ReadonlySet<string> = new Set(Object.keys(PRIMAR
 
 const PRIMARY_DISPOSITION_COLORS: Partial<Record<PrimaryDisposition, string>> = {
   promotion_ready: 'bg-emerald-500',
+  validated_improvement: 'bg-teal-500',
   continue_optimization: 'bg-blue-500',
   stakeholder_decision_required: 'bg-amber-500',
   no_safe_improvement: 'bg-slate-500',
@@ -357,6 +395,13 @@ const LIFECYCLE_GROUPS = [
     dispositions: ['promotion_ready'],
     icon: ShieldCheck,
     tone: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  },
+  {
+    key: 'validated-improvement',
+    label: 'Validated improvement',
+    dispositions: ['validated_improvement'],
+    icon: CheckCircle2,
+    tone: 'bg-teal-500/10 text-teal-700 dark:text-teal-300',
   },
   {
     key: 'continue-or-no-safe-improvement',
@@ -501,7 +546,52 @@ function parseOutcomeRow(value: unknown): OptimizationOutcome {
   validateOptionalPrimaryDisposition(row, context)
   validateOptionalNumbers(row, ['evidence_count'], context)
   validateOptionalStringList(row, 'secondary_issue_flags', context)
+  if (row.alignment_evidence !== undefined) {
+    const alignment = record(row.alignment_evidence)
+    if (!alignment) throw new Error(`${context}: alignment evidence must be an object.`)
+    for (const cohort of ['recent', 'regression'] as const) {
+      if (alignment[cohort] === undefined) continue
+      const metric = record(alignment[cohort])
+      if (!metric) throw new Error(`${context}: ${cohort} alignment evidence must be an object.`)
+      validateOptionalNumbers(metric, ['baseline', 'candidate'], context)
+      if (
+        metric.delta != null
+        && (typeof metric.delta !== 'number' || !Number.isFinite(metric.delta))
+      ) {
+        throw new Error(`${context}: delta must be a finite number.`)
+      }
+    }
+  }
   return row as OptimizationOutcome
+}
+
+function formatAC1(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(3) : 'Not available'
+}
+
+function formatAC1Delta(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'change not available'
+  return `${value >= 0 ? '+' : ''}${value.toFixed(3)}`
+}
+
+function AlignmentEvidence({ outcome }: { outcome: OptimizationOutcome }) {
+  const evidence = outcome.alignment_evidence
+  if (!evidence) return null
+  return (
+    <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+      {([
+        ['Recent AC1', evidence.recent],
+        ['Regression AC1', evidence.regression],
+      ] as const).map(([cohort, metric]) => (
+        <div key={cohort} className="rounded-md bg-background/70 px-3 py-2">
+          <dt className="text-xs font-medium text-muted-foreground">{cohort}</dt>
+          <dd className="mt-1 tabular-nums">
+            {formatAC1(metric?.baseline)} → {formatAC1(metric?.candidate)} ({formatAC1Delta(metric?.delta)})
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
 }
 
 function parsePriorityRow(value: unknown): PriorityRow {
@@ -927,6 +1017,58 @@ function parseActionWorkstreams(value: unknown): ActionWorkstream[] | undefined 
   })
 }
 
+function parseGuidelineCodeConflictWorkstream(
+  value: unknown,
+): GuidelineCodeConflictWorkstream | undefined {
+  if (value === undefined || value === null) return undefined
+  const context = 'Stakeholder presentation contains a malformed guideline/code conflict workstream'
+  const workstream = record(value)
+  if (
+    !workstream
+    || typeof workstream.title !== 'string'
+    || typeof workstream.why_optimization_is_blocked !== 'string'
+    || typeof workstream.next_action !== 'string'
+    || !Array.isArray(workstream.items)
+    || finiteNonNegativeNumber(workstream.conflict_count) === null
+    || finiteNonNegativeNumber(workstream.score_count) === null
+  ) {
+    throw new Error(`${context}.`)
+  }
+  const items = workstream.items.map(raw => {
+    const item = record(raw)
+    if (
+      !item
+      || typeof item.scorecard_name !== 'string'
+      || typeof item.score_name !== 'string'
+      || typeof item.conflict_claim !== 'string'
+      || typeof item.supporting_evidence !== 'string'
+      || typeof item.why_optimization_is_blocked !== 'string'
+      || typeof item.next_action !== 'string'
+    ) {
+      throw new Error(`${context}: conflict items require names, claim, evidence, blocker, and next action.`)
+    }
+    validateOptionalStrings(item, ['dashboard_url'], context)
+    if (item.evidence_references !== undefined && (
+      !Array.isArray(item.evidence_references)
+      || item.evidence_references.some(reference => typeof reference !== 'string')
+    )) {
+      throw new Error(`${context}: evidence references must be strings.`)
+    }
+    validateOptionalStrings(item, ['owner_role'], context)
+    validateOptionalNumbers(
+      item,
+      ['affected_evidence_count', 'affected_disagreement_rate'],
+      context,
+    )
+    return item as GuidelineCodeConflict
+  })
+  if (workstream.conflict_count !== items.length) {
+    throw new Error(`${context}: conflict count must reconcile to items.`)
+  }
+  validateOptionalStrings(workstream, ['owner_role'], context)
+  return { ...workstream, items } as GuidelineCodeConflictWorkstream
+}
+
 function parsePresentation(value: unknown): StakeholderPresentation {
   const parsed = typeof value === 'string' ? JSON.parse(value) : value
   const data = record(parsed)
@@ -940,6 +1082,9 @@ function parsePresentation(value: unknown): StakeholderPresentation {
   const decisionSummary = parseDecisionSummary(data?.decision_summary)
   const actionCounts = countMap(data?.action_counts, 'action_counts')
   const actionWorkstreams = parseActionWorkstreams(data?.action_workstreams)
+  const guidelineCodeConflictWorkstream = parseGuidelineCodeConflictWorkstream(
+    data?.guideline_code_conflict_workstream,
+  )
   if (
     !data ||
     !record(data.overview) ||
@@ -1032,6 +1177,7 @@ function parsePresentation(value: unknown): StakeholderPresentation {
     decision_summary: decisionSummary,
     action_counts: actionCounts || undefined,
     action_workstreams: actionWorkstreams,
+    guideline_code_conflict_workstream: guidelineCodeConflictWorkstream,
     score_count: data.score_count,
     scorecard_count: data.scorecard_count,
     primary_disposition_counts: primaryDispositionCounts || undefined,
@@ -1226,6 +1372,67 @@ function DecisionBrief({
             : 'Next: Review the evidence and collection recommendations before another automatic run.'}
       </p>
     </div>
+  )
+}
+
+function GuidelineCodeConflictWorkstream({
+  workstream,
+}: {
+  workstream?: GuidelineCodeConflictWorkstream
+}) {
+  if (!workstream || workstream.items.length === 0) return null
+  return (
+    <section
+      data-testid="guideline-code-conflict-workstream"
+      className="mt-5 rounded-lg bg-rose-500/10 p-5"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-medium uppercase tracking-wide text-rose-800 dark:text-rose-200">
+            Repair workstream
+          </div>
+          <h3 className="mt-1 text-xl font-semibold">{workstream.title}</h3>
+        </div>
+        <div className="text-right text-sm text-muted-foreground">
+          <div>{workstream.conflict_count} {workstream.conflict_count === 1 ? 'conflict' : 'conflicts'}</div>
+          <div>{workstream.score_count} {workstream.score_count === 1 ? 'score' : 'scores'}</div>
+        </div>
+      </div>
+      <p className="mt-2 max-w-4xl text-sm">{workstream.why_optimization_is_blocked}</p>
+      <p className="mt-2 text-sm text-muted-foreground">Owner: {label(workstream.owner_role || 'score_maintainer')}</p>
+      <p className="mt-3 text-sm font-medium">Next: {label(workstream.next_action)}</p>
+      <div className="mt-4 space-y-3">
+        {workstream.items.map((item, index) => (
+          <article
+            key={`${item.scorecard_name}-${item.score_name}-${item.conflict_claim}-${index}`}
+            className="rounded-md bg-card/80 p-4 text-sm"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-medium">{item.score_name}</div>
+                <div className="text-xs text-muted-foreground">{item.scorecard_name}</div>
+              </div>
+              <div className="text-right text-xs text-muted-foreground">
+                <div>{finiteNonNegative(item.affected_evidence_count)} feedback items</div>
+                {typeof item.affected_disagreement_rate === 'number' && (
+                  <div>{(item.affected_disagreement_rate * 100).toFixed(1)}% affected disagreement</div>
+                )}
+              </div>
+            </div>
+            <p className="mt-3"><span className="font-medium">Conflict:</span> {item.conflict_claim}</p>
+            <p className="mt-2 text-muted-foreground"><span className="font-medium text-foreground">Evidence:</span> {item.supporting_evidence}</p>
+            {item.evidence_references && item.evidence_references.length > 0 && (
+              <p className="mt-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">Evidence references:</span> {item.evidence_references.join(', ')}</p>
+            )}
+            <p className="mt-2 text-muted-foreground"><span className="font-medium text-foreground">Why blocked:</span> {item.why_optimization_is_blocked}</p>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <span className="font-medium">Owner: {label(item.owner_role || workstream.owner_role || 'score_maintainer')} · Next: {label(item.next_action)}</span>
+              {item.dashboard_url && <Link href={item.dashboard_url} className="text-primary hover:underline">Open score</Link>}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -1474,7 +1681,10 @@ function IssuesSummary({ issues }: { issues: ScoreQuestion[] }) {
 
 function OptimizationOutcomes({ outcomes }: { outcomes: OptimizationOutcome[] }) {
   const [showAll, setShowAll] = useState(false)
-  if (outcomes.length === 0) return null
+  const executionOutcomes = outcomes.filter(outcome => (
+    typeof outcome.outcome === 'string' && outcome.outcome !== 'not_run'
+  ))
+  if (executionOutcomes.length === 0) return null
   return (
     <section className="rounded-lg bg-card p-6">
       <h3 className="text-lg font-semibold">Optimization progress and outcomes</h3>
@@ -1482,7 +1692,7 @@ function OptimizationOutcomes({ outcomes }: { outcomes: OptimizationOutcome[] })
         Approved optimizer work, evidence review, and terminal decisions. Promotion always requires a separate human approval.
       </p>
       <div className="mt-4 space-y-2">
-        {(showAll ? outcomes : outcomes.slice(0, 5)).map((outcome, index) => (
+        {(showAll ? executionOutcomes : executionOutcomes.slice(0, 5)).map((outcome, index) => (
           <article key={`${outcome.scorecard_name}-${outcome.score_name}-${index}`} className="rounded-md bg-muted/30 p-4 text-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -1495,7 +1705,10 @@ function OptimizationOutcomes({ outcomes }: { outcomes: OptimizationOutcome[] })
               </div>
             </div>
             <p className="mt-3">{outcome.rationale || 'No outcome rationale is available yet.'}</p>
-            {outcome.trend && <p className="mt-2 text-xs text-muted-foreground">{outcome.trend}</p>}
+            <AlignmentEvidence outcome={outcome} />
+            {outcome.trend && outcome.trend !== 'Not available' && (
+              <p className="mt-2 text-xs text-muted-foreground">{outcome.trend}</p>
+            )}
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <span className="text-muted-foreground">{label(outcome.next_action || 'review')}</span>
               {outcome.dashboard_url && (
@@ -1505,13 +1718,13 @@ function OptimizationOutcomes({ outcomes }: { outcomes: OptimizationOutcome[] })
           </article>
         ))}
       </div>
-      {outcomes.length > 5 && (
+      {executionOutcomes.length > 5 && (
         <button
           type="button"
           className="mt-4 text-sm text-primary hover:underline"
           onClick={() => setShowAll(value => !value)}
         >
-          {showAll ? 'Collapse outcomes' : `Show all outcomes (${outcomes.length})`}
+          {showAll ? 'Collapse outcomes' : `Show all outcomes (${executionOutcomes.length})`}
         </button>
       )}
     </section>
@@ -1869,6 +2082,12 @@ export function OptimizationRunStatusPresentation({
   const launchedCount = finiteNonNegative(overview.execution_launched_count)
   const evaluatedCount = finiteNonNegative(overview.optimizer_review_count)
   const improvedCount = finiteNonNegative(dispositionCounts.promotion_ready)
+    + finiteNonNegative(dispositionCounts.validated_improvement)
+  const noSafeImprovementCount = Math.min(
+    evaluatedCount,
+    finiteNonNegative(dispositionCounts.no_safe_improvement),
+  )
+  const unresolvedLaunchedCount = Math.max(0, launchedCount - evaluatedCount)
   const executionFunnel = [
     ['Surveyed', surveyedCount],
     ['Assessed', assessedCount],
@@ -1913,6 +2132,10 @@ export function OptimizationRunStatusPresentation({
           decisionSummary={presentation.decision_summary}
         />
 
+        <GuidelineCodeConflictWorkstream
+          workstream={presentation.guideline_code_conflict_workstream || undefined}
+        />
+
         <div className="mt-5">
           <div className="text-sm font-medium">From opportunity survey to validated improvement</div>
           <div
@@ -1941,12 +2164,22 @@ export function OptimizationRunStatusPresentation({
           )}>
             {improvedCount > 0 ? (
               <span className="font-medium">
-                {improvedCount} validated safe {improvedCount === 1 ? 'improvement' : 'improvements'}
+                {improvedCount} validated {improvedCount === 1 ? 'improvement' : 'improvements'}
               </span>
             ) : launchedCount === 0 ? (
               <>
                 <span className="font-medium">No score optimizer launched</span>
                 <span className="text-muted-foreground"> · A completed survey does not mean that a score was optimized.</span>
+              </>
+            ) : noSafeImprovementCount > 0 ? (
+              <>
+                <span className="font-medium">No safe improvement found</span>
+                <span className="text-muted-foreground">
+                  {' '}· {noSafeImprovementCount} {noSafeImprovementCount === 1 ? 'optimizer' : 'optimizers'} completed evaluation and review but produced no promotion-ready {noSafeImprovementCount === 1 ? 'candidate' : 'candidates'}.
+                  {unresolvedLaunchedCount > 0 && (
+                    <> {unresolvedLaunchedCount} {unresolvedLaunchedCount === 1 ? 'optimizer remains' : 'optimizers remain'} unresolved.</>
+                  )}
+                </span>
               </>
             ) : (
               <>

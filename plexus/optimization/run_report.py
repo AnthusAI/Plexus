@@ -29,9 +29,11 @@ from plexus.optimization.operator_identity import (
     OptimizationOperatorIdentity,
     optimization_operator_identity,
 )
+from plexus.optimization.decision import normalize_execution_candidate_policy
 from plexus.optimization.report_actions import (
     build_action_projection,
     build_decision_summary,
+    build_guideline_code_conflict_workstream,
 )
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
@@ -194,6 +196,7 @@ _OVERVIEW_KEYS = {
     "ranked_score_count", "unranked_score_count", "cooldown_excluded_count",
     "assessed_score_count", "assessment_progress", "diagnosis_coverage", "pending_approval_count", "notes",
     "execution_mode", "execution_selected_count", "execution_launched_count", "execution_rejected_count",
+    "execution_candidate_policy",
     "execution_named_selected_count", "execution_named_launched_count", "execution_named_rejected_count",
     "execution_detail_coverage", "execution_detail_limitation",
     "ranking_cutoff", "ranking_policy", "priority_display_limit",
@@ -230,7 +233,7 @@ _ROW_METADATA_KEYS = {
     "policy_reason", "review_disposition", "eligibility_timestamp",
     "primary_disposition", "secondary_issue_flags", "secondary_issue_summary",
     "issue_flag", "issue_severity", "affected_evidence_count", "affected_disagreement_rate",
-    "evidence_references",
+    "evidence_references", "evidence_reference_tokens",
     "execution_status", "execution_reason", "execution_authorization_source",
 }
 
@@ -349,7 +352,17 @@ def optimization_run_key(account_id: str, run_spec: Mapping[str, Any]) -> str:
 
 
 def _same_run_spec(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
-    return _json(left) == _json(right)
+    # Policy was added after living reports already existed.  Legacy evidence
+    # with no field means the conservative default, not an implicit diagnostic
+    # opt-in; normalize only that omission before comparing frozen contracts.
+    def normalized(value: Mapping[str, Any]) -> dict[str, Any]:
+        result = dict(value)
+        result["execution_candidate_policy"] = normalize_execution_candidate_policy(
+            result.get("execution_candidate_policy")
+        )
+        return result
+
+    return _json(normalized(left)) == _json(normalized(right))
 
 
 def _metadata(value: Any) -> dict[str, Any]:
@@ -1526,6 +1539,12 @@ def build_stakeholder_presentation(
         ),
     )
     action_projection = build_action_projection(rows)
+    guideline_code_conflict_workstream = build_guideline_code_conflict_workstream(
+        [
+            issue for issue in stakeholder_view.get("questions_and_issues", [])
+            if isinstance(issue, Mapping)
+        ]
+    )
     return {
         "overview": overview,
         "score_count": len(rows),
@@ -1535,6 +1554,7 @@ def build_stakeholder_presentation(
         "decision_summary": build_decision_summary(overview, primary_decision_mix),
         "action_counts": action_projection["action_counts"],
         "action_workstreams": action_projection["action_workstreams"],
+        "guideline_code_conflict_workstream": guideline_code_conflict_workstream,
         "primary_disposition_counts": primary_decision_mix,
         # Compatibility alias for report views published before dispositions.
         "primary_decision_mix": primary_decision_mix,
@@ -1621,6 +1641,9 @@ class OptimizationRunReportService:
             raise ValueError(
                 "run_spec.execution_mode must be 'automatic' or 'approval_required'"
             )
+        run_spec["execution_candidate_policy"] = normalize_execution_candidate_policy(
+            run_spec.get("execution_candidate_policy")
+        )
         if self._state is not None:
             if not _same_run_spec(self._state.run_spec, run_spec):
                 raise OptimizationRunIntegrityError(

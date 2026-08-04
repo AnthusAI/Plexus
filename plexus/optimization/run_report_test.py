@@ -803,6 +803,7 @@ def test_recovery_restores_lost_task_identity_from_its_existing_report(monkeypat
     assert restored_metadata["run_spec"] == {
         **run_spec,
         "execution_mode": "approval_required",
+        "execution_candidate_policy": "promotion_ready",
     }
     assert restored_metadata["procedure_id"] == "procedure-1"
     assert len(_Report.created) == 1

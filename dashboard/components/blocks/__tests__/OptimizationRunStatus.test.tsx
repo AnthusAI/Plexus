@@ -765,6 +765,10 @@ describe('OptimizationRunStatus', () => {
           trend: 'Stable across the latest complete weeks.',
           rationale: 'The candidate improved safely across recent and historical evidence.',
           next_action: 'request_promotion_approval',
+          alignment_evidence: {
+            recent: { baseline: 0.826, candidate: 0.942, delta: 0.116 },
+            regression: { baseline: 0.310, candidate: 0.450, delta: 0.140 },
+          },
         }],
         opportunity_distribution: [],
         top_priorities: [],
@@ -845,6 +849,10 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getAllByText('Answer stakeholder question').length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: 'Optimization progress and outcomes' })).toBeInTheDocument()
     expect(screen.getByText('The candidate improved safely across recent and historical evidence.')).toBeInTheDocument()
+    expect(screen.getByText('Recent AC1')).toBeInTheDocument()
+    expect(screen.getByText('0.826 → 0.942 (+0.116)')).toBeInTheDocument()
+    expect(screen.getByText('Regression AC1')).toBeInTheDocument()
+    expect(screen.getByText('0.310 → 0.450 (+0.140)')).toBeInTheDocument()
     expect(screen.getByText('Request promotion approval')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /Example Portfolio/ }))
@@ -1272,7 +1280,162 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getByLabelText('Optimization execution funnel')).toHaveTextContent(
       '40Surveyed12Assessed5Diagnosed3Selected2Launched2Evaluated1Improved',
     )
-    expect(screen.getByText('1 validated safe improvement')).toBeInTheDocument()
+    expect(screen.getByText('1 validated improvement')).toBeInTheDocument()
+  })
+
+  it('counts a validated improvement without describing it as promotion ready', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: {
+            lifecycle_status: 'complete',
+            execution_mode: 'automatic',
+            evidence_ranked_score_count: 1,
+            assessed_score_count: 1,
+            diagnosis_completed_count: 1,
+            execution_selected_count: 1,
+            execution_launched_count: 1,
+            optimizer_review_count: 1,
+          },
+          score_count: 1,
+          scorecard_count: 1,
+          primary_disposition_counts: { validated_improvement: 1 },
+          primary_decision_mix: {}, secondary_issue_counts: {}, attention_queue: [],
+          questions_and_issues: [], optimization_outcomes: [], opportunity_distribution: [], top_priorities: [],
+          scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.getByLabelText('Optimization execution funnel')).toHaveTextContent(
+      '1Surveyed1Assessed1Diagnosed1Selected1Launched1Evaluated1Improved',
+    )
+    expect(screen.getByText('1 validated improvement')).toBeInTheDocument()
+    expect(screen.getByTestId('lifecycle-validated-improvement')).toHaveTextContent('1Validated improvement')
+    expect(screen.getByTestId('lifecycle-promotion-ready')).toHaveTextContent('0Promotion ready')
+  })
+
+  it('adds promotion-ready and validated improvements once each in the funnel', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: {
+            lifecycle_status: 'complete',
+            execution_mode: 'automatic',
+            evidence_ranked_score_count: 2,
+            assessed_score_count: 2,
+            diagnosis_completed_count: 2,
+            execution_selected_count: 2,
+            execution_launched_count: 2,
+            optimizer_review_count: 2,
+          },
+          score_count: 2,
+          scorecard_count: 1,
+          primary_disposition_counts: { promotion_ready: 1, validated_improvement: 1 },
+          primary_decision_mix: {}, secondary_issue_counts: {}, attention_queue: [],
+          questions_and_issues: [], optimization_outcomes: [], opportunity_distribution: [], top_priorities: [],
+          scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.getByLabelText('Optimization execution funnel')).toHaveTextContent(
+      '2Surveyed2Assessed2Diagnosed2Selected2Launched2Evaluated2Improved',
+    )
+    expect(screen.getByText('2 validated improvements')).toBeInTheDocument()
+  })
+
+  it('shows actual optimizer work without burying it behind ordinary not-run portfolio rows', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: {
+            lifecycle_status: 'incomplete',
+            execution_mode: 'automatic',
+            execution_selected_count: 1,
+            execution_launched_count: 1,
+            optimizer_review_count: 1,
+          },
+          score_count: 264,
+          scorecard_count: 13,
+          primary_disposition_counts: { validated_improvement: 1, not_selected: 263 },
+          primary_decision_mix: {}, secondary_issue_counts: {}, attention_queue: [],
+          questions_and_issues: [],
+          optimization_outcomes: [{
+            scorecard_name: 'Portfolio', score_name: 'Ordinary not-run score',
+            primary_disposition: 'not_selected', outcome: 'not_run',
+            rationale: 'No optimizer outcome yet.',
+          }, {
+            scorecard_name: 'Portfolio', score_name: 'Validated candidate',
+            primary_disposition: 'validated_improvement', outcome: 'validated_improvement',
+            rationale: 'Matched evaluation evidence supports an improvement.',
+            trend: 'Not available',
+          }],
+          opportunity_distribution: [], top_priorities: [], scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'Optimization progress and outcomes' })).toBeInTheDocument()
+    expect(screen.getByText('Validated candidate')).toBeInTheDocument()
+    expect(screen.queryByText('Ordinary not-run score')).not.toBeInTheDocument()
+    expect(screen.queryByText('Not available')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Show all outcomes (2)' })).not.toBeInTheDocument()
+  })
+
+  it('reports a completed no-safe-improvement review without describing it as awaiting or failed', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: {
+            lifecycle_status: 'incomplete',
+            inventory_coverage_status: 'complete',
+            analysis_coverage_status: 'incomplete',
+            execution_mode: 'automatic',
+            execution_selected_count: 1,
+            execution_launched_count: 1,
+            optimizer_review_count: 1,
+          },
+          score_count: 1,
+          scorecard_count: 1,
+          primary_disposition_counts: { no_safe_improvement: 1 },
+          primary_decision_mix: {}, secondary_issue_counts: {}, attention_queue: [],
+          questions_and_issues: [], optimization_outcomes: [], opportunity_distribution: [], top_priorities: [],
+          scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.getByText('No safe improvement found')).toBeInTheDocument()
+    expect(screen.getByText(/1 optimizer completed evaluation and review but produced no promotion-ready candidate/i)).toBeInTheDocument()
+    expect(screen.queryByText(/awaiting or did not pass evaluation and review/i)).not.toBeInTheDocument()
+  })
+
+  it('separates completed no-safe-improvement reviews from unresolved launched optimizers', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: {
+            lifecycle_status: 'incomplete',
+            execution_mode: 'automatic',
+            execution_selected_count: 2,
+            execution_launched_count: 2,
+            optimizer_review_count: 1,
+          },
+          score_count: 2,
+          scorecard_count: 1,
+          primary_disposition_counts: { no_safe_improvement: 1 },
+          primary_decision_mix: {}, secondary_issue_counts: {}, attention_queue: [],
+          questions_and_issues: [], optimization_outcomes: [], opportunity_distribution: [], top_priorities: [],
+          scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.getByText('No safe improvement found')).toBeInTheDocument()
+    expect(screen.getByText(/1 optimizer completed evaluation and review but produced no promotion-ready candidate/i)).toBeInTheDocument()
+    expect(screen.getByText(/1 optimizer remains unresolved/i)).toBeInTheDocument()
+    expect(screen.queryByText(/awaiting or did not pass evaluation and review/i)).not.toBeInTheDocument()
   })
 
   it('keeps the human optimization-approval checkpoint visible for approval-required runs', () => {
@@ -1329,6 +1492,59 @@ describe('OptimizationRunStatus', () => {
     expect(screen.getAllByTestId('optimization-action-card')).toHaveLength(4)
     expect(screen.getAllByText('Repairs and evidence').length).toBeGreaterThan(0)
     expect(screen.getByText('Resolve guideline and code conflicts.')).toBeInTheDocument()
+  })
+
+  it('puts guideline and code conflicts near the report top with the evidence needed for repair', () => {
+    render(
+      <OptimizationRunStatusPresentation
+        presentation={{
+          overview: { lifecycle_status: 'complete' },
+          decision_summary: {
+            state: 'repair_required',
+            headline: 'Repair score definitions before optimization',
+            explanation: 'No safe automatic target is available.',
+            next_action: 'repair_guideline_and_code_alignment',
+          },
+          guideline_code_conflict_workstream: {
+            title: 'Potential guideline and code conflicts',
+            conflict_count: 1,
+            score_count: 1,
+            why_optimization_is_blocked: 'A potential mismatch between the guideline and score code blocks automatic optimization until a score maintainer verifies it and either repairs the definition or records why the behavior is intentional.',
+            owner_role: 'score_maintainer',
+            next_action: 'review_and_repair_guideline_code_alignment',
+            items: [{
+              scorecard_name: 'Example portfolio',
+              score_name: 'Eligibility score',
+              conflict_claim: 'The guideline requires an explicit confirmation, but the score code accepts an implied answer.',
+              supporting_evidence: 'Model-backed comparison of the current ScoreVersion guideline and score configuration (semantic diagnosis).',
+              evidence_references: ['semantic-evidence-1234abcd'],
+              affected_evidence_count: 27,
+              affected_disagreement_rate: 0.31,
+              why_optimization_is_blocked: 'A potential mismatch between the guideline and score code blocks automatic optimization until a score maintainer verifies it and either repairs the definition or records why the behavior is intentional.',
+              owner_role: 'score_maintainer',
+              next_action: 'review_and_repair_guideline_code_alignment',
+            }],
+          },
+          action_counts: {}, action_workstreams: [],
+          score_count: 1, scorecard_count: 1, primary_decision_mix: {}, secondary_issue_counts: {},
+          attention_queue: [], questions_and_issues: [], optimization_outcomes: [], opportunity_distribution: [], top_priorities: [], scorecards: [],
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'Potential guideline and code conflicts' })).toBeInTheDocument()
+    expect(screen.getByText('Eligibility score')).toBeInTheDocument()
+    expect(screen.getByText('Example portfolio')).toBeInTheDocument()
+    expect(screen.getByText('The guideline requires an explicit confirmation, but the score code accepts an implied answer.')).toBeInTheDocument()
+    expect(screen.getByText(/Model-backed comparison.*semantic diagnosis/i)).toBeInTheDocument()
+    expect(screen.getByText('semantic-evidence-1234abcd')).toBeInTheDocument()
+    expect(screen.getAllByText(/Owner: Score Maintainer/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/blocks automatic optimization/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/review and repair guideline code alignment/i).length).toBeGreaterThan(0)
+
+    const conflict = screen.getByTestId('guideline-code-conflict-workstream')
+    expect(conflict.compareDocumentPosition(screen.getByLabelText('Optimization execution funnel'))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('surfaces a run failure above the last durable pre-failure presentation', async () => {
