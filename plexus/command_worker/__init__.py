@@ -5,6 +5,7 @@ from .ports import (
     ClaimStatus,
     Clock,
     Delivery,
+    DrainSignal,
     ExecutionContext,
     Executor,
     HeartbeatHandle,
@@ -13,6 +14,13 @@ from .ports import (
     Transport,
 )
 from .scheduler import ThreadHeartbeatScheduler
+from .service import (
+    CommandWorkerService,
+    EventDrainSignal,
+    ServiceOutcome,
+    ServiceReceiveError,
+    ServiceStopReason,
+)
 from .worker import CommandWorker, LeaseLostError, ProcessOutcome
 
 __all__ = [
@@ -22,8 +30,10 @@ __all__ = [
     "CommandEnvelope",
     "CommandWorker",
     "Delivery",
+    "DrainSignal",
     "ExecutionContext",
     "Executor",
+    "EventDrainSignal",
     "HeartbeatHandle",
     "HeartbeatScheduler",
     "JSONValue",
@@ -33,4 +43,8 @@ __all__ = [
     "ProgressUpdate",
     "Transport",
     "ThreadHeartbeatScheduler",
+    "CommandWorkerService",
+    "ServiceOutcome",
+    "ServiceReceiveError",
+    "ServiceStopReason",
 ]

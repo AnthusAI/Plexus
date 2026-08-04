@@ -1,0 +1,31 @@
+{
+  "id": "plx-d2037326-36c6-4cf9-bcc7-510b1043ad4c",
+  "title": "Design the portable command control-plane adapter",
+  "description": "Map the additive control-plane schema, dispatch routing, lifecycle mutations, structured command conversion, and migration boundaries required to connect the portable worker without disrupting the legacy Celery path. Produce an evidence-backed design and unresolved decisions only; do not edit source code or infrastructure.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "486d8823-5e7a-4ac7-b933-91a9db4ccd5e",
+      "author": "derek.norrbom",
+      "text": "Read-only investigation started in parallel with the drainable service implementation. It is mapping additive task lifecycle fields, atomic mutation requirements, structured command seams, generic routing options, stream-dispatch isolation, and a safe parallel migration sequence. No source or external state changes are authorized.",
+      "created_at": "2026-08-04T20:48:19.673891Z"
+    },
+    {
+      "id": "83523be0-dcdf-4ae8-b7b9-821fef6f6c61",
+      "author": "derek.norrbom",
+      "text": "## Investigation result\n\nVerified migration constraints:\n- The Task record is both the dashboard lifecycle contract and the legacy Celery stream trigger.\n- Any inserted Task with dispatchStatus PENDING currently reaches Celery unless metadata marks one of two self-managed modes.\n- Portable routing and the complete envelope must therefore be pinned on the initial create; a two-phase update is unsafe.\n- The legacy dispatcher deny guard must deploy before any portable producer.\n- Raw GraphQL model mutations support conditions, but existing Task helpers do not expose them.\n- Direct DynamoDB lifecycle writes would bypass current AppSync mutation subscriptions.\n- Current Task API authorization does not provide a ready ECS workload-identity path.\n- Typed command inputs exist before string rendering for most command families; arbitrary command input remains an explicit legacy case.\n\nRecommended migration sequence for main-agent planning:\n1. Add nullable route and lifecycle fields.\n2. Add and test a fail-closed legacy dispatcher route guard while absent route remains legacy.\n3. Introduce one typed portable producer and a conditional lifecycle adapter in development.\n4. Prove duplicate, recovery, stale completion, cancellation, dead-letter, and subscription behavior.\n5. Route new production Tasks through an explicit generic policy while in-flight routes remain immutable.\n\nEvidence was independently verified at the active dispatcher, Amplify Task schema/auth, conditional mutation example, Python Task helper, and subscription selections. No source or external state was changed.",
+      "created_at": "2026-08-04T20:54:08.151211Z"
+    }
+  ],
+  "created_at": "2026-08-04T20:47:06.447495Z",
+  "updated_at": "2026-08-04T20:54:17.541579Z",
+  "closed_at": "2026-08-04T20:54:17.541579Z",
+  "custom": {}
+}

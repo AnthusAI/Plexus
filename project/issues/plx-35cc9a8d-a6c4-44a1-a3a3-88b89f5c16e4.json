@@ -10,9 +10,16 @@
   "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "71aac3ce-f672-4c7d-a1e5-8c8e822b6bdf",
+      "author": "derek.norrbom",
+      "text": "Additional behavior for the service-loop slice:\n\nFeature: Drain an always-on worker service\n  Scenario: Drain begins while the worker is idle\n    Given a worker service is waiting for commands\n    When draining is requested\n    Then it stops receiving new work and exits cleanly\n\n  Scenario: Drain begins during command execution\n    Given a worker service is executing a claimed command\n    When draining is requested\n    Then the active execution is allowed to settle\n    And no additional command is received\n    And the service exits after the active execution returns\n\n  Scenario: Drain races with delivery receipt\n    Given a delivery was received but execution has not started\n    When draining is observed\n    Then that delivery is released without execution\n    And the service exits",
+      "created_at": "2026-08-04T20:46:55.106627Z"
+    }
+  ],
   "created_at": "2026-08-04T19:45:23.159556Z",
-  "updated_at": "2026-08-04T19:45:23.159556Z",
+  "updated_at": "2026-08-04T20:46:55.106627Z",
   "closed_at": null,
   "custom": {}
 }

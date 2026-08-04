@@ -1,0 +1,31 @@
+{
+  "id": "plx-6ce00cbd-9dda-475e-aa76-f1416f0dad9d",
+  "title": "Implement a drainable always-on command worker service",
+  "description": "Implement the provider-neutral always-on service loop for story plx-35cc9a. It must receive and process one delivery at a time, wait without busy-spinning when idle, stop receiving on drain, release a delivery if drain races with receipt, allow active execution to settle, and exit deterministically. Signals, ECS task protection, provider adapters, cancellation, concurrency greater than one per service instance, and infrastructure remain out of scope.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "14d89034-1197-442c-913d-571d05bdeba5",
+      "author": "derek.norrbom",
+      "text": "Implementation started on feature/drainable-command-worker-service. The slice is restricted to the provider-neutral single-command service loop, drain ordering, deterministic idle waiting, and executable behavior specifications. Provider adapters, cancellation, signals, task protection, infrastructure, and dashboard changes are out of scope.",
+      "created_at": "2026-08-04T20:48:16.234519Z"
+    },
+    {
+      "id": "9b6fa732-23fb-48c2-a2eb-e0f4fb534092",
+      "author": "derek.norrbom",
+      "text": "## Completion and direct review\n\nImplemented a provider-neutral warm worker service loop that:\n- performs bounded receives and processes one delivery at a time;\n- exits without receiving when already draining;\n- releases unstarted delivery when drain races with receipt;\n- allows active execution to settle and prevents another receive;\n- uses interruptible idle waits rather than busy-spinning;\n- exposes stop reason and per-outcome processing counts;\n- propagates receive failures with prior outcome context.\n\nValidation:\n- python -m behave tests/command_worker/features → 15 scenarios and 70 steps passed\n- python -m pytest -q tests/command_worker plexus/cli/shared/command_tasks_test.py plexus/cli/shared/command_dispatch_test.py plexus/cli/shared/test_command_dispatch.py → 76 passed\n- ruff check plexus/command_worker tests/command_worker → passed\n- ruff format --check plexus/command_worker tests/command_worker → passed\n- provider-boundary check → no forbidden imports\n\nNo Celery, dashboard, infrastructure, dependency, or provider code changed. Signal integration, task protection, cancellation, provider adapters, and deployment remain follow-up work.",
+      "created_at": "2026-08-04T20:54:23.823739Z"
+    }
+  ],
+  "created_at": "2026-08-04T20:47:01.729803Z",
+  "updated_at": "2026-08-04T20:54:28.582676Z",
+  "closed_at": "2026-08-04T20:54:28.582676Z",
+  "custom": {}
+}
