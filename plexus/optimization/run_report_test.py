@@ -2451,6 +2451,9 @@ def test_procedure_owned_task_is_reused_without_duplicate_task_or_stage_creation
         "display_title": "Feedback survey: Example portfolio",
         "display_scope": 'scorecard names beginning with "Example portfolio"',
     }
+    assert metadata["optimization_kind"] == "scorecard_scoped_portfolio"
+    assert metadata["display_title"] == "Feedback survey: Example portfolio"
+    assert metadata["display_scope"] == 'scorecard names beginning with "Example portfolio"'
     assert procedure_task.description == (
         'Feedback survey: Example portfolio — scorecard names beginning with '
         '"Example portfolio"'

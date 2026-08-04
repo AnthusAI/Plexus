@@ -1723,6 +1723,15 @@ class OptimizationRunReportService:
                         "operator_identity": operator_identity.as_dict(),
                     })
                     created_new_attempt = True
+                # The Procedure service writes compatibility display fields at
+                # Task creation time, before the living Report freezes its
+                # authoritative run specification. Keep those fields aligned
+                # with the same scope-derived identity used by the Report.
+                existing_metadata.update({
+                    "optimization_kind": operator_identity.kind,
+                    "display_title": operator_identity.display_title,
+                    "display_scope": operator_identity.display_scope,
+                })
                 try:
                     task.update(
                         metadata=json.dumps(existing_metadata),

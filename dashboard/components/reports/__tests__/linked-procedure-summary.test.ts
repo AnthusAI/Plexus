@@ -66,6 +66,31 @@ describe('buildLinkedProcedureSummary', () => {
     expect(summary?.displayScope).not.toContain('beginning with')
   })
 
+  it('uses the frozen search phrase when legacy display fields still say account-wide', () => {
+    const staleTask = {
+      ...linkedTask,
+      metadata: JSON.stringify({
+        ...JSON.parse(linkedTask.metadata),
+        display_title: 'Feedback survey: All',
+        display_scope: 'All scorecards',
+        operator_identity: {
+          kind: 'account_wide_portfolio',
+          display_title: 'Feedback survey: All',
+          display_scope: 'All scorecards',
+        },
+      }),
+    }
+
+    const summary = buildLinkedProcedureSummary({
+      reportId: 'report-1',
+      reportName: 'Feedback survey: All',
+      reportCreatedAt: '2026-07-30T12:00:02.000Z',
+      task: staleTask as any,
+    })
+
+    expect(summary?.displayTitle).toBe('Feedback survey: Example')
+  })
+
   it('does not invent a Procedure summary for an unrelated or missing Task', () => {
     expect(buildLinkedProcedureSummary({
       reportId: 'report-1',

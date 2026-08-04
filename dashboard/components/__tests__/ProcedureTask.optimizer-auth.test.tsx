@@ -460,6 +460,42 @@ describe('ProcedureTask optimizer auth flow', () => {
     expect(screen.getByText('Clear greeting')).toBeInTheDocument()
   })
 
+  it('prefers the frozen search phrase over stale account-wide display metadata', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          title: 'Optimization Portfolio Run',
+          procedureType: 'Portfolio Optimization',
+          displayTitle: 'Feedback survey: All',
+          displayScope: 'All scorecards',
+          scorecard: null,
+          score: null,
+          task: {
+            ...baseProcedure.task,
+            metadata: JSON.stringify({
+              procedure_type: 'Portfolio Optimization',
+              display_title: 'Feedback survey: All',
+              display_scope: 'All scorecards',
+              run_parameters: {
+                scorecard_name_prefixes: ['Example Search'],
+              },
+              operator_identity: {
+                kind: 'scorecard_scoped_portfolio',
+                display_title: 'Feedback survey: Example Search',
+                display_scope: 'scorecard names beginning with "Example Search"',
+              },
+            }),
+          },
+        } as any}
+      />,
+    )
+
+    expect(screen.getByText('Feedback survey: Example Search')).toBeInTheDocument()
+    expect(screen.queryByText('Feedback survey: All')).not.toBeInTheDocument()
+  })
+
   it('shows an incomplete portfolio outcome instead of a completed success', () => {
     render(
       <ProcedureTask

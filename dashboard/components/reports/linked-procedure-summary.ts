@@ -128,12 +128,12 @@ const feedbackSurveyTitle = (
   fallback: string,
 ): string => {
   const stored = typeof identity.display_title === 'string' ? identity.display_title.trim() : ''
-  if (/^Feedback survey:/i.test(stored)) return stored
   const runParameters = record(metadata.run_parameters)
   const prefixes = Array.isArray(runParameters.scorecard_name_prefixes)
     ? runParameters.scorecard_name_prefixes.filter((value): value is string => typeof value === 'string' && value.trim() !== '')
     : []
   if (prefixes.length === 1) return `Feedback survey: ${prefixes[0].trim()}`
+  if (/^Feedback survey:/i.test(stored)) return stored
   if (identity.kind === 'account_wide_portfolio' || /account-wide/i.test(stored || fallback)) {
     return 'Feedback survey: All'
   }

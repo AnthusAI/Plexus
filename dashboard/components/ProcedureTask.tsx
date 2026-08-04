@@ -201,9 +201,9 @@ const feedbackSurveyTitle = (
   storedTitle: string,
   storedKind: unknown,
 ): string => {
-  if (/^Feedback survey:/i.test(storedTitle)) return storedTitle
   const prefixes = asStringList(runParameters.scorecard_name_prefixes)
   if (prefixes.length === 1) return `Feedback survey: ${prefixes[0]}`
+  if (/^Feedback survey:/i.test(storedTitle)) return storedTitle
   if (storedKind === 'account_wide_portfolio' || /account-wide/i.test(storedTitle)) {
     return 'Feedback survey: All'
   }
