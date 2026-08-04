@@ -24,9 +24,9 @@ NOW = datetime(2026, 8, 4, tzinfo=timezone.utc)
 
 def envelope(**overrides):
     values = {
-        "schema_version": 1,
+        "schema_version": 2,
         "command_id": "command-1",
-        "task_id": "task-1",
+        "tenant_id": "tenant-1",
         "target": "evaluation",
         "idempotency_key": "evaluation:task-1",
         "created_at": NOW,
@@ -134,9 +134,9 @@ def test_message_containers_do_not_mutate_the_immutable_envelope():
 @pytest.mark.parametrize(
     "mutation, error",
     [
-        (lambda message: message.pop("task_id"), ValueError),
+        (lambda message: message.pop("tenant_id"), ValueError),
         (lambda message: message.update({"unexpected": True}), ValueError),
-        (lambda message: message.update({"schema_version": 2}), ValueError),
+        (lambda message: message.update({"schema_version": 1}), ValueError),
         (
             lambda message: message.update({"created_at": "not-a-datetime"}),
             ValueError,

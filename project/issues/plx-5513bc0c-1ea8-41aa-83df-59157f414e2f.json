@@ -1,0 +1,31 @@
+{
+  "id": "plx-5513bc0c-1ea8-41aa-83df-59157f414e2f",
+  "title": "Implement the portable command service contract",
+  "description": "Implement story plx-48b1ee as a provider-neutral application service and durable repository contract with executable behavior specifications. Cover tenant scoping, structured submission, service-owned identity/time, idempotent duplicate submission, idempotency conflicts, status lookup, cancellation state, and atomic dispatch discoverability. Do not add HTTP, AWS, Kubernetes, dashboard, Celery, or provider storage implementations.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "cb7bc0a2-fb0e-4c86-9eb9-2b948dd37842",
+      "author": "derek.norrbom",
+      "text": "Implementation started on feature/portable-command-service-api. Scope is restricted to the clean provider-neutral submission/status/cancellation contract, tenant scoping, schema-v2 envelope, idempotency, and repository semantics. No HTTP, cloud, dashboard, Celery, migration, or provider code is authorized.",
+      "created_at": "2026-08-04T21:50:29.126625Z"
+    },
+    {
+      "id": "b8b3eed9-28ed-4200-a2c9-42a0302fdb25",
+      "author": "derek.norrbom",
+      "text": "Implemented the provider-neutral command service contract with authenticated immutable context, resource-aware versioned authorization decisions, principal-scoped idempotency, bounded canonical request digests, atomic repository semantics, tenant non-disclosure, payload-free audit events, safe cancellation transitions, and durable execution-integrity requirements. Local validation: conda run -n py311 behave tests/command_worker/features (29 scenarios, 128 steps passed); conda run -n py311 python -m pytest -q tests/command_worker (80 passed); conda run -n py311 python -m pytest -q tests/cli/test_cli_imports_only.py (7 passed, 7 existing Pydantic deprecation warnings); ruff check plexus/command_worker tests/command_worker; ruff format --check plexus/command_worker tests/command_worker; git diff --check. Direct review corrections completed before acceptance.",
+      "created_at": "2026-08-04T22:05:05.260933Z"
+    }
+  ],
+  "created_at": "2026-08-04T21:49:19.242626Z",
+  "updated_at": "2026-08-04T22:05:05.260933Z",
+  "closed_at": null,
+  "custom": {}
+}

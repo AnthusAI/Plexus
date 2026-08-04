@@ -7,12 +7,25 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Protocol
 
-from .models import Claim, CommandEnvelope, JSONValue, ProgressUpdate
+from .models import (
+    AnnouncementResult,
+    AuditEvent,
+    AuthenticatedCommandContext,
+    AuthorizationDecision,
+    CancellationResult,
+    Claim,
+    CommandEnvelope,
+    CommandRecord,
+    CommandRequest,
+    JSONValue,
+    ProgressUpdate,
+)
 
 
 class ClaimStatus(str, Enum):
     ACTIVE = "active"
     TERMINAL = "terminal"
+    INTEGRITY_MISMATCH = "integrity_mismatch"
 
 
 class Delivery(Protocol):
@@ -21,6 +34,8 @@ class Delivery(Protocol):
     def acknowledge(self) -> None: ...
 
     def release(self) -> None: ...
+
+    def quarantine(self, reason: str) -> None: ...
 
     def extend_lease(self, duration: timedelta) -> bool: ...
 
@@ -39,6 +54,14 @@ class DrainSignal(Protocol):
 
 
 class LifecycleStore(Protocol):
+    """Durable lifecycle and integrity boundary for untrusted envelopes.
+
+    Before issuing a lease, ``claim`` must atomically load durable command state
+    and verify command identity, tenant, target, idempotency identity, and the
+    canonical payload digest. CANCELLED is terminal even when a broker message
+    was published before cancellation. Any mismatch returns INTEGRITY_MISMATCH.
+    """
+
     def claim(
         self,
         envelope: CommandEnvelope,
@@ -104,6 +127,54 @@ class Executor(Protocol):
 
 class Clock(Protocol):
     def now(self) -> datetime: ...
+
+
+class CommandIdGenerator(Protocol):
+    def new_id(self) -> str: ...
+
+
+class CommandRepository(Protocol):
+    """Atomic persistence boundary for portable command state.
+
+    ``announce`` must atomically resolve the tenant/principal/operation-scoped
+    idempotency key,
+    durably store a new command, and make that command's dispatch discoverable.
+    A caller must never observe durable state without its corresponding dispatch
+    eligibility, or dispatch eligibility without durable state.
+
+    ``get`` and ``request_cancel`` are tenant scoped. Implementations must return
+    ``None`` both when a command is absent and when it belongs to another tenant.
+    ``request_cancel`` atomically applies the cancellation transition and, for an
+    ANNOUNCED command, removes dispatch eligibility in the same operation.
+    """
+
+    def announce(self, command: CommandRecord) -> AnnouncementResult: ...
+
+    def get(self, tenant_id: str, command_id: str) -> CommandRecord | None: ...
+
+    def request_cancel(
+        self, tenant_id: str, command_id: str, now: datetime
+    ) -> CancellationResult | None: ...
+
+
+class CommandAuthorizer(Protocol):
+    """Fail-closed policy for authenticated contexts and registered targets."""
+
+    def can_submit(
+        self, context: AuthenticatedCommandContext, request: CommandRequest
+    ) -> AuthorizationDecision: ...
+
+    def can_read(
+        self, context: AuthenticatedCommandContext, command: CommandRecord
+    ) -> AuthorizationDecision: ...
+
+    def can_cancel(
+        self, context: AuthenticatedCommandContext, command: CommandRecord
+    ) -> AuthorizationDecision: ...
+
+
+class AuditSink(Protocol):
+    def record(self, event: AuditEvent) -> None: ...
 
 
 class HeartbeatHandle(Protocol):
