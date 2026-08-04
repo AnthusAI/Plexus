@@ -64,6 +64,10 @@ class _ExpiredSignedURL(ArtifactTransferError):
     """Internal marker permitting the single signed-URL refresh."""
 
 
+class _RetryableTransferError(ArtifactTransferError):
+    """Internal marker permitting one fresh-ticket retry for a WRITE."""
+
+
 class GraphQLExecutor(Protocol):
     """The stable subset supplied by ``PlexusDashboardClient``."""
 
@@ -272,8 +276,9 @@ class GraphQLArtifactStore:
     def upload_batch(self, uploads: Sequence[ArtifactUpload]) -> list[dict[str, Any]]:
         """Authorize up to twenty verified writes with one ticket request.
 
-        An explicit signed-URL expiry may refresh only its individual ticket once;
-        no other authorization, transfer, or integrity failure is retried.
+        An explicit signed-URL expiry or transient HTTPS failure may refresh only
+        its individual WRITE ticket once; authorization, integrity, and other
+        failures are never retried.
         """
         if not uploads:
             raise ValueError("artifact upload batches must not be empty")
@@ -373,6 +378,11 @@ class GraphQLArtifactStore:
                 return self._transfer(replacement, payload)
             except _ExpiredSignedURL as exc:
                 raise ArtifactTransferError("replacement signed URL expired") from exc
+        except _RetryableTransferError:
+            if request.operation != "WRITE":
+                raise
+            replacement = self.request_tickets([request])[0]
+            return self._transfer(replacement, payload)
 
     def _transfer(
         self, ticket: ArtifactTransferTicket, payload: Optional[bytes]
@@ -389,7 +399,7 @@ class GraphQLArtifactStore:
                 request_kwargs["verify"] = self._ca_bundle
             response = self._http_session.request(ticket.method, ticket.url, **request_kwargs)
         except requests.RequestException as exc:
-            raise ArtifactTransferError("HTTPS artifact transfer failed") from exc
+            raise _RetryableTransferError("HTTPS artifact transfer failed") from exc
         except Exception as exc:
             raise ArtifactTransferError("HTTPS artifact transfer failed") from exc
 
@@ -398,6 +408,12 @@ class GraphQLArtifactStore:
             raise _ExpiredSignedURL("signed URL expired during transfer")
         if status_code in {401, 403}:
             raise ArtifactAuthorizationError("signed URL authorization was rejected")
+        if status_code in {408, 429} or (
+            isinstance(status_code, int) and 500 <= status_code < 600
+        ):
+            raise _RetryableTransferError(
+                f"HTTPS artifact transfer returned transient status {status_code}"
+            )
         if not isinstance(status_code, int) or not 200 <= status_code < 300:
             raise ArtifactTransferError(f"HTTPS artifact transfer returned status {status_code}")
 

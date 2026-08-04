@@ -18,6 +18,7 @@ from plexus.optimization.semantic_budget import (
 SEMANTIC_PROVIDER = "openai"
 SEMANTIC_MODEL = "gpt-5-mini-2025-08-07"
 SEMANTIC_PRICING_VERSION = "openai-2025-08-07-v1"
+SEMANTIC_PUBLICATION_ATTEMPTS = 2
 
 
 class SemanticAuthorityError(RuntimeError):
@@ -113,12 +114,21 @@ class SemanticBudgetCoordinator:
     ) -> dict[str, Any]:
         candidate = SemanticBudgetLedger.from_dict(self._ledger.to_dict())
         result = mutation(candidate)
-        try:
-            self._persist(candidate.to_dict())
-        except Exception as exc:
+        last_error: Exception | None = None
+        for _attempt in range(SEMANTIC_PUBLICATION_ATTEMPTS):
+            try:
+                # Retrying the identical candidate is safe even when the first
+                # response was lost after the commit point: Report persistence
+                # recognizes its checksum and returns the existing pointer.
+                self._persist(candidate.to_dict())
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = exc
+        if last_error is not None:
             raise SemanticAuthorityPublicationError(
                 "semantic authority state could not be committed"
-            ) from exc
+            ) from last_error
         self._ledger = candidate
         return result
 

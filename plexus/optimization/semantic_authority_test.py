@@ -76,6 +76,64 @@ def test_reservation_commit_failure_uses_specific_publication_type():
     assert report.value is not None
 
 
+def test_settlement_retries_transient_publication_without_repeating_semantic_work():
+    coordinator, report = _coordinator()
+    view = coordinator.view(target_id="a", call_site="direct", max_attempts=1)
+    plan = view.direct_plan(
+        attempt=1, max_input_tokens=100, max_output_tokens=10,
+        request_payload={"prompt": "exactly once"},
+    )
+    decision = view.reserve_direct(plan)
+    original_persist = coordinator._persist
+    publication_attempts = 0
+
+    def fail_once(value):
+        nonlocal publication_attempts
+        publication_attempts += 1
+        if publication_attempts == 1:
+            raise RuntimeError("temporary artifact publication failure")
+        return original_persist(value)
+
+    coordinator._persist = fail_once
+    view.settle_direct(
+        decision.reservation_id,
+        SemanticUsage(input_tokens=8, output_tokens=2, provider_request_id="req-once"),
+        output_text='{"status":"consistent"}',
+    )
+
+    assert publication_attempts == 2
+    assert coordinator.ledger.summary()["settled_count"] == 1
+    assert coordinator.ledger.summary()["outcome_unknown_count"] == 0
+    assert report.value["entries"][0]["usage"]["provider_request_id"] == "req-once"
+
+
+def test_settlement_fails_closed_after_bounded_publication_retries():
+    coordinator, _report = _coordinator()
+    view = coordinator.view(target_id="a", call_site="direct", max_attempts=1)
+    plan = view.direct_plan(
+        attempt=1, max_input_tokens=100, max_output_tokens=10,
+        request_payload={"prompt": "bounded failure"},
+    )
+    decision = view.reserve_direct(plan)
+    publication_attempts = 0
+
+    def always_fail(_value):
+        nonlocal publication_attempts
+        publication_attempts += 1
+        raise RuntimeError("persistent artifact publication failure")
+
+    coordinator._persist = always_fail
+    with pytest.raises(SemanticAuthorityPublicationError):
+        view.settle_direct(
+            decision.reservation_id,
+            SemanticUsage(input_tokens=8, output_tokens=2),
+            output_text='{"status":"consistent"}',
+        )
+
+    assert publication_attempts == 2
+    assert coordinator.ledger.summary()["settled_count"] == 0
+
+
 def test_report_resume_reuses_settled_tactus_replay_without_contact_or_double_charge():
     from tactus.protocols.model_attempt import (
         ModelAttemptOutcome,
