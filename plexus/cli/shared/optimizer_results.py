@@ -198,6 +198,96 @@ def _find_iteration_by_version_id(iterations: List[Dict[str, Any]], version_id: 
     return None
 
 
+def _winning_candidate_accuracy_evaluation_id(
+    iteration: Optional[Dict[str, Any]],
+    winning_version_id: Optional[str],
+) -> Optional[str]:
+    if not iteration or not winning_version_id:
+        return None
+    for candidate in iteration.get("exploration_results") or []:
+        if not isinstance(candidate, dict):
+            continue
+        evaluation_id = candidate.get("acc_eval_id")
+        if candidate.get("version_id") == winning_version_id and evaluation_id:
+            return str(evaluation_id)
+    return None
+
+
+def _is_completed_status(value: Any) -> bool:
+    return str(value or "").upper() == "COMPLETED"
+
+
+def _alignment_at_least(metrics: Any, minimum: float) -> bool:
+    if not isinstance(metrics, dict):
+        return False
+    alignment = _finite_number(metrics.get("alignment"))
+    return alignment is not None and alignment >= minimum
+
+
+def _legacy_baselines_already_good(
+    *,
+    procedure: Dict[str, Any],
+    task: Task,
+    state: Dict[str, Any],
+    run_summary: Dict[str, Any],
+    iterations: List[Dict[str, Any]],
+    baseline_feedback_metrics: Dict[str, Any],
+    baseline_accuracy_metrics: Dict[str, Any],
+) -> bool:
+    """Recognize only the pre-marker, zero-cycle durable completion shape."""
+    feedback_evaluation_id = state.get("recent_baseline_id")
+    accuracy_evaluation_id = state.get("regression_baseline_id")
+    return (
+        not run_summary.get("completion_reason")
+        and _is_completed_status(procedure.get("status"))
+        and _is_completed_status(getattr(task, "status", None))
+        and not iterations
+        and not run_summary.get("last_accepted_version_id")
+        and not run_summary.get("winning_version_id")
+        and not state.get("winning_version_id")
+        and not state.get("last_accepted_version_id")
+        and bool(state.get("baseline_version_id"))
+        and bool(feedback_evaluation_id)
+        and bool(accuracy_evaluation_id)
+        and feedback_evaluation_id != accuracy_evaluation_id
+        and _alignment_at_least(baseline_feedback_metrics, 0.99)
+        and _alignment_at_least(baseline_accuracy_metrics, 0.99)
+    )
+
+
+def _legacy_indexed_baselines_already_good(
+    *,
+    procedure: Dict[str, Any],
+    task: Optional[Task],
+    summary: Dict[str, Any],
+    baseline: Dict[str, Any],
+    best: Dict[str, Any],
+    cycles: Any,
+) -> bool:
+    """Recognize the old durable completion shape without modifying its manifest."""
+    feedback_evaluation_id = baseline.get("original_feedback_evaluation_id")
+    accuracy_evaluation_id = baseline.get("original_accuracy_evaluation_id")
+    completed_cycles = summary.get("completed_cycles")
+    return (
+        not summary.get("completion_reason")
+        and _is_completed_status(procedure.get("status"))
+        and task is not None
+        and _is_completed_status(getattr(task, "status", None))
+        and isinstance(cycles, list)
+        and not cycles
+        and type(completed_cycles) is int
+        and completed_cycles == 0
+        and not best.get("winning_version_id")
+        and not best.get("last_accepted_version_id")
+        and bool(baseline.get("version_id"))
+        and bool(feedback_evaluation_id)
+        and bool(accuracy_evaluation_id)
+        and feedback_evaluation_id != accuracy_evaluation_id
+        and _alignment_at_least(baseline.get("feedback_metrics"), 0.99)
+        and _alignment_at_least(baseline.get("accuracy_metrics"), 0.99)
+    )
+
+
 def _report_phase_failures(phase_statuses: Any) -> List[Dict[str, Any]]:
     """Return stable, compact failures without hiding successful run evidence."""
     if not isinstance(phase_statuses, dict):
@@ -564,33 +654,91 @@ class OptimizerResultsService:
         if not run_summary:
             run_summary = _parse_json_dict(state.get("optimizer_result_summary"))
 
+        baseline_feedback_source = (
+            state.get("recent_initial_baseline_metrics")
+            or state.get("recent_baseline_metrics")
+        )
+        baseline_accuracy_source = (
+            state.get("regression_initial_baseline_metrics")
+            or state.get("regression_baseline_metrics")
+        )
+        completion_reason = run_summary.get("completion_reason")
+        if _legacy_baselines_already_good(
+            procedure=procedure,
+            task=task,
+            state=state,
+            run_summary=run_summary,
+            iterations=iterations,
+            baseline_feedback_metrics=(
+                baseline_feedback_source
+                if isinstance(baseline_feedback_source, dict)
+                else {}
+            ),
+            baseline_accuracy_metrics=(
+                baseline_accuracy_source
+                if isinstance(baseline_accuracy_source, dict)
+                else {}
+            ),
+        ):
+            completion_reason = "legacy_baselines_already_good"
+        already_good_completion = completion_reason in {
+            "baselines_already_good",
+            "legacy_baselines_already_good",
+        }
+
         # The final report is the handoff contract.  State is retained only for
         # supporting provenance and for older runs that predate the report.
         winning_version_id = (
-            run_summary.get("last_accepted_version_id")
+            (
+                run_summary.get("champion_version_id")
+                or state.get("baseline_version_id")
+            )
+            if already_good_completion
+            else run_summary.get("last_accepted_version_id")
             or run_summary.get("winning_version_id")
             or state.get("winning_version_id")
             or state.get("last_accepted_version_id")
         )
         winning_iteration = _find_iteration_by_version_id(iterations, winning_version_id)
+        winning_candidate_accuracy_eval_id = _winning_candidate_accuracy_evaluation_id(
+            winning_iteration,
+            winning_version_id,
+        )
+        final_regression_evaluation_id = run_summary.get(
+            "final_regression_evaluation_id"
+        )
+        final_regression_is_original_baseline = (
+            final_regression_evaluation_id == state.get("regression_baseline_id")
+            and winning_version_id != state.get("baseline_version_id")
+        )
         current_recent_baseline_id = state.get("current_recent_baseline_id") or state.get("last_accepted_fb_eval_id")
         current_regression_baseline_id = state.get("current_regression_baseline_id") or state.get("last_accepted_acc_eval_id")
         best_feedback_eval_id = (
-            run_summary.get("final_recent_evaluation_id")
+            state.get("recent_baseline_id")
+            if already_good_completion
+            else run_summary.get("final_recent_evaluation_id")
             or state.get("last_accepted_fb_eval_id")
             or current_recent_baseline_id
         )
         best_accuracy_eval_id = (
-            run_summary.get("final_regression_evaluation_id")
+            state.get("regression_baseline_id")
+            if already_good_completion
+            else (
+                None
+                if final_regression_is_original_baseline
+                else final_regression_evaluation_id
+            )
+            or (winning_iteration or {}).get("regression_evaluation_id")
+            or winning_candidate_accuracy_eval_id
             or state.get("last_accepted_acc_eval_id")
             or current_regression_baseline_id
         )
         baseline_feedback_metrics = _metrics_with_report_alignment(
-            state.get("recent_initial_baseline_metrics") or state.get("recent_baseline_metrics"),
+            baseline_feedback_source,
             run_summary.get("baseline_fb_ac1"),
         )
         baseline_accuracy_metrics = _metrics_with_report_alignment(
-            state.get("regression_initial_baseline_metrics") or state.get("regression_baseline_metrics"),
+            baseline_accuracy_source,
             run_summary.get("baseline_regression_ac1"),
         )
         winning_feedback_metrics = _metrics_with_report_alignment(
@@ -663,6 +811,7 @@ class OptimizerResultsService:
                     or run_summary.get("cycles")
                     or None
                 ),
+                "completion_reason": completion_reason,
                 "stop_reason": stop_reason,
                 "terminal_state": terminal_state,
                 "partial_failures": partial_failures,
@@ -1221,6 +1370,14 @@ class OptimizerResultsService:
                 f"Procedure {procedure_id} is not indexed. Run 'plexus procedure index-optimizer-run {procedure_id}' first."
             )
         manifest = self.load_indexed_manifest_for_procedure(procedure)
+        task_id = artifact_pointer.get("task_id")
+        task = None
+        if isinstance(task_id, str) and task_id:
+            task = self._find_task_for_procedure(
+                procedure_id=procedure_id,
+                account_id=str(procedure.get("accountId") or ""),
+                explicit_task_id=task_id,
+            )
         cycles = [
             {
                 "cycle": cycle.get("cycle"),
@@ -1260,6 +1417,26 @@ class OptimizerResultsService:
         winning_feedback_metrics = raw_best.get("winning_feedback_metrics") or {}
         winning_accuracy_metrics = raw_best.get("winning_accuracy_metrics") or {}
         raw_status = (manifest.get("procedure") or {}).get("status")
+        legacy_baselines_already_good = _legacy_indexed_baselines_already_good(
+            procedure=procedure,
+            task=task,
+            summary=raw_summary,
+            baseline=raw_baseline,
+            best=raw_best,
+            cycles=manifest.get("cycles"),
+        )
+        completion_reason = (
+            "legacy_baselines_already_good"
+            if legacy_baselines_already_good
+            else raw_summary.get("completion_reason")
+        )
+        procedure_payload = dict(manifest.get("procedure") or {})
+        procedure_payload["status"] = procedure.get("status") or raw_status
+        if task is not None:
+            procedure_payload["task_id"] = task.id
+            procedure_payload["task_status"] = task.status
+            procedure_payload["task_target"] = getattr(task, "target", None)
+            procedure_payload["task_command"] = getattr(task, "command", None)
         end_of_run_report = raw_summary.get("end_of_run_report")
         report_evidence = (
             end_of_run_report.get("evidence")
@@ -1285,13 +1462,16 @@ class OptimizerResultsService:
         effective_status = terminal_state or raw_status
         if not terminal_state and stop_reason and str(raw_status or "").upper() == "RUNNING":
             effective_status = "COMPLETED"
+        if legacy_baselines_already_good:
+            effective_status = "COMPLETED"
         payload: Dict[str, Any] = {
             "procedure_id": procedure_id,
-            "procedure": manifest.get("procedure"),
+            "procedure": procedure_payload,
             "summary": {
                 "current_cycle": raw_summary.get("current_cycle"),
                 "completed_cycles": raw_summary.get("completed_cycles"),
                 "configured_max_iterations": raw_summary.get("configured_max_iterations"),
+                "completion_reason": completion_reason,
                 "stop_reason": stop_reason,
                 "terminal_state": terminal_state,
                 "effective_status": effective_status,
@@ -1314,12 +1494,34 @@ class OptimizerResultsService:
                 "accuracy_accuracy": baseline_accuracy_metrics.get("accuracy"),
             },
             "best": {
-                "winning_version_id": raw_best.get("winning_version_id"),
-                "last_accepted_version_id": raw_best.get("last_accepted_version_id"),
-                "best_feedback_evaluation_id": raw_best.get("best_feedback_evaluation_id"),
-                "best_feedback_evaluation_url": _evaluation_url(raw_best.get("best_feedback_evaluation_id")),
-                "best_accuracy_evaluation_id": raw_best.get("best_accuracy_evaluation_id"),
-                "best_accuracy_evaluation_url": _evaluation_url(raw_best.get("best_accuracy_evaluation_id")),
+                "winning_version_id": (
+                    raw_baseline.get("version_id")
+                    if legacy_baselines_already_good
+                    else raw_best.get("winning_version_id")
+                ),
+                "last_accepted_version_id": (
+                    raw_best.get("last_accepted_version_id")
+                ),
+                "best_feedback_evaluation_id": (
+                    raw_baseline.get("original_feedback_evaluation_id")
+                    if legacy_baselines_already_good
+                    else raw_best.get("best_feedback_evaluation_id")
+                ),
+                "best_feedback_evaluation_url": _evaluation_url(
+                    raw_baseline.get("original_feedback_evaluation_id")
+                    if legacy_baselines_already_good
+                    else raw_best.get("best_feedback_evaluation_id")
+                ),
+                "best_accuracy_evaluation_id": (
+                    raw_baseline.get("original_accuracy_evaluation_id")
+                    if legacy_baselines_already_good
+                    else raw_best.get("best_accuracy_evaluation_id")
+                ),
+                "best_accuracy_evaluation_url": _evaluation_url(
+                    raw_baseline.get("original_accuracy_evaluation_id")
+                    if legacy_baselines_already_good
+                    else raw_best.get("best_accuracy_evaluation_id")
+                ),
                 "feedback_alignment": winning_feedback_metrics.get("alignment"),
                 "feedback_accuracy": winning_feedback_metrics.get("accuracy"),
                 "accuracy_alignment": winning_accuracy_metrics.get("alignment"),
@@ -1332,7 +1534,6 @@ class OptimizerResultsService:
                 "rca_complete": rca_complete,
             },
         }
-        task_id = artifact_pointer.get("task_id")
         if (include_runtime_log or include_events) and (not isinstance(task_id, str) or not task_id):
             raise RuntimeError("Optimizer artifact pointer is missing task_id.")
         if include_runtime_log:

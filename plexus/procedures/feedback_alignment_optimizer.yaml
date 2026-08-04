@@ -1100,14 +1100,16 @@ code: |
       local waited = plexus.handle.await({id = h.id, timeout = EVAL_AWAIT_POLL_TIMEOUT})
       -- After await, the evaluation data lives in waited.evaluation.
       local eval_data = waited.evaluation
-      if not eval_data then
-        -- If evaluation_id is available, fetch directly.
-        local eval_id = waited.evaluation_id
-          or (type(waited.dispatch_result) == "table" and waited.dispatch_result.evaluation_id)
-        if eval_id then
-          local ok, info = pcall(function() return plexus.evaluation.info({evaluation_id = eval_id}) end)
-          if ok and type(info) == "table" then eval_data = info end
-        end
+      -- A terminal handle payload can be a compact snapshot without the
+      -- immutable Evaluation id.  Such a snapshot is useful for progress but
+      -- is not sufficient candidate evidence: refresh the exact Evaluation
+      -- whenever its id is available and the payload cannot identify itself.
+      local eval_id = waited.evaluation_id
+        or (type(waited.dispatch_result) == "table" and waited.dispatch_result.evaluation_id)
+        or (type(eval_data) == "table" and (eval_data.evaluation_id or eval_data.id))
+      if eval_id and (type(eval_data) ~= "table" or not (eval_data.id or eval_data.evaluation_id)) then
+        local ok, info = pcall(function() return plexus.evaluation.info({evaluation_id = eval_id}) end)
+        if ok and type(info) == "table" then eval_data = info end
       end
       if not eval_data then
         local waited_status = tostring(waited.status or "")
@@ -1147,13 +1149,19 @@ code: |
       if eval_status == "FAILED" or eval_status == "CANCELLED" or eval_status == "CANCELED" then
         local eval_error = (eval_data and (eval_data.error_message or eval_data.errorMessage or eval_data.error))
           or waited.error_message or waited.errorMessage or waited.error
+        local terminal_evaluation_id = (eval_data and (eval_data.evaluation_id or eval_data.id))
+          or waited.evaluation_id
         local error_suffix = ""
         if eval_error ~= nil then
           error_suffix = " error_message=" .. tostring(eval_error)
         end
         return {
+          id = terminal_evaluation_id,
+          evaluation_id = terminal_evaluation_id,
+          status = tostring((eval_data and eval_data.status) or waited.status),
+          terminal_failure = true,
           error = "Evaluation did not complete: status=" .. tostring((eval_data and eval_data.status) or waited.status)
-            .. " evaluation_id=" .. tostring((eval_data and (eval_data.evaluation_id or eval_data.id)) or waited.evaluation_id or "")
+            .. " evaluation_id=" .. tostring(terminal_evaluation_id or "")
             .. error_suffix
         }
       end
@@ -5873,6 +5881,30 @@ code: |
   local acc_perfect = not regression_available or (regression_baseline_metrics and regression_baseline_metrics.alignment >= 0.99)
   if recent_baseline_metrics.alignment >= 0.99 and acc_perfect then
     local reason = "Both baselines already at 99%+ alignment — nothing to optimize."
+    local optimization_completed_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+    local already_good_summary = {
+      completion_reason = "baselines_already_good",
+      stop_reason = "already_good",
+      cycles = 0,
+      configured_max_iterations = params.max_iterations,
+      accepted = 0,
+      rejected = 0,
+      skipped = 0,
+      recent_baseline_id = recent_baseline_id,
+      regression_baseline_id = regression_baseline_id,
+      recent_baseline_metrics = recent_baseline_metrics,
+      regression_baseline_metrics = regression_baseline_metrics,
+      baseline_fb_ac1 = recent_baseline_metrics.alignment,
+      final_fb_ac1 = recent_baseline_metrics.alignment,
+      baseline_regression_ac1 = regression_baseline_metrics and regression_baseline_metrics.alignment or nil,
+      final_regression_ac1 = regression_baseline_metrics and regression_baseline_metrics.alignment or nil,
+      champion_version_id = champion_version_id,
+      total_fb_improvement = 0,
+      total_acc_improvement = 0,
+    }
+    State.set("optimization_complete", true)
+    State.set("optimization_completed_at", optimization_completed_at)
+    State.set("optimizer_result_summary", already_good_summary)
     Human.notify({message = reason, level = "info"})
     return {
       success = true,
@@ -7305,7 +7337,10 @@ code: |
         local base_idx = (i - 1) * evals_per
         if regression_available then
           local acc_r = batch_results and batch_results[base_idx + 1]
-          if acc_r and (acc_r.id or acc_r.evaluation_id) then
+          if acc_r and acc_r.terminal_failure and (acc_r.id or acc_r.evaluation_id) then
+            sv.acc_eval_id = acc_r.id or acc_r.evaluation_id
+            sv.acc_evaluation_failure = acc_r
+          elseif acc_r and (acc_r.id or acc_r.evaluation_id) then
             sv.acc_metrics = extract_metrics(acc_r)
             sv.acc_cost_per_item = extract_cost_per_item(acc_r)
             sv.acc_deltas = calculate_deltas(sv.acc_metrics, regression_baseline_metrics)
@@ -7315,7 +7350,10 @@ code: |
           end
         end
         local fb_r = batch_results and batch_results[base_idx + evals_per]
-        if fb_r and (fb_r.id or fb_r.evaluation_id) then
+        if fb_r and fb_r.terminal_failure and (fb_r.id or fb_r.evaluation_id) then
+          sv.fb_eval_id = fb_r.id or fb_r.evaluation_id
+          sv.fb_evaluation_failure = fb_r
+        elseif fb_r and (fb_r.id or fb_r.evaluation_id) then
           local cohort_ok, cohort_error = require_exact_feedback_cohort(
             fb_r,
             recent_baseline_feedback_item_ids
@@ -7336,11 +7374,21 @@ code: |
       -- allow missing handles/metrics to become zero-delta candidate results:
       -- that would let synthesis reason from an unevaluated edit.
       local incomplete_candidates = {}
+      local terminal_evaluation_failures = {}
       for _, sv in ipairs(submitted_versions) do
-        sv.evaluation_incomplete = (not sv.fb_eval_id)
-          or (regression_available and not sv.acc_eval_id)
+        sv.evaluation_incomplete = (not sv.fb_eval_id and not sv.fb_evaluation_failure)
+          or (regression_available and not sv.acc_eval_id and not sv.acc_evaluation_failure)
         if sv.evaluation_incomplete then
           table.insert(incomplete_candidates, tostring(sv.version_id or sv.index))
+        end
+        if sv.fb_evaluation_failure or sv.acc_evaluation_failure then
+          local failure = sv.fb_evaluation_failure or sv.acc_evaluation_failure
+          sv.evaluation_rejection = failure.error or "required candidate evaluation failed"
+          table.insert(terminal_evaluation_failures, {
+            version_id = sv.version_id,
+            feedback_evaluation = sv.fb_evaluation_failure,
+            regression_evaluation = sv.acc_evaluation_failure,
+          })
         end
       end
       if #incomplete_candidates > 0 then
@@ -7352,6 +7400,41 @@ code: |
           message = incomplete_message,
         })
         error("candidate_evaluation_incomplete: " .. incomplete_message)
+      end
+
+      -- A terminal failed evaluation is durable rejection evidence, not a
+      -- missing comparison. Preserve the candidate and both evaluation
+      -- outcomes, reject it, and end this bounded run safely. Synthesis must
+      -- never reason from a candidate whose required safety evaluation failed.
+      if #terminal_evaluation_failures > 0 then
+        local failure_message = string.format(
+          "%d candidate(s) rejected because a required evaluation failed",
+          #terminal_evaluation_failures)
+        State.set("candidate_evaluation_failed", {
+          cycle = cycle,
+          failures = terminal_evaluation_failures,
+          message = failure_message,
+        })
+        for _, sv in ipairs(submitted_versions) do
+          sv.succeeded = false
+        end
+        table.insert(iterations, {
+          iteration = cycle,
+          accepted = false,
+          skip_reason = "candidate_evaluation_failed: " .. failure_message,
+          exploration_results = submitted_versions,
+          recent_metrics = submitted_versions[1] and submitted_versions[1].fb_metrics or nil,
+          regression_metrics = submitted_versions[1] and submitted_versions[1].acc_metrics or nil,
+          recent_deltas = submitted_versions[1] and submitted_versions[1].fb_deltas
+            or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+          regression_deltas = submitted_versions[1] and submitted_versions[1].acc_deltas
+            or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+        })
+        cycle_recorded = true
+        State.set("iterations", iterations)
+        stop_reason = "candidate_evaluation_failed"
+        Human.notify({message = failure_message .. "; no candidate was accepted or promoted.", level = "warning"})
+        return "break_cycle"
       end
 
       -- Classify hypotheses as succeeded/failed

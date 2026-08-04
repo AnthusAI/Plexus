@@ -693,6 +693,28 @@ def test_optimizer_yaml_final_reports_do_not_block_optimizer_completion():
     assert "final report deferred" not in code
 
 
+def test_optimizer_yaml_persists_structured_already_good_result_before_early_return():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    early_exit_start = code.index(
+        "if recent_baseline_metrics.alignment >= 0.99 and acc_perfect then"
+    )
+    early_return = code.index("  return {", early_exit_start)
+    early_exit = code[early_exit_start:early_return]
+
+    assert 'completion_reason = "baselines_already_good"' in early_exit
+    assert 'stop_reason = "already_good"' in early_exit
+    assert "recent_baseline_id = recent_baseline_id" in early_exit
+    assert "regression_baseline_id = regression_baseline_id" in early_exit
+    assert "baseline_fb_ac1 = recent_baseline_metrics.alignment" in early_exit
+    assert "baseline_regression_ac1 = regression_baseline_metrics and regression_baseline_metrics.alignment or nil" in early_exit
+    assert "champion_version_id = champion_version_id" in early_exit
+    assert "cycles = 0" in early_exit
+    assert 'State.set("optimization_complete", true)' in early_exit
+    assert 'State.set("optimizer_result_summary", already_good_summary)' in early_exit
+
+
 def test_optimizer_yaml_adds_report_phase_markers_for_context_capture():
     config = _load_optimizer_config()
     code = config["code"]
@@ -1194,6 +1216,113 @@ def test_optimizer_yaml_rejects_incomplete_candidate_evaluation_batches():
     assert "candidate_evaluation_incomplete" in code
     assert "Candidate evaluation batch returned no terminal evidence" in code
     assert "sv.evaluation_incomplete" in code
+
+
+def test_optimizer_recovers_exact_terminal_evaluation_when_handle_payload_omits_id():
+    from lupa import LuaRuntime
+
+    config = _load_optimizer_config()
+    code = config["code"]
+    start = code.index('local EVAL_AWAIT_POLL_TIMEOUT = "PT1M"')
+    end = code.index("-- Dispatch evaluations in bounded parallel batches")
+    block = code[start:end]
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    recover = lua.execute(
+        """
+local info_calls = 0
+local diag = function(_) end
+plexus = {
+  handle = {
+    await = function(_)
+      return {
+        status = "completed",
+        evaluation_id = "evaluation-1",
+        evaluation = {status = "COMPLETED", accuracy = 91.0}
+      }
+    end
+  },
+  evaluation = {
+    info = function(args)
+      info_calls = info_calls + 1
+      return {id = args.evaluation_id, status = "COMPLETED", accuracy = 91.0}
+    end,
+    find_recent = function(_) error("find_recent must not be used when the exact evaluation id is known") end
+  }
+}
+"""
+        + block
+        + """
+return function()
+  local result = _await_eval_handle({id = "handle-1"}, "candidate", {})
+  return {result = result, info_calls = info_calls}
+end
+"""
+    )
+
+    recovered = recover()
+
+    assert recovered["result"]["id"] == "evaluation-1"
+    assert recovered["info_calls"] == 1
+
+
+def test_optimizer_preserves_terminal_failed_evaluation_as_candidate_rejection_evidence():
+    from lupa import LuaRuntime
+
+    config = _load_optimizer_config()
+    code = config["code"]
+    start = code.index('local EVAL_AWAIT_POLL_TIMEOUT = "PT1M"')
+    end = code.index("-- Dispatch evaluations in bounded parallel batches")
+    block = code[start:end]
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    await_failed = lua.execute(
+        """
+local diag = function(_) end
+plexus = {
+  handle = {
+    await = function(_)
+      return {
+        status = "failed",
+        evaluation_id = "evaluation-failed-1",
+        evaluation = {
+          id = "evaluation-failed-1",
+          status = "FAILED",
+          errorMessage = "candidate score returned ERROR value"
+        }
+      }
+    end
+  },
+  evaluation = {
+    info = function(_) error("exact failed payload already has its id") end,
+    find_recent = function(_) error("failed evaluation must not use recent lookup") end
+  }
+}
+"""
+        + block
+        + """
+return function()
+  return _await_eval_handle({id = "handle-failed-1"}, "candidate", {})
+end
+"""
+    )
+
+    failed = await_failed()
+
+    assert failed["id"] == "evaluation-failed-1"
+    assert failed["status"] == "FAILED"
+    assert failed["terminal_failure"] is True
+    assert "candidate score returned ERROR value" in failed["error"]
+
+
+def test_optimizer_rejects_terminally_failed_candidate_without_marking_evidence_missing():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "sv.acc_evaluation_failure = acc_r" in code
+    assert "sv.fb_evaluation_failure = fb_r" in code
+    assert "not sv.acc_eval_id and not sv.acc_evaluation_failure" in code
+    assert "not sv.fb_eval_id and not sv.fb_evaluation_failure" in code
+    assert 'skip_reason = "candidate_evaluation_failed:' in code
+    assert 'State.set("candidate_evaluation_failed"' in code
 
 
 def test_optimizer_does_not_treat_elapsed_or_inactive_time_as_evaluation_failure():
