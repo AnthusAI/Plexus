@@ -3,7 +3,7 @@
   "title": "Expired command leases recover without silent loss",
   "description": "As an operator, I want interrupted commands to become recoverable after their execution lease expires, so that worker failure cannot silently lose long-running work.\n\nFeature: Recover interrupted commands\n  Scenario: A worker disappears during execution\n    Given a running command with a renewable execution lease\n    And the worker stops heartbeating before completion\n    When the lease expires\n    Then the command becomes eligible for a controlled retry\n    And a stale worker cannot complete the superseded attempt\n    And the task history records the interruption and retry",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,16 @@
       "author": "derek.norrbom",
       "text": "Additional behavior for this slice:\n\nFeature: Maintain ownership during long execution\n  Scenario: A healthy worker continues a long-running command\n    Given a worker holds an active command lease\n    When the configured heartbeat interval elapses during execution\n    Then the lifecycle lease is renewed before its expiry\n    And the broker delivery lease is extended\n    And completion uses the latest fencing token\n\n  Scenario: A worker loses its execution lease\n    Given a worker is executing a command\n    And another attempt supersedes its lease\n    When its next heartbeat is rejected\n    Then the stale worker is notified that ownership was lost\n    And it cannot report progress, complete, or acknowledge the delivery",
       "created_at": "2026-08-04T20:13:08.738600Z"
+    },
+    {
+      "id": "60eb18bb-d649-46c5-8c88-71856d2bb58a",
+      "author": "derek.norrbom",
+      "text": "Landed in develop through PR #535. Lease renewal, fencing-token rotation, delivery lease extension, and stale-worker rejection are merged.",
+      "created_at": "2026-08-04T22:52:26.141959Z"
     }
   ],
   "created_at": "2026-08-04T19:45:17.030122Z",
-  "updated_at": "2026-08-04T20:13:08.738600Z",
-  "closed_at": null,
+  "updated_at": "2026-08-04T22:52:26.168644Z",
+  "closed_at": "2026-08-04T22:52:26.168644Z",
   "custom": {}
 }

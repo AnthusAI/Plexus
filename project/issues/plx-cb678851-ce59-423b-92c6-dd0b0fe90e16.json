@@ -1,0 +1,37 @@
+{
+  "id": "plx-cb678851-ce59-423b-92c6-dd0b0fe90e16",
+  "title": "Implement the reusable AWS command state stack",
+  "description": "Implements story plx-21816d. Add a client-neutral CommandServiceStateStack under plexus/infrastructure/command_service. Provision a pk/sk DynamoDB table using on-demand billing, AWS-managed encryption, point-in-time recovery, deletion protection, and RETAIN; a standard SQS command queue with explicitly managed DLQ, encryption, retention, visibility, and redrive configuration; and a DLQ visibility alarm with optional operations-topic action. Expose stable resource attributes and outputs. Add CDK assertion tests, property validation, and a client-specific-value boundary scan. Do not add runtime adapters, Lambda, Fargate, API, dashboard, Celery, or legacy integration.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9f8a4048-4bd2-4cac-b6d7-d6af33dd7d98",
+      "author": "derek.norrbom",
+      "text": "Implemented the reusable command-service state stack within the bounded infrastructure scope. The stack defines a retained DynamoDB pk/sk table with on-demand billing, AWS-managed encryption, point-in-time recovery, and production-default deletion protection; retained SQS command/DLQ resources with managed encryption and configurable redrive settings; and an optional-topic DLQ alarm. Added strict validation, stable outputs/logical-ID coverage, public package export, and consumer/legacy-value scans.\n\nLocal validation (Python 3.11 where applicable):\n- python -m pytest infrastructure/tests/unit/test_command_service_state_stack.py -q — 27 passed\n- python -m pytest infrastructure/tests/unit/test_scoring_service_platform_stacks.py -q — 6 passed\n- python -m pytest infrastructure/tests/unit -q — 42 passed\n- python -m ruff check plexus/infrastructure/command_service infrastructure/tests/unit/test_command_service_state_stack.py — passed\n- python -m ruff format --check plexus/infrastructure/command_service infrastructure/tests/unit/test_command_service_state_stack.py — passed",
+      "created_at": "2026-08-04T23:00:59.761312Z"
+    },
+    {
+      "id": "ab7ff8d7-f308-4410-8762-bd221f6bc6ee",
+      "author": "derek.norrbom",
+      "text": "Review corrections completed: both queues now enforce TLS through generated resource policies, with synth coverage proving each policy denies sqs:* when aws:SecureTransport is false. The command queue now defaults ReceiveMessageWaitTimeSeconds to 20 for long polling, exposes a configurable receive_message_wait_time, and validates the SQS 0-20 second range.\n\nUpdated validation:\n- python -m pytest infrastructure/tests/unit/test_command_service_state_stack.py -q — 29 passed\n- python -m pytest infrastructure/tests/unit -q — 44 passed\n- python -m ruff check plexus/infrastructure/command_service infrastructure/tests/unit/test_command_service_state_stack.py — passed\n- python -m ruff format --check plexus/infrastructure/command_service infrastructure/tests/unit/test_command_service_state_stack.py — passed",
+      "created_at": "2026-08-04T23:03:24.279190Z"
+    },
+    {
+      "id": "acba4a67-a932-49ca-a6b5-d419af22bb1b",
+      "author": "derek.norrbom",
+      "text": "Implemented the reusable AWS command state stack with a retained encrypted pk/sk DynamoDB table, explicitly managed encrypted SQS command queue and DLQ, TLS-only queue policies, configurable redrive/retention/visibility, 20-second long polling, production-default deletion protection, stable outputs, and DLQ alarming. Direct review added TLS enforcement and long polling. Local validation: conda run -n py311 python -m pytest infrastructure/tests/unit/test_command_service_state_stack.py -q (29 passed); conda run -n py311 python -m pytest infrastructure/tests/unit -q (44 passed); conda run -n py311 python -m pytest tests/command_worker -q (80 passed); poetry run ruff check plexus/infrastructure/command_service infrastructure/tests/unit/test_command_service_state_stack.py; poetry run ruff format --check plexus/infrastructure/command_service infrastructure/tests/unit/test_command_service_state_stack.py; git diff --check. Runtime adapters and payload persistence/outbox semantics remain explicitly out of scope.",
+      "created_at": "2026-08-04T23:04:08.408407Z"
+    }
+  ],
+  "created_at": "2026-08-04T22:56:15.282926Z",
+  "updated_at": "2026-08-04T23:04:08.408407Z",
+  "closed_at": null,
+  "custom": {}
+}
