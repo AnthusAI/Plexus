@@ -29,6 +29,7 @@ class ProcessOutcome(str, Enum):
     ACTIVE_DUPLICATE = "active_duplicate"
     TERMINAL_DUPLICATE = "terminal_duplicate"
     LEASE_LOST = "lease_lost"
+    INTEGRITY_MISMATCH = "integrity_mismatch"
 
 
 @dataclass(slots=True)
@@ -152,6 +153,11 @@ class CommandWorker:
         if claim is ClaimStatus.TERMINAL:
             delivery.acknowledge()
             return ProcessOutcome.TERMINAL_DUPLICATE
+        if claim is ClaimStatus.INTEGRITY_MISMATCH:
+            delivery.quarantine(
+                "command envelope failed durable integrity verification"
+            )
+            return ProcessOutcome.INTEGRITY_MISMATCH
 
         context = _ExecutionContext(
             lifecycle=self._lifecycle,

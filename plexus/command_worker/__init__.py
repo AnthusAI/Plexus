@@ -1,9 +1,38 @@
-"""Portable command-worker lifecycle foundation."""
+"""Portable command service and worker foundation."""
 
-from .models import Claim, CommandEnvelope, JSONValue, ProgressUpdate
+from .application import (
+    AuthorizationDenied,
+    CommandNotFound,
+    CommandService,
+    IdempotencyConflict,
+    UUIDCommandIdGenerator,
+)
+from .models import (
+    AuditEvent,
+    AuditEventType,
+    AuthenticatedCommandContext,
+    AuthorizationDecision,
+    CancellationResult,
+    Claim,
+    CommandEnvelope,
+    CommandLimits,
+    CommandRecord,
+    CommandRequest,
+    CommandStatus,
+    JSONValue,
+    ProgressUpdate,
+    RequestDigest,
+    SubmissionDisposition,
+    SubmissionResult,
+    request_digest,
+)
 from .ports import (
+    AuditSink,
     ClaimStatus,
     Clock,
+    CommandAuthorizer,
+    CommandIdGenerator,
+    CommandRepository,
     Delivery,
     DrainSignal,
     ExecutionContext,
@@ -13,6 +42,7 @@ from .ports import (
     LifecycleStore,
     Transport,
 )
+from .repository import InMemoryCommandRepository
 from .scheduler import ThreadHeartbeatScheduler
 from .service import (
     CommandWorkerService,
@@ -24,27 +54,50 @@ from .service import (
 from .worker import CommandWorker, LeaseLostError, ProcessOutcome
 
 __all__ = [
+    "AuditEvent",
+    "AuditEventType",
+    "AuditSink",
+    "AuthenticatedCommandContext",
+    "AuthorizationDecision",
+    "AuthorizationDenied",
+    "CancellationResult",
     "Claim",
     "ClaimStatus",
     "Clock",
+    "CommandAuthorizer",
     "CommandEnvelope",
+    "CommandIdGenerator",
+    "CommandLimits",
+    "CommandNotFound",
+    "CommandRecord",
+    "CommandRepository",
+    "CommandRequest",
+    "CommandService",
+    "CommandStatus",
     "CommandWorker",
+    "CommandWorkerService",
     "Delivery",
     "DrainSignal",
+    "EventDrainSignal",
     "ExecutionContext",
     "Executor",
-    "EventDrainSignal",
     "HeartbeatHandle",
     "HeartbeatScheduler",
+    "IdempotencyConflict",
+    "InMemoryCommandRepository",
     "JSONValue",
     "LeaseLostError",
     "LifecycleStore",
     "ProcessOutcome",
     "ProgressUpdate",
-    "Transport",
-    "ThreadHeartbeatScheduler",
-    "CommandWorkerService",
+    "RequestDigest",
     "ServiceOutcome",
     "ServiceReceiveError",
     "ServiceStopReason",
+    "SubmissionDisposition",
+    "SubmissionResult",
+    "ThreadHeartbeatScheduler",
+    "Transport",
+    "UUIDCommandIdGenerator",
+    "request_digest",
 ]

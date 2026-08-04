@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c96dc651-f397-4a5b-a797-70598239f733",
+  "issue_id": "plx-7ae7c410-e74f-4cdb-8958-473e17ac992a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-04T21:49:23.903Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Perform a read-only threat model of the proposed portable command-service API and durable-state boundary. Analyze tenant isolation, authentication context, idempotency abuse, replay, command authorization, payload limits, sensitive data, result access, cancellation races, broker trust, confused-deputy risks, auditability, and provider portability. Return required contract safeguards and open decisions without editing source.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Threat model the portable command service boundary"
+  }
+}

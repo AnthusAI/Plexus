@@ -166,9 +166,9 @@ def _initialize(context) -> None:
     context.clock = MutableClock(datetime(2026, 8, 4, tzinfo=timezone.utc))
     context.store = MemoryLifecycleStore(context.events)
     context.envelope = CommandEnvelope(
-        schema_version=1,
+        schema_version=2,
         command_id="command-1",
-        task_id="task-1",
+        tenant_id="tenant-1",
         target="evaluation",
         idempotency_key="task-1:evaluation",
         created_at=context.clock.now(),
