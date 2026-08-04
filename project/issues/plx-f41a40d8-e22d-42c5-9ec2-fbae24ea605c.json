@@ -1,0 +1,18 @@
+{
+  "id": "plx-f41a40d8-e22d-42c5-9ec2-fbae24ea605c",
+  "title": "AWS command transport uses explicitly managed infrastructure",
+  "description": "As a platform operator, I want the AWS command transport and worker service provisioned explicitly, so that runtime startup does not create infrastructure or depend on static cloud credentials.\n\nFeature: Managed AWS command transport\n  Scenario: The AWS worker service starts\n    Given its queue, dead-letter queue, roles, logs, and service were deployed through infrastructure as code\n    When a worker starts with its workload identity\n    Then it consumes only its configured queue\n    And it does not create queues or result tables\n    And it does not require static cloud access keys",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-08-04T19:45:27.747573Z",
+  "updated_at": "2026-08-04T19:45:27.747573Z",
+  "closed_at": null,
+  "custom": {}
+}

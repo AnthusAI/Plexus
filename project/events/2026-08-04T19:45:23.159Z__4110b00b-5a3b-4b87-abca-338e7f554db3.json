@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4110b00b-5a3b-4b87-abca-338e7f554db3",
+  "issue_id": "plx-35cc9a8d-a6c4-44a1-a3a3-88b89f5c16e4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-04T19:45:23.159Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "As an operator, I want worker revisions to drain active commands before termination, so that routine deployments do not destroy long-running work.\n\nFeature: Drain workers safely\n  Scenario: A new worker revision is deployed while a command is running\n    Given an old worker revision holds an active command lease\n    When the deployment marks that revision as draining\n    Then the old worker accepts no new commands\n    And the active command may finish or transfer through the recovery protocol\n    And the new revision accepts newly announced commands\n    And deployment does not silently terminate the active command",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Workers drain active commands safely during deployment"
+  }
+}
