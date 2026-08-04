@@ -2114,7 +2114,6 @@ export function OptimizationRunStatusPresentation({
             <p className="text-sm text-muted-foreground">
               {label(lifecycleStatus)} · Inventory {label(inventoryCoverageStatus).toLowerCase()} · Analysis {label(analysisCoverageStatus).toLowerCase()}
             </p>
-            <h2 className="mt-1 text-2xl font-semibold">Optimization opportunity survey</h2>
             {overview.current_activity && <p className="mt-2 max-w-3xl text-muted-foreground">{overview.current_activity}</p>}
           </div>
           <div className="rounded-md bg-primary/10 px-3 py-2 text-sm font-medium text-primary">

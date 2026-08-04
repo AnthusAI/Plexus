@@ -19,6 +19,9 @@ const linkedTask = {
       display_title: 'Scorecard-scoped optimization portfolio',
       display_scope: 'scorecard names beginning with "Internal selector"',
     },
+    run_parameters: {
+      scorecard_name_prefixes: ['Example'],
+    },
   }),
   createdAt: '2026-07-30T12:00:00.000Z',
   startedAt: '2026-07-30T12:00:01.000Z',
@@ -49,8 +52,8 @@ describe('buildLinkedProcedureSummary', () => {
 
     expect(summary).toMatchObject({
       id: 'procedure-1',
-      procedureType: 'Optimization opportunity survey',
-      displayTitle: 'Scorecard-scoped optimization portfolio',
+      procedureType: 'Feedback survey',
+      displayTitle: 'Feedback survey: Example',
       displayScope: 'Focused scorecard portfolio',
       createdByUserId: 'user-1',
       task: {
@@ -96,7 +99,7 @@ describe('buildLinkedProcedureSummary', () => {
 
     expect(summary?.status).toBe('INCOMPLETE')
     expect(summary?.task?.status).toBe('COMPLETED')
-    expect(linkedProcedureSubtitle(summary!)).toBe('Optimization opportunity survey • Incomplete')
+    expect(linkedProcedureSubtitle(summary!)).toBe('Incomplete')
   })
 
   it('uses the living Report revision when its terminal outcome arrives before Task metadata refreshes', () => {

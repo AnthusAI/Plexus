@@ -196,6 +196,22 @@ const selectedScorecardScope = (runParameters: Record<string, any>): string | un
   return parts.join(' plus ')
 }
 
+const feedbackSurveyTitle = (
+  runParameters: Record<string, any>,
+  storedTitle: string,
+  storedKind: unknown,
+): string => {
+  if (/^Feedback survey:/i.test(storedTitle)) return storedTitle
+  const prefixes = asStringList(runParameters.scorecard_name_prefixes)
+  if (prefixes.length === 1) return `Feedback survey: ${prefixes[0]}`
+  if (storedKind === 'account_wide_portfolio' || /account-wide/i.test(storedTitle)) {
+    return 'Feedback survey: All'
+  }
+  const ids = Array.isArray(runParameters.scorecard_ids) ? runParameters.scorecard_ids : []
+  if (ids.length === 0 && prefixes.length === 0 && !storedTitle) return 'Feedback survey: All'
+  return 'Feedback survey: Selected scorecards'
+}
+
 const procedureOperatorIdentity = (
   procedure: ProcedureTaskData,
   taskMetadata: Record<string, any>,
@@ -229,11 +245,11 @@ const procedureOperatorIdentity = (
 
   if (/portfolio/i.test(rawType) || /portfolio/i.test(procedure.title || '')) {
     return {
-      type: 'Optimization opportunity survey',
-      displayTitle: procedure.displayTitle || storedTitle || (
-        selectedScope
-          ? 'Scorecard-scoped optimization portfolio'
-          : 'Account-wide optimization portfolio'
+      type: 'Feedback survey',
+      displayTitle: feedbackSurveyTitle(
+        runParameters,
+        procedure.displayTitle || storedTitle,
+        storedIdentity.kind,
       ),
       displayScope: procedure.displayScope || storedScope || selectedScope || 'All scorecards',
     }
@@ -1141,12 +1157,16 @@ export default function ProcedureTask({
     const normalized = description.trim()
     if (
       normalized === `Procedure workflow for ${procedure.id}` ||
-      /^Procedure workflow for [0-9a-f]{8}-[0-9a-f-]{27}$/i.test(normalized)
+      /^Procedure workflow for [0-9a-f]{8}-[0-9a-f-]{27}$/i.test(normalized) ||
+      (
+        operatorIdentity.type === 'Feedback survey' &&
+        /^(Account-wide|Scorecard-scoped) optimization portfolio\b/i.test(normalized)
+      )
     ) {
       return undefined
     }
     return description
-  }, [procedure.description, procedure.id, procedure.task?.description])
+  }, [operatorIdentity.type, procedure.description, procedure.id, procedure.task?.description])
   const dispatchDisplayMode = procedure.task ? (dispatchMode || (hasLocalProcedureRuntime ? 'local' : undefined)) : 'pending'
   const dispatchIndicator = useMemo(() => {
     if (dispatchDisplayMode === 'pending') {
@@ -1180,7 +1200,7 @@ export default function ProcedureTask({
 
   const taskObject = {
     id: procedure.id,
-    type: operatorIdentity.type,
+    type: operatorIdentity.type === 'Feedback survey' ? '' : operatorIdentity.type,
     name: operatorIdentity.displayTitle,
     description: operatorDescription,
     scorecard: procedure.scorecard?.name || stateScorecardName || '',
@@ -1361,7 +1381,9 @@ export default function ProcedureTask({
         <div className="p-0 flex flex-col items-start w-full max-w-full">
           <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
             <div className="flex flex-col leading-none min-w-0 flex-1 overflow-hidden">
-              {(hasGridActions || operatorIdentity.type !== 'Optimization Procedure') && (
+              {operatorIdentity.type !== 'Feedback survey' && (
+                hasGridActions || operatorIdentity.type !== 'Optimization Procedure'
+              ) && (
                 <div className="mb-1 flex items-center gap-1.5 text-sm font-semibold min-w-0">
                   <Waypoints className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   <span className="truncate">{taskObject.type}</span>

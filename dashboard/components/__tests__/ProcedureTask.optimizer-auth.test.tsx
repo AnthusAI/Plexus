@@ -404,8 +404,8 @@ describe('ProcedureTask optimizer auth flow', () => {
       />
     )
 
-    expect(screen.getByText('Optimization opportunity survey')).toBeInTheDocument()
-    expect(screen.getByText('Account-wide optimization portfolio')).toBeInTheDocument()
+    expect(screen.getByText('Feedback survey: All')).toBeInTheDocument()
+    expect(screen.queryByText(/^Feedback survey$/)).not.toBeInTheDocument()
     expect(screen.getByText('All scorecards')).toBeInTheDocument()
     expect(screen.queryByText(/^Optimization Procedure$/)).not.toBeInTheDocument()
     expect(screen.queryByText(/^Portfolio Optimization$/)).not.toBeInTheDocument()
@@ -438,7 +438,7 @@ describe('ProcedureTask optimizer auth flow', () => {
       />
     )
 
-    expect(screen.getByText('Scorecard-scoped optimization portfolio')).toBeInTheDocument()
+    expect(screen.getByText('Feedback survey: Example')).toBeInTheDocument()
     expect(screen.getByText('1 selected scorecard plus scorecard names beginning with "Example"')).toBeInTheDocument()
     expect(screen.queryByText(/3f9b66cb/)).not.toBeInTheDocument()
 

@@ -677,7 +677,7 @@ describe('OptimizationRunStatus', () => {
       />,
     )
 
-    await screen.findByText('Optimization opportunity survey')
+    await screen.findByText('Preparing human decisions.')
     expect(screen.queryByText('12 scorecards inspected')).not.toBeInTheDocument()
   })
 
@@ -1245,7 +1245,7 @@ describe('OptimizationRunStatus', () => {
       />,
     )
 
-    expect(screen.getByRole('heading', { name: 'Optimization opportunity survey' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Optimization opportunity survey' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Optimization execution funnel')).toHaveTextContent(
       '1105Surveyed696Assessed1Diagnosed0Selected0Launched0Evaluated0Improved',
     )

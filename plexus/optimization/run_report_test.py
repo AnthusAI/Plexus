@@ -518,16 +518,16 @@ def test_start_is_self_identifying_in_the_task_report_list_and_cover(monkeypatch
     state = service.start_or_resume({"scope": {}})
 
     assert state.task.type == "OptimizationRunReport"
-    assert state.task.description == "Account-wide optimization portfolio — All scorecards"
-    assert state.report.name == "Account-wide optimization portfolio"
-    assert state.report.parameters["_display_title"] == "Account-wide optimization portfolio"
-    assert state.report.parameters["_display_subtitle"] == "Periodic analysis across all scorecards"
+    assert state.task.description == "Feedback survey: All — All scorecards"
+    assert state.report.name == "Feedback survey: All"
+    assert state.report.parameters["_display_title"] == "Feedback survey: All"
+    assert state.report.parameters["_display_subtitle"] == "All scorecards"
     assert state.report.parameters["optimization_run"]["operator_identity"] == {
         "kind": "account_wide_portfolio",
-        "display_title": "Account-wide optimization portfolio",
+        "display_title": "Feedback survey: All",
         "display_scope": "All scorecards",
     }
-    assert state.report.output.startswith("# Account-wide optimization portfolio")
+    assert state.report.output.startswith("# Feedback survey: All")
     assert "This living report follows the linked procedure" in state.report.output
     assert "Scope:" not in state.report.output
     assert "Current phase:" not in state.report.output
@@ -586,7 +586,7 @@ def test_milestone_cover_projects_safe_progress_and_preserves_identity_on_finali
     )
 
     cover = state.report.output
-    assert cover.startswith("# Account-wide optimization portfolio")
+    assert cover.startswith("# Feedback survey: All")
     assert "Current phase:" not in cover
     assert "Checking deterministic readiness" in cover
     assert "Semantic diagnosis begins" in cover
@@ -603,7 +603,7 @@ def test_milestone_cover_projects_safe_progress_and_preserves_identity_on_finali
 
     service.finalize(status="incomplete")
 
-    assert state.report.output.startswith("# Account-wide optimization portfolio")
+    assert state.report.output.startswith("# Feedback survey: All")
     assert "Status: incomplete" in state.report.output
     assert "Checking deterministic readiness" in state.report.output
 
@@ -2448,11 +2448,11 @@ def test_procedure_owned_task_is_reused_without_duplicate_task_or_stage_creation
     assert metadata["optimization_run_final_status"] == "complete"
     assert metadata["operator_identity"] == {
         "kind": "scorecard_scoped_portfolio",
-        "display_title": "Scorecard-scoped optimization portfolio",
+        "display_title": "Feedback survey: Example portfolio",
         "display_scope": 'scorecard names beginning with "Example portfolio"',
     }
     assert procedure_task.description == (
-        'Scorecard-scoped optimization portfolio — scorecard names beginning with '
+        'Feedback survey: Example portfolio — scorecard names beginning with '
         '"Example portfolio"'
     )
     assert not any(update.get("status") == "COMPLETED" for update in procedure_task.updates)

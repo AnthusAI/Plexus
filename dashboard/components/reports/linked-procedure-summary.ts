@@ -122,6 +122,24 @@ const conciseScope = (identity: Record<string, any>): string | undefined => {
   return undefined
 }
 
+const feedbackSurveyTitle = (
+  metadata: Record<string, any>,
+  identity: Record<string, any>,
+  fallback: string,
+): string => {
+  const stored = typeof identity.display_title === 'string' ? identity.display_title.trim() : ''
+  if (/^Feedback survey:/i.test(stored)) return stored
+  const runParameters = record(metadata.run_parameters)
+  const prefixes = Array.isArray(runParameters.scorecard_name_prefixes)
+    ? runParameters.scorecard_name_prefixes.filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+    : []
+  if (prefixes.length === 1) return `Feedback survey: ${prefixes[0].trim()}`
+  if (identity.kind === 'account_wide_portfolio' || /account-wide/i.test(stored || fallback)) {
+    return 'Feedback survey: All'
+  }
+  return 'Feedback survey: Selected scorecards'
+}
+
 const optimizationLifecycleStatus = (
   metadata: Record<string, any>,
   fallback?: string | null,
@@ -157,7 +175,7 @@ export const linkedProcedureSubtitle = (procedure: ProcedureTaskData): string =>
   const type = procedure.procedureType || procedure.task?.type || 'Procedure'
   const rawStatus = procedure.status || procedure.task?.status || 'PENDING'
   const status = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase()
-  return `${type} • ${status}`
+  return type === 'Feedback survey' ? status : `${type} • ${status}`
 }
 
 export const buildLinkedProcedureSummary = ({
@@ -183,13 +201,15 @@ export const buildLinkedProcedureSummary = ({
     /portfolio/i.test(storedProcedureType)
     || /portfolio/i.test(String(identity.kind || ''))
   )
-    ? 'Optimization opportunity survey'
+    ? 'Feedback survey'
     : storedProcedureType
-  const displayTitle = (
-    typeof identity.display_title === 'string' && identity.display_title.trim()
-      ? identity.display_title.trim()
-      : reportName
-  )
+  const displayTitle = procedureType === 'Feedback survey'
+    ? feedbackSurveyTitle(metadata, identity, reportName)
+    : (
+        typeof identity.display_title === 'string' && identity.display_title.trim()
+          ? identity.display_title.trim()
+          : reportName
+      )
   const lifecycleStatus = optimizationLifecycleStatus(
     metadata,
     task.status,

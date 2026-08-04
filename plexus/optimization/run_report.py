@@ -4319,9 +4319,9 @@ class OptimizationRunReportService:
     @staticmethod
     def _display_subtitle(identity: OptimizationOperatorIdentity) -> str:
         if identity.kind == "account_wide_portfolio":
-            return "Periodic analysis across all scorecards"
+            return "All scorecards"
         if identity.kind == "scorecard_scoped_portfolio":
-            return "Focused scorecard portfolio analysis"
+            return identity.display_scope
         if identity.kind == "single_score":
             return "Focused analysis and optimization of one score"
         return "Living optimization analysis"

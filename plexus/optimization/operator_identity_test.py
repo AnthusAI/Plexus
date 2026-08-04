@@ -7,7 +7,7 @@ def test_account_wide_portfolio_identity_is_explicit_from_the_start():
     identity = optimization_operator_identity(scope={})
 
     assert identity.kind == "account_wide_portfolio"
-    assert identity.display_title == "Account-wide optimization portfolio"
+    assert identity.display_title == "Feedback survey: All"
     assert identity.display_scope == "All scorecards"
 
 
@@ -18,7 +18,7 @@ def test_prefix_and_exact_scorecard_scope_is_human_readable_without_opaque_ids()
     })
 
     assert identity.kind == "scorecard_scoped_portfolio"
-    assert identity.display_title == "Scorecard-scoped optimization portfolio"
+    assert identity.display_title == "Feedback survey: Selected scorecards"
     assert identity.display_scope == (
         '1 selected scorecard plus scorecard names beginning with "Example" or "Sample"'
     )
@@ -32,7 +32,7 @@ def test_lua_array_mappings_preserve_scorecard_scoped_identity():
     })
 
     assert identity.kind == "scorecard_scoped_portfolio"
-    assert identity.display_title == "Scorecard-scoped optimization portfolio"
+    assert identity.display_title == "Feedback survey: Example"
     assert identity.display_scope == 'scorecard names beginning with "Example"'
 
 
@@ -43,7 +43,17 @@ def test_exact_scope_can_be_enriched_with_names_after_exhaustive_enumeration():
     )
 
     assert identity.display_scope == "Example Sales and Example Support"
+    assert identity.display_title == "Feedback survey: Selected scorecards"
     assert "opaque" not in identity.display_scope
+
+
+def test_one_named_scorecard_scope_is_used_in_the_feedback_survey_title():
+    identity = optimization_operator_identity(
+        scope={"scorecard_ids": ["opaque-one"]},
+        matched_scorecard_names=["Example Support"],
+    )
+
+    assert identity.display_title == "Feedback survey: Example Support"
 
 
 def test_single_score_identity_names_the_scorecard_and_score():

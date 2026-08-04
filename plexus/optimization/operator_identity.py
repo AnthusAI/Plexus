@@ -73,6 +73,22 @@ def _quoted_prefixes(prefixes: Sequence[str]) -> str:
     return f"{', '.join(quoted[:-1])}, or {quoted[-1]}"
 
 
+def _feedback_survey_title(
+    *,
+    prefixes: Sequence[str],
+    safe_scorecard: str | None,
+    matched_names: Sequence[str],
+) -> str:
+    """Name a survey by the operator's useful scope, not its implementation."""
+    if len(prefixes) == 1:
+        return f"Feedback survey: {prefixes[0]}"
+    if safe_scorecard:
+        return f"Feedback survey: {safe_scorecard}"
+    if len(matched_names) == 1:
+        return f"Feedback survey: {matched_names[0]}"
+    return "Feedback survey: Selected scorecards"
+
+
 def optimization_operator_identity(
     *,
     scope: Mapping[str, Any] | None = None,
@@ -104,7 +120,7 @@ def optimization_operator_identity(
     if not scoped:
         return OptimizationOperatorIdentity(
             kind="account_wide_portfolio",
-            display_title="Account-wide optimization portfolio",
+            display_title="Feedback survey: All",
             display_scope="All scorecards",
         )
 
@@ -125,6 +141,10 @@ def optimization_operator_identity(
 
     return OptimizationOperatorIdentity(
         kind="scorecard_scoped_portfolio",
-        display_title="Scorecard-scoped optimization portfolio",
+        display_title=_feedback_survey_title(
+            prefixes=prefixes,
+            safe_scorecard=safe_scorecard,
+            matched_names=matched_names,
+        ),
         display_scope=display_scope,
     )

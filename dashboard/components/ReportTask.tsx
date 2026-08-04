@@ -235,7 +235,10 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   // Explicitly set the name and description in the correct order
   // name = Report name (from report.name)
   // description = Report configuration description
-  const reportName = task.data?.configName || task.data?.name || '';
+  const linkedSurveyTitle = linkedProcedure?.displayTitle?.match(/^Feedback survey:/i)
+    ? linkedProcedure.displayTitle
+    : undefined;
+  const reportName = linkedSurveyTitle || task.data?.configName || task.data?.name || '';
   const reportDescription = getValueOrEmpty(task.data?.configDescription);
 
   // Calculate processing duration if we have both timestamps
@@ -525,7 +528,15 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     strong: ({node, ...props}: any) => <strong className="font-semibold" {...props} />,
     ul: ({node, ...props}: any) => <ul className="list-disc pl-5 mb-2" {...props} />,
     li: ({node, ...props}: any) => <li className="mb-1" {...props} />,
-    h1: ({node, ...props}: any) => <h1 className="text-2xl font-bold mt-1 mb-1 leading-tight" {...props} />,
+    h1: ({node, children, ...props}: any) => {
+      const legacyPortfolioHeading = typeof children === 'string'
+        && /optimization portfolio/i.test(children)
+      return (
+        <h1 className="text-2xl font-bold mt-1 mb-1 leading-tight" {...props}>
+          {legacyPortfolioHeading && linkedSurveyTitle ? linkedSurveyTitle : children}
+        </h1>
+      )
+    },
     h2: ({node, ...props}: any) => <h2 className="text-xl font-bold mt-1 mb-1 leading-tight" {...props} />,
     h3: ({node, ...props}: any) => <h3 className="text-lg font-bold mt-3 mb-1" {...props} />,
     h4: ({node, ...props}: any) => <h4 className="text-base font-bold mt-2 mb-1" {...props} />,
@@ -535,7 +546,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         <div className="w-full min-w-0 max-w-full" {...props}>{children}</div>
       </div>
     ),
-  }), [customCodeBlockRenderer]);
+  }), [customCodeBlockRenderer, linkedSurveyTitle]);
 
   // Content for bare variant
   const bareContent = (

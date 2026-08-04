@@ -19,6 +19,12 @@ jest.mock('react-markdown', () => {
         }),
       )
     }
+    if (source.startsWith('# ')) {
+      return React.createElement(components.h1, {
+        node: { data: {} },
+        children: source.slice(2),
+      })
+    }
     return React.createElement(React.Fragment, null, children)
   }
 })
@@ -145,17 +151,18 @@ describe('ReportTask optimization status integration', () => {
       />,
     )
 
-    expect(await screen.findByText('Optimization opportunity survey')).toBeInTheDocument()
+    expect(await screen.findByText('Preparing the frozen portfolio.')).toBeInTheDocument()
+    expect(screen.queryByText('Optimization opportunity survey')).not.toBeInTheDocument()
     expect(screen.getByText('Preparing the frozen portfolio.')).toBeInTheDocument()
   })
 
   it('embeds the standard linked Procedure Task summary ahead of report findings', async () => {
     const linkedProcedure = {
       id: 'procedure-1',
-      title: 'Scorecard-scoped optimization portfolio',
-      displayTitle: 'Scorecard-scoped optimization portfolio',
+      title: 'Feedback survey: Example',
+      displayTitle: 'Feedback survey: Example',
       displayScope: 'Focused scorecard portfolio',
-      procedureType: 'Portfolio Optimization',
+      procedureType: 'Feedback survey',
       featured: false,
       createdAt: '2026-07-30T00:00:00.000Z',
       updatedAt: '2026-07-30T00:01:00.000Z',
@@ -186,7 +193,7 @@ describe('ReportTask optimization status integration', () => {
             id: 'report-1',
             title: 'Scorecard-scoped optimization portfolio',
             configName: 'Scorecard-scoped optimization portfolio',
-            output: '# Findings',
+            output: '# Scorecard-scoped optimization portfolio',
             reportBlocks: [],
           },
         } as any}
@@ -194,9 +201,10 @@ describe('ReportTask optimization status integration', () => {
     )
 
     expect(screen.getByTestId('linked-procedure-task-summary')).toHaveTextContent(
-      'Scorecard-scoped optimization portfolio — RUNNING',
+      'Feedback survey: Example — RUNNING',
     )
-    expect(screen.getByText('# Findings')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Feedback survey: Example' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Scorecard-scoped optimization portfolio' })).not.toBeInTheDocument()
     expect(screen.getByTestId('report-detail-content')).not.toHaveClass('h-full')
     expect(screen.getByTestId('report-cover-content')).not.toHaveClass('overflow-y-auto')
     expect(screen.getByTestId('report-cover-content')).not.toHaveClass('flex-1')
