@@ -10,6 +10,7 @@ from plexus.command_worker import (
     CommandEnvelope,
     CommandWorker,
     ProgressUpdate,
+    LeaseLostError,
 )
 
 
@@ -31,6 +32,9 @@ class MemoryLifecycleStore:
         self.lease: Claim | None = None
         self.progress_values: list[float] = []
         self._token_number = 0
+        self.reject_renewal = False
+        self.rotate_renewal = False
+        self.mutation_tokens: list[tuple[str, str]] = []
 
     def claim(self, envelope, owner, now, lease_duration):
         if self.state in {"completed", "failed", "cancelled"}:
@@ -47,6 +51,7 @@ class MemoryLifecycleStore:
         return self.lease
 
     def report_progress(self, command_id, token, progress, now):
+        self.mutation_tokens.append(("progress", token))
         if not self._accepts(token, now):
             return False
         self.progress_values.append(progress.fraction)
@@ -54,13 +59,18 @@ class MemoryLifecycleStore:
         return True
 
     def renew(self, command_id, token, now, lease_duration):
+        self.events.append("lifecycle-renewed")
+        if self.reject_renewal:
+            return None
         if not self._accepts(token, now):
             return None
         assert self.lease is not None
-        self.lease = Claim(token, self.lease.owner, now + lease_duration)
+        renewed_token = "rotated-lease" if self.rotate_renewal else token
+        self.lease = Claim(renewed_token, self.lease.owner, now + lease_duration)
         return self.lease
 
     def complete(self, command_id, token, result, now):
+        self.mutation_tokens.append(("complete", token))
         if not self._accepts(token, now):
             return False
         self.state = "completed"
@@ -68,6 +78,7 @@ class MemoryLifecycleStore:
         return True
 
     def fail(self, command_id, token, error, now):
+        self.mutation_tokens.append(("fail", token))
         if not self._accepts(token, now):
             return False
         self.state = "failed"
@@ -86,6 +97,7 @@ class MemoryDelivery:
         self.events = events
         self.acknowledged = False
         self.released = False
+        self.renewal_succeeds = True
 
     def acknowledge(self) -> None:
         self.acknowledged = True
@@ -95,14 +107,55 @@ class MemoryDelivery:
         self.released = True
         self.events.append("released")
 
+    def extend_lease(self, duration: timedelta) -> bool:
+        self.events.append("delivery-renewed")
+        return self.renewal_succeeds
+
+
+class ManualHeartbeatHandle:
+    def __init__(self, scheduler) -> None:
+        self.scheduler = scheduler
+
+    def stop(self) -> bool:
+        self.scheduler.running = False
+        self.scheduler.events.append("heartbeat-stopped")
+        return True
+
+
+class ManualHeartbeatScheduler:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+        self.callback = None
+        self.running = False
+
+    def start(self, interval: timedelta, callback):
+        self.callback = callback
+        self.running = True
+        return ManualHeartbeatHandle(self)
+
+    def fire(self) -> None:
+        if self.running:
+            self.callback()
+
 
 class RecordingExecutor:
     def __init__(self, progress: float | None = None) -> None:
         self.calls = 0
         self.progress = progress
+        self.fire_heartbeat = False
+        self.observe_loss = False
+        self.observed_loss = False
+        self.scheduler = None
 
     def execute(self, envelope, context):
         self.calls += 1
+        if self.fire_heartbeat:
+            self.scheduler.fire()
+        if self.observe_loss:
+            try:
+                context.raise_if_lease_lost()
+            except LeaseLostError:
+                self.observed_loss = True
         if self.progress is not None:
             context.report_progress(self.progress)
         return {"outcome": "ok"}
@@ -123,6 +176,8 @@ def _initialize(context) -> None:
     )
     context.delivery = MemoryDelivery(context.envelope, context.events)
     context.executor = RecordingExecutor()
+    context.scheduler = ManualHeartbeatScheduler(context.events)
+    context.executor.scheduler = context.scheduler
     context.worker = CommandWorker(
         lifecycle=context.store,
         executor=context.executor,
@@ -131,9 +186,59 @@ def _initialize(context) -> None:
     )
 
 
+def _enable_heartbeats(context) -> None:
+    context.worker = CommandWorker(
+        lifecycle=context.store,
+        executor=context.executor,
+        clock=context.clock,
+        lease_duration=timedelta(minutes=5),
+        heartbeat_interval=timedelta(minutes=1),
+        delivery_lease_duration=timedelta(minutes=3),
+        heartbeat_scheduler=context.scheduler,
+    )
+
+
 @given("an announced command delivery")
 def announced_delivery(context):
     _initialize(context)
+
+
+@given("an announced command delivery with automatic heartbeats")
+def heartbeat_delivery(context):
+    _initialize(context)
+    _enable_heartbeats(context)
+
+
+@given("lifecycle renewal rotates the fencing token")
+def rotating_renewal(context):
+    context.store.rotate_renewal = True
+
+
+@given("lifecycle renewal will be rejected")
+def rejected_renewal(context):
+    context.store.reject_renewal = True
+
+
+@given("delivery lease renewal will fail")
+def failed_delivery_renewal(context):
+    context.delivery.renewal_succeeds = False
+
+
+@given("an executor that fires a heartbeat, reports progress, and succeeds")
+def heartbeat_progress_executor(context):
+    context.executor.fire_heartbeat = True
+    context.executor.progress = 0.5
+
+
+@given("an executor that fires a heartbeat and observes ownership loss")
+def heartbeat_loss_executor(context):
+    context.executor.fire_heartbeat = True
+    context.executor.observe_loss = True
+
+
+@given("an executor that fires a heartbeat and succeeds")
+def heartbeat_executor(context):
+    context.executor.fire_heartbeat = True
 
 
 @given("an executor that reports 50 percent progress and succeeds")
@@ -273,6 +378,46 @@ def stale_mutations_rejected(context):
 def current_owner_remains(context):
     assert context.store.lease.owner == "worker-two"
     assert context.store.state == "running"
+
+
+@then("lifecycle ownership is renewed before the delivery lease")
+def lifecycle_before_delivery(context):
+    assert context.events.index("lifecycle-renewed") < context.events.index(
+        "delivery-renewed"
+    )
+
+
+@then("later progress and completion use the rotated fencing token")
+def rotated_token_used(context):
+    assert ("progress", "rotated-lease") in context.store.mutation_tokens
+    assert ("complete", "rotated-lease") in context.store.mutation_tokens
+
+
+@then("no terminal lifecycle mutation is stored")
+def no_terminal_mutation(context):
+    assert context.executor.observed_loss
+    assert not any(
+        operation in {"complete", "fail"}
+        for operation, _token in context.store.mutation_tokens
+    )
+
+
+@then("the delivery is released without acknowledgement")
+def released_without_ack(context):
+    assert context.delivery.released
+    assert not context.delivery.acknowledged
+
+
+@then("heartbeat scheduling stops before completion")
+def heartbeat_stops_first(context):
+    assert context.events.index("heartbeat-stopped") < context.events.index("completed")
+
+
+@then("no heartbeat can run after execution returns")
+def heartbeat_cannot_run(context):
+    renewal_count = context.events.count("lifecycle-renewed")
+    context.scheduler.fire()
+    assert context.events.count("lifecycle-renewed") == renewal_count
 
 
 @then("both legacy modules are importable")

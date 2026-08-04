@@ -15,8 +15,9 @@ from plexus.command_worker import (
     CommandWorker,
     ProcessOutcome,
     ProgressUpdate,
+    LeaseLostError,
+    ThreadHeartbeatScheduler,
 )
-
 
 NOW = datetime(2026, 8, 4, tzinfo=timezone.utc)
 
@@ -50,6 +51,10 @@ class Delivery:
 
     def release(self):
         self.events.append("release")
+
+    def extend_lease(self, duration):
+        self.events.append("extend")
+        return True
 
 
 class Store:
@@ -246,6 +251,261 @@ def test_renewed_rotated_token_is_used_for_subsequent_completion():
     assert outcome is ProcessOutcome.COMPLETED
     assert store.completion_token == "rotated-token"
     assert delivery.events == ["ack"]
+
+
+class ManualHeartbeatHandle:
+    def __init__(self, scheduler):
+        self.scheduler = scheduler
+
+    def stop(self):
+        self.scheduler.events.append("stop")
+        if self.scheduler.stop_error is not None:
+            raise self.scheduler.stop_error
+        self.scheduler.running = False
+        return self.scheduler.settles
+
+
+class ManualHeartbeatScheduler:
+    def __init__(self, events=None, settles=True, stop_error=None):
+        self.events = events if events is not None else []
+        self.settles = settles
+        self.running = False
+        self.callback = None
+        self.stop_error = stop_error
+
+    def start(self, interval, callback):
+        self.events.append("start")
+        self.running = True
+        self.callback = callback
+        return ManualHeartbeatHandle(self)
+
+    def fire(self):
+        if self.running:
+            self.callback()
+
+
+def heartbeat_worker(store, executor, scheduler, **overrides):
+    values = {
+        "lifecycle": store,
+        "executor": executor,
+        "clock": Clock(),
+        "lease_duration": timedelta(minutes=5),
+        "heartbeat_interval": timedelta(minutes=1),
+        "delivery_lease_duration": timedelta(minutes=3),
+        "heartbeat_scheduler": scheduler,
+    }
+    values.update(overrides)
+    return CommandWorker(**values)
+
+
+def test_heartbeat_orders_renewals_and_propagates_rotated_token():
+    events = []
+    scheduler = ManualHeartbeatScheduler(events)
+
+    class RotatingStore(Store):
+        renewal_count = 0
+
+        def renew(self, command_id, token, now, lease_duration):
+            events.append(f"renew:{token}")
+            self.renewal_count += 1
+            return Claim(
+                f"rotated-{self.renewal_count}", "worker", now + lease_duration
+            )
+
+        def report_progress(self, command_id, token, progress, now):
+            events.append(f"progress:{token}")
+            return True
+
+        def complete(self, command_id, token, result, now):
+            events.append(f"complete:{token}")
+            return True
+
+    class ExtendingDelivery(Delivery):
+        def extend_lease(self, duration):
+            events.append(f"extend:{duration.total_seconds()}")
+            return True
+
+    class HeartbeatingExecutor:
+        def execute(self, envelope, context):
+            scheduler.fire()
+            scheduler.fire()
+            context.report_progress(0.5)
+            return {"ok": True}
+
+    delivery = ExtendingDelivery()
+    outcome = heartbeat_worker(
+        RotatingStore(), HeartbeatingExecutor(), scheduler
+    ).process(delivery, "worker")
+
+    assert outcome is ProcessOutcome.COMPLETED
+    assert events == [
+        "start",
+        "renew:token",
+        "extend:180.0",
+        "renew:rotated-1",
+        "extend:180.0",
+        "progress:rotated-2",
+        "stop",
+        "complete:rotated-2",
+    ]
+    assert delivery.events == ["ack"]
+
+
+@pytest.mark.parametrize("failure", ["lifecycle", "delivery", "exception"])
+def test_heartbeat_failure_is_observable_and_prevents_terminal_mutation(failure):
+    scheduler = ManualHeartbeatScheduler()
+
+    class FailingStore(Store):
+        def renew(self, command_id, token, now, lease_duration):
+            if failure == "lifecycle":
+                return None
+            if failure == "exception":
+                raise RuntimeError("renewal unavailable")
+            return super().renew(command_id, token, now, lease_duration)
+
+    class FailingDelivery(Delivery):
+        def extend_lease(self, duration):
+            return failure != "delivery"
+
+    class ObservingExecutor:
+        observed_loss = False
+
+        def execute(self, envelope, context):
+            scheduler.fire()
+            assert context.ownership_lost
+            with pytest.raises(LeaseLostError):
+                context.raise_if_lease_lost()
+            self.observed_loss = True
+            return {"must_not_complete": True}
+
+    store = FailingStore()
+    delivery = FailingDelivery()
+    executor = ObservingExecutor()
+    outcome = heartbeat_worker(store, executor, scheduler).process(delivery, "worker")
+
+    assert outcome is ProcessOutcome.LEASE_LOST
+    assert executor.observed_loss
+    assert store.events == []
+    assert delivery.events == ["release"]
+
+
+def test_heartbeat_does_not_swallow_process_level_base_exceptions():
+    scheduler = ManualHeartbeatScheduler()
+
+    class InterruptingStore(Store):
+        def renew(self, command_id, token, now, lease_duration):
+            raise KeyboardInterrupt("stop process")
+
+    class HeartbeatingExecutor:
+        def execute(self, envelope, context):
+            scheduler.fire()
+            pytest.fail("the process-level exception must escape the heartbeat")
+
+    delivery = Delivery()
+
+    with pytest.raises(KeyboardInterrupt, match="stop process"):
+        heartbeat_worker(
+            InterruptingStore(), HeartbeatingExecutor(), scheduler
+        ).process(delivery, "worker")
+
+    assert delivery.events == []
+
+
+def test_first_ownership_loss_reason_wins_across_context_observation():
+    scheduler = ManualHeartbeatScheduler()
+
+    class FailingStore(Store):
+        calls = 0
+
+        def renew(self, command_id, token, now, lease_duration):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("first heartbeat failure")
+            return None
+
+    class ObservingExecutor:
+        def execute(self, envelope, context):
+            scheduler.fire()
+            scheduler.fire()
+            with pytest.raises(LeaseLostError) as exc_info:
+                context.raise_if_lease_lost()
+            assert str(exc_info.value) == (
+                "heartbeat raised RuntimeError: first heartbeat failure"
+            )
+            return {"must_not_complete": True}
+
+    delivery = Delivery()
+    outcome = heartbeat_worker(FailingStore(), ObservingExecutor(), scheduler).process(
+        delivery, "worker"
+    )
+
+    assert outcome is ProcessOutcome.LEASE_LOST
+    assert delivery.events == ["release"]
+
+
+def test_scheduler_settles_before_terminal_mutation_and_cannot_fire_after_stop():
+    events = []
+    scheduler = ManualHeartbeatScheduler(events)
+
+    class OrderedStore(Store):
+        def complete(self, command_id, token, result, now):
+            events.append("complete")
+            return True
+
+    outcome = heartbeat_worker(OrderedStore(), Executor(), scheduler).process(
+        Delivery(), "worker"
+    )
+    scheduler.fire()
+
+    assert outcome is ProcessOutcome.COMPLETED
+    assert events == ["start", "stop", "complete"]
+
+
+def test_unsettled_scheduler_prevents_terminal_mutation():
+    scheduler = ManualHeartbeatScheduler(settles=False)
+    store = Store()
+    delivery = Delivery()
+
+    outcome = heartbeat_worker(store, Executor(), scheduler).process(delivery, "worker")
+
+    assert outcome is ProcessOutcome.LEASE_LOST
+    assert store.events == []
+    assert delivery.events == ["release"]
+
+
+def test_scheduler_shutdown_exception_prevents_terminal_mutation():
+    scheduler = ManualHeartbeatScheduler(stop_error=RuntimeError("cannot join"))
+    store = Store()
+    delivery = Delivery()
+
+    outcome = heartbeat_worker(store, Executor(), scheduler).process(delivery, "worker")
+
+    assert outcome is ProcessOutcome.LEASE_LOST
+    assert store.events == []
+    assert delivery.events == ["release"]
+
+
+@pytest.mark.parametrize(
+    "overrides, message",
+    [
+        ({"heartbeat_interval": timedelta(0)}, "heartbeat_interval"),
+        ({"heartbeat_interval": timedelta(minutes=5)}, "shorter"),
+        ({"heartbeat_interval": timedelta(minutes=6)}, "shorter"),
+        ({"delivery_lease_duration": timedelta(0)}, "delivery_lease_duration"),
+    ],
+)
+def test_heartbeat_durations_are_validated(overrides, message):
+    with pytest.raises(ValueError, match=message):
+        heartbeat_worker(Store(), Executor(), ManualHeartbeatScheduler(), **overrides)
+
+
+def test_standard_scheduler_uses_a_daemon_thread_and_settles_without_sleep():
+    scheduler = ThreadHeartbeatScheduler(shutdown_timeout=timedelta(seconds=1))
+    handle = scheduler.start(timedelta(minutes=1), lambda: None)
+
+    assert handle._thread.daemon
+    assert handle.stop()
+    assert not handle._thread.is_alive()
 
 
 @pytest.mark.parametrize("fraction", [True, False, "0.5", None, []])

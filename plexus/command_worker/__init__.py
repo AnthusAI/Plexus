@@ -7,9 +7,12 @@ from .ports import (
     Delivery,
     ExecutionContext,
     Executor,
+    HeartbeatHandle,
+    HeartbeatScheduler,
     LifecycleStore,
     Transport,
 )
+from .scheduler import ThreadHeartbeatScheduler
 from .worker import CommandWorker, LeaseLostError, ProcessOutcome
 
 __all__ = [
@@ -21,10 +24,13 @@ __all__ = [
     "Delivery",
     "ExecutionContext",
     "Executor",
+    "HeartbeatHandle",
+    "HeartbeatScheduler",
     "JSONValue",
     "LeaseLostError",
     "LifecycleStore",
     "ProcessOutcome",
     "ProgressUpdate",
     "Transport",
+    "ThreadHeartbeatScheduler",
 ]
