@@ -51,7 +51,12 @@ from .service import (
     ServiceReceiveError,
     ServiceStopReason,
 )
-from .worker import CommandWorker, LeaseLostError, ProcessOutcome
+from .worker import (
+    CancellationRequestedError,
+    CommandWorker,
+    LeaseLostError,
+    ProcessOutcome,
+)
 
 __all__ = [
     "AuditEvent",
@@ -61,6 +66,7 @@ __all__ = [
     "AuthorizationDecision",
     "AuthorizationDenied",
     "CancellationResult",
+    "CancellationRequestedError",
     "Claim",
     "ClaimStatus",
     "Clock",

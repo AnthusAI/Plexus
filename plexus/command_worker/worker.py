@@ -23,12 +23,17 @@ class LeaseLostError(RuntimeError):
     """Raised when the lifecycle store rejects a fenced mutation."""
 
 
+class CancellationRequestedError(RuntimeError):
+    """Raised at a cooperative boundary after durable cancellation is requested."""
+
+
 class ProcessOutcome(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     ACTIVE_DUPLICATE = "active_duplicate"
     TERMINAL_DUPLICATE = "terminal_duplicate"
     LEASE_LOST = "lease_lost"
+    CANCELLED = "cancelled"
     INTEGRITY_MISMATCH = "integrity_mismatch"
 
 
@@ -41,6 +46,7 @@ class _ExecutionContext:
     lease_duration: timedelta
     _lock: RLock
     _ownership_lost: Event
+    _cancellation_requested: Event
     _ownership_loss_reason: str | None = None
 
     @property
@@ -52,6 +58,14 @@ class _ExecutionContext:
             raise LeaseLostError(
                 self._ownership_loss_reason or "execution ownership was lost"
             )
+
+    @property
+    def cancellation_requested(self) -> bool:
+        return self._cancellation_requested.is_set()
+
+    def raise_if_cancellation_requested(self) -> None:
+        if self._cancellation_requested.is_set():
+            raise CancellationRequestedError("execution cancellation was requested")
 
     def _lose_ownership(self, reason: str) -> None:
         with self._lock:
@@ -73,6 +87,7 @@ class _ExecutionContext:
         update = ProgressUpdate(fraction, message, details)
         with self._lock:
             self.raise_if_lease_lost()
+            self.raise_if_cancellation_requested()
             accepted = self.lifecycle.report_progress(
                 self.command_id, self.lease.token, update, self.clock.now()
             )
@@ -94,6 +109,8 @@ class _ExecutionContext:
                 self.raise_if_lease_lost()
             self.raise_if_lease_lost()
             self.lease = renewed
+            if renewed.cancellation_requested:
+                self._cancellation_requested.set()
             return renewed
 
     def heartbeat(self, delivery: Delivery, delivery_lease_duration: timedelta) -> None:
@@ -159,6 +176,9 @@ class CommandWorker:
             )
             return ProcessOutcome.INTEGRITY_MISMATCH
 
+        cancellation_requested = Event()
+        if claim.cancellation_requested:
+            cancellation_requested.set()
         context = _ExecutionContext(
             lifecycle=self._lifecycle,
             clock=self._clock,
@@ -167,6 +187,7 @@ class CommandWorker:
             lease_duration=self._lease_duration,
             _lock=RLock(),
             _ownership_lost=Event(),
+            _cancellation_requested=cancellation_requested,
         )
         try:
             heartbeat = self._heartbeat_scheduler.start(
@@ -183,6 +204,7 @@ class CommandWorker:
         execution_error: Exception | None = None
         result: JSONValue = None
         try:
+            context.raise_if_cancellation_requested()
             result = self._executor.execute(envelope, context)
         except Exception as exc:
             execution_error = exc
@@ -202,6 +224,19 @@ class CommandWorker:
         try:
             context.raise_if_lease_lost()
         except LeaseLostError:
+            delivery.release()
+            return ProcessOutcome.LEASE_LOST
+
+        cancellation_requested = context.cancellation_requested or isinstance(
+            execution_error, CancellationRequestedError
+        )
+        if cancellation_requested:
+            accepted = self._lifecycle.finalize_cancel(
+                envelope.command_id, context._token(), self._clock.now()
+            )
+            if accepted:
+                delivery.acknowledge()
+                return ProcessOutcome.CANCELLED
             delivery.release()
             return ProcessOutcome.LEASE_LOST
 
@@ -240,6 +275,11 @@ class CommandWorker:
             self._clock.now(),
         )
         if not accepted:
+            if self._lifecycle.finalize_cancel(
+                envelope.command_id, context._token(), self._clock.now()
+            ):
+                delivery.acknowledge()
+                return ProcessOutcome.CANCELLED
             delivery.release()
             return ProcessOutcome.LEASE_LOST
         delivery.acknowledge()

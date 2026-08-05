@@ -102,6 +102,16 @@ class LifecycleStore(Protocol):
         now: datetime,
     ) -> bool: ...
 
+    def finalize_cancel(
+        self,
+        command_id: str,
+        token: str,
+        now: datetime,
+    ) -> bool:
+        """Atomically settle a cancellation request held by this lease."""
+
+        ...
+
 
 class ExecutionContext(Protocol):
     def report_progress(
@@ -117,6 +127,11 @@ class ExecutionContext(Protocol):
     def ownership_lost(self) -> bool: ...
 
     def raise_if_lease_lost(self) -> None: ...
+
+    @property
+    def cancellation_requested(self) -> bool: ...
+
+    def raise_if_cancellation_requested(self) -> None: ...
 
 
 class Executor(Protocol):

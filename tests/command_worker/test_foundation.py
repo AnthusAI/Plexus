@@ -81,6 +81,9 @@ class Store:
         self.events.append("fail")
         return self.fail_accepted
 
+    def finalize_cancel(self, command_id, token, now):
+        return False
+
 
 class Executor:
     def __init__(self, error=None):
