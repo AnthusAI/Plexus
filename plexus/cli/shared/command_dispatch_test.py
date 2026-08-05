@@ -134,6 +134,66 @@ class TestCommandDispatchConfig(unittest.TestCase):
         self.assertEqual(_map_procedure_status_to_task_status("PENDING"), "RUNNING")
         self.assertIsNone(_map_procedure_status_to_task_status(None))
 
+    def test_local_dispatch_completes_a_non_procedure_after_successful_exit(self):
+        task = SimpleNamespace(
+            id="task-1",
+            accountId="account-1",
+            type="COMMAND",
+            status="PENDING",
+            target="items/info",
+            command="items info item-1",
+            metadata="{}",
+            update=Mock(),
+        )
+
+        with (
+            patch(
+                "plexus.cli.shared.CommandDispatch._resolve_dispatch_mode",
+                return_value="local",
+            ),
+            patch(
+                "plexus.cli.shared.CommandDispatch._resolve_queue_name",
+                return_value="queue",
+            ),
+            patch(
+                "plexus.cli.shared.CommandDispatch._resolve_local_dispatch_timeout_seconds",
+                return_value=30,
+            ),
+            patch("plexus.cli.shared.CommandDispatch.create_client", return_value=object()),
+            patch(
+                "plexus.cli.shared.CommandDispatch._resolve_required_dispatch_account_id",
+                return_value="account-1",
+            ),
+            patch(
+                "plexus.cli.shared.CommandDispatch._list_pending_tasks_for_account",
+                return_value=[{"id": "task-1"}],
+            ),
+            patch("plexus.cli.shared.CommandDispatch.Task.get_by_id", return_value=task),
+            patch(
+                "plexus.cli.shared.CommandDispatch._claim_task_for_dispatch",
+                return_value=True,
+            ),
+            patch(
+                "plexus.cli.shared.CommandDispatch._build_local_run_args",
+                return_value=["plexus", "items", "info"],
+            ),
+            patch(
+                "plexus.cli.shared.CommandDispatch.subprocess.run",
+                return_value=SimpleNamespace(returncode=0, stdout="done", stderr=""),
+            ),
+            patch(
+                "plexus.cli.shared.CommandDispatch._get_procedure_status_for_local_command",
+                return_value=None,
+            ),
+        ):
+            result = CliRunner().invoke(command, ["dispatcher", "--once"])
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        task.update.assert_called_once()
+        self.assertEqual(task.update.call_args.kwargs["status"], "COMPLETED")
+        self.assertEqual(task.update.call_args.kwargs["dispatchStatus"], "DISPATCHED")
+        self.assertIsNotNone(task.update.call_args.kwargs["completedAt"])
+
     def test_local_dispatch_preserves_durable_time_wait_without_completing_task(self):
         claimed_task = SimpleNamespace(
             id="task-1",

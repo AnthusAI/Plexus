@@ -110,14 +110,13 @@ def _build_local_run_args(task: Task) -> list[str]:
     """
     Build the local subprocess argv for a claimed task.
 
-    Programmatic report block tasks should run via `python -m plexus.cli` so
-    dispatcher execution uses the current workspace code instead of any older
-    `plexus` console script on PATH.
+    Run every task through the current interpreter and workspace module. A bare
+    ``plexus`` console script can resolve to an unrelated virtual environment,
+    making local command results depend on PATH rather than the dispatcher
+    runtime that claimed the task.
     """
     split_command = shlex.split(task.command or "")
-    if (task.type or "") == "ProgrammaticReportBlock":
-        return [sys.executable, "-m", "plexus.cli", *split_command]
-    return ["plexus", *split_command]
+    return [sys.executable, "-m", "plexus.cli", *split_command]
 
 
 def _validate_celery_requirements() -> None:
@@ -979,7 +978,9 @@ def dispatcher(account: Optional[str], interval: float, limit: int, once: bool, 
                     if result.returncode == 0:
                         procedure_id = _extract_procedure_id_from_task(task, metadata)
                         procedure_status = _get_procedure_status_for_local_command(client, procedure_id)
-                        mapped_task_status = _map_procedure_status_to_task_status(procedure_status) or "RUNNING"
+                        mapped_task_status = _map_procedure_status_to_task_status(
+                            procedure_status
+                        ) or ("RUNNING" if procedure_id else "COMPLETED")
                         if procedure_status in PROCEDURE_DURABLE_WAIT_STATUSES:
                             refreshed_task = Task.get_by_id(task.id, client)
                             if refreshed_task is None:
