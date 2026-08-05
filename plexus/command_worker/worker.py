@@ -120,7 +120,8 @@ class _ExecutionContext:
                 if not delivery.extend_lease(delivery_lease_duration):
                     self._lose_ownership("delivery lease renewal failed")
         except LeaseLostError:
-            pass
+            # Another worker owns the command now; preserve the fenced state.
+            return
         except Exception as exc:
             self._lose_ownership(f"heartbeat raised {type(exc).__name__}: {exc}")
 
