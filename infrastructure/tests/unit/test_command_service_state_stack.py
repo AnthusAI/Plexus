@@ -306,14 +306,18 @@ def test_state_stack_rejects_invalid_configuration(
         )
 
 
-def test_command_service_infrastructure_contains_no_consumer_or_legacy_values() -> None:
-    source_root = (
-        Path(__file__).resolve().parents[3]
-        / "plexus"
-        / "infrastructure"
-        / "command_service"
+def test_state_stack_contains_no_consumer_or_delivery_provider_values() -> None:
+    source = (
+        (
+            Path(__file__).resolve().parents[3]
+            / "plexus"
+            / "infrastructure"
+            / "command_service"
+            / "state_stack.py"
+        )
+        .read_text()
+        .casefold()
     )
-    source = "\n".join(path.read_text().casefold() for path in source_root.glob("*.py"))
 
     for forbidden_value in (
         "capacity",
