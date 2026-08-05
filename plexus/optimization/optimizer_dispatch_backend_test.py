@@ -127,18 +127,18 @@ def _dispatch_request() -> dict[str, Any]:
 
 def test_account_scans_are_exhaustive_paginated_and_map_json_metadata() -> None:
     client = _RecordingClient([
-        {"listProcedureByAccountIdAndUpdatedAt": {
+        {"listProcedureByAccountIdUpdatedAt": {
             "items": [_procedure(metadata=json.dumps({"marker": "first"}))],
             "nextToken": "next-procedures",
         }},
-        {"listProcedureByAccountIdAndUpdatedAt": {
+        {"listProcedureByAccountIdUpdatedAt": {
             "items": [_procedure(procedure_id="procedure-second")], "nextToken": None,
         }},
-        {"listTaskByAccountIdAndUpdatedAt": {
+        {"listTaskByAccountIdUpdatedAt": {
             "items": [_task(metadata=json.dumps({"marker": "first"}))],
             "nextToken": "next-tasks",
         }},
-        {"listTaskByAccountIdAndUpdatedAt": {
+        {"listTaskByAccountIdUpdatedAt": {
             "items": [_task(task_id="task-second")], "nextToken": None,
         }},
     ])
@@ -151,16 +151,15 @@ def test_account_scans_are_exhaustive_paginated_and_map_json_metadata() -> None:
     assert procedures[0]["items"][0]["metadata"] == json.dumps({"marker": "first"})
     assert [page["items"][0]["id"] for page in tasks] == [TASK_ID, "task-second"]
     assert tasks[0]["items"][0]["metadata"] == json.dumps({"marker": "first"})
-    assert "listProcedureByAccountIdAndUpdatedAt" in client.calls[0][0]
+    assert "listProcedureByAccountIdUpdatedAt" in client.calls[0][0]
     assert client.calls[0][1] == {
         "accountId": ACCOUNT_ID,
-        "updatedAt": {"ge": "2000-01-01T00:00:00.000Z"},
         "sortDirection": "DESC",
         "limit": 2,
         "nextToken": None,
     }
     assert client.calls[1][1]["nextToken"] == "next-procedures"
-    assert "listTaskByAccountIdAndUpdatedAt" in client.calls[2][0]
+    assert "listTaskByAccountIdUpdatedAt" in client.calls[2][0]
     assert client.calls[3][1]["nextToken"] == "next-tasks"
 
 
@@ -170,7 +169,7 @@ def test_account_scans_are_exhaustive_paginated_and_map_json_metadata() -> None:
     {"items": [], "nextToken": 42},
 ])
 def test_malformed_account_page_fails_closed(connection: dict[str, Any]) -> None:
-    client = _RecordingClient([{"listProcedureByAccountIdAndUpdatedAt": connection}])
+    client = _RecordingClient([{"listProcedureByAccountIdUpdatedAt": connection}])
 
     with pytest.raises(RuntimeError, match="procedure account scan"):
         list(_adapter(client).procedure_pages_for_account(ACCOUNT_ID))
@@ -178,8 +177,8 @@ def test_malformed_account_page_fails_closed(connection: dict[str, Any]) -> None
 
 def test_repeated_pagination_token_fails_closed_without_requesting_a_cycle() -> None:
     client = _RecordingClient([
-        {"listTaskByAccountIdAndUpdatedAt": {"items": [], "nextToken": "repeat"}},
-        {"listTaskByAccountIdAndUpdatedAt": {"items": [], "nextToken": "repeat"}},
+        {"listTaskByAccountIdUpdatedAt": {"items": [], "nextToken": "repeat"}},
+        {"listTaskByAccountIdUpdatedAt": {"items": [], "nextToken": "repeat"}},
     ])
 
     with pytest.raises(RuntimeError, match="pagination token cycle"):
@@ -204,10 +203,10 @@ def test_real_adapter_skips_malformed_optimizer_metadata_on_unrelated_legacy_row
     )
     unrelated["scoreId"] = "other-score"
     client = _RecordingClient([
-        {"listProcedureByAccountIdAndUpdatedAt": {
+        {"listProcedureByAccountIdUpdatedAt": {
             "items": [unrelated], "nextToken": "exact",
         }},
-        {"listProcedureByAccountIdAndUpdatedAt": {
+        {"listProcedureByAccountIdUpdatedAt": {
             "items": [exact], "nextToken": None,
         }},
     ])
@@ -254,8 +253,8 @@ def test_graphql_operations_validate_against_checked_in_amplify_contract() -> No
         "order": 1, "status": "PENDING", "statusMessage": None,
     }
     client = _RecordingClient([
-        {"listProcedureByAccountIdAndUpdatedAt": {"items": [], "nextToken": None}},
-        {"listTaskByAccountIdAndUpdatedAt": {"items": [], "nextToken": None}},
+        {"listProcedureByAccountIdUpdatedAt": {"items": [], "nextToken": None}},
+        {"listTaskByAccountIdUpdatedAt": {"items": [], "nextToken": None}},
         {"createProcedure": _procedure(metadata={"optimizer_launch_spec": {"id": "launch"}})},
         {"getProcedure": _procedure()},
         {"updateProcedure": updated_procedure},

@@ -19,7 +19,6 @@ from plexus.cli.procedure.tactus_adapters.storage import (
 )
 
 
-_ACCOUNT_START = "2000-01-01T00:00:00.000Z"
 _PROCEDURE_FIELDS = """
   id accountId scorecardId scoreId name category version featured isTemplate
   status metadata createdAt updatedAt
@@ -109,15 +108,15 @@ class GraphQLOptimizerDispatchBackend:
     def procedure_pages_for_account(self, account_id: str) -> Iterator[dict[str, Any]]:
         yield from self._account_pages(
             account_id,
-            field="listProcedureByAccountIdAndUpdatedAt",
+            field="listProcedureByAccountIdUpdatedAt",
             resource="procedure account",
             query=f"""
               query ListProcedureByAccountIdUpdatedAt(
-                $accountId: String!, $updatedAt: ModelStringKeyConditionInput,
-                $sortDirection: ModelSortDirection, $limit: Int, $nextToken: String
+                $accountId: String!, $sortDirection: ModelSortDirection,
+                $limit: Int, $nextToken: String
               ) {{
-                listProcedureByAccountIdAndUpdatedAt(
-                  accountId: $accountId, updatedAt: $updatedAt,
+                listProcedureByAccountIdUpdatedAt(
+                  accountId: $accountId,
                   sortDirection: $sortDirection, limit: $limit, nextToken: $nextToken
                 ) {{ items {{ {_PROCEDURE_FIELDS} }} nextToken }}
               }}
@@ -127,15 +126,15 @@ class GraphQLOptimizerDispatchBackend:
     def task_pages_for_account(self, account_id: str) -> Iterator[dict[str, Any]]:
         yield from self._account_pages(
             account_id,
-            field="listTaskByAccountIdAndUpdatedAt",
+            field="listTaskByAccountIdUpdatedAt",
             resource="task account",
             query=f"""
               query ListTaskByAccountIdUpdatedAt(
-                $accountId: String!, $updatedAt: ModelStringKeyConditionInput,
-                $sortDirection: ModelSortDirection, $limit: Int, $nextToken: String
+                $accountId: String!, $sortDirection: ModelSortDirection,
+                $limit: Int, $nextToken: String
               ) {{
-                listTaskByAccountIdAndUpdatedAt(
-                  accountId: $accountId, updatedAt: $updatedAt,
+                listTaskByAccountIdUpdatedAt(
+                  accountId: $accountId,
                   sortDirection: $sortDirection, limit: $limit, nextToken: $nextToken
                 ) {{ items {{ {_TASK_FIELDS} }} nextToken }}
               }}
@@ -152,7 +151,6 @@ class GraphQLOptimizerDispatchBackend:
         while True:
             response = self._client.execute(query, {
                 "accountId": account_id,
-                "updatedAt": {"ge": _ACCOUNT_START},
                 "sortDirection": "DESC",
                 "limit": self._page_size,
                 "nextToken": token,
