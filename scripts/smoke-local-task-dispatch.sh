@@ -6,6 +6,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PLEXUS_API_URL="${PLEXUS_API_URL:-http://localhost:18080/graphql}"
 export PLEXUS_API_KEY="${PLEXUS_API_KEY:-local-smoke-key}"
 export PLEXUS_ACCOUNT_KEY="${PLEXUS_ACCOUNT_KEY:-local-demo}"
+# The local control plane deliberately uses its API-key boundary instead of
+# Cognito. Make the CLI client select that supported transport explicitly.
+export PLEXUS_GRAPHQL_AUTH_MODE="api_key"
 export PLEXUS_DISPATCH_MODE="${PLEXUS_DISPATCH_MODE:-local}"
 export SMOKE_PROOF_DIR="${SMOKE_PROOF_DIR:-$ROOT_DIR/tmp/local-control-plane-proof}"
 export SMOKE_TASK_DISPATCH_PROOF_FILE="${SMOKE_TASK_DISPATCH_PROOF_FILE:-$SMOKE_PROOF_DIR/task-dispatch.json}"
