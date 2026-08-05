@@ -64,6 +64,18 @@ class CommandProgress:
             callback(current_progress)
 
     @classmethod
+    @contextmanager
+    def bind_update_callback(cls, callback):
+        """Bind fresh progress state and a callback for one command execution."""
+        progress_token = cls._current_progress.set(None)
+        callback_token = cls._update_callback.set(callback)
+        try:
+            yield
+        finally:
+            cls._update_callback.reset(callback_token)
+            cls._current_progress.reset(progress_token)
+
+    @classmethod
     def update(cls, current: int, total: int, status: str = None):
         """Update the progress state and notify the callback if set.
         Safe to call even when no callback is set."""

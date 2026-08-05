@@ -42,3 +42,21 @@ def test_track_restores_prior_progress_state_after_completion() -> None:
     assert restored is not None
     assert restored.current == 1
     assert restored.status == "outer"
+
+
+def test_bound_callback_and_progress_state_are_restored_after_execution() -> None:
+    outer = []
+    with CommandProgress.bind_update_callback(outer.append):
+        CommandProgress.update(1, 4, "outer")
+        inner = []
+
+        with CommandProgress.bind_update_callback(inner.append):
+            assert CommandProgress.get_current_state() is None
+            CommandProgress.update(2, 5, "inner")
+
+        restored = CommandProgress.get_current_state()
+        assert restored is not None
+        assert restored.status == "outer"
+
+    assert [(state.current, state.status) for state in inner] == [(2, "inner")]
+    assert [(state.current, state.status) for state in outer] == [(1, "outer")]
