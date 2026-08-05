@@ -1,0 +1,43 @@
+{
+  "id": "plx-0ed853a5-e792-4627-a480-a20ce14cb2f5",
+  "title": "Fail closed before zero-budget optimizer dispatch",
+  "description": "The portfolio coordinator currently relies on the public run validator to reject a nonpositive optimizer budget after a human response. The durable child launch-spec boundary does not independently reject a nonpositive budget. Add an early coordinator gate and defense-in-depth launch validation.\n\nFeature: Zero-budget portfolio safety\n\nScenario: Approved response cannot enter run validation\n  Given a portfolio run has a zero optimizer cost budget\n  And a valid human response approves an exact target\n  When the portfolio coordinator resumes\n  Then it does not invoke the optimization run validator\n  And it does not construct or dispatch any optimizer child\n  And it publishes an explicit non-launch outcome\n\nScenario: Launch boundary rejects a nonpositive budget\n  Given an internal caller supplies a target that appears accepted\n  And the optimizer launch limits contain a nonpositive cost budget\n  When the durable launch specification is built\n  Then the request fails closed before any Procedure or Task is created\n\nScenario: Positive approved budgets remain unchanged\n  Given a fresh approved target and strictly positive explicit limits\n  When the coordinator resumes\n  Then the existing validation and durable child lifecycle remain unchanged",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f14d097f-4844-4d2f-9a90-c879e6f17b1f",
+      "author": "ryan.porter",
+      "text": "Production analysis pilot stopped before any write because preflight proved the zero-cost policy is enforced only after the coordinator enters run validation and is not repeated at the durable launch-spec boundary. Implementation is proceeding test-first locally. No production Procedure, Task, Report, ReportBlock, attachment, ChatMessage, optimizer, evaluation, score version, score configuration, feedback setting, or champion mutation occurred.",
+      "created_at": "2026-07-31T02:02:11.159536Z"
+    },
+    {
+      "id": "66e13d3c-593d-4683-9288-08dd915a8e82",
+      "author": "ryan.porter",
+      "text": "Red/green evidence: five pre-fix regressions reproduced the gap\u2014one coordinator dispatch invocation and four invalid child costs accepted. The local fix now records an explicit invalid-run-limits non-launch state before run validation and independently rejects zero, negative, infinite, and NaN cost at the launch-spec boundary. Affected modules pass 123 tests under Python 3.11 and 123 under Python 3.12; three focused runtime integration tests also pass. Independent review is in progress. No commit, push, deployment, or production contact occurred.",
+      "created_at": "2026-07-31T02:04:51.505295Z"
+    },
+    {
+      "id": "33189885-acb5-4ca3-a704-6c9d9d27fea1",
+      "author": "ryan.porter",
+      "text": "Accepted review blocker: zero-budget finalization produces an incomplete-evidence issue row with a noncanonical raw disagreement_rate key, so stakeholder workbook and score-artifact publication reject the final view. Implementing a test-first contract repair that preserves the metric as affected_disagreement_rate, exercises the real coordinator final view through workbook and score-artifact builders, and leaves launch safety and positive-budget behavior unchanged.",
+      "created_at": "2026-07-31T02:10:42.218443Z"
+    },
+    {
+      "id": "197750e9-6b13-40f6-88e6-861a3c32ab6c",
+      "author": "ryan.porter",
+      "text": "Implemented the accepted artifact-contract repair in plexus/optimization/portfolio_run.py with regression coverage in portfolio_run_test.py. Red evidence: the zero-budget finalization regression failed because questions_and_issues retained a disallowed raw disagreement_rate key. Green evidence: the metric is now preserved once as affected_disagreement_rate; the same coordinator final view successfully builds and verifies the stakeholder workbook, per-score CSV and Markdown artifacts, scorecard JSON presentation, and aggregate presentation. Focused suites passed: 199 tests, 1 unrelated deprecation warning. git diff --check passed. Ruff is not installed in the active Poetry environment. No commit, push, deploy, production access, or project/ inspection occurred.",
+      "created_at": "2026-07-31T02:12:27.652789Z"
+    }
+  ],
+  "created_at": "2026-07-31T02:00:00.300136Z",
+  "updated_at": "2026-07-31T02:12:27.652789Z",
+  "closed_at": null,
+  "custom": {}
+}

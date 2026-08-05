@@ -1,0 +1,25 @@
+{
+  "id": "plx-35408f5d-a313-48d6-9283-022bf97824ee",
+  "title": "Prevent clipped living-report overview cells",
+  "description": "As a stakeholder, I want the living-report workbook overview to display its complete labels and values, so that the cover sheet is readable without manual resizing.\n\nFeature: Readable optimization workbook overview\n\nScenario: Open a generated living-report workbook\n  Given a stakeholder workbook with lifecycle metadata and a plain-language summary\n  When the workbook is opened or rendered at its default layout\n  Then the complete overview headings, labels, and values are visible without clipping\n  And every other stakeholder sheet remains readable\n\nOut of scope: changing report evidence, adding resources, or altering optimization decisions.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "80e94da9-14a8-41e3-80b4-cdb72f5c6c51",
+      "author": "ryan.porter",
+      "text": "Reproduced the defect with a rendered eight-sheet workbook: the Overview title and labels were clipped at default column widths. Added an outside-in regression test, observed the expected failure, and implemented bounded Overview sizing with wrapped values. Regenerated and imported the workbook, reconciled every sheet, found no formula errors, and visually confirmed the Overview is fully readable. Focused living-report and ChatMessage suites now pass (312 tests). The bug remains open until the change lands.",
+      "created_at": "2026-07-29T18:18:12.159350Z"
+    }
+  ],
+  "created_at": "2026-07-29T18:14:44.097366Z",
+  "updated_at": "2026-07-29T18:18:12.159350Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,37 @@
+{
+  "id": "plx-5d71f361-a0d7-4fba-b5ae-9ce0459a0093",
+  "title": "Visualize ranking signals within priority rows",
+  "description": "As an optimization operator, I want every ranked priority row to show comparable visual signals for opportunity, feedback volume, and disagreement rate, so that I can judge relative scale without opening a chart tooltip.\n\nOut of scope: changing ranking calculations or policy gates.\n\nFeature: Ranked priority signal visualization\n\nScenario: Compare ranking opportunity in the priority list\nGiven a report contains multiple ranked score opportunities\nWhen the operator views the priority list\nThen each row shows a ranking-opportunity bar scaled consistently across the visible list\nAnd the exact reviewed-disagreement count remains readable\n\nScenario: Compare feedback evidence in the priority list\nGiven ranked scores have different valid feedback volumes and disagreement rates\nWhen the operator views the priority list\nThen each row shows a feedback-volume bar scaled consistently across the visible list\nAnd each row shows a disagreement-rate bar on a fixed zero-to-one-hundred-percent scale\nAnd the exact valid-feedback count and disagreement percentage remain readable\n\nScenario: Handle missing or zero evidence\nGiven a ranked row has missing or zero signal evidence\nWhen the operator views the priority list\nThen the row remains readable without implying positive evidence\nAnd the list layout remains stable.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f4e9c4f8-cbbf-46d0-9df7-d465c0ea4aee",
+      "author": "ryan.porter",
+      "text": "Implementation started. The ranked-list visualization will use list-wide relative bars for reviewed-disagreement opportunity and valid-feedback volume, preserve exact values and disagreement percentage, and leave ranking and policy calculations unchanged.",
+      "created_at": "2026-07-30T20:49:57.999586Z"
+    },
+    {
+      "id": "517e33b3-b5c1-403b-b859-13df259b83a5",
+      "author": "ryan.porter",
+      "text": "Implemented three aligned visual signals in each ranked priority row: reviewed-disagreement opportunity relative to the visible maximum, valid-feedback volume relative to the visible maximum, and disagreement rate on a fixed zero-to-one-hundred-percent scale. Exact values remain visible; missing evidence renders as zero or unavailable. Focused report/chart tests pass (5 tests), dashboard web typecheck passes, and the live local Report was visually verified in split and full-width layouts.",
+      "created_at": "2026-07-30T20:53:46.456253Z"
+    },
+    {
+      "id": "015565be-ba2b-4ba9-b685-8af97d4cca5c",
+      "author": "ryan.porter",
+      "text": "Committed the validated ranked-priority signal visualization as 620ca7882. The story remains in progress until the change lands through the integration path.",
+      "created_at": "2026-07-30T20:54:26.472320Z"
+    }
+  ],
+  "created_at": "2026-07-30T20:49:52.319905Z",
+  "updated_at": "2026-07-30T20:54:26.472320Z",
+  "closed_at": null,
+  "custom": {}
+}

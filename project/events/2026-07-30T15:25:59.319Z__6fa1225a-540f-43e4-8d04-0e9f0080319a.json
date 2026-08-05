@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6fa1225a-540f-43e4-8d04-0e9f0080319a",
+  "issue_id": "plx-a62e4958-ea6f-418f-90ee-5df24c950588",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T15:25:59.319Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Publish portfolio milestones to the Action Inbox",
+    "description": "Living optimization Reports publish durable milestones, but the existing Action Inbox receives no corresponding Updates. Operators looking at the sidebar cannot tell that a long-running analysis started, became ready for review, needs action, or ended.\n\nFeature: Project key portfolio milestones into the existing ChatMessage feed\n\nScenario: A portfolio run advances through analysis\nGiven a living Report has durably published a run milestone\nWhen the portfolio coordinator announces that milestone\nThen it creates or reuses one idempotent NOTIFICATION ChatMessage for the account and procedure\nAnd the notification links to the same Report\nAnd the Action Inbox shows only the key started, analysis-ready, action-required, work-started, and terminal updates\n\nScenario: A procedure replays after checkpoint or retry\nGiven the milestone notification was already created\nWhen the same run and event key are published again\nThen no duplicate update is created\n\nScenario: Sidebar publication fails\nGiven the authoritative Report milestone is already durable\nWhen notification publication fails\nThen the Report remains authoritative\nAnd the failure is retained as run evidence rather than silently converting the Report milestone into failure\n\nExclusions: No new data model, index, function, storage, or association is introduced.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

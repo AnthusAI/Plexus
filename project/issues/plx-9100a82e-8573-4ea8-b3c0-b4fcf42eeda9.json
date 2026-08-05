@@ -1,0 +1,40 @@
+{
+  "id": "plx-9100a82e-8573-4ea8-b3c0-b4fcf42eeda9",
+  "title": "Resume a living report by exact Task identity",
+  "description": "As an operator, I want a retried optimization attempt to resume the one Report already linked to its Task, so that the Report URL and revision history remain stable even when a Procedure runner rewrites its Task metadata projection.\n\nObserved behavior: the Procedure runner replaced Task metadata and removed optimization-run identity fields. Resume interpreted the same existing Task as a new attempt, deliberately skipped Report lookup, created a second Report for that Task, and restarted revision numbering even though the original Report retained the exact run key, attempt ID, frozen specification, and revision history.\n\nFeature: Task-linked Report authority during resume\n\nScenario: Task metadata projection lost report identity\nGiven an active Procedure Task already has one linked living Report\nAnd the Task metadata no longer contains optimization-run identity fields\nAnd the Report preserves the exact run key, attempt ID, and frozen run specification\nWhen the same attempt resumes\nThen the service resolves the Report through the Task relationship\nAnd restores the Task identity projection from that Report\nAnd reuses the fixed ReportBlocks and latest revision\nAnd creates no Report or ReportBlock\n\nScenario: Task has no linked Report\nGiven a new Procedure Task has no linked living Report\nWhen the living report starts\nThen exactly one Report and its fixed ReportBlocks are created\n\nScenario: Conflicting Report identity is observed\nGiven a Task relationship resolves a Report with a different run key or frozen specification\nWhen resume validates the relationship\nThen the service fails closed with explicit integrity evidence\nAnd does not silently choose or create another Report\n\nOut of scope: GraphQL schema or resource changes; deleting or rewriting historical Reports.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1bb7f1fe-9ec3-458f-95db-69e662c02476",
+      "author": "ryan.porter",
+      "text": "Production dogfood evidence confirmed two Reports linked to one existing Task. The original Report retained the correct optimization_run identity and revision 1, while the resumed process created another Report and restarted at revision 1 after Task metadata lost optimization_run_key. Recovery must consult the Task-linked Report before classifying an existing Procedure Task as a new attempt.",
+      "created_at": "2026-07-31T16:11:38.146655Z"
+    },
+    {
+      "id": "333b6522-d7a2-422a-a429-a4cfa94727e5",
+      "author": "ryan.porter",
+      "text": "Red/green evidence: recovery with an existing Task-linked Report and deliberately removed Task optimization identity first created a second Report. Recovery now resolves Report identity directly through getTask.report, validates the Report run key/attempt/frozen specification, restores only the missing Task identity projection while preserving Procedure metadata, and reuses the Report and fixed blocks. The default lookup no longer scans an arbitrary account window. Complete run-report suite: 85 passed.",
+      "created_at": "2026-07-31T16:13:36.301132Z"
+    },
+    {
+      "id": "8b3431c6-b0f3-4fa6-8639-b39ab8c7f8f6",
+      "author": "ryan.porter",
+      "text": "Closed the stale Task-metadata overwrite path in the procedure runner. Metadata merges now reload the authoritative Task when a real API client is present and fail closed if that reload is unavailable; simple local fakes retain their prior behavior. Validation: 22 experiment-runner tests and 129 combined dispatcher, worker, runner, and living-Report tests passed.",
+      "created_at": "2026-07-31T16:26:50.432578Z"
+    }
+  ],
+  "created_at": "2026-07-31T16:10:30.457444Z",
+  "updated_at": "2026-07-31T16:26:50.432578Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

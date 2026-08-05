@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a1757951-a552-4fba-b0f6-98772ad2b6e3",
+  "issue_id": "plx-8d2d311e-00dd-459c-8754-e7acff92e0ec",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T22:42:42.054Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Continue one living Report through optimization outcomes",
+    "description": "As an account operator, I want the existing portfolio Report to continue through approved optimization and terminal review, so that selection, execution, evidence, and decisions remain available at one stable URL.\n\nFeature: Phase-two living optimization Report\n\nScenario: Publish meaningful optimizer milestones\n  Given a portfolio Report already contains frozen selection evidence\n  When approvals, child launches, child state changes, reviews, or terminal outcomes occur\n  Then the same Report is revised\n  And earlier selection evidence remains available\n  And revisions are not published for routine heartbeats\n\nScenario: Present score-level lifecycle\n  Given a selected score progresses through diagnosis, approval, optimization, evaluation, and review\n  When an operator expands that score\n  Then its timeline and linked Procedure, Evaluation, ScoreVersion, Task, and artifacts are visible\n  And the workbook and scorecard exports reconcile with the Report\n\nScenario: Request promotion without mutating the champion\n  Given terminal evidence supports promotion readiness\n  When the review completes\n  Then an evidence-bound human approval request is created\n  And no champion is changed automatically",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

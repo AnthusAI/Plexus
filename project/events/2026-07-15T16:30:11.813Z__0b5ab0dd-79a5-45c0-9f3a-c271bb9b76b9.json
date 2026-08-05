@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0b5ab0dd-79a5-45c0-9f3a-c271bb9b76b9",
+  "issue_id": "plx-656ef752-3367-4abf-9132-a8031757dcc3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-15T16:30:11.813Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Improve console score workflow UI"
+  }
+}

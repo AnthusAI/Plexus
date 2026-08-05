@@ -1,0 +1,31 @@
+{
+  "id": "plx-fc47c654-1141-44ef-a474-434a5091746a",
+  "title": "Show incremental portfolio analysis progress",
+  "description": "As an operator, I want a living optimization Report to show assessment and diagnosis progress while those loops run, so that I can distinguish active work from a stalled process.\n\nOut of scope: per-score workbook revisions, new backend resources, and optimizer mutations.\n\nFeature: Incremental portfolio analysis progress\n\nScenario: Deterministic assessment is running\nGiven a living optimization Report has published its ranked portfolio\nWhen ranked scores are assessed over a long-running loop\nThen the existing Analysis TaskStage exposes processed and total work\nAnd the Report overview displays the same current progress without a new immutable workbook revision\n\nScenario: Semantic diagnosis is running\nGiven deterministic assessment is complete\nWhen selected scores receive semantic diagnosis\nThen progress continues from the assessment count through the combined analysis total\nAnd the current activity clearly identifies semantic diagnosis\n\nScenario: Progress publication fails\nGiven stakeholder-visible progress cannot be durably updated\nWhen the orchestrator attempts to advance analysis\nThen the run fails closed rather than continuing ahead of its visible state",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a22967db-7b11-46cd-8b15-c959e1e4571f",
+      "author": "ryan.porter",
+      "text": "Observed acceptance gap: a newly opened living report can render before its Task link hydrates. If the linking Report update is missed, the current refresh hook does not subscribe or poll because taskId is absent; ProcedureTask and cover metrics then appear only after navigation or reload. Add a scenario requiring selected reports to reconcile while Task authority is still hydrating.",
+      "created_at": "2026-07-30T19:09:09.107529Z"
+    },
+    {
+      "id": "8ce3fb38-1f59-4635-9563-4ff898790d3b",
+      "author": "ryan.porter",
+      "text": "Acceptance evidence: with a newly created selected Report left mounted, the dashboard updated without navigation or reload from revision 1 with 0 inspected / 0 in scope / 0 portfolio scores to revision 2 with 56 scorecards inspected / 1 in scope / 30 portfolio scores and 10 of 30 assessments. The Report card subtitle also hydrated live. Focused hook tests and dashboard frontend/backend typechecks pass.",
+      "created_at": "2026-07-30T19:18:51.982239Z"
+    }
+  ],
+  "created_at": "2026-07-30T18:42:20.029516Z",
+  "updated_at": "2026-07-30T19:18:51.982239Z",
+  "closed_at": null,
+  "custom": {}
+}

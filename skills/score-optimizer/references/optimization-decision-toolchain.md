@@ -86,16 +86,27 @@ cutoff. This includes an unpromoted new version and a promotion or metadata edit
 that updates the score record. Score results and evaluations do not start the
 cooldown.
 
-Excluded scores remain in `unranked` as `recent_score_activity` with activity
-source/timestamp, newest opaque version ID/timestamp, cutoff, and eligibility
-timestamp. Missing or malformed recency evidence fails closed and prevents an
-exact ranking. Assessment preserves this evidence and returns
+Policy gates do not change the quantified evidence order. Every analyzed score
+retains its pre-policy `evidence_rank`; rows that pass the gates additionally
+receive `candidate_rank`. Deferred scores remain visible in `unranked` with
+`policy_disposition`, `policy_reason`, and
+`eligible_for_optimization=false`. Recent activity uses reason
+`recent_score_activity` and includes activity source/timestamp, newest opaque
+version ID/timestamp, cutoff, and eligibility timestamp. Missing or malformed
+recency evidence fails closed and prevents an exact ranking. Assessment
+preserves this evidence and returns
 `cooldown_active` plus `wait_for_cooldown`. Launch rechecks the same live fields;
 a new edit or version after assessment is rejected without optimizer dispatch.
 Scores whose scalar champion ID does not resolve through the champion
 relationship are structurally unranked as `unresolved_champion_reference`;
 they cannot be optimized and do not make otherwise complete cooldown coverage
 incomplete.
+
+Reports and workbooks must show the complete evidence-ranked distribution and
+overlay the action disposition. Distinguish selected for deeper semantic review,
+eligible but below the current review budget, cooldown, structural blockers, and
+incomplete evidence. A semantic-review selection is not optimizer authorization;
+launch still requires an explicit target approval and freshness recheck.
 
 Offline CLI evidence must include complete activity coverage with the fixed
 policy version and frozen `as_of`, plus complete per-score activity evidence.

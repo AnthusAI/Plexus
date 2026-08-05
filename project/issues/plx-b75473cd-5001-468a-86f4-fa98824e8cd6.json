@@ -1,0 +1,31 @@
+{
+  "id": "plx-b75473cd-5001-468a-86f4-fa98824e8cd6",
+  "title": "Reject optimization approvals when frozen evidence changes",
+  "description": "As a portfolio operator, I want a structured approval to authorize only the exact evidence shown to the reviewer, so that recomputed targets cannot inherit stale approval.\n\nFeature: Frozen optimization approval evidence\n\nScenario: Evidence changes before procedure resume\n  Given a pending optimization approval for an exact target and assessment fingerprint\n  And the portfolio is recomputed with a different fingerprint, champion version, feedback watermark, or target set\n  When the saved human response is reconciled\n  Then the response does not approve the recomputed target\n  And no optimizer is dispatched\n  And a fresh approval remains required\n\nScenario: Evidence remains identical\n  Given a pending optimization approval for an exact frozen target batch\n  When the procedure resumes with a valid response and identical preconditions\n  Then only that exact batch may be accepted.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4dfcea58-b15c-48a5-a3d3-627643425368",
+      "author": "ryan.porter",
+      "text": "Outside-in proof complete: the new replay specification first showed an approval for frozen evidence A authorizing recomputed evidence B. The runner now accepts accumulated responses only when the saved request exactly matches the current action key, resource refs, target set, evidence preconditions, and response schema. Changed evidence remains pending and dispatch stays empty. Focused regression is green.",
+      "created_at": "2026-07-29T19:54:57.269918Z"
+    },
+    {
+      "id": "cca9f7fc-2cf1-4a36-a68f-17ee3cfa2c77",
+      "author": "ryan.porter",
+      "text": "Final post-fix validation passed on Python 3.11 and 3.12: 356 focused tests and 4,088 full-suite tests on each runtime, plus lint, dispatch regression, lock, version, and diff checks.",
+      "created_at": "2026-07-29T20:06:54.286033Z"
+    }
+  ],
+  "created_at": "2026-07-29T19:50:11.551725Z",
+  "updated_at": "2026-07-29T20:06:54.286033Z",
+  "closed_at": null,
+  "custom": {}
+}

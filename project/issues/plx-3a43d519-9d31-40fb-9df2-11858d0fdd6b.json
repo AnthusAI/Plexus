@@ -1,0 +1,31 @@
+{
+  "id": "plx-3a43d519-9d31-40fb-9df2-11858d0fdd6b",
+  "title": "Separate complete inventory from incomplete semantic analysis",
+  "description": "Observed behavior: a portfolio run can enumerate its entire score inventory while selected semantic diagnoses return incomplete evidence. The living Report currently labels this as complete coverage, which overstates the completed analysis and obscures why the run is incomplete.\n\nFeature: Distinct inventory and analysis completeness\n\nScenario: Complete inventory with incomplete diagnosis results\nGiven exhaustive score inventory coverage is complete\nAnd a scheduled semantic diagnosis returns an incomplete result\nWhen the living Report publishes the terminal milestone\nThen the Report identifies portfolio inventory coverage as complete\nAnd identifies semantic analysis as incomplete\nAnd reports the count of returned incomplete diagnoses separately from execution failures and safety-cap deferrals\n\nScenario: Complete semantic analysis\nGiven exhaustive score inventory coverage is complete\nAnd every policy-selected semantic diagnosis completes without an incomplete result or deferral\nWhen the living Report publishes the milestone\nThen semantic analysis is labeled complete\n\nScenario: Analysis still in progress\nGiven policy-selected semantic diagnoses have not yet reached a terminal result\nWhen the living Report publishes an intermediate milestone\nThen semantic analysis is labeled pending rather than complete.\n\nOut of scope: changing ranking, diagnosis selection, safety caps, or optimizer authorization.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7252876a-d6f5-4cc5-a827-f18d8b4f290f",
+      "author": "ryan.porter",
+      "text": "Implemented distinct inventory and semantic-analysis completeness. Returned-but-incomplete diagnosis packets are counted separately from execution failures and safety-cap deferrals; the Report cover, workbook overview, dashboard header, and limitation banner now use the distinct states. Validation: 58 backend/report tests, 6 dashboard tests, dashboard web typecheck, and live verification against a terminal production-backed Report. A fresh read-only run is still needed to verify newly published artifact fields end to end.",
+      "created_at": "2026-07-30T21:01:09.036002Z"
+    },
+    {
+      "id": "42b10a62-a67f-4e19-8e0a-dc6995a556a8",
+      "author": "ryan.porter",
+      "text": "Fresh production-backed read-only acceptance completed. The frozen run inspected the full account inventory, analyzed one scoped portfolio, assessed every eligible score, and intentionally deferred all selected semantic diagnoses through a zero safety cap. Durable terminal Report and workbook revisions now distinguish complete portfolio inventory from incomplete semantic analysis, with returned-incomplete, execution-failure, and safety-cap deferral counts separated. No optimizer, evaluation, score version, champion, guideline, or feedback mutation ran.",
+      "created_at": "2026-07-30T21:12:05.391122Z"
+    }
+  ],
+  "created_at": "2026-07-30T20:56:28.382483Z",
+  "updated_at": "2026-07-30T21:12:05.391122Z",
+  "closed_at": null,
+  "custom": {}
+}

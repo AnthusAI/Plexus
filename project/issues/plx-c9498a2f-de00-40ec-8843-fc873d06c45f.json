@@ -1,0 +1,40 @@
+{
+  "id": "plx-c9498a2f-de00-40ec-8843-fc873d06c45f",
+  "title": "Make living-report artifact publication incremental and observable",
+  "description": "As an operator, I want large living-report milestones to publish incrementally with truthful progress and resumable work, so that account-wide portfolio reports do not remain silent or restart thousands of completed uploads after a transient interruption.\n\nObserved behavior: a large portfolio milestone publishes every score and scorecard artifact sequentially, reports only category-level completion, and uses new object keys on retry. The visible counter can remain unchanged for minutes and a late failure repeats already completed uploads.\n\nFeature: Incremental living-report artifact publication\n\nScenario: Per-artifact progress is visible\nGiven a milestone contains many stakeholder-safe score and scorecard artifacts\nWhen publication is in progress\nThen durable live progress advances at a bounded cadence as artifacts complete\nAnd the Report identifies the active category and completed count\n\nScenario: Retry reuses verified artifacts\nGiven an interrupted publication has already uploaded checksum-valid immutable artifacts\nWhen the same milestone and evidence fingerprint are retried\nThen checksum-identical artifacts are reused\nAnd only missing or changed artifacts are uploaded\nAnd the latest Report revision changes only after complete reconciliation\n\nScenario: Unchanged score artifacts are not regenerated\nGiven a later milestone does not change a score or scorecard presentation\nWhen that milestone is published\nThen the prior immutable artifact is referenced by the new manifest\nAnd no duplicate upload is created\n\nScenario: Partial publication never becomes authoritative\nGiven one required artifact remains missing or invalid\nWhen publication reconciliation ends\nThen the Report remains on its last complete revision\nAnd the incomplete milestone is visibly retryable\n\nOut of scope: GraphQL schema or resource changes; deleting historical artifacts; weakening checksum validation or atomic revision commits.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "acb50706-61d2-4e7a-b702-cf9b7e0079f7",
+      "author": "ryan.porter",
+      "text": "Outside-in progress increment: a 30-score publication regression first showed only 0 then 30 completed score briefs. The callback now records successful uploads and publishes compact progress every 25 artifacts plus category completion, while enforcing exact category totals before the atomic manifest commit. Focused publication tests pass, and the complete run-report suite passes: 83 tests. Retry reuse and unchanged-artifact reuse remain open.",
+      "created_at": "2026-07-31T16:07:32.741811Z"
+    },
+    {
+      "id": "9d12d8c3-68a1-4b63-806b-b3b278e0d41a",
+      "author": "ryan.porter",
+      "text": "Implemented the next publication-efficiency increment. A new milestone now loads the last committed manifest, verifies checksum-identical score, scorecard, and stakeholder-presentation artifacts, and reuses them instead of uploading duplicates. Changed dependencies republish, and corrupt reuse candidates are replaced. The full living-Report suite passes with 88 tests. Interrupted same-revision orphan recovery remains the next increment.",
+      "created_at": "2026-07-31T16:26:50.432686Z"
+    },
+    {
+      "id": "063258f4-d4c2-4780-aada-bd413d1b9468",
+      "author": "ryan.porter",
+      "text": "Added durable same-revision recovery. Publication freezes its generated time, checkpoints partial score-artifact descriptors every 25 resolutions through the existing Task-attachment route, and reuses checksum-verified artifacts after a worker/process restart. It preserves the existing invariant that individual score artifacts are not added directly to Task.attachedFiles. A manifest-interruption replay now uploads evidence, workbook, and four child artifacts only once. Combined validation: 132 tests passed.",
+      "created_at": "2026-07-31T16:32:10.333471Z"
+    }
+  ],
+  "created_at": "2026-07-31T16:04:27.961131Z",
+  "updated_at": "2026-07-31T16:32:10.333471Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

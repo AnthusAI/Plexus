@@ -8,6 +8,8 @@ import pytest
 
 from plexus.cli.shared.async_cleanup import drain_litellm_service_logging_tasks
 from plexus.cli.shared.experiment_runner import _extract_run_parameters_from_procedure_yaml
+from plexus.cli.shared.experiment_runner import _merge_task_metadata
+from plexus.cli.shared.experiment_runner import create_tracker_and_experiment_task
 from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
 
 
@@ -69,10 +71,66 @@ class _FakeClient:
         raise AssertionError(f"Unexpected GraphQL call: {query}")
 
 
+def test_task_metadata_merge_reloads_authoritative_concurrent_report_identity(monkeypatch):
+    stale_task = _FakeTask()
+    stale_task._client = object()
+    authoritative_task = SimpleNamespace(
+        metadata=json.dumps({
+            "seed": "value",
+            "optimization_run_key": "run-1",
+            "attempt_id": "attempt-1",
+        })
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.Task.get_by_id",
+        lambda task_id, client: authoritative_task,
+    )
+
+    merged = _merge_task_metadata(
+        stale_task,
+        {"runtime": {"tactus_run_id": "runtime-1"}},
+    )
+
+    assert merged == {
+        "seed": "value",
+        "optimization_run_key": "run-1",
+        "attempt_id": "attempt-1",
+        "runtime": {"tactus_run_id": "runtime-1"},
+    }
+
+
+def test_task_metadata_merge_fails_closed_when_authoritative_reload_fails(monkeypatch):
+    stale_task = _FakeTask()
+    stale_task._client = object()
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.Task.get_by_id",
+        lambda task_id, client: (_ for _ in ()).throw(RuntimeError("API unavailable")),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="authoritative Task could not be reloaded",
+    ):
+        _merge_task_metadata(stale_task, {"runtime": {"tactus_run_id": "runtime-1"}})
+
+
+def test_task_metadata_merge_keeps_local_behavior_for_simple_test_fakes():
+    task = _FakeTask()
+
+    assert _merge_task_metadata(task, {"runtime": {"tactus_run_id": "runtime-1"}}) == {
+        "seed": "value",
+        "runtime": {"tactus_run_id": "runtime-1"},
+    }
+
+
 def _patch_tracker(monkeypatch, fake_task):
     monkeypatch.setattr(
         "plexus.cli.shared.experiment_runner.create_tracker_and_experiment_task",
         lambda **_kwargs: (None, None, fake_task),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.Task.get_by_id",
+        lambda *_args, **_kwargs: fake_task,
     )
     monkeypatch.setattr(
         "plexus.cli.shared.experiment_runner.DashboardProcedure.get_by_id",
@@ -152,6 +210,45 @@ parameters:
     assert result["hint"] == "focus on transfer language"
 
 
+def test_starting_a_run_preserves_semantic_procedure_identity(monkeypatch):
+    fake_task = _FakeTask()
+    fake_task.metadata = json.dumps({
+        "procedure_type": "Portfolio Optimization",
+        "display_title": "Account-wide optimization portfolio",
+        "display_scope": "All scorecards",
+    })
+    procedure = SimpleNamespace(
+        code=None,
+        metadata={"procedure_type": "Portfolio Optimization"},
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner._find_existing_task_for_procedure",
+        lambda *_args, **_kwargs: fake_task.id,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.Task.get_by_id",
+        lambda *_args, **_kwargs: fake_task,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.DashboardProcedure.get_by_id",
+        lambda *_args, **_kwargs: procedure,
+    )
+
+    _, _, task = create_tracker_and_experiment_task(
+        client=SimpleNamespace(),
+        account_id="acct-123",
+        procedure_id="proc-123",
+        run_parameters={"max_samples": 10},
+        local_dispatch=True,
+    )
+
+    metadata = json.loads(task.metadata)
+    assert metadata["procedure_type"] == "Portfolio Optimization"
+    assert metadata["procedure_action"] == "run"
+    assert metadata["display_title"] == "Account-wide optimization portfolio"
+    assert metadata["display_scope"] == "All scorecards"
+
+
 @pytest.mark.asyncio
 async def test_run_procedure_persists_failed_result_telemetry(monkeypatch):
     fake_task = _FakeTask()
@@ -201,6 +298,10 @@ async def test_run_procedure_launches_background_stale_timeout_scan(monkeypatch)
     monkeypatch.setattr(
         "plexus.cli.procedure.procedure_executor._fail_all_task_stages",
         lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.persist_task_output_artifact",
+        lambda **_kwargs: ("{}", [], "tasks/task-123/output.json"),
     )
     monkeypatch.setattr(
         "plexus.cli.procedure.stale_timeout.launch_async_stale_timeout_scan",
@@ -281,6 +382,326 @@ async def test_run_procedure_persists_compacted_task_output_attachment(monkeypat
     assert fake_task.update_calls[-1]["dispatchStatus"] == "LOCAL"
     assert fake_task.update_calls[-1]["workerNodeId"] is None
     assert json.loads(fake_task.update_calls[-1]["metadata"])["dispatch_mode"] == "local"
+
+
+@pytest.mark.asyncio
+async def test_terminal_output_persistence_preserves_living_report_attachments_from_stale_task(monkeypatch):
+    """A terminal output must append to, not replace, report revisions published mid-run."""
+    stale_task = _FakeTask()
+    stale_task.attachedFiles = []
+    authoritative_task = _FakeTask()
+    living_report_attachments = [
+        "tasks/task-123/optimization-evidence-r0003.json",
+        "tasks/task-123/optimization-workbook-r0003.xlsx",
+    ]
+    authoritative_task.attachedFiles = list(living_report_attachments)
+    fake_client = _FakeClient()
+    persisted_calls = []
+
+    _patch_tracker(monkeypatch, stale_task)
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.Task.get_by_id",
+        lambda task_id, client: authoritative_task if task_id == stale_task.id else None,
+    )
+
+    def _persist(**kwargs):
+        persisted_calls.append(kwargs)
+        attached_files = list(kwargs["existing_attached_files"] or [])
+        output_attachment = "tasks/task-123/output.json"
+        if output_attachment not in attached_files:
+            attached_files.append(output_attachment)
+        return ('{"output_compacted": true, "output_attachment": "tasks/task-123/output.json"}',
+                attached_files, output_attachment)
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.persist_task_output_artifact",
+        _persist,
+    )
+
+    async def _run_impl(_procedure_id, **_options):
+        return {"success": True, "status": "completed", "message": "ok"}
+
+    _patch_service(monkeypatch, _run_impl)
+
+    result = await run_procedure_with_task_tracking(
+        procedure_id="proc-123",
+        client=fake_client,
+        account_id="acct-123",
+    )
+
+    assert result["status"] == "COMPLETED"
+    assert persisted_calls[0]["existing_attached_files"] == living_report_attachments
+    assert stale_task.update_calls[-1]["attachedFiles"] == [
+        *living_report_attachments,
+        "tasks/task-123/output.json",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_run_procedure_persists_durable_external_child_wait(monkeypatch):
+    fake_task = _FakeTask()
+    fake_client = _FakeClient()
+    _patch_tracker(monkeypatch, fake_task)
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.persist_task_output_artifact",
+        lambda **_kwargs: (
+            '{"output_compacted": true}',
+            ["tasks/task-123/output.json"],
+            "tasks/task-123/output.json",
+        ),
+    )
+
+    wait_request = {
+        "mode": "any",
+        "children": [{
+            "id": "child-task-1",
+            "task_id": "child-task-1",
+            "procedure_id": "child-procedure-1",
+        }],
+    }
+
+    async def _run_impl(_procedure_id, **_options):
+        return {
+            "success": False,
+            "status": "WAITING_FOR_CHILDREN",
+            "request": wait_request,
+            "children": [{"id": "child-task-1", "terminal": False}],
+        }
+
+    _patch_service(monkeypatch, _run_impl)
+
+    result = await run_procedure_with_task_tracking(
+        procedure_id="proc-123",
+        client=fake_client,
+        account_id="acct-123",
+    )
+
+    assert result["status"] == "WAITING_FOR_CHILDREN"
+    task_update = fake_task.update_calls[-1]
+    assert task_update["status"] == "WAITING_FOR_CHILDREN"
+    assert task_update["dispatchStatus"] == "WAITING_FOR_CHILDREN"
+    assert task_update["completedAt"] is None
+    task_metadata = json.loads(task_update["metadata"])
+    assert task_metadata["dispatch_policy"] == "resume_once"
+    assert task_metadata["waiting_for_children"] == {
+        "procedure_id": "proc-123",
+        "parent_task_id": "task-123",
+        "request": wait_request,
+        "children": [{"id": "child-task-1", "terminal": False}],
+    }
+    assert fake_client.procedure_status == "WAITING_FOR_CHILDREN"
+    assert fake_client.procedure_metadata["waiting_for_children"] == task_metadata["waiting_for_children"]
+
+
+@pytest.mark.asyncio
+async def test_run_procedure_persists_native_time_wait_and_releases_the_worker(monkeypatch):
+    fake_task = _FakeTask()
+    fake_task.workerNodeId = "worker-1"
+    fake_client = _FakeClient()
+    _patch_tracker(monkeypatch, fake_task)
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.persist_task_output_artifact",
+        lambda **_kwargs: ("{}", [], "tasks/task-123/output.json"),
+    )
+    request = {
+        "key": "optimization-report-publication",
+        "resume_at": "2026-07-31T12:00:00Z",
+        "reason": "retryable_report_publication",
+    }
+
+    async def _run_impl(_procedure_id, **_options):
+        return {"success": False, "status": "WAITING_FOR_TIME", "request": request}
+
+    _patch_service(monkeypatch, _run_impl)
+    result = await run_procedure_with_task_tracking(
+        procedure_id="proc-123", client=fake_client, account_id="acct-123",
+    )
+
+    assert result["status"] == "WAITING_FOR_TIME"
+    task_update = fake_task.update_calls[-1]
+    assert task_update["status"] == "WAITING_FOR_TIME"
+    assert task_update["dispatchStatus"] == "WAITING_FOR_TIME"
+    assert task_update["workerNodeId"] is None
+    assert task_update["completedAt"] is None
+    task_metadata = json.loads(task_update["metadata"])
+    assert task_metadata["dispatch_policy"] == "resume_once"
+    assert task_metadata["waiting_for_time"] == {
+        "procedure_id": "proc-123", "parent_task_id": "task-123", "request": request,
+    }
+    assert fake_client.procedure_status == "WAITING_FOR_TIME"
+    assert fake_client.procedure_metadata["waiting_for_time"] == task_metadata["waiting_for_time"]
+
+
+@pytest.mark.asyncio
+async def test_tracked_replay_reuses_the_original_tactus_run_identity(monkeypatch):
+    fake_task = _FakeTask()
+    fake_task.metadata = json.dumps({
+        "procedure_id": "proc-123",
+        "runtime": {"tactus_run_id": "stable-run-identity"},
+    })
+    fake_client = _FakeClient()
+    _patch_tracker(monkeypatch, fake_task)
+    observed_run_ids = []
+
+    async def _run_impl(_procedure_id, **options):
+        observed_run_ids.append(options.get("_tactus_run_id"))
+        return {"success": True, "status": "COMPLETED"}
+
+    _patch_service(monkeypatch, _run_impl)
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.persist_task_output_artifact",
+        lambda **_kwargs: ("{}", [], "tasks/task-123/output.json"),
+    )
+
+    await run_procedure_with_task_tracking(
+        procedure_id="proc-123", client=fake_client, account_id="acct-123",
+    )
+
+    assert observed_run_ids == ["stable-run-identity"]
+    runtime = json.loads(fake_task.update_calls[-1]["metadata"])["runtime"]
+    assert runtime["tactus_run_id"] == "stable-run-identity"
+
+
+@pytest.mark.asyncio
+async def test_external_child_wait_persists_procedure_before_parent_task(monkeypatch):
+    events = []
+    fake_task = _FakeTask()
+    original_update = fake_task.update
+
+    def _task_update(**kwargs):
+        if kwargs.get("status") == "WAITING_FOR_CHILDREN":
+            events.append("task_waiting")
+        return original_update(**kwargs)
+
+    fake_task.update = _task_update
+
+    class _OrderedClient(_FakeClient):
+        def execute(self, query, variables):
+            if "updateProcedure(input: $input)" in query and variables["input"].get("status") == "WAITING_FOR_CHILDREN":
+                events.append("procedure_waiting")
+            return super().execute(query, variables)
+
+    fake_client = _OrderedClient()
+    _patch_tracker(monkeypatch, fake_task)
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.persist_task_output_artifact",
+        lambda **_kwargs: ("{}", [], "tasks/task-123/output.json"),
+    )
+
+    async def _run_impl(_procedure_id, **_options):
+        return {
+            "success": False,
+            "status": "WAITING_FOR_CHILDREN",
+            "request": {"mode": "any", "children": [{
+                "id": "launch-1", "procedure_id": "child-procedure-1",
+                "task_id": "child-task-1", "scorecard_id": "card", "score_id": "score",
+            }]},
+            "children": [{"id": "launch-1", "terminal": False}],
+        }
+
+    _patch_service(monkeypatch, _run_impl)
+    result = await run_procedure_with_task_tracking(
+        procedure_id="proc-123", client=fake_client, account_id="acct-123",
+    )
+
+    assert result["status"] == "WAITING_FOR_CHILDREN"
+    assert events == ["procedure_waiting", "task_waiting"]
+
+
+@pytest.mark.asyncio
+async def test_external_child_wait_procedure_publication_failure_is_fatal(monkeypatch):
+    fake_task = _FakeTask()
+
+    class _FailingClient(_FakeClient):
+        def execute(self, query, variables):
+            if "updateProcedure(input: $input)" in query and variables["input"].get("status") == "WAITING_FOR_CHILDREN":
+                raise RuntimeError("procedure write failed")
+            return super().execute(query, variables)
+
+    fake_client = _FailingClient()
+    _patch_tracker(monkeypatch, fake_task)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._fail_all_task_stages",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.persist_task_output_artifact",
+        lambda **_kwargs: ("{}", [], "tasks/task-123/output.json"),
+    )
+
+    async def _run_impl(_procedure_id, **_options):
+        return {
+            "success": False,
+            "status": "WAITING_FOR_CHILDREN",
+            "request": {"mode": "any", "children": [{
+                "id": "launch-1", "procedure_id": "child-procedure-1",
+                "task_id": "child-task-1", "scorecard_id": "card", "score_id": "score",
+            }]},
+            "children": [{"id": "launch-1", "terminal": False}],
+        }
+
+    _patch_service(monkeypatch, _run_impl)
+    result = await run_procedure_with_task_tracking(
+        procedure_id="proc-123", client=fake_client, account_id="acct-123",
+    )
+
+    assert result["status"] == "FAILED"
+    assert fake_task.status == "FAILED"
+
+
+@pytest.mark.asyncio
+async def test_completed_replay_clears_external_child_wait_metadata(monkeypatch):
+    fake_task = _FakeTask()
+    fake_task.metadata = json.dumps({
+        "seed": "value",
+        "dispatch_policy": "resume_once",
+        "waiting_for_children": {"request": {"children": [{"id": "child-task-1"}]}},
+    })
+    fake_client = _FakeClient()
+    fake_client.procedure_metadata["waiting_for_children"] = {
+        "request": {"children": [{"id": "child-task-1"}]},
+    }
+    _patch_tracker(monkeypatch, fake_task)
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.persist_task_output_artifact",
+        lambda **_kwargs: ("{}", [], "tasks/task-123/output.json"),
+    )
+
+    async def _run_impl(_procedure_id, **_options):
+        return {"success": True, "status": "COMPLETED"}
+
+    _patch_service(monkeypatch, _run_impl)
+
+    await run_procedure_with_task_tracking(
+        procedure_id="proc-123", client=fake_client, account_id="acct-123",
+    )
+
+    task_metadata = json.loads(fake_task.update_calls[-1]["metadata"])
+    assert "waiting_for_children" not in task_metadata
+    assert "dispatch_policy" not in task_metadata
+    assert "waiting_for_children" not in fake_client.procedure_metadata
+
+
+@pytest.mark.asyncio
+async def test_completed_optimizer_child_preserves_held_once_dispatch_policy(monkeypatch):
+    fake_task = _FakeTask()
+    fake_task.metadata = json.dumps({"dispatch_policy": "held_once"})
+    fake_client = _FakeClient()
+    _patch_tracker(monkeypatch, fake_task)
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.persist_task_output_artifact",
+        lambda **_kwargs: ("{}", [], "tasks/task-123/output.json"),
+    )
+
+    async def _run_impl(_procedure_id, **_options):
+        return {"success": True, "status": "COMPLETED"}
+
+    _patch_service(monkeypatch, _run_impl)
+    await run_procedure_with_task_tracking(
+        procedure_id="proc-123", client=fake_client, account_id="acct-123",
+    )
+
+    assert json.loads(fake_task.update_calls[-1]["metadata"])["dispatch_policy"] == "held_once"
 
 
 @pytest.mark.asyncio

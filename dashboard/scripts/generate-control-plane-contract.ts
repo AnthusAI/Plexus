@@ -379,7 +379,11 @@ function parseIndexes(modelName: string, expression: string): IndexManifest[] {
   while ((match = itemRegex.exec(array)) !== null) {
     const partitionField = match[1]
     const sortFields = match[2] ? stringArrayValues(match[2]) : []
-    const indexName = match[3] || `by${pascalCase(partitionField)}${sortFields.map(pascalCase).join("")}`
+    const defaultQuerySuffix = [
+      pascalCase(partitionField),
+      ...sortFields.map((field) => `And${pascalCase(field)}`),
+    ].join("")
+    const indexName = match[3] || `by${defaultQuerySuffix}`
     const querySuffix = indexName.startsWith("by") ? indexName.slice(2) : indexName
     const sortArgument = sortFields.length === 0 ? undefined : sortFields.map((field, index) => (
       index === 0 ? field : pascalCase(field)
@@ -531,6 +535,7 @@ function buildGraphqlSchema(manifest: Manifest): string {
     "scalar AWSJSON",
     "enum ModelSortDirection {\n  ASC\n  DESC\n}",
     "input ModelStringInput {\n  eq: String\n  beginsWith: String\n  contains: String\n}",
+    "input ModelStringKeyConditionInput {\n  eq: String\n  le: String\n  lt: String\n  ge: String\n  gt: String\n  between: [String]\n  beginsWith: String\n}",
     ...enumBlocks,
     ...typeBlocks,
     ...inputBlocks,
@@ -586,7 +591,7 @@ function indexArgumentType(arg: string, index: IndexManifest): string {
   if (arg === "nextToken") {
     return "String"
   }
-  return index.sortFields.length > 1 ? "AWSJSON" : "ModelStringInput"
+  return index.sortFields.length > 1 ? "AWSJSON" : "ModelStringKeyConditionInput"
 }
 
 function isInputField(field: FieldManifest): boolean {

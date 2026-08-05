@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "ff321864-5e70-4b6a-96f4-31b20e8d9ab8",
+  "issue_id": "plx-bfdcec09-c369-4e60-97b9-4d6db192a629",
+  "event_type": "field_updated",
+  "occurred_at": "2026-07-31T15:58:36.597Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "As an operator, I want a dispatcher claim that fails before enqueue or execution to become safely retryable, so that a durable Procedure continuation cannot remain stranded in DISPATCHING.\n\nObserved behavior: the dispatcher claimed a pending continuation, then its transport raised before enqueue. The Task remained PENDING/DISPATCHING and could not be claimed by the supported local dispatcher.\n\nFeature: Recover failed pre-dispatch claims\n\nScenario: Transport fails before dispatch\nGiven a pending Task has been atomically claimed by a dispatcher\nAnd the transport raises before returning an external dispatch identity\nWhen the dispatcher handles the failure\nThen the Task is returned to a claimable pending state using a conditional update\nAnd the failed dispatcher identity is cleared\nAnd no second Procedure or Task is created\n\nScenario: Dispatch may already have occurred\nGiven a transport returns an external dispatch identity\nWhen a later persistence update fails\nThen the dispatcher does not rearm the Task automatically\nAnd duplicate execution is prevented\n\nOut of scope: GraphQL schema or resource changes; bypassing durable continuation checks; changing optimization policy.",
+        "to": "As an operator, I want a dispatcher claim whose broker publication becomes ambiguous to fail closed, so that a durable Procedure continuation cannot execute twice or remain indefinitely stranded in DISPATCHING.\n\nObserved behavior: the dispatcher claimed a pending continuation, then its broker transport raised. The Task remained PENDING/DISPATCHING and could not be safely classified or reclaimed.\n\nFeature: Fail closed after ambiguous broker publication\n\nScenario: Broker publication raises before acknowledgement\nGiven a pending Task has been atomically claimed by a dispatcher\nWhen broker publication raises before returning an external dispatch identity\nThen the Task becomes FAILED with dispatchStatus ERROR using a conditional update\nAnd the failed dispatcher identity is cleared\nAnd continuation metadata and sanitized failure evidence are retained\nAnd the Task is not automatically requeued\n\nScenario: A delayed broker message arrives\nGiven a Task is already terminal after an ambiguous publication failure\nWhen a delayed worker message for that Task arrives\nThen the worker rejects it before invoking the Plexus command\nAnd no duplicate Procedure execution occurs\n\nScenario: Dispatch was acknowledged\nGiven broker publication returns an external dispatch identity\nWhen a later persistence update fails\nThen the dispatcher does not rearm the Task automatically\nAnd duplicate execution is prevented\n\nOut of scope: GraphQL schema or resource changes; bypassing durable continuation checks; changing optimization policy."
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "plx-18b8c5bb-ba91-453c-b0cf-bd15c332242e",
+  "title": "Preserve the supported AWS credential chain over stale YAML keys",
+  "description": "A local worker can have a supported AWS SDK credential source available while legacy static keys remain in Plexus YAML. Configuration loading currently exports the YAML keys unless an explicit profile environment variable is present, which can displace the supported credential provider and cause evidence reads to fail.\n\nFeature: Safe AWS credential-source precedence\n\nScenario: the default AWS credential chain has a provider\nGiven the AWS SDK resolves credentials through a supported non-environment provider\nAnd Plexus YAML also contains static access keys\nWhen Plexus loads configuration\nThen the static YAML keys are not exported\nAnd the SDK provider remains authoritative\n\nScenario: no other AWS credential source exists\nGiven no environment, profile, workload, or SDK credential provider is configured\nAnd Plexus YAML contains static access keys\nWhen Plexus loads configuration\nThen the YAML keys remain available as the legacy fallback\n\nScenario: provider authorization has expired\nGiven a supported SDK provider is configured but requires reauthentication\nWhen required evidence preflight runs\nThen Plexus reports an authorization prerequisite failure\nAnd it does not silently fall back to unrelated static YAML credentials.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-07-31T17:03:59.975310Z",
+  "updated_at": "2026-07-31T17:04:20.612524Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

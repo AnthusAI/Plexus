@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "69067285-276d-46fd-bbe2-4e574cb91f5b",
+  "issue_id": "plx-84edbeb2-c828-4746-a95f-7aa2b3b1f3a5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T18:46:57.850Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Publish deterministic report evidence before diagnosis",
+    "description": "As a stakeholder, I want completed ranking and assessment evidence published before semantic diagnosis finishes, so that a living report reflects durable progress during long model work.\n\nOut of scope: per-score workbook publication or changing ranking and diagnosis algorithms.\n\nFeature: Living report milestone ordering\n\n  Scenario: Publish deterministic evidence before semantic diagnosis\n    Given exhaustive ranking and all deterministic assessments complete\n    When semantic diagnosis begins\n    Then the ranking and assessment milestone has already been published\n    And diagnosis evidence is published only after diagnosis completes\n\n  Scenario: Diagnosis fails after deterministic evidence is published\n    Given the ranking and assessment milestone is durable\n    When semantic diagnosis fails\n    Then the existing milestone remains visible\n    And the run reports the diagnosis failure without relabeling prior evidence as incomplete",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

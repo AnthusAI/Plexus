@@ -1,0 +1,25 @@
+{
+  "id": "plx-93a15d45-6562-456c-b840-34d0e281f2b6",
+  "title": "Preserve scheduled portfolio suspension through local dispatch",
+  "description": "A suspended portfolio procedure is currently translated into completion by the local command-dispatch boundary, and the checked-in replay test does not persist procedure state.\n\nFeature: Preserve scheduled portfolio continuation\n\nScenario: Future continuation remains suspended\n  Given a portfolio procedure defers until a future UTC timestamp\n  When the local command dispatcher records the procedure result\n  Then the Procedure and Task remain WAITING_FOR_TIME\n  And the Task retains no completion timestamp or worker ownership\n  And no completed result is reported\n\nScenario: Scheduled publication retry replays durably\n  Given a portfolio run records one scheduled publication retry\n  When the procedure is invoked again before that retry is due\n  Then the persisted retry is replayed without another portfolio call\n  And the procedure remains WAITING_FOR_TIME\n\nScenario: Consecutive retries append and complete\n  Given two consecutive publication retries\n  When each due timestamp is reached in order\n  Then each continuation is replayed exactly once\n  And the portfolio operation runs three times before terminal completion",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-78b7597b-9390-408b-9a5c-6799b70c2ab2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e83f056c-4695-4374-a1c3-d2909f80c608",
+      "author": "ryan.porter",
+      "text": "Implemented the minimal local-dispatch boundary fix after the failing observable spec: WAITING_FOR_TIME is mapped as durable suspension, resume_once scheduled tasks are eligible after the due-time claimant transitions dispatchStatus to PENDING, and a successful child process exit reloads and preserves the runner-authored waiting Task rather than writing completion. Focused command-dispatch tests pass within the 114-test runtime gate.",
+      "created_at": "2026-07-31T15:15:56.486239Z"
+    }
+  ],
+  "created_at": "2026-07-31T15:11:12.420508Z",
+  "updated_at": "2026-07-31T15:15:56.486239Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "beb79004-ee5e-4a82-88eb-5a580f260366",
+  "issue_id": "plx-bd9dcac9-dc5a-49ee-a610-353fbe2c09ed",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T22:44:49.628Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Integrate durable child waiting into portfolio execution",
+    "description": "Implement story plx-e91e03 using the supported Tactus external-child wait contract and existing Plexus Procedure and Task records. Checkpoint child references, suspend without holding compute, resume through the procedure recovery path, review only terminal indexed evidence, and never impose a fixed evaluation timeout or premature cancellation.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-78b7597b-9390-408b-9a5c-6799b70c2ab2",
+    "labels": []
+  }
+}

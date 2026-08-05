@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "08877774-e5ed-46e2-bb82-6a90133fe0cb",
+  "issue_id": "plx-a83ea9d6-e6f9-4ab2-9ef0-b4fa5ed7e4fe",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T22:44:49.038Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Finish fail-closed living Report recovery",
+    "description": "Complete the existing recovery work under bug plx-420460. Verify committed checkpoint manifests and evidence descriptors exactly, reject missing or malformed frozen run specifications, keep transient publication failures resumable from the last committed revision, reconcile advisory ChatMessage responses, and publish terminal inbox state idempotently. Preserve the existing Task attachment route and zero backend-resource diff.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-1249ce6e-aaf6-4856-85a5-76df0823737c",
+  "title": "Clarify portfolio phases when no optimization targets run",
+  "description": "Observed behavior: a portfolio run with no approved optimization targets still publishes optimization and optimization-review milestones using active-work language. This implies optimizer or evaluation work is running when those phases are actually empty.\n\nFeature: Truthful empty optimization phase narration\n\nScenario: No approved targets enter optimization\nGiven a portfolio run has zero approved optimization targets\nWhen the run publishes the optimization milestone\nThen the Report states that no optimizations were launched\nAnd the next checkpoint does not imply evaluations are running\n\nScenario: No optimizer results enter review\nGiven a portfolio run has no dispatched optimizer procedures or evaluation evidence\nWhen the run publishes the optimization-review milestone\nThen the Report states that there are no optimization results to review\nAnd does not imply completed optimizer evidence exists\n\nScenario: Approved targets are dispatched\nGiven one or more exact targets were approved and dispatched\nWhen optimization and review milestones are published\nThen active-work narration remains specific to the dispatched work\n\nOut of scope: changing approval authority, optimizer dispatch, evaluation behavior, or terminal status.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "599836d3-5d85-4f30-b390-dc8dde93a3ee",
+      "author": "ryan.porter",
+      "text": "Acceptance evidence: a production read-only portfolio run with zero approved targets published an Optimization revision stating that no optimizations were launched, followed by an Optimization Review revision stating that no optimization results were available because no optimizer procedure was launched. Both revisions exposed approved, dispatched, and review counts as zero. The run then finalized without score, version, evaluation, champion, guideline, or feedback-setting mutations. Focused optimization/report tests pass: 60 passed.",
+      "created_at": "2026-07-30T21:41:16.594925Z"
+    }
+  ],
+  "created_at": "2026-07-30T21:12:05.619737Z",
+  "updated_at": "2026-07-30T21:41:16.594925Z",
+  "closed_at": null,
+  "custom": {}
+}

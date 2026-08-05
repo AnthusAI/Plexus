@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "acb145af-e52b-444c-8382-655b54d0dd24",
+  "issue_id": "plx-a5d694aa-900b-4fd4-bcf1-ca3fcd2b046b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T19:05:24.854Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Reconcile diagnosed priority actions in optimization reports",
+    "description": "Ensure completed semantic diagnosis replaces stale assessment guidance in stakeholder-facing priority rows.\n\nFeature: Diagnosed priority projection\n  Scenario: A selected priority has completed diagnosis\n    Given a ranked score has both deterministic assessment and completed semantic diagnosis\n    When the living report projects the priority\n    Then its state, rationale, and next action come from the completed diagnosis\n    And it does not tell the operator to complete diagnosis again\n\n  Scenario: A priority has not completed diagnosis\n    Given a ranked score has assessment evidence but no completed diagnosis\n    When the living report projects the priority\n    Then the report clearly labels diagnosis as incomplete",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

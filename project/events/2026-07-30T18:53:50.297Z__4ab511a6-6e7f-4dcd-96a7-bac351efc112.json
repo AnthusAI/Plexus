@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4ab511a6-6e7f-4dcd-96a7-bac351efc112",
+  "issue_id": "plx-3c008952-72b6-423f-91d7-b509d9d66793",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T18:53:50.297Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Show scoped identity consistently in optimization reports",
+    "description": "Ensure the embedded procedure summary and living report use the same sanitized scope identity.\n\nFeature: Scoped optimization identity\n  Scenario: A scorecard-scoped portfolio run is displayed\n    Given an optimization portfolio procedure has one or more scorecard selectors\n    When the procedure task and living report are rendered\n    Then both surfaces identify the run as scorecard-scoped\n    And neither surface describes the run as account-wide\n\n  Scenario: An account-wide portfolio run is displayed\n    Given an optimization portfolio procedure has no scorecard selectors\n    When the procedure task and living report are rendered\n    Then both surfaces identify the run as account-wide",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

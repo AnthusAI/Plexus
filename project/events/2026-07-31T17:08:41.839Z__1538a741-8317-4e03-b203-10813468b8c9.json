@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1538a741-8317-4e03-b203-10813468b8c9",
+  "issue_id": "plx-f8ebcc4c-4fe7-4df4-8a27-e2094386f444",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T17:08:41.839Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Identify superseded duplicate living Reports without deleting history",
+    "description": "A historical retry can leave two living Reports linked to the same Task and optimization run. Even after the Task finishes, the earlier copy can remain visibly running with an obsolete first revision. Operators need the dashboard to identify the authoritative revision while preserving both records.\n\nFeature: Read-only duplicate Report reconciliation\n\nScenario: two Reports identify the same Task and run\nGiven two optimization Reports share one Task and run key\nAnd one Report has a later durable revision\nWhen the Reports dashboard renders them\nThen the later revision is treated as authoritative\nAnd the earlier Report is labeled superseded\nAnd the earlier Report links to the authoritative Report\n\nScenario: retries use different Tasks\nGiven two optimization Reports share a run key but belong to different Tasks\nWhen the dashboard renders them\nThen neither is treated as a duplicate of the other\n\nScenario: revision evidence is tied\nGiven duplicate Reports have the same latest revision number\nWhen the dashboard resolves the authoritative Report\nThen the most recently updated Report wins with a stable ID tie-breaker.\n\nNo Report, Task, block, artifact, or GraphQL resource is deleted or rewritten.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

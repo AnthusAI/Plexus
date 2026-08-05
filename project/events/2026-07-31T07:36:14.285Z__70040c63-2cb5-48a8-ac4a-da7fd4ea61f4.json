@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "70040c63-2cb5-48a8-ac4a-da7fd4ea61f4",
+  "issue_id": "plx-51cf3870-3e74-4978-bd5f-b752110dbbeb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T07:36:14.285Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Resume long-running portfolio runs after application authentication expiry",
+    "description": "A long-running portfolio procedure can outlive its Plexus application login. The current worker stops mid-assessment, then required artifact persistence fails with a secondary authorization error that can obscure the primary cause. Preserve the failed attempt and make recovery explicit and replay-safe.\n\nFeature: Authentication-resilient portfolio execution\n\nScenario: Refresh authority during a long run\n  Given a portfolio run is making durable progress\n  And its application access token expires\n  When the worker performs the next authorized Plexus operation\n  Then it refreshes authority without losing progress\n  And the same run attempt continues from durable evidence\n\nScenario: Resume when refresh is unavailable\n  Given a portfolio run has durable ranking and partial assessment progress\n  And application authority cannot be refreshed\n  When an operator reauthenticates and resumes the procedure\n  Then completed durable work is not silently discarded\n  And the same attempt resumes from the latest valid checkpoint\n  And no optimizer target is dispatched twice\n\nScenario: Preserve the primary failure\n  Given application authentication expires during execution\n  When terminal artifact persistence also lacks authority\n  Then the run reports authentication expiry as the primary failure\n  And artifact persistence failure remains visible as a secondary failure\n\nOut of scope: weakening artifact authorization, persisting credentials in procedure state, or automatically promoting score versions.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+    "labels": []
+  }
+}

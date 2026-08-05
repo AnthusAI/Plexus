@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import '@/components/blocks/registrySetup'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FileBarChart, Clock, Square, Columns2, X } from 'lucide-react'
@@ -10,6 +10,7 @@ import { getClient } from '@/utils/amplify-client'
 import BlockDetails from './reports/BlockDetails'
 import { parseOutputString } from '@/lib/utils'
 import { TaskAuthorIndicator } from '@/components/ui/task-author-indicator'
+import ProcedureTask, { type ProcedureTaskData } from '@/components/ProcedureTask'
 
 // Define the data structure for report tasks
 export interface ReportTaskData {
@@ -60,6 +61,8 @@ export interface ReportTaskData {
 // Props for the ReportTask component
 export interface ReportTaskProps extends BaseTaskProps<ReportTaskData> {
   isSelected?: boolean;
+  linkedProcedure?: ProcedureTaskData | null;
+  detailNotice?: React.ReactNode;
 }
 
 // Add interface for report blocks
@@ -101,6 +104,62 @@ const blockTypeMatches = (block: ReportBlock, blockClass: string): boolean =>
 const blockNameMatches = (block: ReportBlock, blockName: string): boolean =>
   normalizedBlockValue(block.name) === normalizedBlockValue(blockName);
 
+const finiteNonNegativeNumber = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+
+const linkedProcedureOverview = (metadata: unknown): Record<string, unknown> | null => {
+  try {
+    const parsed = typeof metadata === 'string' ? JSON.parse(metadata) : metadata
+    const latestRevision = parsed && typeof parsed === 'object'
+      ? (parsed as Record<string, unknown>).latest_revision
+      : null
+    const overview = latestRevision && typeof latestRevision === 'object'
+      ? (latestRevision as Record<string, unknown>).overview
+      : null
+    return overview && typeof overview === 'object' && !Array.isArray(overview)
+      ? overview as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+const hasConfiguredDiagnosisLimitEvidence = (metadata: unknown): boolean => {
+  const overview = linkedProcedureOverview(metadata)
+  if (!overview) return false
+  if (overview.analysis_incomplete_reason === 'configured_count_limit') return true
+
+  const scheduled = finiteNonNegativeNumber(overview.diagnosis_scheduled_count)
+  const completed = finiteNonNegativeNumber(overview.diagnosis_completed_count)
+  const deferred = finiteNonNegativeNumber(overview.diagnosis_deferred_count)
+  const incomplete = finiteNonNegativeNumber(overview.diagnosis_incomplete_count)
+  const executionFailures = overview.diagnosis_execution_failure_count === undefined
+    ? finiteNonNegativeNumber(overview.semantic_budget_failure_count)
+    : finiteNonNegativeNumber(overview.diagnosis_execution_failure_count)
+  const prerequisiteFailures = finiteNonNegativeNumber(overview.diagnosis_prerequisite_failure_count)
+  const semanticBudgetExhausted = finiteNonNegativeNumber(overview.semantic_budget_exhausted_count)
+  const semanticBudgetDeferred = finiteNonNegativeNumber(overview.semantic_budget_deferred_count)
+  return (
+    overview.inventory_coverage_status === 'complete'
+    && overview.analysis_coverage_status === 'incomplete'
+    && scheduled !== null
+    && completed !== null
+    && deferred !== null
+    && incomplete !== null
+    && executionFailures !== null
+    && prerequisiteFailures !== null
+    && semanticBudgetExhausted !== null
+    && semanticBudgetDeferred !== null
+    && deferred > 0
+    && completed >= scheduled
+    && incomplete === 0
+    && executionFailures === 0
+    && prerequisiteFailures === 0
+    && semanticBudgetExhausted === 0
+    && semanticBudgetDeferred === 0
+  )
+}
+
 const ReportTask: React.FC<ReportTaskProps> = ({ 
   variant, 
   task, 
@@ -109,7 +168,9 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   isFullWidth,
   onToggleFullWidth,
   onClose,
-  isSelected
+  isSelected,
+  linkedProcedure,
+  detailNotice,
 }) => {
   // Helper to transform raw blocks into ReportBlock format
   const transformBlocks = useCallback((rawBlocks: Array<{ id?: string; type?: string; name?: string; position: number; output?: any; log?: string; config?: any; attachedFiles?: any[]; dataSet?: any }>): ReportBlock[] => {
@@ -139,6 +200,12 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   const [reportBlocks, setReportBlocks] = useState<ReportBlock[]>(initialBlocks)
   const [isLoadingBlocks, setIsLoadingBlocks] = useState(false)
   const [blockError, setBlockError] = useState<string | null>(null)
+  const reportBlocksRef = useRef(reportBlocks)
+  const taskStatusRef = useRef(task.status)
+  const variantRef = useRef(variant)
+  reportBlocksRef.current = reportBlocks
+  taskStatusRef.current = task.status
+  variantRef.current = variant
 
   // Use the shared parsing utility function
   const parseOutput = parseOutputString;
@@ -194,10 +261,12 @@ const ReportTask: React.FC<ReportTaskProps> = ({
 
   // Fetch blocks when report is selected and we're in detail view
   useEffect(() => {
-    if (variant === 'detail' && task.data?.id) {
+    const parentSuppliedBlocks = Array.isArray(task.data?.reportBlocks)
+      && task.data.reportBlocks.length > 0
+    if (variant === 'detail' && task.data?.id && !parentSuppliedBlocks) {
       fetchReportBlocks(task.data.id);
     }
-  }, [variant, task.data?.id]);
+  }, [variant, task.data?.id, task.data?.reportBlocks]);
 
   // Sync reportBlocks from task.data when parent passes them (detail view: avoids empty flash before fetch; bare: primary source)
   useEffect(() => {
@@ -222,7 +291,28 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   // Explicitly set the name and description in the correct order
   // name = Report name (from report.name)
   // description = Report configuration description
-  const reportName = task.data?.configName || task.data?.name || '';
+  const linkedSurveyTitle = linkedProcedure?.displayTitle?.match(/^Feedback survey:/i)
+    ? linkedProcedure.displayTitle
+    : undefined;
+  const displayedReportOutput = useMemo(() => {
+    const output = task.data?.output || ''
+    const normalizedSafetyTerminology = linkedSurveyTitle
+      ? output
+        .replace(/deferred by the safety cap/gi, 'not examined because of the configured diagnosis limit')
+        .replace(/safety cap/gi, 'configured diagnosis limit')
+      : output
+    if (!hasConfiguredDiagnosisLimitEvidence(linkedProcedure?.task?.metadata)) return normalizedSafetyTerminology
+    return normalizedSafetyTerminology
+      .replace(
+        /The run ended with incomplete evidence\./g,
+        'The configured diagnosis limit was reached after all scheduled diagnoses completed.',
+      )
+      .replace(
+        /Review the documented coverage failures before relying on its conclusions\./g,
+        'Increase the diagnosis limit or review deferred candidates in a follow-up run.',
+      )
+  }, [linkedProcedure?.task?.metadata, linkedSurveyTitle, task.data?.output])
+  const reportName = linkedSurveyTitle || task.data?.configName || task.data?.name || '';
   const reportDescription = getValueOrEmpty(task.data?.configDescription);
 
   // Calculate processing duration if we have both timestamps
@@ -357,7 +447,10 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   };
 
   // Update the customCodeBlockRenderer function to handle incomplete reports better
-  const customCodeBlockRenderer = ({ node, inline, className, children, ...props }: any) => {
+  const customCodeBlockRenderer = useCallback(({ node, inline, className, children, ...props }: any) => {
+    const currentReportBlocks = reportBlocksRef.current
+    const currentTaskStatus = taskStatusRef.current
+    const currentVariant = variantRef.current
     // If it's an inline code block, render normally
     if (inline) {
       return <code className={className} {...props}>{children}</code>;
@@ -385,16 +478,16 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       // Match by type + name when name is present (handles multiple blocks of same type)
       const blockData = (
         nameFromMeta
-          ? reportBlocks.find(b => blockTypeMatches(b, blockClass) && blockNameMatches(b, nameFromMeta))
-            ?? reportBlocks.find(b => blockNameMatches(b, nameFromMeta))
-            ?? reportBlocks.find(b => blockTypeMatches(b, blockClass))
-          : reportBlocks.find(b => blockTypeMatches(b, blockClass))
+          ? currentReportBlocks.find(b => blockTypeMatches(b, blockClass) && blockNameMatches(b, nameFromMeta))
+            ?? currentReportBlocks.find(b => blockNameMatches(b, nameFromMeta))
+            ?? currentReportBlocks.find(b => blockTypeMatches(b, blockClass))
+          : currentReportBlocks.find(b => blockTypeMatches(b, blockClass))
       ) ?? null;
 
       if (blockData) {
         // Check if the report is complete
-        const complete = isReportComplete(task.status, reportBlocks);
-        const blockPending = isBlockPending(blockData, complete, task.status);
+        const complete = isReportComplete(currentTaskStatus, currentReportBlocks);
+        const blockPending = isBlockPending(blockData, complete, currentTaskStatus);
         
         const blockKey = `${task.id}-block-${blockData.id}-${blockData.position}`;
         
@@ -443,7 +536,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           // Add any error or warning from the block output if available
           error: blockData.output?.error,
           warning: blockData.output?.warning,
-          isReadOnly: variant === 'bare'
+          isReadOnly: currentVariant === 'bare'
         };
         
         return (
@@ -487,7 +580,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         return (
           <div className="my-4 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/10 p-4">
             <p className="text-sm text-muted-foreground">
-              <strong>{blockLabel}</strong> — Block data not available. Report has {reportBlocks.length} block(s).
+              <strong>{blockLabel}</strong> — Block data not available. Report has {currentReportBlocks.length} block(s).
             </p>
           </div>
         );
@@ -502,45 +595,40 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         </code>
       </div>
     );
-  };
+  }, [task.id]);
+
+  const markdownComponents = useMemo(() => ({
+    p: ({node, ...props}: any) => <p className="mb-1 leading-snug" {...props} />,
+    strong: ({node, ...props}: any) => <strong className="font-semibold" {...props} />,
+    ul: ({node, ...props}: any) => <ul className="list-disc pl-5 mb-2" {...props} />,
+    li: ({node, ...props}: any) => <li className="mb-1" {...props} />,
+    h1: ({node, children, ...props}: any) => {
+      const legacyPortfolioHeading = typeof children === 'string'
+        && /optimization portfolio/i.test(children)
+      return (
+        <h1 className="text-2xl font-bold mt-1 mb-1 leading-tight" {...props}>
+          {legacyPortfolioHeading && linkedSurveyTitle ? linkedSurveyTitle : children}
+        </h1>
+      )
+    },
+    h2: ({node, ...props}: any) => <h2 className="text-xl font-bold mt-1 mb-1 leading-tight" {...props} />,
+    h3: ({node, ...props}: any) => <h3 className="text-lg font-bold mt-3 mb-1" {...props} />,
+    h4: ({node, ...props}: any) => <h4 className="text-base font-bold mt-2 mb-1" {...props} />,
+    code: customCodeBlockRenderer,
+    pre: ({node, children, ...props}: any) => (
+      <div className="w-full min-w-0 max-w-full overflow-x-auto">
+        <div className="w-full min-w-0 max-w-full" {...props}>{children}</div>
+      </div>
+    ),
+  }), [customCodeBlockRenderer, linkedSurveyTitle]);
 
   // Content for bare variant
   const bareContent = (
     <div className="prose dark:prose-invert max-w-none">
       <ReactMarkdown
-        components={{
-          p: ({node, ...props}) => <p className="mb-1 leading-snug" {...props} />,
-          strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
-          ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2" {...props} />,
-          li: ({node, ...props}) => <li className="mb-1" {...props} />,
-          h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-1 mb-1 leading-tight" {...props} />,
-          h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-1 mb-1 leading-tight" {...props} />,
-          h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-3 mb-1" {...props} />,
-          h4: ({node, ...props}) => <h4 className="text-base font-bold mt-2 mb-1" {...props} />,
-          code: ({node, className, children, ...props}: any) => {
-            const match = /language-(\w+)/.exec(className || '');
-            const language = match ? match[1] : '';
-            
-            if (language === 'block') {
-              return customCodeBlockRenderer({ node, className, children, ...props });
-            }
-            
-            return (
-              <div className="w-full min-w-0 max-w-full overflow-x-auto">
-                <code className="bg-muted px-1 py-0.5 rounded block whitespace-pre-wrap break-all" {...props}>
-                  {children}
-                </code>
-              </div>
-            );
-          },
-          pre: ({node, children, ...props}: any) => (
-            <div className="w-full min-w-0 max-w-full overflow-x-auto">
-              <div className="w-full min-w-0 max-w-full" {...props}>{children}</div>
-            </div>
-          ),
-        }}
+        components={markdownComponents}
       >
-        {task.data?.output || ''}
+        {displayedReportOutput}
       </ReactMarkdown>
     </div>
   );
@@ -659,44 +747,26 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       )}
       renderContent={(props) => (
         <TaskContent {...props} hideTaskStatus={true}>
-          <div className={variant === 'detail' ? 'px-3 pb-3 flex flex-col h-full' : ''}>
+          <div
+            className={variant === 'detail' ? 'px-3 pb-3 flex flex-col' : ''}
+            data-testid={variant === 'detail' ? 'report-detail-content' : undefined}
+          >
+            {variant === 'detail' && detailNotice}
+            {variant === 'detail' && linkedProcedure && (
+              <div className="mb-3 flex-none" data-testid="linked-procedure-task">
+                <ProcedureTask variant="grid" procedure={linkedProcedure} />
+              </div>
+            )}
             {variant === 'detail' && task.data?.output && (
-            <div className="bg-background rounded-lg p-3 overflow-y-auto flex-1 min-h-0">
+            <div
+              className="bg-background rounded-lg p-3"
+              data-testid="report-cover-content"
+            >
               <div className="prose dark:prose-invert max-w-none">
                 <ReactMarkdown
-                  components={{
-                    p: ({node, ...props}) => <p className="mb-1 leading-snug" {...props} />,
-                    strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
-                    ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2" {...props} />,
-                    li: ({node, ...props}) => <li className="mb-1" {...props} />,
-                    h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-1 mb-1 leading-tight" {...props} />,
-                    h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-1 mb-1 leading-tight" {...props} />,
-                    h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-3 mb-1" {...props} />,
-                    h4: ({node, ...props}) => <h4 className="text-base font-bold mt-2 mb-1" {...props} />,
-                    code: ({node, className, children, ...props}: any) => {
-                      const match = /language-(\w+)/.exec(className || '');
-                      const language = match ? match[1] : '';
-                      
-                      if (language === 'block') {
-                        return customCodeBlockRenderer({ node, className, children, ...props });
-                      }
-                      
-                      return (
-                        <div className="w-full min-w-0 max-w-full overflow-x-auto">
-                          <code className="bg-muted px-1 py-0.5 rounded block whitespace-pre-wrap break-all" {...props}>
-                            {children}
-                          </code>
-                        </div>
-                      );
-                    },
-                    pre: ({node, children, ...props}: any) => (
-                      <div className="w-full min-w-0 max-w-full overflow-x-auto">
-                        <div className="w-full min-w-0 max-w-full" {...props}>{children}</div>
-                      </div>
-                    ),
-                  }}
+                  components={markdownComponents}
                 >
-                  {task.data.output}
+                  {displayedReportOutput}
                 </ReactMarkdown>
               </div>
             </div>

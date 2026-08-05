@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2eee8b9d-a853-463f-bfee-57104297e2e8",
+  "issue_id": "plx-3d16ab33-6f1b-46ad-990a-fb7bd86fe42f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T13:34:13.943Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Publish meaningful progress during exhaustive portfolio ranking",
+    "description": "Account-wide ranking can spend many minutes between the initial Report revision and the completed ranking milestone. During that interval the living Report remains at zero and operators cannot distinguish active scorecard enumeration, feedback analysis, or a stalled worker.\n\nFeature: Observable exhaustive ranking\n\nScenario: Ranking advances\n  Given an exhaustive portfolio ranking is running\n  When scorecard pages, activity evidence, or feedback batches complete\n  Then the existing living Report publishes throttled aggregate progress\n  And it reports inspected versus discovered scorecards or completed versus total analysis work when totals are known\n  And it reports elapsed time and the next checkpoint\n  And it does not expose opaque identifiers or create a workbook revision per page\n\nScenario: Ranking stalls or fails\n  Given no ranking progress has been recorded within the documented heartbeat interval\n  When an operator views the Report\n  Then the Report distinguishes delayed, retrying, incomplete, and failed states from ordinary active progress.\n\nNo client information is included.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+    "labels": []
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-84edbeb2-c828-4746-a95f-7aa2b3b1f3a5",
+  "title": "Publish deterministic report evidence before diagnosis",
+  "description": "As a stakeholder, I want completed ranking and assessment evidence published before semantic diagnosis finishes, so that a living report reflects durable progress during long model work.\n\nOut of scope: per-score workbook publication or changing ranking and diagnosis algorithms.\n\nFeature: Living report milestone ordering\n\n  Scenario: Publish deterministic evidence before semantic diagnosis\n    Given exhaustive ranking and all deterministic assessments complete\n    When semantic diagnosis begins\n    Then the ranking and assessment milestone has already been published\n    And diagnosis evidence is published only after diagnosis completes\n\n  Scenario: Diagnosis fails after deterministic evidence is published\n    Given the ranking and assessment milestone is durable\n    When semantic diagnosis fails\n    Then the existing milestone remains visible\n    And the run reports the diagnosis failure without relabeling prior evidence as incomplete",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "cd7f3224-4ed3-485d-9ceb-1d20d82919d6",
+      "author": "ryan.porter",
+      "text": "Added outside-in lifecycle regressions for milestone ordering and diagnosis failure. The runner now publishes all deterministic assessments before semantic diagnosis, and a later diagnosis failure preserves that published milestone. Focused regressions pass.",
+      "created_at": "2026-07-29T18:51:38.497928Z"
+    }
+  ],
+  "created_at": "2026-07-29T18:46:57.850257Z",
+  "updated_at": "2026-07-29T18:51:38.497928Z",
+  "closed_at": null,
+  "custom": {}
+}

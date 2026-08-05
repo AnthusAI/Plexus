@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2379d69c-a832-4d73-bd68-79eaf7576e5d",
+  "issue_id": "plx-4857f13d-6682-4527-982f-f289a50fd6a5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T17:13:07.194Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Allow deterministic tool-only procedures to run without agents",
+    "description": "As an optimization operator, I want deterministic portfolio procedures that invoke only trusted tools to execute without a synthetic language-model agent, so that read-only ranking and reporting can start safely and predictably.\n\nOut of scope: changing optimizer approval gates, adding model work, or changing score data.\n\nFeature: Tool-only procedure compatibility\n\nScenario: Run a valid deterministic procedure with no agents\nGiven a valid Tactus procedure declares no agents and its code uses only registered deterministic tools\nWhen the procedure is executed through the Plexus procedure runtime\nThen configuration validation accepts the procedure\nAnd execution reaches the procedure code\nAnd no synthetic agent or model call is required\n\nScenario: Reject an agent reference without an agent definition\nGiven a procedure declares no agents\nAnd its code references an agent primitive\nWhen the procedure is validated\nThen validation fails with an actionable missing-agent error",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

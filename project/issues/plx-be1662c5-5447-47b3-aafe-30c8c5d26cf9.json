@@ -1,0 +1,55 @@
+{
+  "id": "plx-be1662c5-5447-47b3-aafe-30c8c5d26cf9",
+  "title": "Show linked procedure progress on living optimization reports",
+  "description": "As an operator, I want a living optimization Report to show its linked Procedure Task summary and a plain-language run identity, so that I can understand what kind of run it is and what is happening without interpreting internal scope selectors.\n\nOut of scope: changing Task lifecycle ownership, introducing new backend resources, or removing detailed scope evidence from the Report body.\n\nFeature: Procedure-aware living Report header\n\nScenario: View a Report linked to a Procedure Task\nGiven a living optimization Report is linked to its Procedure Task\nWhen an operator opens the Report\nThen the page shows the standard Procedure Task visual summary\nAnd the run type and lifecycle state are understandable at a glance\nAnd raw scope selector syntax is not used as the primary subtitle or description\n\nScenario: View a Report without a linked Task\nGiven a Report has no linked Procedure Task\nWhen an operator opens the Report\nThen the Report remains readable\nAnd the page does not show a broken Task summary\n\nScenario: Inspect exact scope\nGiven a living optimization Report has normalized scope evidence\nWhen an operator needs execution details\nThen the exact scope remains available in the Report evidence below the header",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "86734cff-01ef-4a98-8e48-1d07a37784ee",
+      "author": "ryan.porter",
+      "text": "Operator acceptance found that the Report subtitle and top description expose normalized selector wording and repeat lifecycle metadata instead of showing the established Procedure Task summary. Implementation will reuse the existing Task presentation, preserve exact scope in detailed evidence, and retain a graceful unlinked-Report fallback.",
+      "created_at": "2026-07-30T17:14:02.864548Z"
+    },
+    {
+      "id": "c92c024c-d54c-486f-ab93-559d4b0d052d",
+      "author": "ryan.porter",
+      "text": "Implemented the operator-facing correction without schema or infrastructure changes. New living Reports use purpose-oriented subtitles, the cover no longer repeats raw scope selectors or a duplicate current-phase line, and Report detail embeds the linked Procedure Task's standard compact stage/status visualization. Older Reports without a true Procedure Task remain readable and do not invent linkage. Evidence: 40 focused Python tests, 8 focused dashboard tests, dashboard frontend/backend typechecks, and diff checks pass. Fresh live acceptance remains pending behind the separately recorded agentless-runtime defect.",
+      "created_at": "2026-07-30T17:20:19.715459Z"
+    },
+    {
+      "id": "b5ed8e4b-5352-4d0f-979a-c94222ebc5f2",
+      "author": "ryan.porter",
+      "text": "Live operator review found that the aggregate metric label 'Account inventory inspected' obscures its unit. The value counts scorecards, so the presentation should label it directly as 'Scorecards inspected'. Adding focused UI coverage before changing the component.",
+      "created_at": "2026-07-30T17:34:41.758296Z"
+    },
+    {
+      "id": "9842a7a6-4120-4705-9f64-64479e8bb89f",
+      "author": "ryan.porter",
+      "text": "Changed the aggregate metric to the explicit unit label 'Scorecards inspected'. The focused component test now asserts the new label and rejects the old wording; dashboard frontend/backend typechecks pass. Live local-dashboard verification against the completed portfolio Report shows '56 Scorecards inspected' and no old label.",
+      "created_at": "2026-07-30T17:36:01.182576Z"
+    },
+    {
+      "id": "307d9579-d0c0-4de9-94b7-e9d045f1a5cb",
+      "author": "ryan.porter",
+      "text": "Live browser diagnosis found three nested vertical scrollers after embedding the Procedure Task; the Report cover was constrained to a 24-pixel-tall inner scroll box. Reworked the detail layout so the linked Procedure summary and Report cover share the existing outer detail-pane scroller. Focused tests and both dashboard typechecks pass. Live wheel verification on the completed Report moved the right pane from scrollTop 0 to 545 with a 396-pixel viewport over 2,722 pixels of content.",
+      "created_at": "2026-07-30T17:38:35.880259Z"
+    },
+    {
+      "id": "4d93fcd9-fd78-420b-a378-7b677f8858c6",
+      "author": "ryan.porter",
+      "text": "Extended the living optimization Report so operators can see how work was selected: every eligible score now has a stable rank; the Report states that ranking has no eligibility cutoff; the highlighted top-list boundary and reviewed-disagreement value are explicit; and the separate semantic-diagnosis selection boundary is explained. Priority rows now carry feedback volume, disagreement rate, readiness, rationale, and next action. Workbook projections include rank and disagreement rate. Validation: 53 focused Python tests, the focused dashboard component test, and dashboard frontend/backend typechecks pass. Fresh account-wide live acceptance remains next.",
+      "created_at": "2026-07-30T17:59:46.678448Z"
+    }
+  ],
+  "created_at": "2026-07-30T17:13:58.803954Z",
+  "updated_at": "2026-07-30T17:59:46.678448Z",
+  "closed_at": null,
+  "custom": {}
+}

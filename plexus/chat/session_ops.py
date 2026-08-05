@@ -416,6 +416,11 @@ def send_chat_message(
                 "responder": responder or "plexus-chat-send",
             }
         }
+        if isinstance(parent_control, dict):
+            for key in ("action_key", "precondition_fingerprint", "evidence_fingerprint"):
+                value = parent_control.get(key)
+                if isinstance(value, str) and value:
+                    response_metadata["control"][key] = value
         payload["humanInteraction"] = "RESPONSE"
         payload["parentMessageId"] = parent_message_id
         payload["content"] = json.dumps({"value": response_value})

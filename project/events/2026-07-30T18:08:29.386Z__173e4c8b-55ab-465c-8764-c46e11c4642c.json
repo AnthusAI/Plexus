@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "173e4c8b-55ab-465c-8764-c46e11c4642c",
+  "issue_id": "plx-71252c0f-2e1f-4d5a-ad6c-175083ed069b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T18:08:29.386Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Publish exhaustive portfolio ranking into living report",
+    "description": "A production-shaped read-only portfolio run completed exhaustive ranking but failed while publishing the ranking milestone into its living Report. Preserve the fatal-publication rule while making the full ranked packet publishable.\n\nFeature: Durable ranking milestone\n\nScenario: Publish a large exhaustive rank packet\nGiven an account-wide rank packet contains hundreds of score rows and complete coverage\nWhen the portfolio runner publishes the ranking milestone\nThen the living Report receives a reconciled evidence revision and workbook\nAnd the run continues into deterministic assessment\n\nScenario: Expose the underlying publication cause\nGiven ranking publication fails\nWhen the portfolio runner records the failure\nThen the durable failure evidence includes the underlying cause\nAnd the workflow remains failed closed",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

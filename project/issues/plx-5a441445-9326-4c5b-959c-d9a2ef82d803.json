@@ -1,0 +1,73 @@
+{
+  "id": "plx-5a441445-9326-4c5b-959c-d9a2ef82d803",
+  "title": "Make human actions atomic and auditable",
+  "description": "As an account operator, I want human decisions to be durable and race-safe using the existing procedure conversation records, so that a procedure resumes from one valid response without introducing another persistence system.\n\nFeature: Authoritative human actions on existing procedure messages\n\nScenario: Publish a structured action request\n  Given a procedure reaches a structured human boundary\n  When it records the request\n  Then it creates one existing PENDING_* ChatMessage with an exact action key, typed resource references, preconditions and fingerprint, expiry, response schema, UI schema, and report links\n  And the Procedure keeps using its existing waitingOnMessageId pointer\n  And no new model, table, function, queue, association, or custom GraphQL operation is required\n\nScenario: Accept the first valid response\n  Given a pending action message with current preconditions\n  When same-account child RESPONSE messages are examined\n  Then the first response that matches the exact parent, action identity, expiry, preconditions, and response schema is authoritative\n  And later responses cannot replace it\n\nScenario: Reject unsafe responses\n  Given a child response belongs to another account, is malformed, is expired, or no longer satisfies the request preconditions\n  When the procedure checks for a response\n  Then the response is ignored with explicit fail-closed evidence\n  And no dependent procedure or mutation resumes\n\nScenario: Preserve legacy HITL\n  Given a Human request without an action key\n  When the procedure waits or resumes\n  Then the existing ChatMessage control behavior remains unchanged.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "82cce5e3-2d87-4c66-b75e-747a7112a7b1",
+      "author": "ryan.porter",
+      "text": "Starting backend authority slice: executable specifications first, then server-side conditional ActionRequest/ActionEvent operations. No client or scorecard data included.",
+      "created_at": "2026-07-29T16:50:46.146813Z"
+    },
+    {
+      "id": "bcf6969b-8098-49fc-b5ae-aaad54373b43",
+      "author": "ryan.porter",
+      "text": "Backend implementation complete pending integration review. Added read-only ActionRequest/ActionEvent models; server-only create-or-get, account-scoped cursor listing, atomic response acceptance, and terminal cancel/expire/supersede operations. Focused resolver specs: 8 passing. Dashboard TypeScript check passes. The authority uses conditional DynamoDB transactions so a winning response and its event are committed together; same-response retries are recoverable.",
+      "created_at": "2026-07-29T16:57:47.467048Z"
+    },
+    {
+      "id": "5d7da605-08ae-4b16-a353-91b892f6157c",
+      "author": "ryan.porter",
+      "text": "Corrected the ActionRequest listing index design: explicit accountStatus is maintained atomically on every lifecycle transition and powers status-filtered newest-first pages; accountId powers unfiltered newest-first pages. Added focused regression coverage for both query paths, opaque cursors, and index-state writes. Focused Jest suite and dashboard TypeScript typecheck pass.",
+      "created_at": "2026-07-29T17:01:25.170793Z"
+    },
+    {
+      "id": "06726939-91b9-4358-b586-4c4ee08438cb",
+      "author": "ryan.porter",
+      "text": "Redesign decision: remove the proposed ActionRequest/ActionEvent infrastructure and represent structured human authority entirely with existing Procedure, ChatSession, and ChatMessage fields. The Python adapter will extend metadata.control, retain waitingOnMessageId, validate same-account identity, expiry, preconditions, and response schema, and choose the first valid child RESPONSE deterministically. No client information is recorded here.",
+      "created_at": "2026-07-29T17:23:05.890489Z"
+    },
+    {
+      "id": "a8cab9c0-e4b9-40f3-89a1-a1d99dd9b3e3",
+      "author": "ryan.porter",
+      "text": "Progress: replacing provisional action-resource assumptions with the existing ChatMessage and Procedure authority path. The remaining runtime work is to inject ChatMessage action authority into the default portfolio runner, fail closed when that authority is unavailable, preserve blocking Human.review through waitingOnMessageId, and prove advisory actions remain non-mutating across run and replay.",
+      "created_at": "2026-07-29T18:05:52.577766Z"
+    },
+    {
+      "id": "1c59c1fb-6319-4ea6-82df-7bd8b04dbdb5",
+      "author": "ryan.porter",
+      "text": "Progress: the default portfolio runtime now constructs ChatMessage action authority from its authenticated client, while tests may inject the same interface. Missing authority fails closed before optimizer dispatch. Focused specifications prove advisory actions are created, deduplicated, and response-validated on run/replay without score, champion, or optimizer mutations; blocking Human.review remains on Procedure.waitingOnMessageId with atomic parent response ownership.",
+      "created_at": "2026-07-29T18:10:48.782879Z"
+    },
+    {
+      "id": "78748468-e2dd-45b7-adc9-d1562f4f4ea9",
+      "author": "ryan.porter",
+      "text": "Validation update: 354 focused runtime/report/action tests pass after the schema-correct ChatMessage wiring. Full Python CI is green on 3.11 and 3.12. The remaining acceptance gate is a sandbox blocking-review rejection/resume proving waitingOnMessageId, atomic parent ownership, and no optimizer dispatch.",
+      "created_at": "2026-07-29T19:47:10.155904Z"
+    },
+    {
+      "id": "c9af7a8f-277a-4caa-8111-4ba13abed0c3",
+      "author": "ryan.porter",
+      "text": "Sandbox model-backed structured-HITL acceptance passed. A two-target review request reached WAITING_FOR_HUMAN with typed resource references, response schema, precondition fingerprint, and the existing Procedure waiting pointer. One attributed child RESPONSE rejected both targets; resume then completed successfully. Final read-only verification passed all 12 invariants: the parent claim is COMPLETED and owned by that child, the waiting pointer is cleared, target/version/guideline/feedback fingerprints and the referenced living report are unchanged, exactly one harness Procedure and Task were created, and no optimizer Procedure or Task was created. Timings: initial run 28.96s, response creation 1.72s, resume 28.39s. The acceptance required local structured-action metadata support because the currently installed released runtime does not yet propagate those fields.",
+      "created_at": "2026-07-29T19:51:20.414872Z"
+    },
+    {
+      "id": "28248a90-137e-4ebc-aa49-74ee88f6d3a8",
+      "author": "ryan.porter",
+      "text": "Sandbox blocking-review acceptance passed all final invariants: waitingOnMessageId matched the pending review, one attributed child rejection atomically claimed the parent, replay completed, and no optimizer or operational score mutation occurred. The probe required the local Tactus structured-HITL worktree; deployment remains gated on releasing and consuming that Tactus capability.",
+      "created_at": "2026-07-29T19:54:57.773402Z"
+    }
+  ],
+  "created_at": "2026-07-29T16:47:56.481138Z",
+  "updated_at": "2026-07-29T19:54:57.773402Z",
+  "closed_at": null,
+  "custom": {}
+}

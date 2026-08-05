@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f4b18e21-2abb-4fa6-a974-65ed8df8dfec",
+  "issue_id": "plx-08cdcf2c-cdca-433b-860f-374dbfaffed4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T18:11:06.048Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Refresh living report while linked task is active",
+    "description": "An open living Report remains on its initial ReportBlock revision while the backend publishes later milestones. Operators only see the latest Procedure Task and report evidence after navigating or reloading.\n\nFeature: Live milestone visibility\n\nScenario: A running report publishes a new milestone\nGiven an operator has a living Report open\nAnd its linked Task is nonterminal\nWhen the backend updates the Task and ReportBlock artifact pointer\nThen the open page displays the new progress and Report revision without manual reload\n\nScenario: A linked task becomes terminal\nGiven live refresh is active for a living Report\nWhen the linked Task reaches a terminal state\nThen the page displays the terminal Report revision\nAnd background refresh stops",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b9b36243-0e9c-4069-9402-d8f87885911d",
+  "issue_id": "plx-93a15d45-6562-456c-b840-34d0e281f2b6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T15:11:12.420Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Preserve scheduled portfolio suspension through local dispatch",
+    "description": "",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-78b7597b-9390-408b-9a5c-6799b70c2ab2",
+    "labels": []
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "id": "plx-356bd175-a50a-40b8-be6a-cc7f0e1232a9",
+  "title": "Use schema-correct ChatMessage identifiers in action authority queries",
+  "description": "As a procedure operator, I want blocking and advisory human-action readers to use schema-correct GraphQL variable types, so that persisted responses can be validated and claimed against the deployed API.\n\nOut of scope: schema, model, index, association, storage, IAM, or function changes.\n\nScenario: Blocking action response lookup\n  Given an existing pending ChatMessage action\n  When the runtime reads the parent and child responses through the deployed GraphQL schema\n  Then the query uses an ID variable for getChatMessage and a String variable for the parent-message index\n  And the same opaque identifier is supplied to both variables\n\nScenario: Advisory action response lookup\n  Given an existing advisory ChatMessage action\n  When the reconciler reads the parent and child responses\n  Then the query is schema-valid and preserves the same opaque identifier\n\nScenario: Missing authority\n  Given the ChatMessage authority dependency is unavailable\n  When the runtime evaluates an action\n  Then it fails closed without accepting a response.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "68da6036-bb43-45a4-9984-e47a0562a470",
+      "author": "ryan.porter",
+      "text": "Sandbox reproduction confirmed before any optimizer launch: deployed GraphQL rejected the shared String variable at getChatMessage, which requires ID. Adding schema-contract coverage for separate ID and parent-index variables before the minimal reader fix.",
+      "created_at": "2026-07-29T19:27:36.763931Z"
+    },
+    {
+      "id": "2765067a-4ebb-4838-9a86-18b526980f36",
+      "author": "ryan.porter",
+      "text": "The minimal query fix now has green focused and full CI evidence on Python 3.11 and 3.12. Both readers supply the same opaque identifier through schema-correct ID and String variables, and missing authority remains fail-closed. Final sandbox response-claim acceptance is in progress.",
+      "created_at": "2026-07-29T19:47:10.400932Z"
+    }
+  ],
+  "created_at": "2026-07-29T19:27:30.940669Z",
+  "updated_at": "2026-07-29T19:47:10.400932Z",
+  "closed_at": null,
+  "custom": {}
+}

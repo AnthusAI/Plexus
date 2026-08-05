@@ -213,6 +213,31 @@ class ConfigLoader:
         except Exception as e:
             logger.warning(f"Failed to change working directory to {working_dir}: {e}")
             return False
+
+    @staticmethod
+    def _resolved_aws_credential_method() -> Optional[str]:
+        """Return the SDK-selected credential provider without exposing keys.
+
+        Plexus still supports legacy static keys in YAML as a last-resort
+        fallback.  Before exporting them, ask Botocore whether the standard
+        credential chain already selected a provider (for example an AWS CLI
+        login session, SSO profile, workload identity, or instance role).
+        Provider presence is authoritative even when its session has expired:
+        silently falling back to unrelated static keys would change identity.
+        """
+        try:
+            from botocore.session import Session
+
+            credentials = Session().get_credentials()
+        except Exception as exc:
+            logger.debug(
+                "Could not resolve the AWS SDK credential provider before "
+                "loading legacy config keys: %s",
+                type(exc).__name__,
+            )
+            return None
+        method = getattr(credentials, "method", None)
+        return str(method).strip() if method else None
     
     def _set_environment_variables(self, config: Dict[str, Any]) -> int:
         """Set environment variables from configuration.
@@ -222,14 +247,19 @@ class ConfigLoader:
         """
         env_vars_set = 0
         aws_profile_requested = bool(os.environ.get("AWS_PROFILE") or os.environ.get("AWS_DEFAULT_PROFILE"))
+        aws_sdk_credential_method = self._resolved_aws_credential_method()
+        aws_credential_chain_requested = bool(
+            aws_profile_requested or aws_sdk_credential_method
+        )
         
         for yaml_key, env_var in self.ENV_VAR_MAPPING.items():
             value = self._get_nested_value(config, yaml_key)
             
             if value is not None:
-                if aws_profile_requested and env_var in {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"}:
+                if aws_credential_chain_requested and env_var in {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"}:
                     logger.debug(
-                        "Skipped %s from config because AWS_PROFILE/AWS_DEFAULT_PROFILE is set",
+                        "Skipped %s from config because the standard AWS "
+                        "credential chain already selected a provider",
                         env_var,
                     )
                     continue

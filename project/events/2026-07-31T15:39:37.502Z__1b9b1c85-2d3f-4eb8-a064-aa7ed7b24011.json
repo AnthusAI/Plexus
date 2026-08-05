@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1b9b1c85-2d3f-4eb8-a064-aa7ed7b24011",
+  "issue_id": "plx-06efb289-1995-49fa-8cc4-454cda27aeaf",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T15:39:37.502Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Preserve living report drill-in state across background refresh",
+    "description": "As an operator, I want report drill-in state and reading position to remain stable across background reconciliation, so that I can inspect long optimization reports without the page jumping.\n\nObserved behavior: an unchanged background refresh remounts the optimization presentation, collapses expanded scorecards, and changes layout height.\n\nFeature: Stable living-report interaction during refresh\n\nScenario: Unchanged reconciliation is a no-op\nGiven an operator is viewing a report whose durable Report and ReportBlocks have not changed\nAnd the operator has expanded a scorecard and scrolled within the report\nWhen the living-report reconciliation timer completes\nThen the report presentation is not remounted\nAnd the expanded scorecard remains expanded\nAnd the reading position remains stable\n\nScenario: Genuine live progress preserves drill-in state\nGiven an operator has expanded a scorecard in a living report\nWhen a new progress-only ReportBlock revision arrives\nThen the progress indicators update\nAnd the expanded scorecard remains expanded\nAnd the reading position remains stable\n\nScenario: A new immutable presentation is applied without an arbitrary jump\nGiven an operator is reading a living report\nWhen a materially new presentation artifact becomes current\nThen the new presentation is rendered\nAnd the report preserves a stable reading anchor when possible\n\nOut of scope: GraphQL schema or resource changes; changes to optimization policy; client-specific report content.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

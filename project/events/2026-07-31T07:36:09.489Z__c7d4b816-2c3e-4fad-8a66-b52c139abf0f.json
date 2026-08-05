@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c7d4b816-2c3e-4fad-8a66-b52c139abf0f",
+  "issue_id": "plx-d60ab088-632c-443c-92d7-bd586163c98b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T07:36:09.489Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Preserve authenticated recovery for long portfolio runs",
+    "description": "A long-running local portfolio dogfood attempt completed ranking and substantial assessment progress, then lost Plexus application authentication. The procedure failed before diagnosis, and required terminal task-output artifact persistence failed through the same unavailable authorization path. Published evidence must remain immutable, and a renewed session must resume safely rather than silently starting over.\n\nFeature: Recover long portfolio runs after application-session expiry\n\nScenario: Authentication expires during analysis\n  Given a portfolio run has published durable start and ranking evidence\n  And assessment is still running\n  When the application session becomes unavailable\n  Then the run records an actionable authentication interruption when authority permits\n  And it does not label the analysis complete\n  And no optimization is launched\n\nScenario: Resume after renewed authentication\n  Given a failed or interrupted attempt has immutable checkpoints and a frozen run identity\n  When an operator renews the application session and resumes the procedure\n  Then recovery verifies the exact Task, Report, Procedure, run specification, checkpoint, and evidence fingerprint\n  And it continues only from authoritative durable evidence\n  And it never silently duplicates already completed work or creates an unrelated successful attempt\n\nScenario: Terminal artifact persistence loses authorization\n  Given procedure output persistence is required\n  When artifact-ticket authorization is unavailable\n  Then the request fails visibly without an inline fallback\n  And previously published Report evidence remains available\n  And the operator receives a concrete reauthentication and recovery next action\n\nSanitized observation: an exhaustive run stopped partway through assessment after application authentication became unavailable, and required task-output artifact persistence also failed. No client identity, score data, or opaque run identifiers are stored here.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+    "labels": []
+  }
+}

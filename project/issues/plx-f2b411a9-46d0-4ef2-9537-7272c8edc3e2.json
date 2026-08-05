@@ -1,0 +1,25 @@
+{
+  "id": "plx-f2b411a9-46d0-4ef2-9537-7272c8edc3e2",
+  "title": "Configure canonical dashboard links for report artifacts",
+  "description": "As an account operator, I want to configure the canonical dashboard base URL in existing account settings, so that generated report and artifact links open the correct deployed dashboard without adding backend resources.\n\nOut of scope:\n- GraphQL schema changes or new infrastructure resources.\n- Artifact authorization or retention-policy changes.\n- Persisting signed object-storage URLs.\n\nFeature: Configure canonical dashboard links\n\nScenario: Save a valid dashboard base URL\nGiven an account has existing settings\nWhen an operator saves an HTTPS dashboard base URL\nThen the URL is stored under the reporting namespace\nAnd all unrelated settings remain unchanged\n\nScenario: Leave the URL unset\nGiven an account has no canonical dashboard URL\nWhen an operator saves the account settings\nThen the reporting URL remains optional\nAnd existing menu settings continue to work\n\nScenario: Reject an unsafe or malformed URL\nGiven an operator enters a non-HTTP web URL or a URL containing credentials\nWhen the settings are validated\nThen the account settings are not saved\nAnd the operator sees an actionable validation message\n\nScenario: Preserve backward compatibility\nGiven an account only has legacy menu settings\nWhen the dashboard reads those settings\nThen the settings remain valid\nAnd report-link configuration is treated as absent",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6b7bb264-7b0a-49a5-9592-db1df41b6779",
+      "author": "ryan.porter",
+      "text": "Specified and implemented the existing-settings extension. Added an optional reporting.dashboardBaseUrl validated as an HTTPS origin, preserved unrelated account settings during saves, and added the account-settings form control. The focused 17-test contract and dashboard TypeScript check pass. No Amplify schema or resource changes were made for this story. Next: integrate the configured origin into immutable report-artifact route generation and add the revision manifest descriptors under separate behavior specifications.",
+      "created_at": "2026-07-30T15:51:30.782428Z"
+    }
+  ],
+  "created_at": "2026-07-30T15:49:26.499764Z",
+  "updated_at": "2026-07-30T15:51:30.782428Z",
+  "closed_at": null,
+  "custom": {}
+}

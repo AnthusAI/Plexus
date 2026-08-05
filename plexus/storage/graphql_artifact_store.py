@@ -15,7 +15,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Mapping, Optional, Protocol, Sequence
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import requests
 
@@ -62,6 +62,10 @@ class ArtifactIntegrityError(GraphQLArtifactStoreError):
 
 class _ExpiredSignedURL(ArtifactTransferError):
     """Internal marker permitting the single signed-URL refresh."""
+
+
+class _RetryableTransferError(ArtifactTransferError):
+    """Internal marker permitting one fresh-ticket retry for a WRITE."""
 
 
 class GraphQLExecutor(Protocol):
@@ -272,8 +276,9 @@ class GraphQLArtifactStore:
     def upload_batch(self, uploads: Sequence[ArtifactUpload]) -> list[dict[str, Any]]:
         """Authorize up to twenty verified writes with one ticket request.
 
-        An explicit signed-URL expiry may refresh only its individual ticket once;
-        no other authorization, transfer, or integrity failure is retried.
+        An explicit signed-URL expiry or transient HTTPS failure may refresh only
+        its individual WRITE ticket once; authorization, integrity, and other
+        failures are never retried.
         """
         if not uploads:
             raise ValueError("artifact upload batches must not be empty")
@@ -373,6 +378,11 @@ class GraphQLArtifactStore:
                 return self._transfer(replacement, payload)
             except _ExpiredSignedURL as exc:
                 raise ArtifactTransferError("replacement signed URL expired") from exc
+        except _RetryableTransferError:
+            if request.operation != "WRITE":
+                raise
+            replacement = self.request_tickets([request])[0]
+            return self._transfer(replacement, payload)
 
     def _transfer(
         self, ticket: ArtifactTransferTicket, payload: Optional[bytes]
@@ -381,7 +391,7 @@ class GraphQLArtifactStore:
             raise _ExpiredSignedURL("signed URL expired before transfer")
         try:
             request_kwargs: dict[str, Any] = {
-                "headers": ticket.required_headers,
+                "headers": self._transfer_headers(ticket),
                 "data": payload,
                 "timeout": self._timeout_seconds,
             }
@@ -389,7 +399,7 @@ class GraphQLArtifactStore:
                 request_kwargs["verify"] = self._ca_bundle
             response = self._http_session.request(ticket.method, ticket.url, **request_kwargs)
         except requests.RequestException as exc:
-            raise ArtifactTransferError("HTTPS artifact transfer failed") from exc
+            raise _RetryableTransferError("HTTPS artifact transfer failed") from exc
         except Exception as exc:
             raise ArtifactTransferError("HTTPS artifact transfer failed") from exc
 
@@ -398,6 +408,12 @@ class GraphQLArtifactStore:
             raise _ExpiredSignedURL("signed URL expired during transfer")
         if status_code in {401, 403}:
             raise ArtifactAuthorizationError("signed URL authorization was rejected")
+        if status_code in {408, 429} or (
+            isinstance(status_code, int) and 500 <= status_code < 600
+        ):
+            raise _RetryableTransferError(
+                f"HTTPS artifact transfer returned transient status {status_code}"
+            )
         if not isinstance(status_code, int) or not 200 <= status_code < 300:
             raise ArtifactTransferError(f"HTTPS artifact transfer returned status {status_code}")
 
@@ -407,6 +423,54 @@ class GraphQLArtifactStore:
                 raise ArtifactTransferError("HTTPS download returned non-bytes content")
             return ticket, content
         return ticket, None
+
+    @staticmethod
+    def _transfer_headers(ticket: ArtifactTransferTicket) -> dict[str, str]:
+        """Normalize one legacy S3 checksum representation without weakening tickets.
+
+        Some deployed ticket issuers returned ``x-amz-checksum-sha256`` as a
+        required header after the S3 presigner had already moved the identical
+        checksum into the query string.  When that header is absent from
+        ``X-Amz-SignedHeaders``, S3 rejects it as an unsigned ``x-amz-*``
+        header.  Omit it only when the URL contains the exact same checksum and
+        explicitly does not sign the header; every ambiguous or contradictory
+        ticket remains unchanged and therefore continues to fail closed.
+        """
+        headers = dict(ticket.required_headers)
+        if ticket.method != "PUT":
+            return headers
+
+        checksum_header_name = next(
+            (
+                name
+                for name in headers
+                if name.lower() == "x-amz-checksum-sha256"
+            ),
+            None,
+        )
+        if checksum_header_name is None:
+            return headers
+
+        query = {
+            name.lower(): values
+            for name, values in parse_qs(urlparse(ticket.url).query).items()
+        }
+        query_checksums = query.get("x-amz-checksum-sha256") or []
+        signed_header_values = query.get("x-amz-signedheaders") or []
+        if len(query_checksums) != 1 or len(signed_header_values) != 1:
+            return headers
+        signed_headers = {
+            name.strip().lower()
+            for name in signed_header_values[0].split(";")
+            if name.strip()
+        }
+        if "x-amz-checksum-sha256" in signed_headers:
+            return headers
+        if query_checksums[0] != headers[checksum_header_name]:
+            return headers
+
+        del headers[checksum_header_name]
+        return headers
 
     @staticmethod
     def _is_expired_response(response: Any) -> bool:

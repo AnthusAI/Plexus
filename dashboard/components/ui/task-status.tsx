@@ -65,6 +65,7 @@ export interface TaskStatusProps {
   startedAt?: string
   estimatedCompletionAt?: string
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
+  terminalOutcome?: string
   command?: string
   statusMessage?: string
   errorMessage?: string
@@ -141,7 +142,8 @@ export const TaskStatus = React.memo(({
   elapsedSeconds,
   estimatedRemainingSeconds,
   hideElapsedTime = false,
-  hidePreExecutionStatus = false
+  hidePreExecutionStatus = false,
+  terminalOutcome,
 }: TaskStatusProps) => {
 
   if (stages.length > 0) {
@@ -151,6 +153,19 @@ export const TaskStatus = React.memo(({
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const isInProgress = status === 'RUNNING'
   const isError = status === 'FAILED'
+  const terminalOutcomeView = (() => {
+    switch (String(terminalOutcome || '').toUpperCase()) {
+      case 'INCOMPLETE':
+        return { label: 'Incomplete', color: 'bg-warning' }
+      case 'COMPLETED_WITH_UNRESOLVED_ACTIONS':
+      case 'COMPLETE_WITH_UNRESOLVED_ACTIONS':
+        return { label: 'Actions open', color: 'bg-warning' }
+      case 'BLOCKED':
+        return { label: 'Blocked', color: 'bg-neutral' }
+      default:
+        return null
+    }
+  })()
 
   // Memoize timing calculations
   const timingValues = useMemo(() => {
@@ -272,8 +287,10 @@ export const TaskStatus = React.memo(({
     const completionActive = !['FAILED', 'STALLED'].includes(status) && (status === 'COMPLETED' || allStagesCompleted) && lastStageCompleted;
     orderedStages.push({
       key: 'completion',
-      label: 'Complete',
-      color: completionActive ? 'bg-true' : (status === 'FAILED' ? 'bg-false' : 'bg-neutral'),
+      label: terminalOutcomeView?.label || 'Complete',
+      color: completionActive
+        ? terminalOutcomeView?.color || 'bg-true'
+        : (status === 'FAILED' ? 'bg-false' : 'bg-neutral'),
       status: completionActive ? 'COMPLETED' : ((status === 'FAILED' || status === 'STALLED') ? status : 'PENDING'),
       completed: completionActive
     });
@@ -335,10 +352,11 @@ export const TaskStatus = React.memo(({
 
   // Update the progress bar color based on status
   const progressBarColor = useMemo(() => 
+    terminalOutcomeView ? 'neutral' :
     status === 'COMPLETED' ? 'primary' :
     status === 'FAILED' ? 'false' :
     'secondary'
-  , [status]);
+  , [status, terminalOutcome]);
 
   const getPreExecutionStatus = () => {
     if (dispatchMode === 'pending') {
@@ -617,6 +635,7 @@ export const TaskStatus = React.memo(({
     prevProps.startedAt === nextProps.startedAt &&
     prevProps.estimatedCompletionAt === nextProps.estimatedCompletionAt &&
     prevProps.status === nextProps.status &&
+    prevProps.terminalOutcome === nextProps.terminalOutcome &&
     prevProps.command === nextProps.command &&
     prevProps.statusMessage === nextProps.statusMessage &&
     prevProps.errorMessage === nextProps.errorMessage &&

@@ -86,6 +86,17 @@ def test_optimization_commands_delegate_json_payload_to_handler(monkeypatch, ope
     ]
 
 
+def test_optimization_persist_help_uses_canonical_artifact_language() -> None:
+    from plexus.cli.optimization import commands
+
+    result = CliRunner().invoke(commands.optimization, ["rank", "--help"])
+
+    assert result.exit_code == 0, result.output
+    normalized_output = " ".join(result.output.split())
+    assert "artifact persistence" in normalized_output
+    assert "ReportBlock S3" not in normalized_output
+
+
 def test_optimization_commands_merge_typed_options_and_reject_non_object_input(monkeypatch) -> None:
     from plexus.cli.optimization import commands
 

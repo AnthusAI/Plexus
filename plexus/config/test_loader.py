@@ -256,6 +256,50 @@ class TestConfigLoader:
         assert 'AWS_ACCESS_KEY_ID' not in os.environ
         assert 'AWS_SECRET_ACCESS_KEY' not in os.environ
         assert os.environ['AWS_REGION_NAME'] == 'us-east-1'
+
+    def test_set_environment_variables_preserves_default_sdk_credential_provider(self):
+        """Static YAML keys must not displace a supported SDK provider."""
+        config = {
+            'aws': {
+                'access_key_id': 'config-access-key',
+                'secret_access_key': 'config-secret-key',
+                'region_name': 'us-east-1',
+            }
+        }
+
+        with patch.object(
+            self.loader,
+            '_resolved_aws_credential_method',
+            return_value='login',
+        ):
+            env_vars_set = self.loader._set_environment_variables(config)
+
+        assert env_vars_set == 1
+        assert 'AWS_ACCESS_KEY_ID' not in os.environ
+        assert 'AWS_SECRET_ACCESS_KEY' not in os.environ
+        assert os.environ['AWS_REGION_NAME'] == 'us-east-1'
+
+    def test_set_environment_variables_uses_static_aws_keys_only_without_an_sdk_provider(self):
+        """Legacy YAML keys remain a fallback when the SDK chain is empty."""
+        config = {
+            'aws': {
+                'access_key_id': 'config-access-key',
+                'secret_access_key': 'config-secret-key',
+                'region_name': 'us-east-1',
+            }
+        }
+
+        with patch.object(
+            self.loader,
+            '_resolved_aws_credential_method',
+            return_value=None,
+        ):
+            env_vars_set = self.loader._set_environment_variables(config)
+
+        assert env_vars_set == 3
+        assert os.environ['AWS_ACCESS_KEY_ID'] == 'config-access-key'
+        assert os.environ['AWS_SECRET_ACCESS_KEY'] == 'config-secret-key'
+        assert os.environ['AWS_REGION_NAME'] == 'us-east-1'
     
     @patch.object(ConfigLoader, '_load_yaml_file')
     def test_load_config_single_file(self, mock_load_yaml):

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "aa2fae08-fde4-4642-86b2-3c82a77c2806",
+  "issue_id": "plx-5075c3c6-42b4-453e-8baa-bf4deec7e261",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T17:55:27.773Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Record concrete toolchain identity in portfolio Reports",
+    "description": "As an optimization operator, I want every portfolio Report to identify the Plexus and Tactus code that produced it, so that findings and optimizer decisions can be reproduced and audited.\n\nFeature: Optimization toolchain identity\n\nScenario: Caller omits toolchain identity\n  Given a portfolio procedure is launched through the supported runtime\n  When the frozen run specification is created\n  Then it records the installed Plexus version\n  And it records the loaded Tactus version\n  And it does not publish the value unknown\n\nScenario: Explicit build identity is available\n  Given a deployment provides an immutable build revision\n  When the toolchain identity is recorded\n  Then the immutable build revision is included with package versions\n\nScenario: Run resumes\n  Given a living Report has frozen a toolchain identity\n  When the same attempt resumes\n  Then the stored identity remains unchanged\n  And a changed runtime identity cannot silently rewrite prior evidence\n\nOut of scope: schema resources, deployment, source mutation, automatic promotion, and client-specific data.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

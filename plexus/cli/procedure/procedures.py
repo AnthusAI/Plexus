@@ -13,17 +13,41 @@ Uses the shared ProcedureService for consistent behavior.
 """
 
 import click
+import asyncio
 import builtins
 import json
+import os
 import yaml
 import time
-from typing import Any, Optional
+from typing import Any, Awaitable, Callable, Mapping, Optional
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
 from rich.json import JSON
 from datetime import datetime, timedelta, timezone
+
+
+def _parse_set_parameter_value(raw_value: str) -> Any:
+    """Parse one ``--set`` value without reducing structured JSON to text."""
+    value = raw_value.strip()
+    lowered = value.lower()
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+    if value.startswith(("[", "{")):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    try:
+        return int(value)
+    except ValueError:
+        try:
+            return float(value)
+        except ValueError:
+            return value
 
 
 def _json_safe(obj: Any) -> Any:
@@ -61,6 +85,89 @@ from plexus.cli.shared.client_utils import create_client
 from plexus.cli.shared.console import console
 from plexus.cli.shared.optimizer_results import OptimizerResultsService
 from .service import ProcedureService
+
+
+async def _run_local_procedure_through_scheduled_continuations(
+    *,
+    run_once: Callable[..., Awaitable[dict[str, Any]]],
+    run_kwargs: Mapping[str, Any],
+    client: Any,
+    procedure_id: str,
+    enabled: bool,
+    resume_exact: Optional[Callable[[Any, str], Mapping[str, Any]]] = None,
+    sleep: Optional[Callable[[float], Awaitable[Any]]] = None,
+    now: Optional[Callable[[], datetime]] = None,
+) -> dict[str, Any]:
+    """Keep a direct local run alive across its own durable time waits.
+
+    A remotely dispatched run returns the wait to its dispatch host. A direct
+    local run has no such host, so this command remains its exact continuation
+    owner: it waits, conditionally rearms only the same Procedure/Task, and
+    replays the indexed Tactus checkpoint using the same Task identity.
+    """
+    from plexus.cli.procedure.scheduled_continuation import (
+        canonical_time_wait_request,
+    )
+    from plexus.cli.procedure.resume_service import resume_procedure
+
+    resume = resume_exact or resume_procedure
+    sleep_until_due = sleep or asyncio.sleep
+    current_time = now or (lambda: datetime.now(timezone.utc))
+    result = await run_once(**dict(run_kwargs))
+    if not enabled:
+        return result
+
+    while str(result.get("status") or "").upper() == "WAITING_FOR_TIME":
+        request = canonical_time_wait_request(result.get("request"))
+        task_id = result.get("task_id")
+        if request is None or not isinstance(task_id, str) or not task_id.strip():
+            return {
+                **result,
+                "continuation_error": "scheduled_continuation_boundary_invalid",
+            }
+
+        due = datetime.fromisoformat(request["resume_at"].replace("Z", "+00:00"))
+        current = current_time()
+        if current.tzinfo is None:
+            return {
+                **result,
+                "continuation_error": "scheduled_continuation_clock_invalid",
+            }
+        delay_seconds = max(
+            0.0,
+            (due - current.astimezone(timezone.utc)).total_seconds(),
+        )
+        if delay_seconds:
+            console.print(
+                f"[yellow]Report publication will retry automatically in {int(delay_seconds + 0.999)} seconds.[/yellow]"
+            )
+            await sleep_until_due(delay_seconds)
+
+        resume_result = resume(client, procedure_id)
+        if not resume_result.get("resumed"):
+            return {
+                **result,
+                "continuation_error": "scheduled_continuation_not_rearmed",
+                "continuation_status": resume_result.get("status"),
+            }
+
+        prior_task_id = os.environ.get("PLEXUS_DISPATCH_TASK_ID")
+        prior_local_dispatch = os.environ.get("PLEXUS_LOCAL_DISPATCH")
+        os.environ["PLEXUS_DISPATCH_TASK_ID"] = task_id
+        os.environ["PLEXUS_LOCAL_DISPATCH"] = "1"
+        try:
+            result = await run_once(**dict(run_kwargs))
+        finally:
+            if prior_task_id is None:
+                os.environ.pop("PLEXUS_DISPATCH_TASK_ID", None)
+            else:
+                os.environ["PLEXUS_DISPATCH_TASK_ID"] = prior_task_id
+            if prior_local_dispatch is None:
+                os.environ.pop("PLEXUS_LOCAL_DISPATCH", None)
+            else:
+                os.environ["PLEXUS_LOCAL_DISPATCH"] = prior_local_dispatch
+
+    return result
 
 
 def _lua_to_python(obj):
@@ -213,7 +320,6 @@ def create(account: Optional[str], scorecard: str, score: str, yaml: Optional[st
     
     # Use default account if not specified
     if not account:
-        import os
         account = os.environ.get('PLEXUS_ACCOUNT_KEY')
         if not account:
             raise ValueError("PLEXUS_ACCOUNT_KEY environment variable must be set")
@@ -726,7 +832,6 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
         service = ProcedureService(client)
 
         # Use default account
-        import os
         account = os.environ.get('PLEXUS_ACCOUNT_KEY')
         if not account:
             console.print("[red]Error: PLEXUS_ACCOUNT_KEY environment variable must be set[/red]")
@@ -776,11 +881,12 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
                     k, _, v = param.partition('=')
                     k = k.strip().strip('"').strip("'")
                     v = v.strip().strip('"').strip("'")
-                    if k in ('scorecard', 'scorecard_id') and v:
-                        scorecard_identifier_for_create = v
-                    elif k in ('score', 'score_id') and v:
-                        score_identifier_for_create = v
-                    parsed_set_params[k] = v
+                    parsed_value = _parse_set_parameter_value(v)
+                    if k in ('scorecard', 'scorecard_id') and parsed_value:
+                        scorecard_identifier_for_create = str(parsed_value)
+                    elif k in ('score', 'score_id') and parsed_value:
+                        score_identifier_for_create = str(parsed_value)
+                    parsed_set_params[k] = parsed_value
 
         # Inject --set param values into YAML params so they are persisted in the
         # stored procedure code (the same way the dashboard does it at creation time).
@@ -848,35 +954,33 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
                 console.print(f"[red]Error: --set value must be key=value, got: {param}[/red]")
                 return
             key, value = param.split('=', 1)
-            # Try to parse numeric/boolean values
-            if value.lower() == 'true':
-                value = True
-            elif value.lower() == 'false':
-                value = False
-            else:
-                try:
-                    value = int(value)
-                except ValueError:
-                    try:
-                        value = float(value)
-                    except ValueError:
-                        pass  # Keep as string
-            param_context[key.strip()] = value
+            param_context[key.strip()] = _parse_set_parameter_value(value)
         options['context'] = param_context
     
     # Get account ID for task tracking
     from plexus.cli.report.utils import resolve_account_id_for_command
     account_id = resolve_account_id_for_command(client, None)
     
-    # Run the procedure with task tracking (async)
-    import asyncio
+    # Run the procedure with task tracking. A direct local invocation remains
+    # responsible for its own scheduled retries; dispatch-hosted invocations
+    # return the durable wait to that host.
     from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
-    
-    result = asyncio.run(run_procedure_with_task_tracking(
-        procedure_id=procedure_id,
+
+    run_kwargs = {
+        "procedure_id": procedure_id,
+        "client": client,
+        "account_id": account_id,
+        **options,
+    }
+    result = asyncio.run(_run_local_procedure_through_scheduled_continuations(
+        run_once=run_procedure_with_task_tracking,
+        run_kwargs=run_kwargs,
         client=client,
-        account_id=account_id,
-        **options
+        procedure_id=procedure_id,
+        enabled=(
+            not async_mode
+            and not (os.getenv("PLEXUS_DISPATCH_TASK_ID") or "").strip()
+        ),
     ))
     
     if result.get('status') == 'error':

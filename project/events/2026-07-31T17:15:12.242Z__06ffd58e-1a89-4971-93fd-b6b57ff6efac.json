@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "06ffd58e-1a89-4971-93fd-b6b57ff6efac",
+  "issue_id": "plx-fd24dd16-73df-49ac-9235-836c54eb53ca",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T17:15:12.242Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Distinguish portfolio surveys from score optimization outcomes",
+    "description": "As an optimization operator, I want portfolio surveys and score optimizer executions to be unmistakably different, so that a completed survey is never interpreted as a successfully improved score.\n\nFeature: Optimization execution clarity\n\nScenario: Account-wide portfolio survey has not launched an optimizer\n  Given a portfolio procedure has surveyed and assessed scores\n  And it has launched no score optimizer\n  When an operator views the procedure or its Report\n  Then the interface labels it as a portfolio survey\n  And it shows zero optimizer launches and zero successful improvements\n  And it does not imply that any score was optimized\n\nScenario: Portfolio run launches score optimizers\n  Given a portfolio procedure has selected and launched exact score targets\n  When an operator views the procedure or its Report\n  Then the interface shows the funnel from surveyed through diagnosed, selected, launched, evaluated, and improved\n  And score optimizer children are visually distinct from the parent portfolio survey\n\nScenario: Completed procedure has no improvement evidence\n  Given a procedure task is completed\n  But it has no terminal evaluation and safe-improvement review evidence\n  When the operator views its outcome\n  Then the interface does not call the score optimized or improved\n\nOut of scope: changing selection policy, launching new optimizers, promotion, schema resources, or operational mutations.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "plx-3f7424ad-8945-434a-a82a-27f6ad796dd0",
+  "title": "Restore report action summary contract",
+  "description": "Observed behavior: the stakeholder presentation omits the decision summary and action workstreams expected by the report UI.\n\nFeature: Report action summary contract\n\nScenario: Present pending analysis actions\nGiven a portfolio report has an incomplete analysis state and repair findings\nWhen the stakeholder presentation is built\nThen it includes a decision summary with the analysis state\nAnd it includes grouped action workstreams with safe next actions\nAnd the dashboard can render the contract without a fallback.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-08-03T18:23:58.715810Z",
+  "updated_at": "2026-08-03T18:23:59.262828Z",
+  "closed_at": null,
+  "custom": {}
+}

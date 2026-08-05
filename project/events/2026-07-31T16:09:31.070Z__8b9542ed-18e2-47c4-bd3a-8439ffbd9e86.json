@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "8b9542ed-18e2-47c4-bd3a-8439ffbd9e86",
+  "issue_id": "plx-ba9c0f2d-81a6-447c-9d4f-eedd9ba896cb",
+  "event_type": "field_updated",
+  "occurred_at": "2026-07-31T16:09:31.070Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "changes": {
+      "assignee": {
+        "from": null,
+        "to": "ryan.porter@capacity.com"
+      }
+    }
+  }
+}

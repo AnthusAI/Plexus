@@ -198,6 +198,9 @@ def test_send_response_derives_control_metadata(monkeypatch):
                                 "request_id": "req-1",
                                 "procedure_id": "proc-1",
                                 "request_type": "approval",
+                                "action_key": "approve-change",
+                                "precondition_fingerprint": "fingerprint-1",
+                                "evidence_fingerprint": "evidence-1",
                             }
                         }
                     ),
@@ -236,6 +239,9 @@ def test_send_response_derives_control_metadata(monkeypatch):
     assert payload["humanInteraction"] == "RESPONSE"
     assert payload["responseStatus"] == "PENDING"
     assert metadata["control"]["request_id"] == "req-1"
+    assert metadata["control"]["action_key"] == "approve-change"
+    assert metadata["control"]["precondition_fingerprint"] == "fingerprint-1"
+    assert metadata["control"]["evidence_fingerprint"] == "evidence-1"
     assert metadata["control"]["value"] is True
 
 

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "338c3cc9-0651-4298-8f92-b14c9a258a45",
+  "issue_id": "plx-6ce00cbd-9dda-475e-aa76-f1416f0dad9d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-04T20:47:01.729Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implement the provider-neutral always-on service loop for story plx-35cc9a. It must receive and process one delivery at a time, wait without busy-spinning when idle, stop receiving on drain, release a delivery if drain races with receipt, allow active execution to settle, and exit deterministically. Signals, ECS task protection, provider adapters, cancellation, concurrency greater than one per service instance, and infrastructure remain out of scope.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement a drainable always-on command worker service"
+  }
+}

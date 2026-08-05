@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9d3dcf46-0ac8-44d0-8e84-adee7cea4c8c",
+  "issue_id": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-04T19:22:48.113Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Design a reusable Plexus-owned execution platform for interactive commands that can run for many hours without relying on server hosts. The platform must provide responsive dispatch, durable execution, safe concurrency, observable lifecycle state, and interruption-safe deployments.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Durable interactive command execution platform"
+  }
+}

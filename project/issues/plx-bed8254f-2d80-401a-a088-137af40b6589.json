@@ -1,0 +1,25 @@
+{
+  "id": "plx-bed8254f-2d80-401a-a088-137af40b6589",
+  "title": "Honor bounded semantic diagnosis as partial coverage",
+  "description": "As an operator, I want a semantic-diagnosis cap to run a deterministic subset and report the remainder honestly, so that bounded dogfood runs produce useful findings without implying full portfolio coverage.\n\nFeature: Bounded portfolio diagnosis\n\nScenario: The policy-selected diagnosis set exceeds the configured cap\nGiven a complete ranked and assessed portfolio\nAnd more scores qualify for semantic diagnosis than the configured maximum\nWhen the portfolio procedure enters diagnosis\nThen it diagnoses the highest-priority scores up to the maximum\nAnd it reports the policy-selected, scheduled, completed, failed, and deferred counts separately\nAnd it labels portfolio semantic coverage incomplete\nAnd it does not treat the cap as a model-work failure.\n\nScenario: The configured cap covers the selected set\nGiven a complete ranked and assessed portfolio\nAnd the configured maximum covers every policy-selected score\nWhen semantic diagnosis completes\nThen no scores are reported as deferred by the cap\nAnd selected-scope completeness reflects the completed and failed diagnoses.\n\nScenario: The configured cap is zero\nGiven one or more scores qualify for semantic diagnosis\nWhen the configured maximum is zero\nThen no semantic diagnosis is invoked\nAnd the Report says all selected diagnoses were deferred by the cap\nAnd the run remains incomplete without claiming a diagnosis failure.\n\nScope: portfolio orchestration, decision evidence, living Report and workbook presentation, and focused tests. No optimizer launch, score mutation, schema change, or new resource.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d10bd307-1926-4af5-aa5a-7cd5d22cb19c",
+      "author": "ryan.porter",
+      "text": "Outside-in implementation complete for local acceptance. A diagnosis maximum now schedules the highest-ranked subset instead of aborting all semantic work. Evidence and stakeholder presentation distinguish policy-selected, scheduled, completed, failed, policy-skipped, and cap-deferred counts. A zero cap invokes no model work and reports every selected diagnosis as deferred; partial coverage finalizes as incomplete. Validation: 57 focused Python tests, 5 focused dashboard tests, frontend/backend typechecks, and diff check passed. Live production-backed rerun is next; no optimizer or score mutation will be authorized.",
+      "created_at": "2026-07-30T20:38:41.349906Z"
+    }
+  ],
+  "created_at": "2026-07-30T20:33:19.202610Z",
+  "updated_at": "2026-07-30T20:38:41.349906Z",
+  "closed_at": null,
+  "custom": {}
+}

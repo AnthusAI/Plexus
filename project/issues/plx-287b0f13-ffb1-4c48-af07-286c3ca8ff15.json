@@ -1,0 +1,18 @@
+{
+  "id": "plx-287b0f13-ffb1-4c48-af07-286c3ca8ff15",
+  "title": "Workers claim and report commands through a portable lifecycle",
+  "description": "As a dashboard user, I want an announced command to be claimed and reported through a provider-neutral worker lifecycle, so that execution behaves consistently across deployment targets.\n\nFeature: Portable command lifecycle\n  Scenario: A worker completes an announced command\n    Given an announced command with no active execution lease\n    When an eligible worker claims and executes the command\n    Then exactly one active lease identifies that worker\n    And progress is visible through the control-plane task\n    And the task reaches a completed terminal state\n    And transport-specific result storage is not required",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-08-04T19:45:08.913537Z",
+  "updated_at": "2026-08-04T19:45:08.913537Z",
+  "closed_at": null,
+  "custom": {}
+}

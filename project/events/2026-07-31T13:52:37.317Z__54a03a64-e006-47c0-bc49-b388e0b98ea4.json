@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "54a03a64-e006-47c0-bc49-b388e0b98ea4",
+  "issue_id": "plx-2ef1878b-7134-4e86-98f1-a7671696fce4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T13:52:37.317Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Publish progress while materializing portfolio milestone artifacts",
+    "description": "After exhaustive assessment completes, the portfolio worker may spend several minutes generating and uploading the run workbook, evidence packet, and per-scorecard stakeholder artifacts. The living Report remains on the final assessment count with no indication that publication is active.\n\nFeature: Observable portfolio artifact publication\n\nScenario: Assessment milestone artifacts are being materialized\n  Given deterministic assessment is complete\n  When stakeholder artifacts are generated, validated, or uploaded\n  Then the living Report shows a publication phase distinct from assessment and semantic diagnosis\n  And it reports completed versus total artifacts grouped by safe artifact kind\n  And it reports elapsed time and the next durable milestone\n  And it never exposes object keys or opaque resource identifiers\n\nScenario: Artifact publication fails\n  Given one or more required milestone artifacts cannot be validated or published\n  When the publication attempt terminates\n  Then the Report identifies the failed artifact kind and incomplete milestone\n  And it does not imply semantic diagnosis or optimization began.\n\nNo client information is included.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+    "labels": []
+  }
+}

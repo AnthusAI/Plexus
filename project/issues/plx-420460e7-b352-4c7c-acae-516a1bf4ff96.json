@@ -1,0 +1,43 @@
+{
+  "id": "plx-420460e7-b352-4c7c-acae-516a1bf4ff96",
+  "title": "Recover living Report finalization after credential expiry",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "efdc65d4-0c22-4355-b11e-87de9a277dee",
+      "author": "ryan.porter",
+      "text": "Dogfood reproduction: a read-only portfolio run completed its zero-cost workflow but temporary production API credentials expired during finalization. Required Report and Task writes failed closed, leaving the durable stakeholder state behind the in-memory procedure result. Renewing credentials allowed the same Task and Report IDs to be reused, but the current retry path republished an empty started revision and repeated analysis. Next: preserve the latest durable milestone on retry and add a credential-lifetime/recovery contract before implementation.",
+      "created_at": "2026-07-30T21:36:43.157654Z"
+    },
+    {
+      "id": "3929ab61-3f4c-4d12-9a80-236846ecb5d0",
+      "author": "ryan.porter",
+      "text": "Read-only investigation: local Cognito GraphQL transport obtains a bearer token once during client construction and freezes it in static headers; its token provider already supports refresh, so requests made after access-token expiry cannot recover. The portfolio runner creates a new empty in-memory state on every invocation and unconditionally publishes the started milestone after start_or_resume; the durable latest immutable evidence exists but is not read back, so retry recomputes earlier stages. Proposed minimal repair: request-time Cognito auth plus verified latest-evidence hydration through existing TASK_ATTACHMENT ticket reads, with runner progression keyed by the last durable milestone. Preserve the same outer procedure Task/Report; fail closed if the latest evidence cannot be verified.",
+      "created_at": "2026-07-30T21:43:27.925170Z"
+    },
+    {
+      "id": "3727eba3-eb6c-4e2f-8507-f59a0c127445",
+      "author": "ryan.porter",
+      "text": "Implemented the isolated Cognito request-time refresh slice without touching procedure/report code. Test-first evidence: the new prepared-request contract initially failed against static Authorization headers (3 focused failures), then passed after adding a small AuthBase adapter. ...............................                                          [100%]\n31 passed in 4.87s => 31 passed. The test proves one client receives token A then token B on two requests and a later refresh failure raises without API-key fallback. Uncommitted; only plexus/dashboard/api/client.py and plexus/dashboard/api/client_test.py changed.",
+      "created_at": "2026-07-30T21:45:50.187753Z"
+    },
+    {
+      "id": "c2a5649d-cf04-4a23-84af-02be06fa433b",
+      "author": "ryan.porter",
+      "text": "Implemented the outside-in recovery repair locally. Request-time Cognito authentication now obtains the current token for every outbound request and fails closed without API-key fallback. Living Reports now load the latest committed evidence through the authorized Task-attachment route, verify integrity and frozen identity, resume from the last durable milestone, avoid repeating completed analysis/dispatch/review work, and use unique artifact keys for interrupted publication retries. Focused validation: 96 tests passed across API client, Report lifecycle, and portfolio runner; diff check passed. Next: inspect the combined diff, run a read-only recovery acceptance, and keep this bug open until the fixes land.",
+      "created_at": "2026-07-30T21:55:57.417178Z"
+    }
+  ],
+  "created_at": "2026-07-30T21:36:36.914436Z",
+  "updated_at": "2026-07-30T21:55:57.417178Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3383231d-93ec-4d94-b52e-283099b6e456",
+  "issue_id": "plx-04e73b58-e8a0-40c4-9bc1-d240876f5638",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-04T19:45:32.044Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "As an operator, I want the existing command worker to remain deployable while the new platform is validated, so that parallel migration does not interrupt current workloads.\n\nFeature: Isolated command-worker migration\n  Scenario: The portable worker runtime is introduced\n    Given the existing Celery command worker remains the active production path\n    When the new runtime and AWS service are built and deployed separately\n    Then existing Celery entrypoints and infrastructure remain unchanged\n    And the new service uses isolated queues, images, configuration, and resource names\n    And cutover requires an explicit future decision",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Legacy command execution remains deployable during migration"
+  }
+}

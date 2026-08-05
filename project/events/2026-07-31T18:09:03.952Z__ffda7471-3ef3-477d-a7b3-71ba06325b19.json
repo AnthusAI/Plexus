@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ffda7471-3ef3-477d-a7b3-71ba06325b19",
+  "issue_id": "plx-2e4b79f2-947d-4959-81e7-206cba0f67a7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T18:09:03.952Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Bound score-level artifact fanout in living reports",
+    "description": "As an optimization operator, I want milestone publication to create individual score briefs only for scores with stakeholder-relevant detail, so that the living Report becomes useful promptly without losing complete portfolio and scorecard evidence.\n\nFeature: Bound score-level artifact fanout\n\nScenario: Ranking publishes a bounded actionable artifact set\n  Given a complete portfolio containing many scores\n  And only a subset appears in priorities, questions, issues, or optimization outcomes\n  When the ranking milestone is published\n  Then every score remains in the stakeholder workbook and scorecard-level CSV\n  And an individual Markdown score brief is published only for that stakeholder-relevant subset\n  And the published artifact plan exactly reconciles with the uploaded artifacts\n\nScenario: A later finding creates a score brief\n  Given a score did not require an individual brief in an earlier milestone\n  When a later milestone adds that score to a stakeholder question or optimization outcome\n  Then that milestone publishes a score brief for the score\n  And the scorecard presentation links to the exact immutable brief revision\n\nScenario: Unchanged relevant briefs are reused\n  Given a stakeholder-relevant score brief was committed in the prior milestone\n  When the next milestone leaves its content unchanged\n  Then the prior verified artifact is reused\n  And no duplicate upload is required\n\nOut of scope:\n- Removing any score from the portfolio workbook or scorecard CSV.\n- Weakening checksum, reconciliation, privacy, or fatal-publication guarantees.\n- Parallel or unordered artifact writes.\n- Automatic score, guideline, champion, or feedback-setting mutation.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

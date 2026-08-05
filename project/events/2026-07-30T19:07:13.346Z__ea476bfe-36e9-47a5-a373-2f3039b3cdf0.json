@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "ea476bfe-36e9-47a5-a373-2f3039b3cdf0",
+  "issue_id": "plx-a5d694aa-900b-4fd4-bcf1-ca3fcd2b046b",
+  "event_type": "field_updated",
+  "occurred_at": "2026-07-30T19:07:13.346Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "changes": {
+      "title": {
+        "from": "Reconcile diagnosed priority actions in optimization reports",
+        "to": "Report incomplete semantic diagnoses honestly"
+      },
+      "description": {
+        "from": "Ensure completed semantic diagnosis replaces stale assessment guidance in stakeholder-facing priority rows.\n\nFeature: Diagnosed priority projection\n  Scenario: A selected priority has completed diagnosis\n    Given a ranked score has both deterministic assessment and completed semantic diagnosis\n    When the living report projects the priority\n    Then its state, rationale, and next action come from the completed diagnosis\n    And it does not tell the operator to complete diagnosis again\n\n  Scenario: A priority has not completed diagnosis\n    Given a ranked score has assessment evidence but no completed diagnosis\n    When the living report projects the priority\n    Then the report clearly labels diagnosis as incomplete",
+        "to": "Distinguish a diagnosis call returning incomplete evidence from a completed semantic diagnosis, and keep its remediation guidance visible.\n\nFeature: Semantic diagnosis completion\n  Scenario: A selected diagnosis returns complete evidence\n    Given semantic diagnosis completes with full coverage\n    When the living report updates diagnosis coverage\n    Then the completed count increases\n    And the score uses the diagnosed state, rationale, and next action\n\n  Scenario: A selected diagnosis returns incomplete evidence\n    Given semantic diagnosis returns incomplete coverage or an incomplete state\n    When the living report updates diagnosis coverage\n    Then the completed count does not increase\n    And the incomplete count increases\n    And the report does not claim all selected diagnoses completed\n    And the run cannot become optimization-ready"
+      }
+    }
+  }
+}

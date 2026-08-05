@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d1dcbad8-5a6c-4708-94c6-739b136eef73",
+  "issue_id": "plx-be1662c5-5447-47b3-aafe-30c8c5d26cf9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T17:13:58.804Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Show linked procedure progress on living optimization reports",
+    "description": "As an operator, I want a living optimization Report to show its linked Procedure Task summary and a plain-language run identity, so that I can understand what kind of run it is and what is happening without interpreting internal scope selectors.\n\nOut of scope: changing Task lifecycle ownership, introducing new backend resources, or removing detailed scope evidence from the Report body.\n\nFeature: Procedure-aware living Report header\n\nScenario: View a Report linked to a Procedure Task\nGiven a living optimization Report is linked to its Procedure Task\nWhen an operator opens the Report\nThen the page shows the standard Procedure Task visual summary\nAnd the run type and lifecycle state are understandable at a glance\nAnd raw scope selector syntax is not used as the primary subtitle or description\n\nScenario: View a Report without a linked Task\nGiven a Report has no linked Procedure Task\nWhen an operator opens the Report\nThen the Report remains readable\nAnd the page does not show a broken Task summary\n\nScenario: Inspect exact scope\nGiven a living optimization Report has normalized scope evidence\nWhen an operator needs execution details\nThen the exact scope remains available in the Report evidence below the header",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

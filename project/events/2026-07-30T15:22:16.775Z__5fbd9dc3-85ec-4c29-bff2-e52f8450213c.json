@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5fbd9dc3-85ec-4c29-bff2-e52f8450213c",
+  "issue_id": "plx-da6d1fa1-24c4-4cfb-b4e8-3476b8e538c6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T15:22:16.775Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Identify optimization actions in the human inbox",
+    "description": "Human actions created by portfolio optimization are currently displayed with only a generic action type. Operators cannot tell which score the action concerns or what decision is being requested without opening another resource.\n\nFeature: Make portfolio actions self-identifying\n\nScenario: A stakeholder clarification is created for one score\nGiven semantic diagnosis emits a stakeholder clarification with human-readable scorecard and score names\nWhen the action is persisted as an existing ChatMessage\nThen the action control envelope contains the action kind, descriptive title, concise question summary, and named resource references\nAnd the Action Inbox shows those names and the question without exposing opaque identifiers\nAnd the submitted response still carries exact opaque identifiers for server validation\n\nScenario: Human-readable names are unavailable\nGiven an action has exact resource identifiers but no trusted display names\nWhen the action is presented\nThen it remains valid and linked\nAnd the system does not invent a client-facing name\n\nExclusions: This change adds no data models or resources and does not automatically answer or execute the action.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f0d5d69b-5f56-4ab8-9e25-fe72cdda3702",
+  "issue_id": "plx-853eb242-b6ff-4f2f-9921-04bc8e6173c5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T16:38:58.230Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Distinguish scope inventory from the selected optimization portfolio",
+    "description": "A scoped run must enumerate the account inventory to resolve opaque IDs and literal prefixes, but the living Report currently presents that inventory count as though every inspected scorecard were in the optimization portfolio.\n\nFeature: Honest scoped-run coverage\n\nScenario: View a scoped optimization run after ranking\n  Given exhaustive inventory inspected more scorecards than the selected scope contains\n  When a stakeholder views the Report cover or aggregate presentation\n  Then the Report separately identifies the inventory inspected and the scorecards in scope\n  And ranked, assessed, and diagnosed counts are clearly associated with the selected scope\n\nScenario: View an account-wide run\n  Given no scorecard selectors were supplied\n  When a stakeholder views coverage\n  Then the account inventory and selected scope are clearly equivalent\n\nOut of scope:\n- Changing exhaustive inventory behavior.\n- Exposing opaque identifiers in stakeholder presentation.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": "ryan.porter",
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

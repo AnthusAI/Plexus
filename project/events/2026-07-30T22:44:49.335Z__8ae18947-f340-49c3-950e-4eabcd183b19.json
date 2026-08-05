@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8ae18947-f340-49c3-950e-4eabcd183b19",
+  "issue_id": "plx-0c5be207-4139-4f88-9bd8-66038b59d784",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T22:44:49.335Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Add idempotent optimizer procedure creation",
+    "description": "Implement story plx-9bb525. Persist deterministic launch identity before mutation, create or recover the exact optimizer Procedure and Task atomically enough to survive an uncertain response, preserve per-target failures, forward every explicit execution limit, and expose stable child references for later monitoring. No score version or champion mutation is added.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+    "labels": []
+  }
+}

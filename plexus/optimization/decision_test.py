@@ -325,6 +325,39 @@ def test_rank_aggregates_and_excludes_recent_score_activity():
     assert ranked["recent_activity_excluded_count"] == 1
     assert ranked["unranked"][0]["score_id"] == "recent"
     assert ranked["unranked"][0]["unranked_reason"] == "recent_score_activity"
+    assert ranked["unranked"][0]["evidence_rank"] == 1
+    assert ranked["unranked"][0]["policy_disposition"] == "cooldown"
+    assert ranked["unranked"][0]["eligible_for_optimization"] is False
+    assert ranked["ranked"][0]["evidence_rank"] == 2
+    assert ranked["ranked"][0]["candidate_rank"] == 1
+    assert ranked["ranked"][0]["policy_disposition"] == "eligible"
+    assert ranked["total_evidence_ranked"] == 2
+
+
+def test_rank_preserves_evidence_order_for_structurally_blocked_scores():
+    result = rank_portfolio(
+        [
+            {
+                "scorecard_id": "card", "score_id": "blocked", "scorecard_name": "Example",
+                "score_name": "Blocked", "champion_version": None,
+                "valid_feedback_count": 100, "disagreement_count": 90,
+            },
+            {
+                "scorecard_id": "card", "score_id": "eligible", "scorecard_name": "Example",
+                "score_name": "Eligible", "champion_version": "champion",
+                "valid_feedback_count": 100, "disagreement_count": 20,
+                "score_activity": _old_score_activity(),
+            },
+        ],
+        coverage={"complete": True, "activity": _activity_coverage()},
+    )
+
+    assert result["unranked"][0]["score_id"] == "blocked"
+    assert result["unranked"][0]["evidence_rank"] == 1
+    assert result["unranked"][0]["policy_disposition"] == "blocked"
+    assert result["unranked"][0]["policy_reason"] == "missing_champion"
+    assert result["ranked"][0]["score_id"] == "eligible"
+    assert result["ranked"][0]["evidence_rank"] == 2
 
 
 @pytest.mark.parametrize(
@@ -646,6 +679,7 @@ def test_semantic_diagnosis_state_is_preserved_in_common_packet_fields():
             "account_id": "account",
             "diagnosis": {
                 "guideline_state": "code_conflict",
+                "guideline_code_conflict_claim": "The guideline requires an explicit confirmation, but the score code accepts an implied answer.",
                 "feedback_contradiction": True,
                 "stakeholder_questions": ["clarify policy"],
                 "complete": True,
@@ -657,6 +691,9 @@ def test_semantic_diagnosis_state_is_preserved_in_common_packet_fields():
     assert diagnosis["feedback_rubric_state"] == "inconsistent"
     assert diagnosis["states"]["guideline_health"] == "potential_code_conflict"
     assert diagnosis["states"]["feedback_rubric_health"] == "inconsistent"
+    assert diagnosis["guideline_code_conflict_claim"] == (
+        "The guideline requires an explicit confirmation, but the score code accepts an implied answer."
+    )
 
 
 def test_complete_semantic_diagnosis_preserves_ready_assessment_only_without_blockers():
@@ -823,11 +860,43 @@ def test_post_run_promotion_requires_explicit_no_collapse_and_candidate_identity
         missing_candidate,
         missing_indexed_evidence,
     ):
-        assert result["post_run_state"] == "continue_optimization"
+        assert result["post_run_state"] == "failed_or_incomplete"
         assert result["promotion_ready"] is False
+        assert result["primary_next_action"] == "complete_or_repair_evaluation"
     assert "prediction_collapse" in missing_collapse["missing_evidence"]
     assert "candidate_version_id" in missing_candidate["missing_evidence"]
     assert "indexed_optimizer_review" in missing_indexed_evidence["missing_evidence"]
+
+
+def test_post_run_validated_improvement_requires_core_gates_but_not_promotion_only_rca():
+    alignment_evidence = {
+        "recent": {"baseline": 0.826, "candidate": 0.942, "delta": 0.116},
+        "regression": {"baseline": 0.310, "candidate": 0.450, "delta": 0.140},
+    }
+    base = {
+        "terminal": True,
+        "indexed_optimizer_review": True,
+        "candidate_version_id": "candidate-version",
+        "matched_recent_evaluation": True,
+        "historical_regression_evidence": True,
+        "class_specific_metrics": True,
+        "prediction_collapse": False,
+        "artifacts_complete": True,
+        "measurable_safe_improvement": True,
+        "alignment_evidence": alignment_evidence,
+    }
+
+    validated = classify_post_run_review({**base, "rca_complete": False})
+    missing_core = classify_post_run_review({**base, "rca_complete": False, "class_specific_metrics": False})
+
+    assert validated["post_run_state"] == "validated_improvement"
+    assert validated["promotion_ready"] is False
+    assert validated["primary_next_action"] == "complete_promotion_evidence"
+    assert validated["missing_evidence"] == ["rca_complete"]
+    assert validated["alignment_evidence"] == alignment_evidence
+    assert missing_core["post_run_state"] == "failed_or_incomplete"
+    assert missing_core["promotion_ready"] is False
+    assert "class_specific_metrics" in missing_core["missing_evidence"]
 
 
 def test_summary_aggregates_actions_questions_failures_and_approval_requests():
@@ -935,6 +1004,65 @@ def test_public_run_dispatch_rejects_missing_ready_assessment_provenance():
     assert missing_marker["rejected"][0]["reason"] == "assessment_not_ready"
     assert missing_limit["accepted"] is False
     assert missing_limit["rejected"][0]["reason"] == "invalid_run_limits"
+
+
+def test_public_run_dispatch_allows_only_explicit_safe_bounded_diagnostic_policy():
+    packet = assess_investment(
+        {
+            "account_id": "account",
+            "scope": {"scorecard_id": "sc", "score_id": "diagnostic"},
+            "window": {"start": "2026-01-01T00:00:00Z", "end": "2026-04-01T00:00:00Z"},
+            "coverage_complete": True,
+            "champion_version": "champion",
+            "feedback_watermark": "watermark",
+            "score_activity": _old_score_activity(),
+            "valid_feedback_count": 200,
+            "disagreement_count": 10,
+            "reachable_classes": ["yes", "no"],
+            "final_label_counts": {"yes": 199, "no": 1},
+            "guideline_state": "consistent",
+        }
+    )
+    assert packet["readiness_state"] == "insufficient_evidence"
+    assert packet["primary_next_action"] == "collect_targeted_classes"
+    target = _ready_target(packet)
+    target["diagnosis"] = {
+        "scope": {"scorecard_id": "sc", "score_id": "diagnostic"},
+        "coverage": {"complete": True, "failures": []},
+        "states": {
+                "optimization": "insufficient_evidence",
+            "guideline_health": "consistent",
+            "feedback_rubric_health": "consistent",
+        },
+        "blockers": [],
+        "stakeholder_questions": [],
+    }
+    limits = {
+        "max_cost_usd": 1.0,
+        "max_samples": 50,
+        "max_iterations": 1,
+        "max_concurrency": 1,
+    }
+    fingerprints = {"sc:diagnostic": packet["evidence_fingerprint"]}
+
+    default = dispatch_optimization_operation(
+        "run", {"approved": True, "targets": [target], **limits, "current_fingerprints": fingerprints},
+    )
+    bounded = dispatch_optimization_operation(
+        "run",
+        {
+            "approved": True,
+            "targets": [target],
+            **limits,
+            "current_fingerprints": fingerprints,
+            "execution_candidate_policy": "promotion_ready_plus_bounded_diagnostic",
+        },
+    )
+
+    assert default["accepted"] is False
+    assert default["rejected"][0]["reason"] == "assessment_not_ready"
+    assert bounded["accepted"] is True
+    assert bounded["accepted_targets"][0]["score_id"] == "diagnostic"
 
 
 def test_every_stage_returns_common_packet_contract_with_caller_context():

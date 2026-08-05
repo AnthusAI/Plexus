@@ -1,0 +1,25 @@
+{
+  "id": "plx-fde05586-a230-424b-88b6-e2ac187aab26",
+  "title": "Preserve frozen feedback watermark through portfolio launch",
+  "description": "An automatically selected target can be ready for optimization yet fail immediately before dispatch because its frozen assessment provenance does not expose the feedback watermark required by the stale-evidence gate.\n\nFeature: Frozen portfolio evidence reaches optimizer launch\n  Scenario: Launch a selected target with unchanged feedback evidence\n    Given exhaustive ranking captured a complete feedback watermark\n    And assessment selected the target as ready to optimize\n    And live champion, feedback, cooldown, configuration, and packet evidence are unchanged\n    When the portfolio coordinator validates the target for launch\n    Then the exact frozen feedback watermark is available to the launch gate\n    And the target is accepted for one idempotent child dispatch\n\n  Scenario: Reject genuinely changed feedback evidence\n    Given a selected target carries its frozen feedback watermark\n    When the live feedback watermark differs before launch\n    Then the target is rejected as stale\n    And no child optimization procedure is created",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "466cf964-3999-4cb2-937f-f1c97ec847aa",
+      "author": "ryan.porter",
+      "text": "Root cause confirmed: the exhaustive shared feedback-window aggregation retained label-pair counts but discarded each score's latest feedback updatedAt. The fix preserves one compact per-score watermark from the same paginated GraphQL read, threads it through batch ranking and assessment, and fails assessment closed when absent. No per-score ranking reads were introduced. Validation: 5 focused provenance contracts, 282 runtime contracts, and 817 optimization/procedure tests pass.",
+      "created_at": "2026-08-03T16:57:09.683604Z"
+    }
+  ],
+  "created_at": "2026-08-03T16:50:55.459752Z",
+  "updated_at": "2026-08-03T16:57:09.683604Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "id": "plx-63a49fbb-f9e7-4a69-b4fa-0f121548f4cf",
+  "title": "Bound semantic diagnosis spend for portfolio runs",
+  "description": "As an operator, I want one enforceable monetary budget for every model call made during semantic portfolio diagnosis, so that I can authorize periodic analysis with a known maximum spend.\n\nNon-goals: automatic budget selection, a billing system, unrelated provider abstraction, automatic optimizer launch, or relaxed approval gates. No new GraphQL resources and no runtime monkeypatching.\n\nFeature: Enforceable semantic diagnosis budget\n\nScenario: Positive bounded diagnosis stays within authorization\n  Given a portfolio run has one positive finite semantic budget\n  And every diagnosis model call has known versioned pricing and bounded input, output, and retries\n  When semantic diagnosis executes across one or more targets\n  Then a shared ledger reserves worst-case cost before each provider call\n  And actual usage reconciles without exceeding the authorized amount\n  And the optimizer cost budget remains independent\n\nScenario: Unsafe model call fails closed\n  Given a diagnosis call has unknown pricing, unbounded tokens or retries, or insufficient remaining budget\n  When the call is planned\n  Then the provider is not contacted\n  And the affected diagnosis is incomplete or deferred\n  And it cannot become optimization-ready or promotion-ready\n\nScenario: Retry and replay cannot overspend\n  Given a malformed model response may require a repair retry\n  And a portfolio attempt may resume from persisted evidence\n  When the retry or replay occurs\n  Then each provider attempt has an idempotent reservation\n  And the original frozen budget and ledger are reused\n  And the budget cannot reset, enlarge, or double-charge\n\nScenario: Stakeholders can audit diagnosis spend\n  Given semantic diagnosis completes, defers, or fails\n  When the living Report publishes a milestone\n  Then stakeholder-safe budget evidence shows authorized, reserved, actual or estimated, remaining, calls, failures, model and pricing versions, and coverage deferred by budget\n  And the same evidence reconciles across packets, fingerprints, workbook, run log, and affected score rationale\n\nScenario: Zero budget makes no model call\n  Given the semantic budget is zero\n  When max semantic diagnoses is zero\n  Then the run remains deterministic and makes no diagnosis model call\n  And a positive diagnosis count with zero budget is rejected before execution",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-07-31T02:32:17.455364Z",
+  "updated_at": "2026-07-31T02:32:22.208997Z",
+  "closed_at": null,
+  "custom": {}
+}

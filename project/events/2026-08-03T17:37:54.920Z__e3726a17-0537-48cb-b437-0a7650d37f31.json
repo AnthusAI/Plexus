@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e3726a17-0537-48cb-b437-0a7650d37f31",
+  "issue_id": "plx-c2a81e76-c7e6-4f0f-9188-59712ee5cedd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-03T17:37:54.920Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Bound automatic portfolio launches by an explicit top-K limit",
+    "description": "",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+    "labels": []
+  }
+}

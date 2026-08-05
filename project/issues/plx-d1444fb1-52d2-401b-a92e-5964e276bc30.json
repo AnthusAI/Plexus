@@ -1,0 +1,25 @@
+{
+  "id": "plx-d1444fb1-52d2-401b-a92e-5964e276bc30",
+  "title": "Consumers deploy a complete scoring substrate from reusable components",
+  "description": "As a platform integrator, I want to deploy the asynchronous scoring service from client-neutral Plexus infrastructure components, so that integrations provide only their own runtime behavior and configuration.\n\nFeature: Reusable asynchronous scoring infrastructure\n\nScenario: Deploy a client-neutral scoring platform\n  Given an integrator supplies explicit names, networking configuration, immutable runtime images, handlers, permissions, and worker definitions\n  When the Plexus infrastructure stacks are synthesized\n  Then they provision the network, scoring, integration hosting, scheduled worker hosting, operations, artifact repositories, and observability resources\n  And no client-specific behavior or values are embedded in Plexus\n\nScenario: Deploy the validated score processor image\n  Given an integrator supplies an immutable score processor image URI by digest\n  When the asynchronous scoring stack is synthesized and deployed\n  Then that exact image URI is assigned to the score processor function\n  And no mutable parameter is resolved later during deployment\n\nScenario: Preserve existing Plexus workloads\n  Given existing Plexus scoring workloads use legacy infrastructure entry points\n  When the reusable service components are added\n  Then those existing entry points and deployments remain unchanged",
+  "type": "story",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-39614d99-a561-4250-991b-0dd4e23c3887",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "fb5e0472-abbe-4447-9788-1b960231efd4",
+      "author": "derek.norrbom",
+      "text": "All specified reusable scoring infrastructure behaviors are implemented and verified.",
+      "created_at": "2026-08-03T18:01:37.393150Z"
+    }
+  ],
+  "created_at": "2026-08-03T17:37:06.601335Z",
+  "updated_at": "2026-08-03T18:01:37.553613Z",
+  "closed_at": "2026-08-03T18:01:37.553613Z",
+  "custom": {}
+}

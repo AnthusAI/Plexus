@@ -1,0 +1,31 @@
+{
+  "id": "plx-da6d1fa1-24c4-4cfb-b4e8-3476b8e538c6",
+  "title": "Identify optimization actions in the human inbox",
+  "description": "Human actions created by portfolio optimization are currently displayed with only a generic action type. Operators cannot tell which score the action concerns or what decision is being requested without opening another resource.\n\nFeature: Make portfolio actions self-identifying\n\nScenario: A stakeholder clarification is created for one score\nGiven semantic diagnosis emits a stakeholder clarification with human-readable scorecard and score names\nWhen the action is persisted as an existing ChatMessage\nThen the action control envelope contains the action kind, descriptive title, concise question summary, and named resource references\nAnd the Action Inbox shows those names and the question without exposing opaque identifiers\nAnd the submitted response still carries exact opaque identifiers for server validation\n\nScenario: Human-readable names are unavailable\nGiven an action has exact resource identifiers but no trusted display names\nWhen the action is presented\nThen it remains valid and linked\nAnd the system does not invent a client-facing name\n\nExclusions: This change adds no data models or resources and does not automatically answer or execute the action.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c6936a19-f81c-4c15-83b4-8d72f46aabbc",
+      "author": "ryan.porter",
+      "text": "Production dogfood created a valid pending clarification with correct Report and Score links, but the inbox rendered only a generic title and request type. The stored control envelope omitted title, summary, kind, and human-readable resource labels even though exact identifiers were preserved. Next: specify the producer and persistence envelope, then verify the dashboard rendering.",
+      "created_at": "2026-07-30T15:22:25.330718Z"
+    },
+    {
+      "id": "d9a79bbd-eafe-4774-99dd-723a7d6934ff",
+      "author": "ryan.porter",
+      "text": "Repair complete in the integration worktree. Portfolio diagnosis now preserves trusted scorecard/score display names; finding actions carry a score-specific title, concise question, named resource reference, and exact opaque identifiers. ChatMessage control envelopes now persist kind/title/message. Focused Python tests and all 10 Action Inbox tests pass. The pre-fix action remains generic by design; a fresh action is required for live visual confirmation.",
+      "created_at": "2026-07-30T15:38:19.589342Z"
+    }
+  ],
+  "created_at": "2026-07-30T15:22:16.774821Z",
+  "updated_at": "2026-07-30T15:38:19.589342Z",
+  "closed_at": null,
+  "custom": {}
+}

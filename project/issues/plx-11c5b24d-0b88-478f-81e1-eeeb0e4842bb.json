@@ -1,0 +1,91 @@
+{
+  "id": "plx-11c5b24d-0b88-478f-81e1-eeeb0e4842bb",
+  "title": "Publish semantic budget evidence and operator controls",
+  "description": "Update procedure parameters, packets, fingerprints, living Report, workbook, score rationale, CLI/MCP/docs/skill, and production pilot packet with reconciled semantic budget evidence.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "36398920-1117-4621-9b64-7b0fa24dcf5e",
+      "author": "ryan.porter",
+      "text": "Implementation started. I will add deterministic, privacy-safe semantic-budget stakeholder/operator evidence across packets, reports, workbooks, summaries, procedure controls, and documentation, with red/green verification. No external provider or production activity is in scope.",
+      "created_at": "2026-07-31T03:45:49.748732Z"
+    },
+    {
+      "id": "1fcebf25-1475-415a-95dc-a9526210f5bb",
+      "author": "ryan.porter",
+      "text": "Completed implementation and verification. Added privacy-safe semantic ledger aggregates with Decimal reconciliation, deterministic portfolio evidence and approval stale boundary, report/workbook/run-log/per-score budget evidence, incomplete-budget next actions, operator release/pilot guidance, and tests. Verification: 475 focused semantic/decision/portfolio/report/workbook/CLI/MCP tests passed; compileall passed; whitespace check and configured schema-file diff check passed. No provider, cloud, deployment, or production artifact activity occurred. Note: ruff is not installed in this checkout.",
+      "created_at": "2026-07-31T03:52:45.410011Z"
+    },
+    {
+      "id": "0aff5e8f-2db4-4a34-be0c-d8483ef6dd8c",
+      "author": "ryan.porter",
+      "text": "Reviewer follow-up complete. Reporting now distinguishes semantic budget policy, budget-spec schema, ledger schema, provider/model, and pricing version; per-score semantic status derives from actual selection and result coverage; unknown provider outcomes override unsafe rationale; reserved and zero-valued reconciliation fields remain visible; nested coverage failures are read; and budget deferrals are not conflated with unrelated failures. Validation: focused semantic/reporting matrix 216 passed; MCP runtime semantic-budget/portfolio subset 7 passed with 256 deselected, including PYTHONPATH-unset execution; compileall, diff whitespace check, and dashboard schema no-diff check passed. Release validation remains blocked because the active environment resolves a pre-release editable Tactus source checkout at metadata version 0.51.4 rather than the packaged Plexus-pinned 0.51.5. No dependency pin was changed. Task remains in progress until changes land.",
+      "created_at": "2026-07-31T04:04:27.547174Z"
+    },
+    {
+      "id": "c6a019d5-8782-468e-8a68-5d2206124ea5",
+      "author": "ryan.porter",
+      "text": "Post-fix expanded validation complete. The original 475-test reporting matrix now contains 479 tests after reviewer coverage additions, and all 479 passed. Representative workbook checks separately passed 4/4: workbook generation/opening layout, privacy rejection of unsafe keys/raw evidence, report-cover privacy for unknown outcomes, and semantic money/call-count reconciliation including reserved and zero values. Static checks remain green. Unresolved deployment validation: even with PYTHONPATH unset, the active Poetry environment imports an editable pre-release Tactus source checkout with metadata version 0.51.4, while Plexus pins 0.51.5. These results validate the code against the local source checkout only; packaged/full release validation is not green until Tactus is released and the pinned package/lock is validated. No Tactus pin or version was changed.",
+      "created_at": "2026-07-31T04:05:17.483258Z"
+    },
+    {
+      "id": "df428c7a-9254-4074-b604-37aaf09b9d25",
+      "author": "ryan.porter",
+      "text": "Final reviewer follow-up started. Add projection-boundary coverage proving actual runner diagnosis states remain distinct in stakeholder Portfolio, workbook, and summary output: budget exhausted, provider outcome unknown, and authority publication failure. No provider, cloud, dependency, commit, or deployment activity is in scope.",
+      "created_at": "2026-07-31T04:09:28.571652Z"
+    },
+    {
+      "id": "974ef6f3-c604-466c-8066-02e977e5dd5f",
+      "author": "ryan.porter",
+      "text": "Final projection-boundary reviewer fix complete. Actual runner diagnosis failures now preserve exact budget_exhausted, outcome_unknown, and authority_publication_failure states through stakeholder Portfolio, optimization outcomes, workbook rows, and summary actions. Nested diagnosis.coverage status envelopes receive the same treatment. Budget exhaustion directs review of the frozen budget and waiting for authorized capacity; unknown outcome directs durable budget-evidence review; publication-authority failure directs repair of semantic authority publication before retry. Generic provider/error text is not exposed. Validation: expanded reporting/MCP matrix 485 passed; dedicated three-state workbook plus reconciliation/open/privacy gate 7 passed; compileall, diff whitespace, and dashboard schema no-diff checks passed. The editable pre-release Tactus checkout remains an unresolved packaged deployment-validation blocker. No dependency pin, commit, cloud, or deployment change was made. Task remains in progress until changes land.",
+      "created_at": "2026-07-31T04:15:24.779584Z"
+    },
+    {
+      "id": "667e0006-07e7-49cf-9888-eadb1c9f2c51",
+      "author": "ryan.porter",
+      "text": "Independent re-review follow-up started. Tighten nested semantic failure-text classification so publication/persistence/commit/durable-write failures take precedence over budget heuristics, while a generic reservation mention is not treated as budget exhaustion without explicit budget/cap/exceeded/insufficient-remaining evidence. Add projection, workbook, and summary regression coverage. No provider, cloud, dependency, commit, or deployment activity is in scope.",
+      "created_at": "2026-07-31T04:16:48.892194Z"
+    },
+    {
+      "id": "ef70013e-cc65-4da9-90e6-04859dc2f615",
+      "author": "ryan.porter",
+      "text": "Independent production-text re-review fixed. Nested failure classification now gives semantic authority publication precedence for publish/published/publication, persist/persisted, commit/committed, and durable-write semantics involving semantic reservation, ledger, authority, or evidence. Budget exhaustion now requires explicit budget, cap, cost limit/ceiling, exceeded, or insufficient/no remaining evidence; generic reservation text remains a generic incomplete diagnosis. Regression coverage verifies production pre-contact wording and persist/commit variants through Portfolio, workbook, and summary repair actions. Validation: focused matrix 227 passed; expanded reporting/MCP matrix 490 passed; dedicated workbook/projection/privacy/reconciliation gate 11 passed; compileall, diff whitespace, and dashboard schema no-diff checks passed. Editable Tactus remains an unresolved packaged deployment-validation blocker. No dependency pin, commit, cloud, or deployment change was made. Task remains in progress until changes land.",
+      "created_at": "2026-07-31T04:18:45.246447Z"
+    },
+    {
+      "id": "fb00a4bf-8d2c-444a-b03c-18457628468a",
+      "author": "ryan.porter",
+      "text": "Boundary-review follow-up started. Replace semantic budget substring heuristics with normalized whole-word and bounded-phrase matching. Add negative coverage for generic remaining cost, reservation, cost, remaining, and exceedingly wording, plus true explicit exhaustion variants through stakeholder projection. No provider, cloud, dependency, commit, or deployment activity is in scope.",
+      "created_at": "2026-07-31T04:19:54.889841Z"
+    },
+    {
+      "id": "4836707a-7421-48ec-820d-d1c15e60c4a7",
+      "author": "ryan.porter",
+      "text": "Contract correction accepted. Remove all natural-language semantic failure classification. Introduce and propagate an explicit typed semantic_failure_category with only budget_exhausted, outcome_unknown, and authority_publication_failure; derive it from exception/state types at the source boundary. Error prose becomes display-only. Missing, unknown, legacy, or contradictory prose without a valid structured category fails closed as generic incomplete. Add full runner-to-evidence/Report/workbook/summary/action regression coverage and verify arbitrary prose cannot alter category.",
+      "created_at": "2026-07-31T04:20:41.531571Z"
+    },
+    {
+      "id": "dae348ac-2b6e-44b6-8e67-11cce0e0b4c8",
+      "author": "ryan.porter",
+      "text": "Typed semantic failure contract implemented. Natural-language/status/outcome inference is removed: only exact semantic_failure_category values budget_exhausted, outcome_unknown, or authority_publication_failure are accepted from structured packets, and missing/invalid/legacy categories fail closed as generic incomplete with safe review guidance. Exception-source mapping is type-only: SemanticBudgetExceeded; SemanticOutcomeUnknown or Tactus ModelAttemptOutcomeUnknown; and specific SemanticAuthorityPublicationError or Report publication/integrity types. Broad semantic authority and generic errors remain incomplete. Coordinator ledger load, initial persistence, and commit failures now raise the specific publication type, while missing authority, unauthorized model, replay conflicts, and unrelated authority errors do not. The typed field propagates through runner row, nested and aggregate diagnosis coverage, durable Report evidence, stakeholder Portfolio/outcomes, workbook, and summary actions. Contradictory/arbitrary prose cannot change it. Validation: focused matrix 248 passed; expanded reporting/MCP matrix 511 passed; workbook/projection/privacy/reconciliation gate 14 passed; compileall, diff whitespace, and dashboard schema no-diff checks passed. Editable Tactus remains an unresolved packaged deployment-validation blocker. No dependency pin, commit, cloud, or deployment change was made. Task remains in progress until changes land.",
+      "created_at": "2026-07-31T04:26:18.459931Z"
+    },
+    {
+      "id": "ae7e4a51-4005-4ef3-be52-098a6b5faccd",
+      "author": "ryan.porter",
+      "text": "E2E typed-output follow-up started. Ensure incomplete-only semantic diagnoses surface a safe generic summary next action/reason even when failed_count is zero. Add a privacy-safe stakeholder Report cover section presenting affected score label, exact typed category (or generic incomplete), next action, and safe rationale for all three typed states plus generic incomplete; no opaque IDs or raw error prose. No provider, cloud, dependency, commit, or deployment activity is in scope.",
+      "created_at": "2026-07-31T04:28:39.768144Z"
+    }
+  ],
+  "created_at": "2026-07-31T02:37:51.979933Z",
+  "updated_at": "2026-07-31T04:28:39.768144Z",
+  "closed_at": null,
+  "custom": {}
+}

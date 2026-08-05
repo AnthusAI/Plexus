@@ -1,0 +1,31 @@
+{
+  "id": "plx-877746f4-a985-4582-bb71-9d0d8b3b0027",
+  "title": "Make workbook checksums independent of serialization time",
+  "description": "As a report consumer, I want identical workbook inputs and publication timestamps to produce identical bytes, so that checksums are reproducible across runtimes and clock boundaries.\n\nFeature: Deterministic workbook serialization\n\nScenario: Repeated workbook generation crosses a clock boundary\n  Given the same stakeholder projection, revision, and generated-at timestamp\n  When the workbook is serialized more than once\n  Then the XLSX bytes and SHA-256 checksum are identical\n  And the embedded creation and modification timestamps equal the supplied generated-at timestamp rather than the serialization clock.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d593116c-caa8-43b9-9513-ea9753496f24",
+      "author": "ryan.porter",
+      "text": "Outside-in proof is now deterministic: the workbook test asserts that both embedded core timestamps equal the supplied generated-at value. The failure showed openpyxl overwriting the modified timestamp with the serialization clock. The serializer now writes through ExcelWriter, preserving the frozen timestamps before canonical ZIP normalization. The focused test and ten repeated generations produce one checksum.",
+      "created_at": "2026-07-29T19:57:44.048364Z"
+    },
+    {
+      "id": "fd790b8f-98ad-41e6-adab-c5770207f6e4",
+      "author": "ryan.porter",
+      "text": "Final cross-runtime validation passed. The deterministic workbook contract passes on Python 3.11 and 3.12; separate processes produced identical bytes, and both full 4,088-test suites are green.",
+      "created_at": "2026-07-29T20:06:54.728944Z"
+    }
+  ],
+  "created_at": "2026-07-29T19:55:44.494552Z",
+  "updated_at": "2026-07-29T20:06:54.728944Z",
+  "closed_at": null,
+  "custom": {}
+}

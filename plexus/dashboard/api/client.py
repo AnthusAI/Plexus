@@ -66,6 +66,7 @@ from gql.transport.exceptions import (
     TransportQueryError,
     TransportServerError,
 )
+from requests.auth import AuthBase
 from queue import Queue, Empty
 from threading import Thread, Event
 import time
@@ -86,6 +87,27 @@ gql_logger.setLevel(logging.WARNING)
 gql_logger.propagate = False
 
 logger = logging.getLogger(__name__)
+
+
+class _RefreshingCognitoAuth(AuthBase):
+    """Apply the current Cognito bearer token to each outbound request."""
+
+    def __init__(self, token_provider: Any) -> None:
+        self._token_provider = token_provider
+
+    def __call__(self, request: Any) -> Any:
+        try:
+            access_token = self._token_provider.get_access_token()
+        except Exception as exc:
+            raise ValueError(
+                "Plexus application authentication is unavailable. Run `plexus login` to authenticate."
+            ) from exc
+        if not isinstance(access_token, str) or not access_token:
+            raise ValueError(
+                "Plexus application authentication is unavailable. Run `plexus login` to authenticate."
+            )
+        request.headers["Authorization"] = f"Bearer {access_token}"
+        return request
 
 if TYPE_CHECKING:
     from .models.scoring_job import ScoringJob
@@ -296,12 +318,11 @@ class _BaseAPIClient:
                 if self._token_provider is None:
                     from plexus.auth.cognito import CognitoAuthService
                     self._token_provider = CognitoAuthService()
-                access_token = self._token_provider.get_access_token()
             except Exception as exc:
                 raise ValueError(
                     "Plexus application authentication is unavailable. Run `plexus login` to authenticate."
                 ) from exc
-            headers["Authorization"] = f"Bearer {access_token}"
+            auth = _RefreshingCognitoAuth(self._token_provider)
         else:
             headers["x-api-key"] = self.api_key
 

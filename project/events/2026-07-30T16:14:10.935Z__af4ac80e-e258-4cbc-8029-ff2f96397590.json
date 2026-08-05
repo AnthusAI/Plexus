@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "af4ac80e-e258-4cbc-8029-ff2f96397590",
+  "issue_id": "plx-ade55601-28fd-4c3d-a5c0-98ca5d253018",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T16:14:10.935Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Show aggregate optimization status and expandable score details",
+    "description": "As an optimization stakeholder, I want the living Report to summarize portfolio status at a glance and let me expand scorecard and score details, so that I can understand the run without opening raw evidence first.\n\nOut of scope:\n- New GraphQL models or infrastructure resources.\n- Eagerly loading every score detail.\n- Limiting how many sections a user may expand.\n\nFeature: Glanceable optimization Report\n\nScenario: Understand aggregate progress at a glance\nGiven a living optimization Report has a published revision\nWhen a stakeholder opens the Report\nThen the top section shows lifecycle, coverage, work completed, primary decision mix, top priorities, pending actions, and the next checkpoint\nAnd every visual has a text or table equivalent\n\nScenario: Reconcile primary decision totals\nGiven each score may have several overlapping findings\nWhen the Report builds the primary decision chart\nThen every score appears in exactly one primary next-action category\nAnd secondary overlapping issue counts are shown separately\n\nScenario: Expand scorecards and scores on demand\nGiven the portfolio contains many scorecards and scores\nWhen a stakeholder expands one or more scorecards\nThen each remains independently expanded\nAnd score rows and artifact links load on demand\nAnd expanding a score reveals its rationale, evidence, and next action\n\nScenario: Explain incomplete termination\nGiven a run stops with incomplete evidence or a configured work limit\nWhen the Report reaches that state\nThen the overview prominently explains why it stopped\nAnd states the next operator action\n\nScenario: Preserve accessible alternatives\nGiven aggregate charts are displayed\nWhen a user cannot interpret or access the chart\nThen equivalent labeled counts and descriptions remain available",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

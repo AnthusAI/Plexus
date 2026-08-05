@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "6993d79a-1a76-4f2f-9e1d-98eb999c01d5",
+  "issue_id": "plx-bfdcec09-c369-4e60-97b9-4d6db192a629",
+  "event_type": "field_updated",
+  "occurred_at": "2026-07-31T15:56:06.128Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "As an operator, I want a dispatcher claim that fails before enqueue or execution to become safely retryable, so that a durable Procedure continuation cannot remain stranded in DISPATCHING.\n\nObserved behavior: the dispatcher claimed a pending continuation, then its transport raised before enqueue. The Task remained PENDING/DISPATCHING and could not be claimed by the supported local dispatcher.\n\nFeature: Recover failed pre-dispatch claims\n\nScenario: Transport fails before dispatch\nGiven a pending Task has been atomically claimed by a dispatcher\nAnd the transport raises before returning an external dispatch identity\nWhen the dispatcher handles the failure\nThen the Task is returned to a claimable pending state using a conditional update\nAnd the failed dispatcher identity is cleared\nAnd no second Procedure or Task is created\n\nScenario: Dispatch may already have occurred\nGiven a transport returns an external dispatch identity\nWhen a later persistence update fails\nThen the dispatcher does not rearm the Task automatically\nAnd duplicate execution is prevented\n\nOut of scope: GraphQL schema or resource changes; bypassing durable continuation checks; changing optimization policy."
+      }
+    }
+  }
+}

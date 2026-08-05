@@ -1,0 +1,25 @@
+{
+  "id": "plx-3888aafa-9c01-49db-b4aa-30bf0981de7a",
+  "title": "Present incomplete optimization runs consistently",
+  "description": "Keep the Report record, embedded procedure summary, and living report lifecycle aligned when evidence is incomplete.\n\nFeature: Consistent optimization terminal status\n  Scenario: A portfolio run finishes with incomplete evidence\n    Given an optimization portfolio run cannot complete its required evidence\n    When the procedure and living Report reach a terminal state\n    Then the Report record is presented as incomplete rather than completed\n    And the embedded procedure summary presents the same incomplete outcome\n    And neither surface implies the analysis completed successfully\n\n  Scenario: A portfolio run completes all required evidence\n    Given an optimization portfolio run completes all required evidence\n    When the procedure and living Report reach a terminal state\n    Then both surfaces present the run as completed",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "eebb7838-3bda-4c99-806a-c841c6a587da",
+      "author": "ryan.porter",
+      "text": "Acceptance: the living Report revision now supplies its precise terminal outcome immediately, even when the coarse Task metadata refresh lags. The selected Report subtitle, embedded Procedure status message, and final segment all display Incomplete while the underlying Task remains COMPLETED. Focused tests and live browser validation passed. Committed as d8a2de1d1.",
+      "created_at": "2026-07-30T20:04:39.616677Z"
+    }
+  ],
+  "created_at": "2026-07-30T19:47:10.475678Z",
+  "updated_at": "2026-07-30T20:04:39.616677Z",
+  "closed_at": null,
+  "custom": {}
+}

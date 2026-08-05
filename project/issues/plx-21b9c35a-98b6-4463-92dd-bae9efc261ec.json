@@ -1,0 +1,21 @@
+{
+  "id": "plx-21b9c35a-98b6-4463-92dd-bae9efc261ec",
+  "title": "Project stable score references for report artifacts",
+  "description": "Implement the production projection support required by story plx-2e4b79f2-947d-4959-81e7-206cba0f67a7.\n\nScope:\n- Add a stable non-displayed score_ref to portfolio, priority, question/issue, feedback-investment, and optimization-outcome stakeholder rows.\n- Derive it deterministically from the exact opaque score ID without displaying or exporting the raw ID.\n- Keep scorecard_ref behavior unchanged.\n- Add outside-in tests proving duplicate score display names remain distinguishable through the projection and raw opaque IDs do not enter displayed workbook cells.\n\nNo client-specific data, GraphQL schema changes, resource changes, or operational mutations.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-07-31T18:21:32.372405Z",
+  "updated_at": "2026-07-31T18:21:38.847680Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

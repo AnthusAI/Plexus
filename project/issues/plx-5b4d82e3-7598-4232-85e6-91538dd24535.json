@@ -1,0 +1,55 @@
+{
+  "id": "plx-5b4d82e3-7598-4232-85e6-91538dd24535",
+  "title": "Publish safe optimization workbook revisions",
+  "description": "As a stakeholder, I want a simple spreadsheet representation of optimization evidence, so that I can review and work with the findings safely.\n\nFeature: Optimization workbook revisions\n\nScenario: Publish a verified workbook\n  Given complete or explicitly incomplete decision evidence\n  When a report milestone is published\n  Then a macro-free workbook contains the defined stakeholder sheets\n  And its row counts reconcile with the evidence\n  And the report points to the newest immutable revision\n\nScenario: Protect restricted evidence\n  Given evidence contains opaque identifiers or sensitive source material\n  When the stakeholder workbook is generated\n  Then displayed cells contain only aggregates, findings, and dashboard links\n  And raw evidence remains in restricted artifact attachments\n  And spreadsheet formulas cannot be injected through source text",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f80bab44-14ca-4689-a75b-763f26abda37",
+      "author": "ryan.porter",
+      "text": "Implemented deterministic macro-free workbook revisions with the agreed eight sheets, row-count evidence, checksum, formula-injection escaping, and an allowlisted stakeholder projection. Raw packets are kept out of the workbook and published only as restricted JSON attachments. Focused tests are green.",
+      "created_at": "2026-07-29T16:58:17.081399Z"
+    },
+    {
+      "id": "923bdfb0-151d-4bbc-a901-f3eeec7f9784",
+      "author": "ryan.porter",
+      "text": "Hardening pass: publish a real initial workbook, retain full revision history, validate reopened workbooks and row reconciliation, verify artifacts when the ticketed reader permits, and expand safe stakeholder columns and table usability. Public workbook and manifest revisions will use ReportBlock transfer tickets; restricted JSON will use Task transfer tickets.",
+      "created_at": "2026-07-29T17:13:54.687933Z"
+    },
+    {
+      "id": "e953c125-6ab4-4df4-b9e3-4d07aeb2f7a1",
+      "author": "ryan.porter",
+      "text": "Workbook hardening complete locally: reopened artifact validation, source row-count reconciliation, checksum read-back when supported, formula/privacy/hidden-sheet/external-link protection, stable tables/filters/frozen headers/widths, and expanded safe stakeholder evidence/state/trend/action columns. The ReportBlock ticket route reuses the existing transfer Lambda, Report/ReportBlock tables, report-details bucket, and existing mutation; it adds no model, operation, function, table, bucket, association, queue, or other AWS resource. Focused Python suite: 54 passed. Resolver suite: 17 passed. Backend TypeScript typecheck passed.",
+      "created_at": "2026-07-29T17:31:51.990677Z"
+    },
+    {
+      "id": "e7d469c3-3826-48e8-bb9e-1eb8372e55fb",
+      "author": "ryan.porter",
+      "text": "Zero-infrastructure correction: immutable JSON/XLSX revisions and manifests will all be authorized as existing TASK_ATTACHMENT files. Workbook privacy and verification remain unchanged; ReportBlocks will point compactly to Task artifact keys. No ReportBlock transfer route, backend environment/IAM change, model, operation, function, table, bucket, or association will remain.",
+      "created_at": "2026-07-29T18:05:37.729856Z"
+    },
+    {
+      "id": "80b791c0-183c-4057-8aed-cd2a799b960d",
+      "author": "ryan.porter",
+      "text": "Zero-infrastructure workbook publication is green. JSON, XLSX, and manifest files all use existing Task attachment tickets and checksum read-back; no ReportBlock artifact type exists. Focused report/portfolio/persistence/compaction/artifact tests: 61 passed. Existing artifact resolver suite: 16 passed. dashboard/amplify/backend.ts and the artifact resolver/tests have zero diff from base.",
+      "created_at": "2026-07-29T18:07:59.207224Z"
+    },
+    {
+      "id": "e7faea6d-4ca4-4008-bd42-e1a3dee54021",
+      "author": "ryan.porter",
+      "text": "Workbook validation completed: all eight visible sheets reopened, rendered, and reconciled against the published counts; no formula errors were found. Publication used only TASK_ATTACHMENT tickets and immutable unique keys. Stakeholder-quality follow-ups remain tracked separately from this mechanical acceptance.",
+      "created_at": "2026-07-29T19:47:10.636571Z"
+    }
+  ],
+  "created_at": "2026-07-29T16:47:56.222372Z",
+  "updated_at": "2026-07-29T19:47:10.636571Z",
+  "closed_at": null,
+  "custom": {}
+}

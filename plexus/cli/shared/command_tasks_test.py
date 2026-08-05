@@ -21,6 +21,57 @@ def test_should_append_task_id_to_evaluation_command():
     assert _should_append_task_id_arg(["evaluate", "accuracy", "--scorecard", "Card"]) is True
 
 
+def test_delayed_worker_message_for_terminal_task_is_skipped_before_command_execution(monkeypatch):
+    registered = {}
+
+    class _App:
+        conf = SimpleNamespace(task_target_matcher=None)
+
+        def task(self, **_kwargs):
+            def _decorator(function):
+                registered[function.__name__] = function
+                return function
+            return _decorator
+
+    terminal_task = SimpleNamespace(
+        id="task-123",
+        accountId="account-123",
+        type="Procedure",
+        target="procedure/procedure-1",
+        command="procedure run procedure-1",
+        status="FAILED",
+        dispatchStatus="ERROR",
+        update=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("terminal task must not be updated")
+        ),
+    )
+    cli_calls = []
+    monkeypatch.setattr(CommandTasks, "create_client", lambda: object())
+    monkeypatch.setattr(
+        "plexus.dashboard.api.models.task.Task.get_by_id",
+        lambda *_args, **_kwargs: terminal_task,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.CommandLineInterface.cli",
+        lambda **_kwargs: cli_calls.append(_kwargs),
+    )
+
+    CommandTasks.register_tasks(_App())
+    celery_task = SimpleNamespace(
+        request=SimpleNamespace(id="celery-delayed"),
+        update_state=lambda **_kwargs: None,
+    )
+    result = registered["execute_command"](
+        celery_task,
+        "procedure run procedure-1",
+        task_id="task-123",
+    )
+
+    assert result["status"] == "skipped"
+    assert result["reason"] == "task_terminal"
+    assert cli_calls == []
+
+
 def test_command_task_fails_and_does_not_complete_when_canonical_output_persistence_fails(monkeypatch):
     registered = {}
 

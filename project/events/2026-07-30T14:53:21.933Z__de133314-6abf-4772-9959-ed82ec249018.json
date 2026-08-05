@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "de133314-6abf-4772-9959-ed82ec249018",
+  "issue_id": "plx-38b43533-deb1-49f3-ac72-a6a734a6ef19",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T14:53:21.933Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Complete exhaustive portfolio ranking under production page limits",
+    "description": "",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

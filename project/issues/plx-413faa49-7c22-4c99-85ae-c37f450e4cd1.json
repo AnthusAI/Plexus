@@ -1,0 +1,73 @@
+{
+  "id": "plx-413faa49-7c22-4c99-85ae-c37f450e4cd1",
+  "title": "Present portfolio runs as decision-first action briefs",
+  "description": "",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "80e7870e-97e6-4bf4-b9b0-bcf3ae22b362",
+      "author": "ryan.porter",
+      "text": "Feature: Decision-first optimization portfolio reports\n\n  Scenario: A run launches no optimizers because diagnosis coverage is capped\n    Given exhaustive ranking and assessment are complete\n    And some diagnosis candidates were deferred by a safety cap\n    When the living Report reaches its decision milestone\n    Then the first screen states that no optimizers launched\n    And distinguishes diagnosed, deferred, selected, launched, and launch-rejected counts\n    And recommends the next bounded operator action\n\n  Scenario: Human actions are separated from exhaustive evidence\n    Given a portfolio contains repair, stakeholder, collection, cooldown, and monitoring findings\n    When an operator opens the Report\n    Then actionable findings are aggregated by owner and required decision\n    And the exhaustive score inventory is collapsed behind an evidence explorer\n    And every aggregate links to its filtered supporting rows\n\n  Scenario: Deferred diagnosis is not presented as approved execution\n    Given a score passed deterministic assessment but semantic diagnosis was deferred\n    When the Report derives its next action\n    Then the action requests completion of diagnosis\n    And the score is not labeled approved or ready to optimize\n\n  Scenario: Non-candidates are not launch rejections\n    Given assessed scores do not satisfy optimization readiness policy\n    When execution evidence is summarized\n    Then ordinary non-candidates are counted separately from targets rejected during launch-time freshness checks",
+      "created_at": "2026-08-03T17:27:31.992161Z"
+    },
+    {
+      "id": "a4c5e13a-3a60-4569-9309-236a045ca8f2",
+      "author": "ryan.porter",
+      "text": "Dogfood reproduction confirmed the Report presented an exhaustive inventory as an action queue, conflated policy non-selection with launch rejection, and allowed missing semantic diagnosis to retain a premature execution action. Added failing behavior tests, implemented a decision-first outcome card and grouped workstreams, capped representative action evidence at 25 rows, and changed missing-diagnosis projection to request diagnosis instead of execution. Validation: 235 focused Python tests passed; 30 dashboard component tests passed; dashboard typecheck passed; Python flake8 passed. Direct ESLint invocation is currently blocked by the repository AJV configuration under the active Node runtime and will be rerun through the supported Node 20 CI path.",
+      "created_at": "2026-08-03T17:36:58.163507Z"
+    },
+    {
+      "id": "6f60c834-0659-4a51-8ef2-7edff71a71d8",
+      "author": "ryan.porter",
+      "text": "Live follow-up observation found that a zero-launch decision could render during initial ranking because launch count is naturally zero before diagnosis. Added a terminal-or-diagnosis-evidence gate and regression coverage so the decision card appears only when a decision can honestly be stated. Dashboard component tests now pass 31/31 and Node typecheck passes.",
+      "created_at": "2026-08-03T17:45:39.785902Z"
+    },
+    {
+      "id": "4bc2e8d7-afa8-45ed-a177-284d23b46332",
+      "author": "ryan.porter",
+      "text": "Feature: Decision-first optimization reports\n\nScenario: Analysis has not reached a decision\n  Given portfolio assessment or diagnosis is still pending\n  When an operator opens the living Report\n  Then the conclusion states that no optimization decision exists yet\n  And zero selected or launched targets are not presented as a terminal outcome\n\nScenario: Shared findings become one open workstream\n  Given multiple scores share the same canonical next action and dominant issue\n  When the stakeholder presentation is published\n  Then each score contributes to exactly one primary workstream\n  And workstream counts reconcile to the underlying scores\n  And affected scorecards and scores remain expandable\n\nScenario: Realtime evidence refreshes during operator review\n  Given an operator has expanded workstreams and scrolled into the Report\n  When a newer Report revision arrives\n  Then compatible expansion and filter state are preserved\n  And the viewport does not jump because unrelated content re-rendered",
+      "created_at": "2026-08-03T18:12:27.708474Z"
+    },
+    {
+      "id": "85ee444f-246b-4bd4-b238-d0e573c56d17",
+      "author": "ryan.porter",
+      "text": "Implementation started after baseline dogfood observation. The existing run assessed the full eligible portfolio and scheduled bounded diagnosis, but repeated a 549-artifact publication batch before computation could advance. Backend behavior specs now fail/pass for deterministic mutually exclusive workstreams and provisional decision summaries. Dashboard and core-publication changes are in progress; no additional run, deployment, push, or promotion has occurred.",
+      "created_at": "2026-08-03T18:15:38.260613Z"
+    },
+    {
+      "id": "f3a0c264-c6d2-4aea-892d-214ce1a7afc5",
+      "author": "ryan.porter",
+      "text": "Decision-first dashboard implementation now leads with the backend conclusion, renders exactly four score-count cards, groups open workstreams by next action, and keeps monitor/history reachable through a persistent status filter. Compatible realtime rerenders preserve component state and no longer clear the last committed presentation while a new artifact loads. Focused dashboard tests and full typecheck pass. No client-specific information is recorded here.",
+      "created_at": "2026-08-03T18:30:02.555050Z"
+    },
+    {
+      "id": "42e851af-6937-46c8-9950-14c9d2ae8e9f",
+      "author": "ryan.porter",
+      "text": "Implementation validation update: the stakeholder presentation now leads with a backend-authored conclusion, reconciled mutually exclusive score workstreams, four aggregate action cards, and Open/Monitor/History progressive disclosure. Visual acceptance found and corrected an internally inconsistent demo fixture so its 12 score assignments, five workstreams, execution funnel, and validated outcome reconcile. Focused backend tests: 103 passed. Focused dashboard tests: 33 passed. Storybook Chromium: 91 suites and 704 tests passed. Python 3.11 and 3.12 full suites, dashboard coverage/typecheck, and Tactus regression are green. The existing bounded pilot remains nonterminal in its legacy report-publication retry loop; no new pilot has been started.",
+      "created_at": "2026-08-03T18:56:44.308929Z"
+    },
+    {
+      "id": "28111eed-bd81-457e-ba8c-89eb353b61a6",
+      "author": "ryan.porter",
+      "text": "Production dogfood reached complete ranking, 700/700 assessment, and four of four bounded diagnoses using only four core artifacts per milestone. All four diagnoses produced repair/code-conflict dispositions, so no optimizer was safe to launch. Browser review exposed two decision-brief defects: three canonical not-selected scores were grouped as automatic work from stale next actions, and a core publication failure remained visually beneath a provisional conclusion. Both now have regression coverage and fixes; full local validation is in progress. No client-specific details are recorded here.",
+      "created_at": "2026-08-03T19:37:31.262117Z"
+    },
+    {
+      "id": "8d4e9085-3f06-47e2-94ad-df5806c24df5",
+      "author": "ryan.porter",
+      "text": "Final local validation is green for the decision-first follow-up. Python 3.11 isolated CI: 4519 passed, 41 skipped, 13 deselected, 3 expected failures; Python 3.12 previously matched those results. Focused backend: 255 passed. Dashboard report component: 34 passed. Dashboard coverage: 776 passed. Typecheck passed. Storybook Chromium: 91 suites and 704 tests passed. Lock, version, diff, and zero-resource checks passed. The implementation adds no Amplify schema, backend resource, Lambda, IAM, storage, index, association, or Tactus API change. The bounded pilot selected no safe optimizer target, launched no optimizer child, and made no score or champion mutation. Follow-up source is ready to commit but remains unpushed pending review.",
+      "created_at": "2026-08-03T19:54:11.323241Z"
+    }
+  ],
+  "created_at": "2026-08-03T17:27:21.565910Z",
+  "updated_at": "2026-08-03T19:54:11.323241Z",
+  "closed_at": null,
+  "custom": {}
+}

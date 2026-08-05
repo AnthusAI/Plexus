@@ -1,0 +1,73 @@
+{
+  "id": "plx-e77c5016-6ddb-46d0-a33d-30ab2fac01a0",
+  "title": "Present optimizer lifecycle and terminal outcomes in the living Report",
+  "description": "Implement story plx-8d2d31 across the Report projection, workbook and scorecard artifacts, and dashboard presentation. Preserve frozen selection evidence, add meaningful child lifecycle revisions and per-score timelines, reconcile all exported counts, surface major contradictions, and create evidence-bound promotion requests without automatic promotion.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1ca9bd2b-df96-4602-aea3-dc748597cb44",
+      "author": "ryan.porter",
+      "text": "UI coding slice started. Outside-in scope: add an at-a-glance optimizer lifecycle summary, mutually exclusive primary decision mix, ranked contradiction and question summary, optimization progress and outcomes, and expandable per-score detail using explicit primary disposition plus secondary issue flags. Preserve existing priority visuals and artifact access behavior. No schema, resource, or Python projection changes in this slice.",
+      "created_at": "2026-07-31T00:51:49.310455Z"
+    },
+    {
+      "id": "f9529e15-e5ec-42ff-9d92-ff8d2b2ef4a9",
+      "author": "ryan.porter",
+      "text": "Dashboard presentation slice validated outside-in: the new lifecycle, primary-disposition mix, attention queue, questions/issues, outcomes, and expandable score-detail specification was observed failing before implementation. Focused Jest now passes 3/3; focused coverage is 85% statements, 75.59% branches, 97.05% functions, and 88.99% lines; full dashboard typecheck passes. Changes remain limited to the assigned status component and its focused test. No schema, resource, deployment, or production changes were made.",
+      "created_at": "2026-07-31T00:59:37.863217Z"
+    },
+    {
+      "id": "3d1735ca-f998-4b97-99d8-9626d7499d79",
+      "author": "ryan.porter",
+      "text": "Local browser acceptance is currently blocked by an unauthenticated browser session for existing Reports. Add a deterministic Storybook scenario for the stakeholder presentation so aggregate lifecycle, contradictions, outcomes, progressive disclosure, and expandable score context can be visually verified without API mutation or credentials. The fixture must use stakeholder-safe generic names and must not create an inline production artifact fallback.",
+      "created_at": "2026-07-31T01:37:32.060376Z"
+    },
+    {
+      "id": "3dcab790-44b8-4893-b53a-fdb2f88c5700",
+      "author": "ryan.porter",
+      "text": "Storybook acceptance slice started. I will extract only a pure presentation boundary from the existing fail-closed artifact container if necessary, add deterministic generic fixture coverage for lifecycle, decisions, questions, outcomes, score context, disclosure, and expansion, then run focused tests, typecheck, and Storybook validation. No authentication, API, schema, resource, lockfile, or production data changes.",
+      "created_at": "2026-07-31T01:37:51.374597Z"
+    },
+    {
+      "id": "92e97e74-018c-4b2b-a70b-c9edc247ae5c",
+      "author": "ryan.porter",
+      "text": "Storybook acceptance slice complete. Extracted the reusable stakeholder-presentation view while leaving the production container artifact-only and fail-closed; scorecard detail loading remains descriptor-driven in production. Added a generic deterministic Storybook fixture and interaction contract covering lifecycle/disposition reconciliation, questions, terminal outcomes, policy/cooldown rank detail, progressive disclosure, and independent scorecard expansion without authentication or API mutation. Evidence: focused Jest 9/9; full dashboard typecheck passed; Storybook build passed; Chromium test-runner passed for tag optimization-run-status-acceptance. No schema, resource, lockfile, deployment, commit, or production-data changes.",
+      "created_at": "2026-07-31T01:44:34.807318Z"
+    },
+    {
+      "id": "2b3795a3-48ec-47c5-aa70-8a38c4f47165",
+      "author": "ryan.porter",
+      "text": "Follow-up hardening slice started after independent review. Add outside-in tests for fail-closed nested stakeholder-row normalization and unknown canonical dispositions, then extend the generic Storybook interaction through collapse and inner score-detail disclosure. Scope remains dashboard presentation only; no authentication, API mutation, schema, resource, lockfile, deployment, commit, or production-data changes.",
+      "created_at": "2026-07-31T01:47:46.343256Z"
+    },
+    {
+      "id": "2ddf7b66-4652-4006-9d43-31574170d4b1",
+      "author": "ryan.porter",
+      "text": "Independent-review hardening complete. Stakeholder presentation parsing now rejects malformed nested fields across attention, question/issue, outcome, priority, and scorecard-detail rows before rendering; scorecard-detail failures remain visible inside the expanded section. Canonical disposition count maps reject unrecognized keys so lifecycle grouping accounts for the complete mix. The generic Storybook interaction now verifies expansion and collapse of lists, independent scorecard expansion, and inner score policy/rank/cooldown context. Evidence: focused Jest 16/16, full dashboard typecheck passed, Storybook build passed, tagged Chromium test-runner passed. No schema, resource, lockfile, API mutation, deployment, commit, or production-data changes.",
+      "created_at": "2026-07-31T01:52:35.750805Z"
+    },
+    {
+      "id": "de1f4daa-0cd9-4321-b2ce-f95c6c8fb2fc",
+      "author": "ryan.porter",
+      "text": "Accepted UI contract follow-up started test-first: make the tagged generic Storybook fixture lifecycle truthfully incomplete whenever analysis or diagnosis coverage is incomplete, and assert the visible incomplete explanation plus remediation in tagged Chromium acceptance. Also make every row-level primary_disposition fail closed against the same canonical disposition set used for aggregate counts, with focused coverage for attention, outcome, and detail rows. Human-readable fixture names remain intact; scope is dashboard presentation only.",
+      "created_at": "2026-07-31T02:13:27.075743Z"
+    },
+    {
+      "id": "44be7dae-43db-47ec-992a-13d5d01e6c3d",
+      "author": "ryan.porter",
+      "text": "Accepted UI follow-up complete. Red evidence: focused Jest exposed three arbitrary primary_disposition values rendering in attention, outcome, and score-detail rows (16 passed, 3 failed); tagged Chromium exposed the generic fixture claiming Complete while analysis was incomplete and lacking the asserted remediation. Implementation now validates all three row types against the same canonical disposition set used by aggregate counts, and the generic fixture is terminally Incomplete with explicit diagnosis explanation and retry remediation. Green evidence: focused Jest 19/19; full dashboard web and backend typecheck passed; Storybook build passed with existing bundle/package warnings; tagged Chromium acceptance passed 1/1 on isolated port 6017 (90 unrelated stories skipped). git diff --check passed. Human-readable generic score names remain intact. No commit, push, deploy, production access, schema/resource/lockfile change, or project/ inspection occurred.",
+      "created_at": "2026-07-31T02:19:35.974342Z"
+    }
+  ],
+  "created_at": "2026-07-30T22:44:50.190743Z",
+  "updated_at": "2026-07-31T02:19:35.974342Z",
+  "closed_at": null,
+  "custom": {}
+}

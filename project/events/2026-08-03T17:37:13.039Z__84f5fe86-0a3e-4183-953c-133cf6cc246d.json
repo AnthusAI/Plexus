@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "84f5fe86-0a3e-4183-953c-133cf6cc246d",
+  "issue_id": "plx-4958d1a9-de86-4517-9b1b-9b66a509995e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-03T17:37:13.039Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implement immutable-image async scoring plus configurable request-state, authenticated API hosting, and response-worker infrastructure while keeping runtime handlers consumer-owned.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-39614d99-a561-4250-991b-0dd4e23c3887",
+    "priority": 1,
+    "status": "open",
+    "title": "Provide reusable asynchronous scoring and integration hosting stacks"
+  }
+}

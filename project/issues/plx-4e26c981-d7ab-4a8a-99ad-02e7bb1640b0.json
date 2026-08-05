@@ -1,0 +1,37 @@
+{
+  "id": "plx-4e26c981-d7ab-4a8a-99ad-02e7bb1640b0",
+  "title": "Forward Procedure Task identity into direct runtime modules",
+  "description": "As an operator, I want a directly executed portfolio procedure to pass its existing Task identity into deterministic Plexus runtime modules, so that its living Report attaches to the one authoritative Procedure Task.\n\nOut of scope: schema changes, automatic mutations, or changing remote dispatch behavior.\n\nFeature: One-Task runtime context propagation\n\nScenario: Execute a portfolio procedure with an existing Task\nGiven the procedure executor receives a runtime context containing the Procedure Task identifier\nWhen it registers the direct Plexus runtime module\nThen that module receives the same Task identifier\nAnd the living Report reuses the Procedure Task\nAnd no report-only Task is created\n\nScenario: Execute without a Task identifier\nGiven the procedure executor has no Task identifier\nWhen it registers the direct Plexus runtime module\nThen the module receives the remaining safe runtime context\nAnd existing non-procedure behavior remains available",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "0e1e6200-feb0-4063-ae83-fe54897ed630",
+      "author": "ryan.porter",
+      "text": "Live zero-match acceptance completed successfully but created a second report-only Task. The outer Procedure Task was known and drove stages, while immutable Report artifacts used another Task. Trace review found the direct Plexus runtime module was registered before runtime context was constructed and therefore received no task_id. Next: add an executor-level failing contract, pass the existing context into the module, rerun focused tests, and repeat live acceptance.",
+      "created_at": "2026-07-30T17:25:38.094862Z"
+    },
+    {
+      "id": "26d1918c-743f-4f9d-9aac-70e68f97ceb4",
+      "author": "ryan.porter",
+      "text": "Added an executor-level regression proving the direct plexus runtime module receives the same runtime context and Procedure Task identity used by Tactus execution. The test failed before the fix because runtime_context was absent, then passed after constructing the shared context before module registration and forwarding it explicitly. Focused procedure executor, runtime module, and living-report suites now pass: 332 tests.",
+      "created_at": "2026-07-30T17:28:52.039411Z"
+    },
+    {
+      "id": "68db1f41-90fb-4aca-977f-9ef1227b38f8",
+      "author": "ryan.porter",
+      "text": "Live direct-execution acceptance passed after context forwarding. One Procedure Task owned the Report and every JSON/XLSX artifact revision; all artifact keys used that Task ID, exhaustive zero-match ranking inspected 56 scorecards, and the procedure completed without a duplicate report-only Task. Procedure/task/report terminal linkage is now correct on the integration branch.",
+      "created_at": "2026-07-30T17:38:48.319264Z"
+    }
+  ],
+  "created_at": "2026-07-30T17:25:32.873537Z",
+  "updated_at": "2026-07-30T17:38:48.319264Z",
+  "closed_at": null,
+  "custom": {}
+}

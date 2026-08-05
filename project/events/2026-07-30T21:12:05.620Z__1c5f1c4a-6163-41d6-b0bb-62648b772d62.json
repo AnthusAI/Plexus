@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1c5f1c4a-6163-41d6-b0bb-62648b772d62",
+  "issue_id": "plx-1249ce6e-aaf6-4856-85a5-76df0823737c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T21:12:05.620Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Clarify portfolio phases when no optimization targets run",
+    "description": "Observed behavior: a portfolio run with no approved optimization targets still publishes optimization and optimization-review milestones using active-work language. This implies optimizer or evaluation work is running when those phases are actually empty.\n\nFeature: Truthful empty optimization phase narration\n\nScenario: No approved targets enter optimization\nGiven a portfolio run has zero approved optimization targets\nWhen the run publishes the optimization milestone\nThen the Report states that no optimizations were launched\nAnd the next checkpoint does not imply evaluations are running\n\nScenario: No optimizer results enter review\nGiven a portfolio run has no dispatched optimizer procedures or evaluation evidence\nWhen the run publishes the optimization-review milestone\nThen the Report states that there are no optimization results to review\nAnd does not imply completed optimizer evidence exists\n\nScenario: Approved targets are dispatched\nGiven one or more exact targets were approved and dispatched\nWhen optimization and review milestones are published\nThen active-work narration remains specific to the dispatched work\n\nOut of scope: changing approval authority, optimizer dispatch, evaluation behavior, or terminal status.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

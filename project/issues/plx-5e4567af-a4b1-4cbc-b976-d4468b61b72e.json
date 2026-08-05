@@ -1,0 +1,34 @@
+{
+  "id": "plx-5e4567af-a4b1-4cbc-b976-d4468b61b72e",
+  "title": "Make optimization runs self-identifying in operator views",
+  "description": "As an optimization operator, I want every optimization run to identify its kind, human-readable scope, and current lifecycle state from the Procedure dashboard through the living Report, so that I can distinguish concurrent work without opening raw evidence.\n\nIncluded:\n- Distinguish account-wide portfolio, scorecard-scoped portfolio, and single-score optimization identities.\n- Use human-readable scorecard and score names in operator presentation.\n- Apply one consistent identity to Procedure, Task, Report title/subtitle, and Report cover.\n- Show the current lifecycle phase and status separately from the durable run identity.\n- Preserve opaque IDs only in machine evidence and validated responses.\n\nExcluded:\n- New GraphQL models, indexes, associations, storage, or infrastructure.\n- Automatic score mutation, evaluation, promotion, or feedback-setting changes.\n- Client-specific naming rules.\n\nFeature: Self-identifying optimization runs\n\nScenario: Account-wide portfolio run is recognizable\n  Given an optimization run covers every eligible scorecard\n  When an operator views the Procedures dashboard or its living Report\n  Then the run is labeled as an account-wide portfolio optimization\n  And its current lifecycle phase and status are visible\n\nScenario: Scorecard-scoped portfolio run is recognizable\n  Given an optimization run is limited to one or more scorecards\n  When an operator views the Procedures dashboard or its living Report\n  Then the run is labeled as a scorecard-scoped portfolio optimization\n  And the human-readable scope is shown without opaque identifiers\n\nScenario: Single-score run is recognizable\n  Given an optimization run targets exactly one score\n  When an operator views the Procedures dashboard or its living Report\n  Then the run is labeled as a single-score optimization\n  And the human-readable scorecard and score names are shown\n\nScenario: Identity remains stable while progress changes\n  Given a living optimization run advances through analysis, approval, execution, and review\n  When each durable milestone is published\n  Then the run identity and URL remain stable\n  And only the lifecycle phase, status, progress, and next checkpoint change\n\nScenario: Presentation remains safe\n  Given the run evidence contains opaque identifiers and restricted details\n  When operator-facing identity is rendered\n  Then raw identifiers and restricted evidence are not exposed\n  And no new backend resource is required",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "792a5bbb-1a86-4bea-9518-ffe8014d10e8",
+      "author": "ryan.porter",
+      "text": "Production dogfood exposed that generic optimization labels make concurrent runs indistinguishable at the Procedure, Task, and Report entry points. Beginning outside-in specifications for a shared zero-resource operator identity and stable lifecycle presentation. No client-specific information or operational mutation is included.",
+      "created_at": "2026-07-30T14:09:58.355481Z"
+    },
+    {
+      "id": "8b8986fb-5a6e-403c-856c-ff0d4b9c02c8",
+      "author": "ryan.porter",
+      "text": "Implemented and verified one stable operator identity across Procedure, Task, and living Report presentation. Account-wide, scorecard-scoped, and single-score work now expose distinct type, human-readable scope, lifecycle phase, activity, next checkpoint, coverage, and progress without showing UUID descriptions. Live local-dashboard verification against existing backend data confirmed the account-wide card is recognizable and legacy UUID descriptions are suppressed. Focused validation: 319 Python tests passed, 21 dashboard tests passed, dashboard frontend/backend typechecks passed, git diff checks clean, and dashboard/amplify has zero changes. The story remains in progress until the change lands; a fresh run is still required to visually verify the newly generated Report cover end to end.",
+      "created_at": "2026-07-30T14:27:10.364340Z"
+    }
+  ],
+  "created_at": "2026-07-30T14:09:50.168997Z",
+  "updated_at": "2026-07-30T14:27:10.364340Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

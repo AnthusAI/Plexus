@@ -1,0 +1,31 @@
+{
+  "id": "plx-4a06bcfe-d426-477b-969c-7703f2bde37a",
+  "title": "Implement the portable command lifecycle foundation",
+  "description": "Implement the first isolated foundation for stories plx-287b0f and plx-04e73b: a provider-neutral command envelope, transport and lifecycle interfaces, deterministic lease model, worker orchestration core, and in-memory adapters with executable specifications. Do not integrate AWS, modify the existing Celery path, or deploy infrastructure in this task.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "fc435267-2ce2-4fa8-9ef4-10be4e3935a9",
+      "author": "derek.norrbom",
+      "text": "Implementation started on feature/portable-command-worker-runtime. The first slice is restricted to executable lifecycle specifications, a provider-neutral core, and in-memory test adapters. AWS integration, infrastructure, existing Celery modules, dashboard behavior, dependencies, and deployment files are explicitly out of scope.",
+      "created_at": "2026-08-04T19:47:03.175441Z"
+    },
+    {
+      "id": "fc336397-5acf-4030-a901-1693ae4c631c",
+      "author": "derek.norrbom",
+      "text": "## Completion and direct review\n\nImplemented an isolated provider-neutral command lifecycle foundation with:\n- immutable, versioned, JSON-round-trippable command envelopes;\n- provider ports for transport, lifecycle state, execution, and time;\n- conditional claims with opaque fencing tokens and renewable leases;\n- progress, completion, and failure mutations fenced by the current token;\n- acknowledgement only after accepted terminal state;\n- active and terminal duplicate handling;\n- executable Gherkin scenarios and focused unit tests.\n\nDirect review required and verified revisions for transport serialization, generic terminal states, contract-correct stale mutation, rotated renewal tokens, and explicit progress validation.\n\nValidation:\n- python -m behave tests/command_worker/features → 6 scenarios and 29 steps passed\n- python -m pytest -q tests/command_worker → 30 passed\n- python -m pytest -q plexus/cli/shared/command_dispatch_test.py plexus/cli/shared/command_tasks_test.py → 17 passed\n- ruff check plexus/command_worker tests/command_worker → passed\n- ruff format --check plexus/command_worker tests/command_worker → passed\n- provider import boundary check → no forbidden imports\n\nNo existing Celery, dashboard, infrastructure, dependency, or lock files were changed. AWS adapters, heartbeat scheduling, cancellation, draining, and production executor integration remain follow-up work.",
+      "created_at": "2026-08-04T19:56:13.873113Z"
+    }
+  ],
+  "created_at": "2026-08-04T19:45:41.013027Z",
+  "updated_at": "2026-08-04T19:56:17.299383Z",
+  "closed_at": "2026-08-04T19:56:17.299383Z",
+  "custom": {}
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-aba6a402-bf8c-4ad3-95a6-bfb81ff72737",
+  "title": "Compare agreement and disagreement in optimization priority rows",
+  "description": "As an optimization operator, I want feedback volume and outcome agreement shown together on one common scale, so that I can compare portfolio priorities without mentally reconciling separate charts.\n\nOut of scope: changing the ranking formula or feedback policy.\n\nFeature: Comparable feedback composition in ranked priorities\n\nScenario: Show agreement and disagreement in one row\nGiven ranked priority rows contain valid feedback and reviewed disagreement counts\nWhen the living Report renders the priority list\nThen each row shows one horizontal feedback bar with agreements in green and disagreements in red\nAnd the exact valid feedback, agreement, disagreement, and disagreement-rate values remain readable\n\nScenario: Use one portfolio-wide scale\nGiven ranked rows have different valid-feedback totals\nWhen their feedback bars are rendered\nThen every bar uses the largest visible valid-feedback total as the common maximum\nAnd shorter bars visibly represent lower feedback volume\n\nScenario: Preserve accessible meaning\nGiven a user relies on text or assistive technology\nWhen the feedback composition is rendered\nThen the bar exposes a concise label containing agreement, disagreement, and total counts\nAnd color is not the only way to distinguish the two segments",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "57d9cb5b-5e2c-4dc5-bee2-c4ef4f12c398",
+      "author": "ryan.porter",
+      "text": "Implemented the specified priority-row visualization. Each visible score now has one feedback-composition bar on a portfolio-wide valid-feedback scale; green shows agreements, red shows reviewed disagreements, and the same line retains exact agreement, disagreement, total, and rate values. Color is reinforced by labels and accessible meter text. Focused Jest: 2 passed. Full dashboard TypeScript checks passed. Verified against a live local Report: the largest feedback total renders at 100 percent, lower-volume rows scale down, and segment widths reconcile to the displayed rate. No ranking or feedback policy changed.",
+      "created_at": "2026-07-30T22:02:22.423394Z"
+    }
+  ],
+  "created_at": "2026-07-30T21:58:59.511771Z",
+  "updated_at": "2026-07-30T22:02:22.423394Z",
+  "closed_at": null,
+  "custom": {}
+}

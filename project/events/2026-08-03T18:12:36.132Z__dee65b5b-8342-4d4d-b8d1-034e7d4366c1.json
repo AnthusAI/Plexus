@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "dee65b5b-8342-4d4d-b8d1-034e7d4366c1",
+  "issue_id": "plx-b05a535f-9624-4235-a9cf-5c9fa63b91c3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-03T18:12:36.132Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Define deterministic optimization action workstreams",
+    "description": "Add backend-authored decision summaries, mutually exclusive action workstreams, reconciled counts, and artifact-detail status to the stakeholder presentation.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

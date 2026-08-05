@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7f2fe320-9bb7-4ce8-8baf-20d0ac806d5d",
+  "issue_id": "plx-413faa49-7c22-4c99-85ae-c37f450e4cd1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-03T17:27:21.566Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Present portfolio runs as decision-first action briefs",
+    "description": "",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

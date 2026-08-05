@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7461275e-ddd0-4964-bae6-29904c1c5385",
+  "issue_id": "plx-356bd175-a50a-40b8-be6a-cc7f0e1232a9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T19:27:30.940Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Use schema-correct ChatMessage identifiers in action authority queries",
+    "description": "As a procedure operator, I want blocking and advisory human-action readers to use schema-correct GraphQL variable types, so that persisted responses can be validated and claimed against the deployed API.\n\nOut of scope: schema, model, index, association, storage, IAM, or function changes.\n\nScenario: Blocking action response lookup\n  Given an existing pending ChatMessage action\n  When the runtime reads the parent and child responses through the deployed GraphQL schema\n  Then the query uses an ID variable for getChatMessage and a String variable for the parent-message index\n  And the same opaque identifier is supplied to both variables\n\nScenario: Advisory action response lookup\n  Given an existing advisory ChatMessage action\n  When the reconciler reads the parent and child responses\n  Then the query is schema-valid and preserves the same opaque identifier\n\nScenario: Missing authority\n  Given the ChatMessage authority dependency is unavailable\n  When the runtime evaluates an action\n  Then it fails closed without accepting a response.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

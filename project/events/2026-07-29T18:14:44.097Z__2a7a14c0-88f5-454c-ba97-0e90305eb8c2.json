@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2a7a14c0-88f5-454c-ba97-0e90305eb8c2",
+  "issue_id": "plx-35408f5d-a313-48d6-9283-022bf97824ee",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T18:14:44.097Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Prevent clipped living-report overview cells",
+    "description": "As a stakeholder, I want the living-report workbook overview to display its complete labels and values, so that the cover sheet is readable without manual resizing.\n\nFeature: Readable optimization workbook overview\n\nScenario: Open a generated living-report workbook\n  Given a stakeholder workbook with lifecycle metadata and a plain-language summary\n  When the workbook is opened or rendered at its default layout\n  Then the complete overview headings, labels, and values are visible without clipping\n  And every other stakeholder sheet remains readable\n\nOut of scope: changing report evidence, adding resources, or altering optimization decisions.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

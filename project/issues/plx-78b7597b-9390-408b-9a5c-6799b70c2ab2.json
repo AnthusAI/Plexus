@@ -27,10 +27,16 @@
       "author": "ryan.porter",
       "text": "Wave 1 integration removed elapsed-time and inactivity failure thresholds for active evaluations. Polling continues through process finalization until an explicit completed, failed, or cancelled terminal state. Full supported-runtime CI passed.",
       "created_at": "2026-07-27T22:25:45.779302Z"
+    },
+    {
+      "id": "47c0c348-72ec-4057-a320-79f6d3137254",
+      "author": "ryan.porter",
+      "text": "Phase-two architecture requires the parent portfolio procedure to checkpoint while optimizer children and their evaluations run, then resume only when terminal evidence is available. Existing process-local thread handles do not satisfy restart safety. Story plx-e91e03 and task plx-bd9dca will consume a host-neutral upstream Tactus wait contract without fixed timeouts or premature cancellation.",
+      "created_at": "2026-07-30T22:47:07.487124Z"
     }
   ],
   "created_at": "2026-07-27T20:52:49.015704Z",
-  "updated_at": "2026-07-27T22:25:45.779302Z",
+  "updated_at": "2026-07-30T22:47:07.487124Z",
   "closed_at": null,
   "custom": {
     "source": "shared",

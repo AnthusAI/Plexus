@@ -1,0 +1,18 @@
+{
+  "id": "plx-efa9107e-9ca0-43c8-8daa-bde71f27cc49",
+  "title": "Accept exact stored metadata during scheduled continuation claims",
+  "description": "As an operator, I want a due scheduled continuation to resume exactly once, so that a retryable living-report publication can recover without manual metadata rewriting.\n\nObserved behavior: the recovery service parses stored JSON metadata and reserializes it with different whitespace before using an exact GraphQL condition. Semantically identical metadata therefore fails the conditional claim.\n\nFeature: Scheduled continuation metadata authority\n\nScenario: Compact stored JSON is claimed exactly\nGiven a Procedure and parent Task are waiting at the same durable scheduled-continuation checkpoint\nAnd their stored metadata is valid compact JSON\nWhen the inclusive resume time is reached\nThen the recovery service uses the exact stored metadata value in conditional mutations\nAnd the parent Task is rearmed exactly once\n\nScenario: Changed metadata still fails closed\nGiven the stored metadata changes after the recovery read\nWhen recovery attempts the conditional claim\nThen the mutation is rejected\nAnd no duplicate execution is dispatched\n\nOut of scope: GraphQL schema or resource changes; weakening checkpoint identity; launching a new portfolio run.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-07-31T15:47:03.962200Z",
+  "updated_at": "2026-07-31T15:47:04.434578Z",
+  "closed_at": null,
+  "custom": {}
+}

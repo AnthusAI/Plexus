@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d2bd837f-f828-4aad-9b9d-96fd1f0f2fea",
+  "issue_id": "plx-e096e99d-d68c-4e5e-af56-36dba2993be3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T16:02:31.189Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Open revision-pinned report artifacts through durable dashboard links",
+    "description": "As an account user, I want durable links to an exact living-report artifact revision, so that I can open or share the evidence that supported a decision without persisting expiring storage URLs.\n\nOut of scope:\n- New GraphQL models or infrastructure resources.\n- New account roles.\n- Artifact retention changes.\n\nFeature: Revision-pinned report artifact links\n\nScenario: Open an exact artifact revision\nGiven a Report revision manifest contains a logical artifact descriptor\nWhen an authenticated account user opens its canonical dashboard route\nThen the dashboard resolves that exact descriptor\nAnd requests a short-lived read ticket only on demand\nAnd previews or downloads the artifact after checksum verification\n\nScenario: Show newer evidence without changing the linked evidence\nGiven an artifact link targets an older Report revision\nAnd a newer revision exists\nWhen the user opens the link\nThen the exact linked revision remains selected\nAnd the dashboard offers a clear newer-revision notice\n\nScenario: Reject invalid or unauthorized references\nGiven an artifact identifier is missing, unknown, malformed, or belongs to another account\nWhen the route is opened\nThen no artifact content is returned\nAnd the user sees an actionable error\n\nScenario: Use the configured canonical dashboard origin\nGiven Account settings contain reporting.dashboardBaseUrl\nWhen a report or export creates a durable artifact link\nThen it uses that HTTPS origin and the revision-pinned route\nAnd no signed object-storage URL is persisted\n\nScenario: Preserve zero-resource architecture\nGiven stable artifact links are enabled\nWhen the backend diff is inspected\nThen no GraphQL schema, function, index, association, storage, or IAM resource is added",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

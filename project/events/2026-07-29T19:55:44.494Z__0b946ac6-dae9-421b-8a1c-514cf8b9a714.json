@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0b946ac6-dae9-421b-8a1c-514cf8b9a714",
+  "issue_id": "plx-877746f4-a985-4582-bb71-9d0d8b3b0027",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T19:55:44.494Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Make workbook checksums independent of serialization time",
+    "description": "As a report consumer, I want identical workbook inputs and publication timestamps to produce identical bytes, so that checksums are reproducible across runtimes and clock boundaries.\n\nFeature: Deterministic workbook serialization\n\nScenario: Repeated workbook generation crosses a clock boundary\n  Given the same stakeholder projection, revision, and generated-at timestamp\n  When the workbook is serialized more than once\n  Then the XLSX bytes and SHA-256 checksum are identical\n  And the embedded creation and modification timestamps equal the supplied generated-at timestamp rather than the serialization clock.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

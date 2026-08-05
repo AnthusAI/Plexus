@@ -13,7 +13,10 @@ The service handles:
 """
 
 import logging
-from typing import Optional, Dict, Any, List, Tuple
+import json
+from math import isfinite
+from numbers import Real
+from typing import Optional, Dict, Any, List, Mapping, Tuple
 from dataclasses import dataclass
 from contextlib import nullcontext
 from pathlib import Path
@@ -34,6 +37,49 @@ from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id, get
 from plexus.attribution.actor_context import resolve_actor_context, set_runtime_actor_context
 
 logger = logging.getLogger(__name__)
+
+
+def _frozen_optimizer_runtime_limits(procedure: Any) -> dict[str, Real] | None:
+    """Project an immutable optimizer launch spec onto Tactus parameters."""
+    raw_metadata = getattr(procedure, "metadata", None)
+    if isinstance(raw_metadata, str):
+        try:
+            metadata = json.loads(raw_metadata)
+        except json.JSONDecodeError as exc:
+            raise ValueError("optimizer child Procedure metadata is not valid JSON") from exc
+    elif isinstance(raw_metadata, Mapping):
+        metadata = dict(raw_metadata)
+    elif raw_metadata in (None, ""):
+        return None
+    else:
+        raise ValueError("optimizer child Procedure metadata is malformed")
+    if not isinstance(metadata, Mapping):
+        raise ValueError("optimizer child Procedure metadata is malformed")
+    launch_spec = metadata.get("optimizer_launch_spec")
+    if launch_spec is None:
+        return None
+    if not isinstance(launch_spec, Mapping) or not isinstance(launch_spec.get("limits"), Mapping):
+        raise ValueError("optimizer child launch limits are malformed")
+    limits = dict(launch_spec["limits"])
+    required = ("max_cost_usd", "max_samples", "max_iterations", "max_concurrency")
+    missing = [key for key in required if key not in limits]
+    if missing:
+        raise ValueError(
+            "optimizer child launch limits are incomplete: " + ", ".join(missing)
+        )
+    for key in required:
+        value = limits[key]
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, Real)
+            or not isfinite(float(value))
+            or float(value) <= 0
+        ):
+            raise ValueError(f"optimizer child launch limit {key} must be positive and finite")
+    for key in ("max_samples", "max_iterations", "max_concurrency"):
+        if not isinstance(limits[key], int):
+            raise ValueError(f"optimizer child launch limit {key} must be an integer")
+    return {key: limits[key] for key in required}
 
 def _validate_yaml_template(template_data):
     """Validate that a YAML template has required sections for procedures."""
@@ -271,6 +317,11 @@ class ProcedureService:
                 name=name,
             )
 
+            procedure_name = str(getattr(procedure, "name", None) or name or "Procedure")
+            procedure_type: Optional[str] = None
+            display_title = procedure_name
+            display_scope: Optional[str] = None
+
             # Upload YAML as an application-authorized attachment and record
             # both the compatible key and integrity envelope in metadata.
             # Also seed scorecard_name/score_name so the dashboard subtitle renders
@@ -290,7 +341,30 @@ class ProcedureService:
                     try:
                         _yaml_data = yaml.safe_load(yaml_config)
                         if isinstance(_yaml_data, dict) and _yaml_data.get("procedure_type"):
-                            current_meta["procedure_type"] = _yaml_data["procedure_type"]
+                            procedure_type = str(_yaml_data["procedure_type"])
+                            current_meta["procedure_type"] = procedure_type
+                        if isinstance(_yaml_data, dict):
+                            from plexus.cli.procedure.parameter_parser import ProcedureParameterParser
+                            from plexus.optimization.operator_identity import optimization_operator_identity
+
+                            parameter_values = ProcedureParameterParser.extract_parameter_values(yaml_config)
+                            scope = {
+                                key: parameter_values[key]
+                                for key in ("scorecard_ids", "scorecard_name_prefixes")
+                                if key in parameter_values
+                            }
+                            semantic_text = f"{procedure_name} {procedure_type or ''}".lower()
+                            if "optimiz" in semantic_text:
+                                identity = optimization_operator_identity(
+                                    scope=scope,
+                                    scorecard_name=scorecard_identifier,
+                                    score_name=score_identifier,
+                                )
+                                display_title = identity.display_title
+                                display_scope = identity.display_scope
+                                current_meta["optimization_kind"] = identity.kind
+                                current_meta["display_title"] = display_title
+                                current_meta["display_scope"] = display_scope
                     except Exception:
                         pass
                 if yaml_config:
@@ -325,6 +399,10 @@ class ProcedureService:
                 score_id=score_id,
                 stage_configs=stage_configs,
                 dispatch_mode=dispatch_mode,
+                procedure_name=procedure_name,
+                procedure_type=procedure_type,
+                display_title=display_title,
+                display_scope=display_scope,
             )
             if task:
                 logger.info(f"Using Task {task.id} with {len(task.get_stages())} stages for procedure {procedure.id}")
@@ -344,7 +422,7 @@ class ProcedureService:
                 success=False,
                 message=f"Failed to create experiment: {str(e)}"
             )
-    
+
     def get_procedure_info(self, procedure_id: str) -> Optional[ProcedureInfo]:
         """Get comprehensive information about an procedure.
         
@@ -898,6 +976,24 @@ class ProcedureService:
                                 or 'optimizer' in procedure_id.lower()
                             ),
                         }
+                        # Stored procedures carry authoritative Scorecard/Score
+                        # associations separately from their Tactus parameter
+                        # values.  A durable optimizer child is normally run by
+                        # ID, without CLI --set arguments, so project those
+                        # associations onto the legacy parameter names expected
+                        # by the procedure.  Prefer resolved display names for
+                        # stakeholder-facing messages, while retaining the exact
+                        # opaque IDs above for validation and tool calls.
+                        scorecard_parameter = (
+                            procedure_info.scorecard_name if procedure_info else None
+                        ) or scorecard_id
+                        score_parameter = (
+                            procedure_info.score_name if procedure_info else None
+                        ) or score_id
+                        if scorecard_parameter:
+                            context['scorecard'] = scorecard_parameter
+                        if score_parameter:
+                            context['score'] = score_parameter
                         if account_id:
                             context['account_id'] = account_id
 
@@ -938,6 +1034,25 @@ class ProcedureService:
                             context['dry_run'] = bool(options['dry_run'])
                         if options.get('max_iterations') is not None:
                             context['max_iterations'] = int(options['max_iterations'])
+
+                        frozen_limits = _frozen_optimizer_runtime_limits(
+                            procedure_info.procedure if procedure_info else None
+                        )
+                        if frozen_limits is not None:
+                            runtime_limits = {
+                                'max_cost_usd': frozen_limits['max_cost_usd'],
+                                'max_samples': frozen_limits['max_samples'],
+                                'max_iterations': frozen_limits['max_iterations'],
+                                'max_parallel_evaluations': frozen_limits['max_concurrency'],
+                            }
+                            for parameter, frozen_value in runtime_limits.items():
+                                supplied_value = context.get(parameter)
+                                if supplied_value is not None and supplied_value != frozen_value:
+                                    raise ValueError(
+                                        f"runtime parameter {parameter} conflicts with the frozen "
+                                        "optimizer child launch limit"
+                                    )
+                                context[parameter] = frozen_value
 
                         # Expose task_id so the Stage.set() MCP tool can update the dashboard
                         task_id_for_tracking = options.get('_task_id_for_stage_tracking')
@@ -1815,6 +1930,10 @@ Based on this data, you should prioritize examining error types with the highest
         score_id: Optional[str] = None,
         stage_configs: Optional[Dict[str, Any]] = None,
         dispatch_mode: Optional[str] = None,
+        procedure_name: Optional[str] = None,
+        procedure_type: Optional[str] = None,
+        display_title: Optional[str] = None,
+        display_scope: Optional[str] = None,
     ) -> Optional['Task']:
         """
         Get or create a Task with stages based on the procedure's state machine.
@@ -1893,6 +2012,14 @@ Based on this data, you should prioritize examining error types with the highest
                 "procedure_id": procedure_id,
                 "task_type": "Procedure",
             }
+            if procedure_name:
+                metadata["procedure_name"] = procedure_name
+            if procedure_type:
+                metadata["procedure_type"] = procedure_type
+            if display_title:
+                metadata["display_title"] = display_title
+            if display_scope:
+                metadata["display_scope"] = display_scope
             normalized_dispatch_mode = (dispatch_mode or "").strip().lower()
             if normalized_dispatch_mode:
                 metadata["dispatch_mode"] = normalized_dispatch_mode
@@ -1907,7 +2034,11 @@ Based on this data, you should prioritize examining error types with the highest
                 status="PENDING",  # Initial status
                 target=f"procedure/{procedure_id}",
                 command=f"procedure run {procedure_id}",
-                description=f"Procedure workflow for {procedure_id}",
+                description=(
+                    f"{display_title} — {display_scope}"
+                    if display_title and display_scope
+                    else f"{procedure_name or 'Procedure'} workflow"
+                ),
                 dispatchStatus=initial_dispatch_status,
                 metadata=json.dumps(metadata)
                 # createdAt and updatedAt are auto-generated by the database
