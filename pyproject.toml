@@ -173,6 +173,7 @@ constructs = ">=10.0.0"
 [tool.poetry.scripts]
 plexus = "plexus.cli.entrypoint:main"
 plexus-dashboard = "plexus.dashboard.cli:cli"
+plexus-command-worker = "plexus.command_worker.runtime:main"
 
 [tool.pytest.ini_options]
 filterwarnings = [
