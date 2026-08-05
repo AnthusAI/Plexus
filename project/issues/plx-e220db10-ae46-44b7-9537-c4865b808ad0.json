@@ -1,0 +1,43 @@
+{
+  "id": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "title": "Durable interactive command execution platform",
+  "description": "Design a reusable Plexus-owned execution platform for interactive commands that can run for many hours without relying on server hosts. The platform must provide responsive dispatch, durable execution, safe concurrency, observable lifecycle state, and interruption-safe deployments.",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bdd36d4f-85f5-4e34-bbba-ecbde178ffc6",
+      "author": "derek.norrbom",
+      "text": "## Portability constraint\n\nThe command execution design must support multiple container orchestration targets without making any cloud broker part of the Plexus domain contract. The portable core should define command envelopes, durable lifecycle transitions, claims and leases, heartbeats, cancellation, progress, results, idempotency, and worker execution. Broker and deployment integrations should be adapters, allowing an AWS queue/Fargate implementation now and a Kubernetes-compatible implementation later without rewriting command behavior or dashboard contracts.",
+      "created_at": "2026-08-04T19:40:59.156123Z"
+    },
+    {
+      "id": "7bc5eff1-fa20-4cb6-be2b-3c18b5fce422",
+      "author": "derek.norrbom",
+      "text": "## Initial implementation sequence\n\n1. Establish executable behavior specifications and a provider-neutral command lifecycle core with in-memory adapters.\n2. Add recovery, heartbeat, cancellation, and draining semantics to the core.\n3. Implement the explicitly provisioned AWS queue adapter and warm container service.\n4. Integrate through an isolated deployment path while retaining the legacy worker.\n5. Validate before any cutover decision.\n\nThe first task is plx-4a06bc. AWS infrastructure is intentionally deferred until the lifecycle contract is proven.",
+      "created_at": "2026-08-04T19:45:45.512929Z"
+    },
+    {
+      "id": "effd8310-57aa-4e2b-8c43-6f3999b9aae1",
+      "author": "derek.norrbom",
+      "text": "## Migration boundary correction\n\nThe legacy Celery dispatcher and worker remain unchanged throughout parallel validation. Portable commands will be isolated by creating their Task with a distinct portable dispatch status and complete structured envelope on the initial insert. A separate portable stream consumer will handle only that status; the existing dispatcher already ignores non-PENDING inserts. Portable code must never transition its Tasks to the legacy PENDING dispatch status. Tests must prove the two consumers remain disjoint. A dedicated outbox model remains a future option if stronger publish auditing is required.",
+      "created_at": "2026-08-04T21:44:23.703231Z"
+    },
+    {
+      "id": "0fb39035-bc34-4dc0-b17e-a1aa1dd5110c",
+      "author": "derek.norrbom",
+      "text": "## Clean-platform boundary\n\nThe portable command platform will not reuse or multiplex the legacy Task stream, Celery dispatcher, Celery result backend, queue naming, dispatch statuses, or fallback behavior. Those resources may not exist in a target deployment.\n\nThe new platform requires an explicit command-service contract with structured submission, durable lifecycle state, cancellation, status/result access, and provider adapters. The AWS implementation will provision its own command state, queue/DLQ, publisher/API boundary, and warm worker service. A Kubernetes implementation can provide different storage and transport adapters while using the same command envelope and worker core. Legacy integration, if ever needed, must be an optional edge adapter rather than a core assumption.",
+      "created_at": "2026-08-04T21:46:14.079898Z"
+    }
+  ],
+  "created_at": "2026-08-04T19:22:48.113028Z",
+  "updated_at": "2026-08-04T21:46:14.079898Z",
+  "closed_at": null,
+  "custom": {}
+}

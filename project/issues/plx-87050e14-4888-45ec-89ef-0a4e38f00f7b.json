@@ -1,0 +1,43 @@
+{
+  "id": "plx-87050e14-4888-45ec-89ef-0a4e38f00f7b",
+  "title": "Distributable score processor runtime image",
+  "description": "Purpose: make the reusable score processor runtime build definition a versioned part of the Plexus Python distribution so consumers can build and validate an image from the same immutable Plexus revision they deploy.\n\nDefinition of Done:\n- The Lambda handler is importable from the installed Plexus package.\n- A self-contained container build definition is shipped in wheel and sdist artifacts.\n- Builds require an explicit immutable Plexus source revision and do not depend on a Plexus repository checkout.\n- Existing first-party score processor image builds remain functional.\n- Reusable repository infrastructure can provision independently named runtime repositories.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "593f23ae-9632-454d-a9d4-435e8a63dcde",
+      "author": "derek.norrbom",
+      "text": "Scope correction: the currently deployed score processor is a strict compatibility boundary. The new distributable runtime will be implemented in a separate package/resource tree with its own handler and Dockerfile. Existing score-processor-lambda source, image pipeline, handler entry point, and production behavior will not be modified. Intentional duplication is accepted for parallel-cutover isolation; legacy removal is explicitly out of scope.",
+      "created_at": "2026-08-03T19:17:56.289402Z"
+    },
+    {
+      "id": "7de9fcfc-3377-4ab8-9b5b-dcfaf71582ea",
+      "author": "derek.norrbom",
+      "text": "Implemented the isolated runtime under plexus/runtime/async_score_processor with a separately packaged handler and Dockerfile. The Dockerfile rejects non-SHA refs, fetches one detached commit using ephemeral GitHub App authentication, installs scoring dependencies from that commit’s poetry.lock, builds and installs the package wheel, and records the source revision. Added a separate configurable repository stack; the legacy score-processor-lambda tree has no diff. Targeted runtime, infrastructure, packaging, and legacy handler tests pass. The local all-tests environment lacks optional all-extra dependencies and contains ignored generated dashboard artifacts, so clean GitHub CI remains the authoritative broad gate.",
+      "created_at": "2026-08-03T19:29:53.557665Z"
+    },
+    {
+      "id": "a462d81b-0aaf-4814-832b-25c26f898f35",
+      "author": "derek.norrbom",
+      "text": "Removed the new reusable async stack’s mutable image-source reference contract. Consumers now supply only a digest-pinned image URI; the existing independent artifact pipeline remains unchanged for legacy consumers.",
+      "created_at": "2026-08-03T19:32:04.282595Z"
+    },
+    {
+      "id": "6fd9b529-737b-42b0-854d-85f179d01763",
+      "author": "derek.norrbom",
+      "text": "Implementation is complete, validated, committed, and pushed for review. Existing production processor files and pipelines remain unchanged.",
+      "created_at": "2026-08-03T20:21:17.481825Z"
+    }
+  ],
+  "created_at": "2026-08-03T19:14:51.448935Z",
+  "updated_at": "2026-08-03T20:21:17.505820Z",
+  "closed_at": "2026-08-03T20:21:17.505820Z",
+  "custom": {}
+}

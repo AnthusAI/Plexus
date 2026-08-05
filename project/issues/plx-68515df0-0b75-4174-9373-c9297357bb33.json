@@ -1,0 +1,37 @@
+{
+  "id": "plx-68515df0-0b75-4174-9373-c9297357bb33",
+  "title": "Map the current interactive command execution flow",
+  "description": "Trace the current command lifecycle from dashboard interaction through API dispatch, broker or queue creation, Celery integration, worker execution, status updates, cancellation, retries, and infrastructure provisioning. Produce evidence-backed findings and identify contracts, coupling, failure modes, and migration decisions. This is a read-only investigation; it does not authorize implementation changes.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d7b6b261-9749-4cf7-a054-6a898a6bb487",
+      "author": "derek.norrbom",
+      "text": "Investigation started. A read-only Coding Agent is tracing the dashboard-to-worker lifecycle, including dispatch, task state, Celery/SQS configuration, queue creation, worker startup, retries, cancellation, and status propagation. No source, infrastructure, or external state changes are authorized in this phase.",
+      "created_at": "2026-08-04T19:23:31.741097Z"
+    },
+    {
+      "id": "168b3741-5d28-4663-a49c-43f26ba40030",
+      "author": "derek.norrbom",
+      "text": "## Investigation result\n\nThe current production route is dashboard Task creation → DynamoDB stream → dispatcher Lambda → Celery over SQS → long-lived command worker → GraphQL Task, TaskStage, and evaluation updates.\n\nVerified findings:\n- Celery is the active dispatch mechanism.\n- The worker creates the SQS queue at runtime when absent; the queue is not provisioned by the current CDK stack.\n- Celery creates its DynamoDB result-backend table at runtime when absent.\n- Dashboard Task records and subscriptions are the user-visible state contract; the Celery result backend is secondary.\n- The CDK stack creates an EC2 role/profile and SSM service document, but not the EC2 instance itself.\n- Current durability gaps include early message acknowledgement, no renewable execution lease, no worker-side idempotent claim, non-atomic send/status recording, no deployment drain, and no proven dashboard cancellation flow.\n- A shared queue uses consumer-side target rejection rather than broker-side routing.\n\nThe repository evidence was independently reviewed at the dashboard dispatch, dispatcher Lambda, Celery configuration, command task, infrastructure stack, and deployment restart boundaries. No files or external systems were changed.",
+      "created_at": "2026-08-04T19:27:42.254335Z"
+    },
+    {
+      "id": "8256f3f8-9f8a-4cd4-9484-1a3d1f2fa878",
+      "author": "derek.norrbom",
+      "text": "Read-only command-flow investigation completed and independently reviewed. Replacement architecture and behavior specifications remain under the parent epic.",
+      "created_at": "2026-08-04T19:27:51.512395Z"
+    }
+  ],
+  "created_at": "2026-08-04T19:22:51.934120Z",
+  "updated_at": "2026-08-04T19:27:51.535186Z",
+  "closed_at": "2026-08-04T19:27:51.535186Z",
+  "custom": {}
+}

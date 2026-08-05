@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1bce1245-038b-42e3-b185-9d5b279a9fa5",
+  "issue_id": "plx-5513bc0c-1ea8-41aa-83df-59157f414e2f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-04T21:49:19.242Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implement story plx-48b1ee as a provider-neutral application service and durable repository contract with executable behavior specifications. Cover tenant scoping, structured submission, service-owned identity/time, idempotent duplicate submission, idempotency conflicts, status lookup, cancellation state, and atomic dispatch discoverability. Do not add HTTP, AWS, Kubernetes, dashboard, Celery, or provider storage implementations.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement the portable command service contract"
+  }
+}

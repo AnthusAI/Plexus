@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cd79ed70-8195-4d06-a40c-a71562b4fb40",
+  "issue_id": "plx-87050e14-4888-45ec-89ef-0a4e38f00f7b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-03T19:14:51.449Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Purpose: make the reusable score processor runtime build definition a versioned part of the Plexus Python distribution so consumers can build and validate an image from the same immutable Plexus revision they deploy.\n\nDefinition of Done:\n- The Lambda handler is importable from the installed Plexus package.\n- A self-contained container build definition is shipped in wheel and sdist artifacts.\n- Builds require an explicit immutable Plexus source revision and do not depend on a Plexus repository checkout.\n- Existing first-party score processor image builds remain functional.\n- Reusable repository infrastructure can provision independently named runtime repositories.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Distributable score processor runtime image"
+  }
+}

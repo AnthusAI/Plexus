@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a8247a5f-7003-4017-845d-2be4abbe737a",
+  "issue_id": "plx-36a78058-08f4-405f-a747-c748146b0c3a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-03T19:15:04.904Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Move the reusable Lambda handler into an installed Plexus module, retain the repository entry point as a thin compatibility shim, and add executable specifications for both import paths.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-87050e14-4888-45ec-89ef-0a4e38f00f7b",
+    "priority": 1,
+    "status": "open",
+    "title": "Package score processor handler and compatibility entry point"
+  }
+}

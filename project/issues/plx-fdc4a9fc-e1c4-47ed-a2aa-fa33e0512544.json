@@ -1,0 +1,25 @@
+{
+  "id": "plx-fdc4a9fc-e1c4-47ed-a2aa-fa33e0512544",
+  "title": "Provide reusable scheduled worker, repository, and monitoring stacks",
+  "description": "Implement configurable container repositories, scheduled container orchestration, and service observability driven entirely by consumer-supplied resource names and references.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-39614d99-a561-4250-991b-0dd4e23c3887",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1e4f2375-8a8b-44d5-9510-d5ccb3fc6d8d",
+      "author": "derek.norrbom",
+      "text": "Implemented configurable container repository, scheduled worker orchestration, and monitoring stacks with no consumer-specific values.",
+      "created_at": "2026-08-03T18:01:36.791208Z"
+    }
+  ],
+  "created_at": "2026-08-03T17:37:13.205539Z",
+  "updated_at": "2026-08-03T18:01:36.936751Z",
+  "closed_at": "2026-08-03T18:01:36.936751Z",
+  "custom": {}
+}
