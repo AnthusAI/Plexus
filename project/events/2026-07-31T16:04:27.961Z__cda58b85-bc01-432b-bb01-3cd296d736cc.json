@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cda58b85-bc01-432b-bb01-3cd296d736cc",
+  "issue_id": "plx-c9498a2f-de00-40ec-8843-fc873d06c45f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T16:04:27.961Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Make living-report artifact publication incremental and observable",
+    "description": "As an operator, I want large living-report milestones to publish incrementally with truthful progress and resumable work, so that account-wide portfolio reports do not remain silent or restart thousands of completed uploads after a transient interruption.\n\nObserved behavior: a large portfolio milestone publishes every score and scorecard artifact sequentially, reports only category-level completion, and uses new object keys on retry. The visible counter can remain unchanged for minutes and a late failure repeats already completed uploads.\n\nFeature: Incremental living-report artifact publication\n\nScenario: Per-artifact progress is visible\nGiven a milestone contains many stakeholder-safe score and scorecard artifacts\nWhen publication is in progress\nThen durable live progress advances at a bounded cadence as artifacts complete\nAnd the Report identifies the active category and completed count\n\nScenario: Retry reuses verified artifacts\nGiven an interrupted publication has already uploaded checksum-valid immutable artifacts\nWhen the same milestone and evidence fingerprint are retried\nThen checksum-identical artifacts are reused\nAnd only missing or changed artifacts are uploaded\nAnd the latest Report revision changes only after complete reconciliation\n\nScenario: Unchanged score artifacts are not regenerated\nGiven a later milestone does not change a score or scorecard presentation\nWhen that milestone is published\nThen the prior immutable artifact is referenced by the new manifest\nAnd no duplicate upload is created\n\nScenario: Partial publication never becomes authoritative\nGiven one required artifact remains missing or invalid\nWhen publication reconciliation ends\nThen the Report remains on its last complete revision\nAnd the incomplete milestone is visibly retryable\n\nOut of scope: GraphQL schema or resource changes; deleting historical artifacts; weakening checksum validation or atomic revision commits.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": "ryan.porter",
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

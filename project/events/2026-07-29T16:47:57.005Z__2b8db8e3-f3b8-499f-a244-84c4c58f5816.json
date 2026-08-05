@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2b8db8e3-f3b8-499f-a244-84c4c58f5816",
+  "issue_id": "plx-d3d51439-a5bd-4fd3-8299-423d1acebfba",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T16:47:57.005Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Orchestrate reported portfolio optimization",
+    "description": "As an account operator, I want a periodic optimization workflow to report findings, request exact approvals, and track approved work, so that useful improvements can proceed without unauthorized mutations.\n\nFeature: Reported portfolio optimization run\n\nScenario: Analyze and request approval\n  Given an account scope and frozen evidence window\n  When the portfolio run completes exhaustive analysis\n  Then the living report contains coverage, priorities, questions, and collection recommendations\n  And incomplete evidence is never labeled exact\n  And at most five exact targets are offered for independent approval\n\nScenario: Execute only current approvals\n  Given a human approved selected targets and explicit limits\n  When the workflow is ready to launch optimization\n  Then champion, feedback, cooldown, configuration, and evidence preconditions are rechecked\n  And only current approved targets are launched\n  And evaluations are allowed to finish\n  And no guideline, feedback setting, or champion is changed automatically",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

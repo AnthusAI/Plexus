@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cd390a87-d461-4161-9993-4b9bf28afeed",
+  "issue_id": "plx-0bb256ec-6697-40b8-ba84-4aa6dff0451a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T16:58:09.478Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Clarify automatic portfolio non-selection and terminal analysis status",
+    "description": "A finalized living Report can describe every assessed candidate as rejected even when no optimizer launch was attempted, and an incomplete semantic result can be presented as pending. Stakeholders need selection outcomes and analysis completeness stated in plain language.\n\nFeature: Honest automatic-run status\n\nScenario: policy does not select an assessed candidate\nGiven an automatic portfolio run assessed candidates\nAnd no optimizer launch was attempted for candidates that did not pass the policy gates\nWhen the stakeholder Report is rendered\nThen those candidates are described as not selected rather than rejected\nAnd launched targets and actual launch failures remain distinguishable\n\nScenario: semantic analysis ends incomplete\nGiven portfolio inventory is complete\nAnd a scheduled semantic diagnosis ends with incomplete evidence\nWhen the terminal Report is rendered\nThen inventory is labeled complete\nAnd semantic analysis is labeled incomplete rather than pending.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

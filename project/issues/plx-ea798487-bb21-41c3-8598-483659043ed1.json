@@ -1,0 +1,37 @@
+{
+  "id": "plx-ea798487-bb21-41c3-8598-483659043ed1",
+  "title": "Bound living Report startup and surface initialization failure",
+  "description": "A synthetic production-backed acceptance created the optimization Report Task but did not reach initial Report creation before the local process ended, leaving operators without a cover page during initialization.\n\nFeature: Observable bounded living Report initialization\n\nScenario: Initial Report publication succeeds\nGiven an optimization run has created its durable Task\nWhen the Report and initial artifacts are initialized\nThen the first Report becomes visible within a bounded startup interval\nAnd the Task identifies the current initialization step\n\nScenario: Initial publication cannot complete\nGiven a required GraphQL or artifact request does not complete within its bounded retry policy\nWhen initialization exhausts that policy\nThen the Task becomes failed with an actionable startup reason\nAnd no phantom running optimization remains\n\nScenario: Process ends before Report creation\nGiven the Report Task exists and no Report has been created\nWhen the worker is interrupted or recovered\nThen recovery either resumes the same attempt safely or marks it terminal\nAnd operators can distinguish initialization from portfolio analysis.\n\nNo client data, score mutation, schema change, or new infrastructure resource is included.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7ff6221b-8f59-4a88-8343-8051bf0b3843",
+      "author": "ryan.porter",
+      "text": "Root cause identified in the living Report service: after Task creation, initialization creates or reads every fixed TaskStage before looking up or creating the Report. Those sequential remote operations create the operator blind interval. Exceptions in stage/report/block setup also occur before the current initialization error boundary, so they can leave a RUNNING Task. Adding outside-in ordering and fail-closed specifications before reordering production code.",
+      "created_at": "2026-07-30T16:56:48.311641Z"
+    },
+    {
+      "id": "480e5b14-6fcd-451c-aac6-ef35afadef3e",
+      "author": "ryan.porter",
+      "text": "Implemented and verified the startup repair. New attempts now create the Report before TaskStage/ReportBlock setup and skip the impossible historical-Report lookup; resume attempts still look up their existing Report. Any later stage/block/artifact initialization exception marks the Task failed and updates the already-visible Report with the failure reason. Focused report/portfolio suite passes 50 tests. The completed live score-brief acceptance confirmed the pre-skip path spent roughly 47 seconds in startup work, providing the baseline for the next fresh timing check.",
+      "created_at": "2026-07-30T17:01:02.715761Z"
+    },
+    {
+      "id": "8e0cbd5b-f90d-433b-834f-4e6b3e1d25fa",
+      "author": "ryan.porter",
+      "text": "Post-fix production-backed acceptance completed safely with no score mutations. Task f5f547f6... and Report b7de78ca... reached terminal completion. The Report was created 0.500 seconds after the living-report Task, proving the new-attempt ordering and skip work. The remaining roughly 40-second blind interval occurred before that Task existed, inside deterministic Task discovery. This should be removed by reusing the procedure's existing Task rather than further optimizing a duplicate-Task lookup.",
+      "created_at": "2026-07-30T17:02:30.650095Z"
+    }
+  ],
+  "created_at": "2026-07-30T16:55:27.844298Z",
+  "updated_at": "2026-07-30T17:02:30.650095Z",
+  "closed_at": null,
+  "custom": {}
+}

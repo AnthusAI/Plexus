@@ -1,0 +1,67 @@
+{
+  "id": "plx-98b9af0c-4729-4196-bd95-ce013c354f98",
+  "title": "Maintain one living optimization run report",
+  "description": "As an account operator, I want one durable report to follow a periodic optimization run, so that the status and evidence remain available at one stable location.\n\nFeature: Living optimization run report\n\nScenario: Start and update one report\n  Given a periodic optimization run with a frozen scope and time window\n  When the run publishes successive milestones\n  Then one running task and one report are reused\n  And each milestone appears in the existing report\n  And immutable evidence revisions remain available\n\nScenario: Fail on report divergence\n  Given a periodic optimization run has advanced\n  When its report milestone cannot be durably published\n  Then the run fails\n  And it does not continue with stakeholder state behind procedure state",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "27c31a25-3a32-4a07-83c0-d7b1d248c44d",
+      "author": "ryan.porter",
+      "text": "Implemented outside-in coverage and the initial service slice: one Task/Report per explicit run key; three fixed ReportBlocks; attachment-backed compact envelopes from initialization; immutable JSON/XLSX revisions; recovery reuse; and fatal milestone publication failure marks the Task failed. Focused tests are green.",
+      "created_at": "2026-07-29T16:58:16.853960Z"
+    },
+    {
+      "id": "a43065ed-ef05-4031-b942-cd1627051778",
+      "author": "ryan.porter",
+      "text": "Hardening pass: separate deterministic run identity from attempt identity; resume only active attempts; keep terminal failed or blocked attempts immutable and link retries; add fixed TaskStages and complete terminal-state semantics. Artifact publication will use only application-authorized GraphQL tickets: restricted evidence as Task attachments and public revisions as ReportBlock attachments. No direct S3 fallback.",
+      "created_at": "2026-07-29T17:13:54.444858Z"
+    },
+    {
+      "id": "d8a25ae5-4bc2-4eed-9e40-daf4a2101928",
+      "author": "ryan.porter",
+      "text": "Hardening implementation complete locally: deterministic run key plus distinct attempt IDs; active-attempt resume; immutable failed/blocked attempts with linked successor Tasks/Reports; eight fixed TaskStages; real initial workbook; append-only full revision metadata; standardized terminal states; fatal publication. Restricted evidence now uses existing Task attachment tickets and public revision files use existing ReportBlock tickets. No direct-S3 fallback.",
+      "created_at": "2026-07-29T17:31:51.736432Z"
+    },
+    {
+      "id": "e878b34b-5470-4cb2-8487-1ec48e08946c",
+      "author": "ryan.porter",
+      "text": "Zero-infrastructure correction: all living-report artifacts (restricted evidence, workbook revisions, and manifests) will use the existing Task attachment ticket route and Task object keys. ReportBlocks will retain only compact attachment-pointer envelopes. The temporary ReportBlock ticket route and all backend changes will be removed so this slice has zero backend/schema/resource diff.",
+      "created_at": "2026-07-29T18:05:37.494482Z"
+    },
+    {
+      "id": "8d23a323-c967-401f-bbf1-0da4367e49d3",
+      "author": "ryan.porter",
+      "text": "Zero-infrastructure correction completed locally. Initialization files and every evidence/workbook/manifest revision now flow through one existing TASK_ATTACHMENT route using the attempt Task ID. Task.attachedFiles retains the immutable keys; each ReportBlock stores only its compact pointer envelope. The temporary ReportBlock ticket/backend changes were removed and the backend/resolver/test files are byte-identical to base.",
+      "created_at": "2026-07-29T18:07:58.787381Z"
+    },
+    {
+      "id": "d7095b8d-fd16-401f-89a2-5a991ec55417",
+      "author": "ryan.porter",
+      "text": "Validation update: the zero-resource working diff has no Amplify/schema/resource/function/storage changes and no ActionRequest/ActionEvent references. A model-backed sandbox run completed through finalization with six immutable TASK_ATTACHMENT revisions; the final eight-sheet workbook reopened successfully, reconciled all published row counts, and was checksum-verified. Full Python CI is green on 3.11 and 3.12, and the dashboard typecheck, coverage, Storybook build, and serial Chromium suite are green.",
+      "created_at": "2026-07-29T19:47:09.908847Z"
+    },
+    {
+      "id": "34d44de5-4e6c-4982-a198-d5eabe3b8fc2",
+      "author": "ryan.porter",
+      "text": "Production dogfood proved the current implementation violates this story's one-Task scenario: the Procedure owns one Task while OptimizationRunReportService discovers or creates a second Task. The duplicate causes a roughly 40-second deterministic Task scan before Report creation and splits operator status. Implementing an adoption path where the service reuses the runtime's existing Procedure Task, preserves its metadata and coarse Tactus stages, and keeps standalone report simulations backward compatible.",
+      "created_at": "2026-07-30T17:04:33.681101Z"
+    },
+    {
+      "id": "967f57cc-9419-415e-9882-bd6318f007aa",
+      "author": "ryan.porter",
+      "text": "Implemented the one-Task conformance path. The portfolio runtime now passes its existing Procedure Task into the living Report service. The service claims that Task idempotently, preserves unrelated metadata, rejects conflicting run claims, creates no duplicate Task or stages, uses the same Task for attachments and Report linkage, and leaves Task/stage completion to Tactus. Standalone simulations keep their self-managed Task behavior. Validation: 52 report/portfolio tests and 5 focused optimization runtime tests pass. Live end-to-end Procedure acceptance remains the next checkpoint.",
+      "created_at": "2026-07-30T17:08:32.576286Z"
+    }
+  ],
+  "created_at": "2026-07-29T16:47:55.953878Z",
+  "updated_at": "2026-07-30T17:08:32.576286Z",
+  "closed_at": null,
+  "custom": {}
+}

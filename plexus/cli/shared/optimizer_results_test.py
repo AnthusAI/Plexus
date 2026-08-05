@@ -156,6 +156,84 @@ def test_build_manifest_extracts_best_versions_and_cycles():
     assert manifest["cycles"][1]["status"] == "accepted"
 
 
+def test_build_manifest_uses_winning_candidate_accuracy_evaluation_before_stale_final_baseline():
+    service = OptimizerResultsService(_FakeClient())
+    state = _sample_state()
+    winning_iteration = state["iterations"][1]
+    winning_iteration["regression_evaluation_id"] = None
+    winning_iteration["exploration_results"] = [{
+        "version_id": "version-accepted",
+        "acc_eval_id": "eval-acc-winning-candidate",
+    }]
+    state["last_accepted_acc_eval_id"] = "eval-acc-baseline"
+    state["current_regression_baseline_id"] = "eval-acc-baseline"
+    state["end_of_run_report"]["run_summary"].update({
+        "last_accepted_version_id": "version-accepted",
+        "final_regression_evaluation_id": "eval-acc-baseline",
+    })
+
+    manifest = service.build_manifest(
+        procedure=_sample_procedure(),
+        task=_FakeTask(),
+        state=state,
+    )
+
+    assert manifest["best"]["best_accuracy_evaluation_id"] == (
+        "eval-acc-winning-candidate"
+    )
+
+
+def test_build_manifest_preserves_already_good_completion_marker_and_champion():
+    service = OptimizerResultsService(_FakeClient())
+    state = _sample_state()
+    state["end_of_run_report"] = None
+    state["iterations"] = []
+    state["last_accepted_version_id"] = None
+    state["optimizer_result_summary"] = {
+        "completion_reason": "baselines_already_good",
+        "stop_reason": "already_good",
+        "champion_version_id": "version-baseline",
+        "cycles": 0,
+    }
+
+    manifest = service.build_manifest(
+        procedure=_sample_procedure(),
+        task=_FakeTask(),
+        state=state,
+    )
+
+    assert manifest["summary"]["completion_reason"] == "baselines_already_good"
+    assert manifest["best"]["winning_version_id"] == "version-baseline"
+
+
+def test_build_manifest_synthesizes_legacy_already_good_marker_from_durable_baselines():
+    service = OptimizerResultsService(_FakeClient())
+    task = _FakeTask()
+    task.status = "COMPLETED"
+    state = _sample_state()
+    state["end_of_run_report"] = None
+    state["iterations"] = []
+    state["last_accepted_version_id"] = None
+    state["optimizer_result_summary"] = {}
+    state["recent_initial_baseline_metrics"] = {"alignment": 0.99}
+    state["regression_initial_baseline_metrics"] = {"alignment": 0.99}
+    procedure = _sample_procedure()
+    procedure["status"] = "COMPLETED"
+
+    manifest = service.build_manifest(
+        procedure=procedure,
+        task=task,
+        state=state,
+    )
+
+    assert manifest["summary"]["completion_reason"] == (
+        "legacy_baselines_already_good"
+    )
+    assert manifest["best"]["winning_version_id"] == "version-baseline"
+    assert manifest["best"]["best_feedback_evaluation_id"] == "eval-fb-baseline"
+    assert manifest["best"]["best_accuracy_evaluation_id"] == "eval-acc-baseline"
+
+
 def test_build_manifest_marks_no_feedback_skip_terminal():
     service = OptimizerResultsService(_FakeClient())
     state = {
@@ -423,6 +501,81 @@ def test_optimizer_summary_uses_effective_completed_status_for_terminal_running_
     assert candidate_summary["pinned"] is True
 
 
+def test_optimizer_summary_synthesizes_legacy_completion_from_live_records(monkeypatch):
+    service = OptimizerResultsService(_FakeClient())
+    stale_task = _FakeTask()
+    state = _sample_state()
+    state.update(
+        {
+            "end_of_run_report": None,
+            "optimizer_result_summary": {},
+            "iterations": [],
+            "last_accepted_version_id": None,
+            "recent_initial_baseline_metrics": {"alignment": 0.99},
+            "regression_initial_baseline_metrics": {"alignment": 0.99},
+        }
+    )
+    manifest = service.build_manifest(
+        procedure=_sample_procedure(), task=stale_task, state=state
+    )
+    assert manifest["summary"]["completion_reason"] is None
+    assert manifest["procedure"]["status"] == "RUNNING"
+    assert manifest["procedure"]["task_status"] == "RUNNING"
+
+    pointer = {"task_id": "task-123", "manifest": "tasks/task-123/optimizer/manifest.json"}
+    live_procedure = _sample_procedure({OPTIMIZER_ARTIFACTS_METADATA_KEY: pointer})
+    live_procedure["status"] = "COMPLETED"
+    live_task = _FakeTask()
+    live_task.status = "COMPLETED"
+    monkeypatch.setattr(service, "_load_procedure_record", lambda _procedure_id: live_procedure)
+    monkeypatch.setattr(service, "_find_task_for_procedure", lambda **_kwargs: live_task)
+    monkeypatch.setattr(service, "load_indexed_manifest_for_procedure", lambda _procedure: manifest)
+
+    payload = service.summarize_optimizer_procedure("proc-123")
+
+    assert payload["summary"]["completion_reason"] == "legacy_baselines_already_good"
+    assert payload["summary"]["effective_status"] == "COMPLETED"
+    assert payload["procedure"]["status"] == "COMPLETED"
+    assert payload["procedure"]["task_status"] == "COMPLETED"
+    assert payload["best"]["winning_version_id"] == "version-baseline"
+    assert payload["best"]["last_accepted_version_id"] is None
+    assert payload["best"]["best_feedback_evaluation_id"] == "eval-fb-baseline"
+    assert payload["best"]["best_accuracy_evaluation_id"] == "eval-acc-baseline"
+    assert service.client.update_calls == []
+
+
+def test_optimizer_summary_does_not_synthesize_legacy_completion_from_prose(monkeypatch):
+    service = OptimizerResultsService(_FakeClient())
+    state = _sample_state()
+    state.update(
+        {
+            "end_of_run_report": None,
+            "optimizer_result_summary": {},
+            "procedure_summary": {"headline": "The baselines are already good."},
+            "iterations": [],
+            "last_accepted_version_id": None,
+            "recent_initial_baseline_metrics": {"alignment": 0.98},
+            "regression_initial_baseline_metrics": {"alignment": 0.99},
+        }
+    )
+    manifest = service.build_manifest(
+        procedure=_sample_procedure(), task=_FakeTask(), state=state
+    )
+    pointer = {"task_id": "task-123", "manifest": "tasks/task-123/optimizer/manifest.json"}
+    live_procedure = _sample_procedure({OPTIMIZER_ARTIFACTS_METADATA_KEY: pointer})
+    live_procedure["status"] = "COMPLETED"
+    live_task = _FakeTask()
+    live_task.status = "COMPLETED"
+    monkeypatch.setattr(service, "_load_procedure_record", lambda _procedure_id: live_procedure)
+    monkeypatch.setattr(service, "_find_task_for_procedure", lambda **_kwargs: live_task)
+    monkeypatch.setattr(service, "load_indexed_manifest_for_procedure", lambda _procedure: manifest)
+
+    payload = service.summarize_optimizer_procedure("proc-123")
+
+    assert payload["summary"]["completion_reason"] is None
+    assert payload["best"]["winning_version_id"] is None
+
+
 def test_list_score_evaluations_filters_sorts_and_extracts_metadata():
     class EvaluationClient:
         def execute(self, query, variables):
@@ -557,6 +710,7 @@ def test_summarize_optimizer_procedure_requires_index_and_returns_cycles(monkeyp
         task=_FakeTask(),
         state=_sample_state(),
     )
+    manifest["summary"]["completion_reason"] = "baselines_already_good"
     monkeypatch.setattr(
         service,
         "_load_procedure_record",
@@ -567,6 +721,7 @@ def test_summarize_optimizer_procedure_requires_index_and_returns_cycles(monkeyp
     payload = service.summarize_optimizer_procedure("proc-123")
 
     assert payload["procedure_id"] == "proc-123"
+    assert payload["summary"]["completion_reason"] == "baselines_already_good"
     assert payload["best"]["best_feedback_evaluation_url"].endswith("/eval-fb-best")
     assert payload["cycles"][0]["feedback_evaluation_url"].endswith("/eval-fb-1")
     assert payload["review_artifacts"] == {

@@ -1,0 +1,37 @@
+{
+  "id": "plx-76dcdee7-a26f-41f4-b02a-46e07aa05342",
+  "title": "Persist semantic ledger through living Report checkpoints",
+  "description": "Use existing Task attachments and Report metadata pointers for pre-contact reservation and post-call settlement checkpoints, with checksum, replay, and publication-failure tests.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "0306200e-7d3f-48b4-bf14-ae697fc11131",
+      "author": "ryan.porter",
+      "text": "Implementation started test-first. Scope: living Report ledger checkpoints through existing Task attachments and a checksum-verified Report parameter commit pointer, including changed-run-spec rejection and publication failure behavior. No new GraphQL resource and no workbook generation per ledger transition.",
+      "created_at": "2026-07-31T02:38:26.969885Z"
+    },
+    {
+      "id": "6708a336-df9b-4d7a-9b17-5a47c3dc5eb7",
+      "author": "ryan.porter",
+      "text": "Red specification evidence: focused semantic-budget and run-report suites produced 19 failed / 56 passed. Report cases fail because immutable semantic-ledger persist/load methods do not yet exist; pre-existing run-report specifications remained green.",
+      "created_at": "2026-07-31T02:40:36.425477Z"
+    },
+    {
+      "id": "6d3a94c5-22a5-41ef-8330-854fb494067b",
+      "author": "ryan.porter",
+      "text": "Green implementation evidence: OptimizationRunReportService now commits ordered immutable semantic-ledger JSON attachments through the existing Task attachment route and stores a checksum-bearing semantic_budget_latest pointer in Report parameters as the commit point. Loading verifies Task and Report frozen run specs, descriptor identity, attachment checksum, canonical JSON, ledger digest, pricing version, and revision. Replays are idempotent, interrupted commits leave no advanced pointer, and no workbook is generated per transition. Focused suites pass: 138 passed.",
+      "created_at": "2026-07-31T02:46:41.988607Z"
+    }
+  ],
+  "created_at": "2026-07-31T02:37:51.609900Z",
+  "updated_at": "2026-07-31T02:46:41.988607Z",
+  "closed_at": null,
+  "custom": {}
+}

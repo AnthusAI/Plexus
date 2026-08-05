@@ -1,0 +1,25 @@
+{
+  "id": "plx-814a214c-b225-4b98-b6c4-89854f4bf1b1",
+  "title": "Fix living-report text media types for artifact tickets",
+  "description": "The living-report publisher declares text artifact content types with charset parameters, but the existing artifact-ticket contract accepts only a type and subtype. Real task-attachment ticket creation therefore rejects Markdown and CSV artifacts even though local fake-store tests pass.\n\nFeature: Publish text artifacts through the production ticket contract\n\nScenario: Upload Markdown and CSV task attachments\nGiven a living report publishes scorecard text artifacts\nWhen it requests existing task-attachment write tickets\nThen Markdown uses text/markdown\nAnd CSV uses text/csv\nAnd the ticket contract accepts both requests\n\nScenario: Keep character encoding deterministic\nGiven a text artifact omits a charset media-type parameter\nWhen it is decoded\nThen Markdown remains UTF-8\nAnd CSV remains UTF-8 with its existing spreadsheet-compatible byte-order marker",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b471a595-6f60-46c9-888a-caa9e35f6b85",
+      "author": "ryan.porter",
+      "text": "Reproduced the production ticket-contract mismatch with a failing focused test, then changed Markdown and CSV task attachments to the accepted text/markdown and text/csv media types while retaining deterministic UTF-8 content. The ticket-path tests pass.",
+      "created_at": "2026-07-30T16:13:42.457084Z"
+    }
+  ],
+  "created_at": "2026-07-30T16:03:03.486530Z",
+  "updated_at": "2026-07-30T16:13:42.457084Z",
+  "closed_at": null,
+  "custom": {}
+}

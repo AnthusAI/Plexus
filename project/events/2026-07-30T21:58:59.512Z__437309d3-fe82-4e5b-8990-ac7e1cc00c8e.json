@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "437309d3-fe82-4e5b-8990-ac7e1cc00c8e",
+  "issue_id": "plx-aba6a402-bf8c-4ad3-95a6-bfb81ff72737",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T21:58:59.512Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Compare agreement and disagreement in optimization priority rows",
+    "description": "As an optimization operator, I want feedback volume and outcome agreement shown together on one common scale, so that I can compare portfolio priorities without mentally reconciling separate charts.\n\nOut of scope: changing the ranking formula or feedback policy.\n\nFeature: Comparable feedback composition in ranked priorities\n\nScenario: Show agreement and disagreement in one row\nGiven ranked priority rows contain valid feedback and reviewed disagreement counts\nWhen the living Report renders the priority list\nThen each row shows one horizontal feedback bar with agreements in green and disagreements in red\nAnd the exact valid feedback, agreement, disagreement, and disagreement-rate values remain readable\n\nScenario: Use one portfolio-wide scale\nGiven ranked rows have different valid-feedback totals\nWhen their feedback bars are rendered\nThen every bar uses the largest visible valid-feedback total as the common maximum\nAnd shorter bars visibly represent lower feedback volume\n\nScenario: Preserve accessible meaning\nGiven a user relies on text or assistive technology\nWhen the feedback composition is rendered\nThen the bar exposes a concise label containing agreement, disagreement, and total counts\nAnd color is not the only way to distinguish the two segments",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

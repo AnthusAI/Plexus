@@ -1,0 +1,43 @@
+{
+  "id": "plx-d3d51439-a5bd-4fd3-8299-423d1acebfba",
+  "title": "Orchestrate reported portfolio optimization",
+  "description": "As an account operator, I want a periodic optimization workflow to report findings, request exact approvals, and track approved work, so that useful improvements can proceed without unauthorized mutations.\n\nFeature: Reported portfolio optimization run\n\nScenario: Analyze and request approval\n  Given an account scope and frozen evidence window\n  When the portfolio run completes exhaustive analysis\n  Then the living report contains coverage, priorities, questions, and collection recommendations\n  And incomplete evidence is never labeled exact\n  And at most five exact targets are offered for independent approval\n\nScenario: Execute only current approvals\n  Given a human approved selected targets and explicit limits\n  When the workflow is ready to launch optimization\n  Then champion, feedback, cooldown, configuration, and evidence preconditions are rechecked\n  And only current approved targets are launched\n  And evaluations are allowed to finish\n  And no guideline, feedback setting, or champion is changed automatically",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c8cd1bf8-8af8-4218-a41f-5d46b9fff7f6",
+      "author": "ryan.porter",
+      "text": "Implementation started: adding an orchestration service that composes existing optimization decision packets with the durable run report, structured approval batches, freshness rechecks, and terminal review. Outside-in tests will cover report-first lifecycle, incomplete coverage stop, exact five-target approvals, stale launch rejection, fatal publication stop, and no automatic promotion.",
+      "created_at": "2026-07-29T17:03:12.274166Z"
+    },
+    {
+      "id": "3dc29737-bb7e-486f-9d40-8b4156b650bd",
+      "author": "ryan.porter",
+      "text": "Implemented the portfolio orchestration slice in the integration worktree: report-first lifecycle, complete-coverage stop, exact structured approvals in batches of five, freshness-preserving optimizer dispatch, terminal review without automatic promotion, and a Tactus procedure/runtime entrypoint. Focused runtime and orchestration specs are green; living-report artifact/stage hardening remains coordinated with its owning workstream.",
+      "created_at": "2026-07-29T17:18:59.615333Z"
+    },
+    {
+      "id": "baf49644-aac8-478f-a774-53206901d80b",
+      "author": "ryan.porter",
+      "text": "Progress: default portfolio runtime validation now covers the zero-resource ChatMessage authority path. The next specification will reproduce missing authority as a fail-closed result, then verify advisory action create, deduplication, and response resolution occur only during portfolio run or replay without score or collection mutations.",
+      "created_at": "2026-07-29T18:05:52.783393Z"
+    },
+    {
+      "id": "86aa0620-c306-4f37-a278-c59c894fe0cd",
+      "author": "ryan.porter",
+      "text": "Validation update: the reproduced default-runtime failure was caused by absent ChatMessage action authority in an injected report-only test and a misplaced runtime import. The contract now explicitly injects authority for success, covers the fail-closed missing-authority path, and verifies replay reuses and resolves the same advisory ChatMessage without operational mutations. Focused runtime, portfolio, HITL, chat, and procedure-config tests are green.",
+      "created_at": "2026-07-29T18:10:48.967600Z"
+    }
+  ],
+  "created_at": "2026-07-29T16:47:57.004854Z",
+  "updated_at": "2026-07-29T18:10:48.967600Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b4c84151-fa43-471b-b326-855fbfd53bb8",
+  "issue_id": "plx-3132eaac-4026-4cbe-ab2b-a05a0d81f325",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-03T18:12:36.633Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Split optimization milestone publication from detail enrichment",
+    "description": "Commit the immutable core milestone before detailed artifacts, defer enrichment off the analysis and launch path, and require reconciled final details before completion.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

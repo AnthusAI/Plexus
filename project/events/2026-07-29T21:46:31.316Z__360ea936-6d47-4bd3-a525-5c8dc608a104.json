@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "360ea936-6d47-4bd3-a525-5c8dc608a104",
+  "issue_id": "plx-a3927569-c2ee-4c17-bc0b-54805812cfba",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T21:46:31.316Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Bound semantic portfolio diagnosis to prioritized scores",
+    "description": "As an optimization operator, I want semantic diagnosis limited to the declared priority scope with explicit coverage and fail-closed approval behavior, so that a periodic portfolio run is predictable, affordable, and cannot approve undiagnosed targets.\n\nIncluded:\n- Assess every ranked score deterministically.\n- Diagnose the ranked top ten plus every monitoring candidate.\n- Deduplicate the selected union in original rank order.\n- Require completed diagnosis before approval readiness.\n- Report selected, completed, skipped, and failed diagnosis coverage.\n- Enforce an explicit nested semantic-work limit or fail before model calls.\n\nExcluded:\n- Optimizer launch, score changes, champion changes, or feedback-setting changes.\n- Client-specific ranking or policy.\n\nFeature: Bounded semantic portfolio diagnosis\n\nScenario: Diagnose the declared priority union\n  Given an exact ranked portfolio and completed assessments\n  When the portfolio run enters semantic diagnosis\n  Then it diagnoses only the top ten ranked opportunities and all monitoring candidates\n  And overlapping targets are diagnosed once in rank order\n\nScenario: Keep undiagnosed targets out of approval\n  Given a score assessed as ready but outside the semantic diagnosis scope\n  When approval targets are prepared\n  Then the score is not approval-ready\n  And its missing diagnosis is reported explicitly\n\nScenario: Publish honest diagnosis coverage\n  Given a bounded semantic diagnosis selection\n  When a milestone is published\n  Then the evidence reports selected, completed, skipped, and failed counts\n  And it never labels semantic portfolio coverage as exhaustive\n\nScenario: Fail closed on exhausted semantic budget\n  Given the configured semantic-work limit would be exceeded\n  When diagnosis would invoke another model-backed check\n  Then no additional model call is made\n  And the run records an incomplete diagnosis blocker.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

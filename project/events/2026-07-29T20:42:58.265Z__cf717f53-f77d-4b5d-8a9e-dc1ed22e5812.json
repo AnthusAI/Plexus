@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cf717f53-f77d-4b5d-8a9e-dc1ed22e5812",
+  "issue_id": "plx-5d24d7a2-4e21-434e-be5f-03509ae5a483",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T20:42:58.265Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Document structured HITL release sequencing",
+    "description": "Document the durable release order for the living optimization report workflow: release the structured-HITL Tactus changes first, update and lock Plexus to that released version, rerun local and sandbox acceptance, then deploy Plexus. Include rollback and verification checkpoints so the dependency cannot be forgotten while unrelated releases are in flight.",
+    "issue_type": "chore",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

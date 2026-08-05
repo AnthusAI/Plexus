@@ -6,6 +6,7 @@ import type { Schema } from '@/amplify/data/resource'
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
+import { FeedEmpty, FeedError, FeedLoading } from "@/components/feed-presentation"
 import { Timestamp } from "@/components/ui/timestamp"
 import { getMessageIcon, getMessageTypeColor, getMessageTypeLabel } from "@/components/ui/message-utils"
 import { InteractiveMessage, type InteractiveMessageMetadata } from "@/components/ui/interactive-message"
@@ -134,35 +135,15 @@ export function ChatFeedView({
   }, [messages])
 
   if (isLoading) {
-    return (
-      <div className={`flex items-center justify-center h-full ${className}`}>
-        <Spinner size="lg" />
-      </div>
-    )
+    return <FeedLoading className={className} />
   }
 
   if (error) {
-    return (
-      <div className={`flex items-center justify-center h-full ${className}`}>
-        <div className="text-center">
-          <p className="text-red-500 mb-2">Error loading messages</p>
-          <p className="text-sm text-muted-foreground">{error}</p>
-        </div>
-      </div>
-    )
+    return <FeedError className={className} title="Error loading messages" detail={error} />
   }
 
   if (messages.length === 0) {
-    return (
-      <div className={`flex items-center justify-center h-full ${className}`}>
-        <div className="text-center">
-          <p className="text-muted-foreground">No messages yet</p>
-          <p className="text-sm text-muted-foreground mt-2">
-            Messages from procedures will appear here
-          </p>
-        </div>
-      </div>
-    )
+    return <FeedEmpty className={className} title="No messages yet" description="Messages from procedures will appear here" />
   }
 
   return (

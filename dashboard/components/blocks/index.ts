@@ -22,6 +22,7 @@ export { default as RecentFeedback } from './RecentFeedback';
 export { default as ScoreChampionVersionTimeline } from './ScoreChampionVersionTimeline';
 export { default as ScorecardHistory } from './ScorecardHistory';
 export { default as ScoreResultsReport } from './ScoreResultsReport';
+export { default as OptimizationRunStatus } from './OptimizationRunStatus';
 export { BlockRenderer } from './BlockRegistry';
 export type { BlockRendererProps } from './BlockRegistry';
 export { getBlock, hasBlock, getRegisteredBlockTypes } from './BlockRegistry';

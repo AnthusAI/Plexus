@@ -10,6 +10,9 @@ from plexus.cli.procedure.tactus_adapters.hitl import PlexusHITLAdapter
 from plexus.cli.procedure.tactus_adapters.chat import PlexusChatAdapter
 from plexus.cli.procedure.tactus_adapters.trace import PlexusTraceSink
 from plexus.cli.procedure.tactus_adapters.terminal_hitl import TerminalHITLAdapter
+from plexus.cli.procedure.tactus_adapters.external_children import (
+    OptimizerExternalChildResolver,
+)
 
 __all__ = [
     'PlexusStorageAdapter',
@@ -17,4 +20,5 @@ __all__ = [
     'PlexusChatAdapter',
     'PlexusTraceSink',
     'TerminalHITLAdapter',
+    'OptimizerExternalChildResolver',
 ]

@@ -1,0 +1,43 @@
+{
+  "id": "plx-3974eae5-3540-4cf3-9b87-81f37843d755",
+  "title": "Describe automatic portfolio runs without implying blocking human decisions",
+  "description": "The living Report introduction currently says every portfolio run follows analysis through human decisions, even when execution_mode is automatic and optimization launch does not wait for human approval. This misstates the active workflow at the most visible point of the Report.\n\nFeature: Mode-accurate portfolio report introduction\n\nScenario: Automatic execution introduction\n  Given a portfolio run uses automatic execution mode\n  When its living Report is rendered\n  Then the introduction explains that policy-selected safe targets may launch automatically\n  And it states that champion promotion remains manual\n  And it does not imply a blocking optimization-approval decision\n\nScenario: Approval-required introduction\n  Given a portfolio run uses approval-required mode\n  When its living Report is rendered\n  Then the introduction explains the human optimization-approval checkpoint\n\nNo client information is included. No execution semantics change is in scope.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "441ed293-cfd2-4728-94b3-8373c2f79f30",
+      "author": "ryan.porter",
+      "text": "Started outside-in implementation. I will add a focused rendered-report specification for both execution modes, then make the smallest presentation-only change. Scope excludes procedure behavior and all production mutations.",
+      "created_at": "2026-07-31T13:33:42.604392Z"
+    },
+    {
+      "id": "ca9609b1-63c1-4068-80fc-55d207129e04",
+      "author": "ryan.porter",
+      "text": "Completed presentation-only change. The Report cover now uses the frozen execution mode: automatic runs say safe policy-selected targets may launch automatically; approval-required runs retain the human optimization-approval checkpoint; both state champion promotion remains manual. Dashboard status card mirrors the same distinction. Outside-in checks: focused Report specification failed before implementation then passed; report suite 74 passed; dashboard component suite 21 passed; dashboard web typecheck passed; git diff --check passed. No commit or stage created.",
+      "created_at": "2026-07-31T13:35:50.908106Z"
+    },
+    {
+      "id": "bb982185-6e7a-4bf4-82a5-cb6997f9199e",
+      "author": "ryan.porter",
+      "text": "Review follow-up started: making frozen run_spec.execution_mode the sole authority for Report, workbook, presentation, and dashboard-facing mode copy. Any contradictory downstream decision evidence will be rejected fail-closed; adding mismatch specifications before implementation.",
+      "created_at": "2026-07-31T13:37:56.651196Z"
+    },
+    {
+      "id": "afe2d63e-24b2-4b3f-a244-e8e8c923349a",
+      "author": "ryan.porter",
+      "text": "Review blocker resolved. `state.run_spec.execution_mode` is now frozen at run start (missing legacy direct calls conservatively freeze `approval_required`) and is passed into stakeholder projection. Top-level evidence mode and nested execution-decision mode are independently checked against it; mismatches in either direction raise an integrity failure before any workbook, presentation artifact, or dashboard-facing projection is written. The Report cover no longer falls back to projected overview mode. Validation: run_report plus portfolio suites 210 passed; dashboard status suite 22 passed; dashboard typecheck passed; py_compile and diff check passed. No commit/stage created.",
+      "created_at": "2026-07-31T13:42:46.855292Z"
+    }
+  ],
+  "created_at": "2026-07-31T13:32:59.611635Z",
+  "updated_at": "2026-07-31T13:42:46.855292Z",
+  "closed_at": null,
+  "custom": {}
+}

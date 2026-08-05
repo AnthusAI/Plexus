@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ae89fa69-727d-4778-a973-3aee5832de70",
+  "issue_id": "plx-420460e7-b352-4c7c-acae-516a1bf4ff96",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T21:36:36.914Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Recover living Report finalization after credential expiry",
+    "description": "",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

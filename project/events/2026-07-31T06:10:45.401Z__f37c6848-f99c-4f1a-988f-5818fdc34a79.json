@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f37c6848-f99c-4f1a-988f-5818fdc34a79",
+  "issue_id": "plx-f678b657-0982-4ccd-ab45-353638525127",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T06:10:45.401Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Avoid repeated configuration loading during portfolio assessment",
+    "description": "Account-wide portfolio dogfooding showed severe repeated configuration and scorecard lookup work during per-score assessment. The run makes progress, but hundreds of candidates create a long operator wait and noisy logs because shared account/scorecard/configuration context appears to be reloaded repeatedly. Keep this performance work separate from automatic-execution semantics.\n\nFeature: Efficient exhaustive portfolio assessment\n\nScenario: Reuse frozen portfolio context\n  Given exhaustive ranking has frozen the account inventory and evidence window\n  When every ranked score is assessed\n  Then shared account, scorecard, and configuration context is reused safely\n  And the run does not reload identical configuration once per score\n  And every score remains assessed with complete coverage\n\nScenario: Report measurable progress\n  Given a large exhaustive portfolio assessment is running\n  When assessment advances\n  Then aggregate progress and timing are visible to operators\n  And logs avoid repeated opaque-identifier and configuration-load noise\n\nObserved sanitized evidence: the first durable ranking milestone required many minutes; a subsequent exhaustive assessment contained hundreds of candidates and repeatedly emitted configuration-load and scorecard-lookup messages. No client identity or score data is recorded here.\n\nOut of scope for the current automatic-mode change: changing ranking metrics, sampling the portfolio, or weakening exhaustive coverage.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+    "labels": []
+  }
+}

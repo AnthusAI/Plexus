@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import ast
+import hashlib
 from pathlib import Path
 from typing import Protocol, Sequence
 
@@ -34,14 +35,22 @@ class TactusRubricEvidenceSynthesizer:
         self,
         *,
         provider: str = "openai",
-        model: str = "gpt-5-mini",
+        model: str = "gpt-5-mini-2025-08-07",
         procedure_id: str = "rubric_evidence_pack_synthesis",
         max_tokens: int = 16000,
+        max_input_tokens: int = 48000,
+        model_attempt_max_attempts: int = 3,
+        model_attempt_authority=None,
     ):
         self.provider = provider
         self.model = model
         self.procedure_id = procedure_id
         self.max_tokens = max_tokens
+        self.max_input_tokens = max_input_tokens
+        self.model_attempt_max_attempts = model_attempt_max_attempts
+        self.model_attempt_authority = model_attempt_authority
+        if provider != "openai" or model != "gpt-5-mini-2025-08-07":
+            raise ValueError("rubric evidence synthesis requires the exact authorized model revision")
 
     async def synthesize(
         self,
@@ -102,10 +111,17 @@ class TactusRubricEvidenceSynthesizer:
             },
         }
         synthesis_prompt = self._build_synthesis_prompt(payload)
+        if self.model_attempt_authority is None:
+            raise RuntimeError("rubric evidence synthesis requires semantic model-attempt authority")
         runtime = TactusRuntime(
             procedure_id=self.procedure_id,
             storage_backend=MemoryStorage(),
             openai_api_key=os.environ.get("OPENAI_API_KEY"),
+            run_id=(
+                f"{self.procedure_id}:{request.score_version_id}:"
+                f"{hashlib.sha256(synthesis_prompt.encode('utf-8')).hexdigest()}"
+            ),
+            model_attempt_authority=self.model_attempt_authority,
         )
         result = await runtime.execute(
             tac_source,
@@ -129,6 +145,8 @@ class TactusRubricEvidenceSynthesizer:
             tac_template.replace("{{PROVIDER}}", self.provider)
             .replace("{{MODEL}}", self.model)
             .replace("{{MAX_TOKENS}}", str(self.max_tokens))
+            .replace("{{MAX_INPUT_TOKENS}}", str(self.max_input_tokens))
+            .replace("{{MODEL_ATTEMPT_MAX_ATTEMPTS}}", str(self.model_attempt_max_attempts))
         )
 
     def _build_synthesis_prompt(self, payload: dict) -> str:

@@ -1,0 +1,55 @@
+{
+  "id": "plx-bd9dcac9-dc5a-49ee-a610-353fbe2c09ed",
+  "title": "Integrate durable child waiting into portfolio execution",
+  "description": "Implement story plx-e91e03 using the supported Tactus external-child wait contract and existing Plexus Procedure and Task records. Checkpoint child references, suspend without holding compute, resume through the procedure recovery path, review only terminal indexed evidence, and never impose a fixed evaluation timeout or premature cancellation.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-78b7597b-9390-408b-9a5c-6799b70c2ab2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a2fafe28-56ae-4615-aa43-1d142b47d2d6",
+      "author": "ryan.porter",
+      "text": "Beginning parent child-wait lifecycle implementation. Scope: procedure child-await loop, WAITING_FOR_CHILDREN propagation, recovery eligibility, and resume_once Task dispatch policy. No polling thread, timeout, cancellation, ChatMessage, schema/resource, or production changes.",
+      "created_at": "2026-07-31T00:15:03.150893Z"
+    },
+    {
+      "id": "9cc9c6d7-0048-4aff-9a55-ebfa62331c72",
+      "author": "ryan.porter",
+      "text": "Beginning runtime dependency and external-child resolver slice. I will use exact GraphQL Procedure/Task reads only, validate immutable launch identity and artifacts fail-closed, and wire the supported Tactus child_wait_resolver constructor gate. No schema/resources or production operations.",
+      "created_at": "2026-07-31T00:15:54.343047Z"
+    },
+    {
+      "id": "073ef626-7709-4fa2-a263-396f69026fee",
+      "author": "ryan.porter",
+      "text": "Runtime child-resolution slice implemented and validated. Added exact-read-only resolver for persisted optimizer Procedure/Task pairs; verifies account, target/link, score IDs, immutable launch identity, source attachment pointer, and indexed optimizer artifacts. Completed children require both records terminal plus indexed evidence; failed/cancelled children are terminal but never successful; malformed/mismatched records fail closed. Default portfolio runtime lazily binds GraphQLOptimizerDispatchBackend and OptimizerTaskDispatchService to the checked-in optimizer YAML plus SHA-256. Procedure executor injects the supported Tactus child_wait_resolver only for await_children and errors explicitly if unavailable. Evidence: 261 MCP runtime tests passed; 124 procedure/resolver/dispatch tests passed; invoke lint passed; diff check passed. Tooling note: local Poetry environment is Python 3.12.13, Tactus 0.51.4 reporting child_wait_resolver; pyproject requests 0.51.5.",
+      "created_at": "2026-07-31T00:20:25.963710Z"
+    },
+    {
+      "id": "3346b69f-8be3-4ae0-8b02-38db791668b5",
+      "author": "ryan.porter",
+      "text": "Review correction applied: optimizer_artifacts is now read only from Procedure.metadata, matching the existing optimizer indexer. Resolver verifies pointer.task_id equals the exact Task, schema/index timestamp, canonical three artifact keys, and per-artifact S3 key, positive size, SHA-256 shape, and content type. Added outside-in completed-child production-shape and mismatched-pointer-task tests. Red: Procedure-owned pointer initially did not terminalize. Green: resolver 8 passed; MCP runtime 261 passed; procedure/resolver/dispatch set 125 passed; invoke lint and diff check passed.",
+      "created_at": "2026-07-31T00:28:08.994875Z"
+    },
+    {
+      "id": "f24e72d5-d992-4db9-a080-8c7dc883a7cb",
+      "author": "ryan.porter",
+      "text": "Release inversion found that optimization-specific held_once and resume_once branches in the existing Amplify task-dispatcher function duplicate the generic transition-to-PENDING plus conditional-claim behavior. Keeping them would expand the deployed function surface and violate the living-workflow zero-Amplify-function-diff gate without being required for durable child waiting. Corrective scope: restore the dispatcher function/tests to develop, retain host-neutral Task transitions in Plexus, and prove portfolio lifecycle plus the existing generic dispatcher claim regressions remain green. No schema, resource, IAM, storage, or production change.",
+      "created_at": "2026-07-31T18:39:10.664187Z"
+    },
+    {
+      "id": "bc1bd39d-e4f9-42f4-a6a1-ddbcdfb50850",
+      "author": "ryan.porter",
+      "text": "Correction implemented and independently reviewed: restored dashboard/amplify/functions/taskDispatcher/index.py and test_index.py byte-for-byte to develop. The generic transition-to-PENDING and conditional claim remain the only dispatcher authority. Validation: both dispatcher suites plus optimizer backend, portfolio lifecycle, child lifecycle, and command-dispatch tests passed 185 tests; diff check passed. After commit, the branch has no dashboard/amplify diff. Task remains in progress until the durable Tactus dependency and end-to-end release gate land.",
+      "created_at": "2026-07-31T18:41:21.552728Z"
+    }
+  ],
+  "created_at": "2026-07-30T22:44:49.627349Z",
+  "updated_at": "2026-07-31T18:41:21.552728Z",
+  "closed_at": null,
+  "custom": {}
+}

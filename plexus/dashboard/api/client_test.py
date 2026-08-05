@@ -3,6 +3,7 @@ import sys
 from types import SimpleNamespace
 import time
 from unittest.mock import Mock, patch
+from requests import Request
 from gql.transport.exceptions import TransportQueryError
 from .client import (
     GraphQLRetryPolicy,
@@ -86,16 +87,32 @@ def test_client_configures_transport_correctly(mock_env, mock_transport):
     assert transport_kwargs['timeout'] == 15
 
 
-def test_client_sends_explicit_cognito_bearer_token(mock_transport, monkeypatch):
+def test_client_uses_fresh_cognito_bearer_tokens_per_prepared_request_and_fails_closed(mock_transport, monkeypatch):
     monkeypatch.setenv('PLEXUS_API_URL', 'https://test.api')
+    monkeypatch.setenv('PLEXUS_API_KEY', 'legacy-key')
     monkeypatch.setenv('PLEXUS_GRAPHQL_AUTH_MODE', 'cognito')
-    token_provider = Mock(get_access_token=Mock(return_value='access-token'))
+    token_provider = Mock(get_access_token=Mock(side_effect=[
+        'access-token-a',
+        'access-token-b',
+        RuntimeError('Run `plexus login` to authenticate.'),
+    ]))
 
     PlexusDashboardClient(token_provider=token_provider)
 
     transport_kwargs = mock_transport.call_args[1]
-    assert transport_kwargs['headers']['Authorization'] == 'Bearer access-token'
+    assert 'Authorization' not in transport_kwargs['headers']
     assert 'x-api-key' not in transport_kwargs['headers']
+    assert token_provider.get_access_token.call_count == 0
+
+    auth = transport_kwargs['auth']
+    first = auth(Request('POST', 'https://test.api').prepare())
+    second = auth(Request('POST', 'https://test.api').prepare())
+
+    assert first.headers['Authorization'] == 'Bearer access-token-a'
+    assert second.headers['Authorization'] == 'Bearer access-token-b'
+    with pytest.raises(ValueError, match='plexus login'):
+        auth(Request('POST', 'https://test.api').prepare())
+    assert token_provider.get_access_token.call_count == 3
 
 
 def test_client_accepts_explicit_cognito_auth_mode_without_global_environment(mock_transport, monkeypatch):
@@ -105,7 +122,8 @@ def test_client_accepts_explicit_cognito_auth_mode_without_global_environment(mo
 
     PlexusDashboardClient(auth_mode='cognito', token_provider=token_provider)
 
-    assert mock_transport.call_args.kwargs['headers']['Authorization'] == 'Bearer access-token'
+    assert 'Authorization' not in mock_transport.call_args.kwargs['headers']
+    assert mock_transport.call_args.kwargs['auth'] is not None
 
 
 def test_client_does_not_fall_back_to_api_key_when_cognito_session_is_unavailable(monkeypatch):
@@ -114,9 +132,10 @@ def test_client_does_not_fall_back_to_api_key_when_cognito_session_is_unavailabl
     monkeypatch.setenv('PLEXUS_GRAPHQL_AUTH_MODE', 'cognito')
     token_provider = Mock(get_access_token=Mock(side_effect=RuntimeError('Run `plexus login` to authenticate.')))
 
-    with pytest.raises(ValueError, match='plexus login'):
-        PlexusDashboardClient(token_provider=token_provider)
+    client = PlexusDashboardClient(token_provider=token_provider)
 
+    with pytest.raises(ValueError, match='plexus login'):
+        client.client.transport.auth(Request('POST', 'https://test.api').prepare())
     token_provider.get_access_token.assert_called_once()
 
 

@@ -21,10 +21,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+from base64 import b64encode
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 import boto3
 import pytest
+import requests
 
 from plexus.storage.graphql_artifact_store import (
     ArtifactUpload,
@@ -49,7 +52,7 @@ class FakeResponse:
 
 
 class FakeHTTPSession:
-    def __init__(self, responses: list[FakeResponse]):
+    def __init__(self, responses: list[FakeResponse | Exception]):
         self.responses = list(responses)
         self.calls: list[dict] = []
 
@@ -63,7 +66,10 @@ class FakeHTTPSession:
                 "timeout": timeout,
             }
         )
-        return self.responses.pop(0)
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
 class FakeCAHTTPSession(FakeHTTPSession):
@@ -198,6 +204,68 @@ def test_upload_transfers_verified_bytes_before_returning_metadata_without_s3(mo
     }
 
 
+def test_upload_omits_only_a_redundant_unsigned_checksum_header_already_bound_in_the_url():
+    checksum = b64encode(bytes.fromhex(PAYLOAD_SHA256)).decode("ascii")
+    query = urlencode({
+        "X-Amz-Checksum-Sha256": checksum,
+        "X-Amz-SignedHeaders": "content-length;host",
+    })
+    legacy_ticket = ticket(url=f"https://storage.example/upload?{query}")
+    legacy_ticket["requiredHeaders"] = {
+        "content-length": str(len(PAYLOAD)),
+        "content-type": "application/json",
+        "x-amz-checksum-sha256": checksum,
+    }
+    http = FakeHTTPSession([FakeResponse(200)])
+    store = GraphQLArtifactStore(FakeExecutor([[legacy_ticket]]), http_session=http)
+
+    store.upload_bytes(write_request(), PAYLOAD)
+
+    assert http.calls[0]["headers"] == {
+        "content-length": str(len(PAYLOAD)),
+        "content-type": "application/json",
+    }
+
+
+@pytest.mark.parametrize(
+    ("url_query", "header_value"),
+    [
+        ({"X-Amz-SignedHeaders": "content-length;host"}, "declared-checksum"),
+        (
+            {
+                "X-Amz-Checksum-Sha256": "query-checksum",
+                "X-Amz-SignedHeaders": "content-length;host",
+            },
+            "different-checksum",
+        ),
+        (
+            {
+                "X-Amz-Checksum-Sha256": "declared-checksum",
+                "X-Amz-SignedHeaders": "content-length;host;x-amz-checksum-sha256",
+            },
+            "declared-checksum",
+        ),
+    ],
+)
+def test_upload_preserves_checksum_header_when_query_binding_is_absent_inconsistent_or_signed(
+    url_query, header_value
+):
+    legacy_ticket = ticket(
+        url=f"https://storage.example/upload?{urlencode(url_query)}"
+    )
+    legacy_ticket["requiredHeaders"] = {
+        "content-length": str(len(PAYLOAD)),
+        "x-amz-checksum-sha256": header_value,
+    }
+    http = FakeHTTPSession([FakeResponse(403, text="<Code>AccessDenied</Code>")])
+    store = GraphQLArtifactStore(FakeExecutor([[legacy_ticket]]), http_session=http)
+
+    with pytest.raises(ArtifactAuthorizationError):
+        store.upload_bytes(write_request(), PAYLOAD)
+
+    assert http.calls[0]["headers"]["x-amz-checksum-sha256"] == header_value
+
+
 def test_upload_batch_requests_all_tickets_once_before_uploading_each_verified_artifact():
     second_payload = b"second application-authorized artifact"
     second_request = ArtifactTransferRequest(
@@ -327,14 +395,76 @@ def test_upload_rejects_mismatched_declared_bytes_before_requesting_ticket():
     assert executor.calls == []
 
 
-def test_http_failure_fails_closed_without_inline_or_s3_fallback():
+@pytest.mark.parametrize("status_code", [408, 429, 503])
+def test_retryable_upload_status_gets_one_fresh_ticket_for_identical_bytes(status_code):
+    executor = FakeExecutor([
+        [ticket()],
+        [ticket(url="https://storage.example/replacement")],
+    ])
+    http = FakeHTTPSession([FakeResponse(status_code, text="retry later"), FakeResponse(200)])
+    store = GraphQLArtifactStore(executor, http_session=http)
+
+    metadata = store.upload_bytes(write_request(), PAYLOAD)
+
+    assert metadata["_s3_key"] == "artifacts/report-1/output.json"
+    assert len(executor.calls) == 2
+    assert [call["url"] for call in http.calls] == [
+        "https://storage.example/upload",
+        "https://storage.example/replacement",
+    ]
+    assert [call["data"] for call in http.calls] == [PAYLOAD, PAYLOAD]
+
+
+def test_retryable_upload_request_exception_gets_one_fresh_ticket_for_identical_bytes():
+    executor = FakeExecutor([
+        [ticket()],
+        [ticket(url="https://storage.example/replacement")],
+    ])
+    http = FakeHTTPSession([requests.ConnectionError("connection reset"), FakeResponse(200)])
+    store = GraphQLArtifactStore(executor, http_session=http)
+
+    store.upload_bytes(write_request(), PAYLOAD)
+
+    assert len(executor.calls) == 2
+    assert [call["data"] for call in http.calls] == [PAYLOAD, PAYLOAD]
+
+
+def test_retryable_download_failure_does_not_request_a_fresh_ticket():
+    executor = FakeExecutor([[ticket(method="GET")]])
+    http = FakeHTTPSession([FakeResponse(503, text="retry later")])
+    store = GraphQLArtifactStore(executor, http_session=http)
+
+    with pytest.raises(ArtifactTransferError):
+        store.download_bytes(read_request())
+
+    assert len(executor.calls) == 1
+    assert len(http.calls) == 1
+
+
+@pytest.mark.parametrize("status_code", [400, 404])
+def test_non_retryable_upload_client_status_fails_closed_without_fresh_ticket(status_code):
     executor = FakeExecutor([[ticket()]])
-    store = GraphQLArtifactStore(executor, http_session=FakeHTTPSession([FakeResponse(500, text="error")]))
+    store = GraphQLArtifactStore(executor, http_session=FakeHTTPSession([FakeResponse(status_code, text="client error")]))
 
     with pytest.raises(ArtifactTransferError):
         store.upload_bytes(write_request(), PAYLOAD)
 
     assert len(executor.calls) == 1
+
+
+def test_second_retryable_upload_failure_fails_closed_without_a_third_ticket():
+    executor = FakeExecutor([
+        [ticket()],
+        [ticket(url="https://storage.example/replacement")],
+    ])
+    http = FakeHTTPSession([FakeResponse(503, text="retry later"), FakeResponse(503, text="still unavailable")])
+    store = GraphQLArtifactStore(executor, http_session=http)
+
+    with pytest.raises(ArtifactTransferError):
+        store.upload_bytes(write_request(), PAYLOAD)
+
+    assert len(executor.calls) == 2
+    assert len(http.calls) == 2
 
 
 def test_configured_local_ca_bundle_is_used_for_https_verification(tmp_path, monkeypatch):

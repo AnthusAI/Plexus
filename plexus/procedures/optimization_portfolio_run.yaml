@@ -1,0 +1,221 @@
+name: Optimization Portfolio Run
+version: 1.0.0
+class: Tactus
+procedure_type: Portfolio Optimization
+description: "Creates one living report, analyzes a frozen score portfolio, and applies the configured automatic or human-approved optimizer launch policy."
+
+params:
+  account_id:
+    type: string
+    required: true
+    description: "Opaque account identifier for the portfolio run."
+  run_key:
+    type: string
+    required: true
+    description: "Stable key for this frozen periodic run and its one Report."
+  max_cost_usd:
+    type: number
+    required: true
+    description: "Explicit maximum optimizer cost per approved batch."
+  max_semantic_diagnoses:
+    type: number
+    required: true
+    description: "Explicit maximum number of model-backed semantic score diagnoses for this portfolio run."
+  max_semantic_cost_usd:
+    type: string
+    required: true
+    description: "Exact decimal-string run-wide cap for semantic diagnosis, separate from optimizer cost."
+  max_execution_targets:
+    type: number
+    required: false
+    default: 5
+    description: "Frozen top-K cap on optimizer targets selected for this run, from one through five."
+  max_samples:
+    type: number
+    required: true
+    description: "Explicit maximum samples per approved optimizer target."
+  max_iterations:
+    type: number
+    required: true
+    description: "Explicit maximum optimizer iterations per approved target."
+  max_concurrency:
+    type: number
+    required: true
+    description: "Explicit optimizer concurrency, from one through five."
+  execution_mode:
+    type: string
+    required: false
+    default: automatic
+    description: "Launch policy: automatic for deterministic safe targets, or approval_required for Human.review."
+  execution_candidate_policy:
+    type: string
+    required: false
+    default: promotion_ready
+    description: "Frozen candidate policy: promotion_ready executes only promotion-ready scores; promotion_ready_plus_bounded_diagnostic additionally permits up to three structurally safe, evidence-bounded diagnostic experiments."
+  toolchain_version:
+    type: string
+    required: false
+    description: "Optional immutable build identity added to the recorded Plexus and Tactus package versions."
+  scorecard_ids:
+    type: array
+    required: false
+    description: "Optional exact opaque scorecard IDs."
+  scorecard_name_prefixes:
+    type: array
+    required: false
+    description: "Optional literal case-insensitive scorecard-name prefixes."
+
+outputs:
+  status:
+    type: string
+    required: true
+  run_key:
+    type: string
+    required: true
+  result:
+    type: object
+    required: true
+
+stages:
+  - preflight
+  - analysis
+  - approval
+  - optimization
+  - review
+  - finalization
+
+code: |
+  Stage.set("preflight")
+  local pending = State.get("optimization_portfolio_pending_action")
+  local approval_responses = State.get("optimization_portfolio_approval_responses")
+  local optimizer_child_snapshots = State.get("optimization_portfolio_child_snapshots")
+  local scheduled_retries = State.get("optimization_portfolio_scheduled_retries")
+  if approval_responses == nil then
+    approval_responses = {}
+  end
+  if scheduled_retries == nil then
+    scheduled_retries = {}
+  end
+  local terminal_statuses = {
+    COMPLETED = true,
+    COMPLETED_WITH_UNRESOLVED_ACTIONS = true,
+    INCOMPLETE = true,
+    BLOCKED = true
+  }
+
+  local function defer_retry(retry)
+    if retry == nil or retry.key == nil or retry.resume_at == nil or retry.reason == nil then
+      error("Retryable publication result has no valid scheduled retry directive.")
+    end
+    Procedure.defer({
+      key = retry.key,
+      resume_at = retry.resume_at,
+      reason = retry.reason
+    })
+  end
+
+  -- A defer checkpoint is replay-sensitive. Re-enter every saved defer in its
+  -- original order before calling the portfolio tool again; the current one
+  -- remains suspended until due, while due predecessors replay harmlessly.
+  for _, retry in ipairs(scheduled_retries) do
+    Stage.set("finalization")
+    defer_retry(retry)
+  end
+
+  while true do
+    if pending ~= nil then
+      Stage.set("approval")
+      local response = Human.review({
+        message = pending.message,
+        action_key = pending.action_key,
+        resource_refs = pending.resource_refs,
+        preconditions = pending.preconditions,
+        expires_at = pending.expires_at,
+        response_schema = pending.response_schema,
+        ui_schema = pending.ui_schema
+      })
+      approval_responses[pending.action_key] = {
+        request = pending,
+        response = response
+      }
+      State.set("optimization_portfolio_approval_responses", approval_responses)
+      State.set("optimization_portfolio_pending_action", nil)
+      pending = nil
+    end
+
+    Stage.set("analysis")
+    local result = plexus.optimization.portfolio_run({
+      account_id = params.account_id,
+      run_key = params.run_key,
+      scorecard_ids = params.scorecard_ids,
+      scorecard_name_prefixes = params.scorecard_name_prefixes,
+      max_cost_usd = params.max_cost_usd,
+      max_semantic_diagnoses = params.max_semantic_diagnoses,
+      max_semantic_cost_usd = params.max_semantic_cost_usd,
+      max_execution_targets = params.max_execution_targets,
+      max_samples = params.max_samples,
+      max_iterations = params.max_iterations,
+      max_concurrency = params.max_concurrency,
+      execution_mode = params.execution_mode,
+      execution_candidate_policy = params.execution_candidate_policy,
+      toolchain_version = params.toolchain_version,
+      approval_responses = approval_responses,
+      optimizer_child_snapshots = optimizer_child_snapshots
+    })
+
+    if result.status == "WAITING_FOR_CHILDREN" then
+      Stage.set("optimization")
+      local remaining = {}
+      local children = result.dispatch and result.dispatch.children or {}
+      for _, child in ipairs(children) do
+        local launch_state = child.launch_state or {}
+        if launch_state.phase == "waiting" or launch_state.phase == "running" then
+          table.insert(remaining, {
+            id = launch_state.launch_spec.identity,
+            task_id = child.task_id,
+            procedure_id = child.procedure_id,
+            scorecard_id = child.target.scorecard_id,
+            score_id = child.target.score_id
+          })
+        end
+      end
+      if #remaining == 0 then
+        Stage.set("finalization")
+        return {status = "INCOMPLETE", run_key = params.run_key, result = result}
+      end
+      local child_wait = Procedure.await_children({
+        children = remaining,
+        mode = "any"
+      })
+      optimizer_child_snapshots = child_wait.children
+      State.set("optimization_portfolio_child_snapshots", optimizer_child_snapshots)
+    elseif result.status == "RETRYABLE_PUBLICATION" then
+      Stage.set("finalization")
+      local retry = result.retry
+      table.insert(scheduled_retries, retry)
+      State.set("optimization_portfolio_scheduled_retries", scheduled_retries)
+      defer_retry(retry)
+    elseif result.status == "FAILED" or result.status == "RUNNING" then
+      -- A portfolio runner failure must escape the Lua procedure so the host
+      -- cannot translate a normal return into a completed Procedure/Task. A
+      -- legacy RUNNING result is also nonterminal and therefore unsafe to
+      -- represent as successful completion.
+      error(result.error or "Optimization portfolio run did not publish a terminal report.")
+    elseif terminal_statuses[result.status] then
+      State.set("optimization_portfolio_pending_action", nil)
+      State.set("optimization_portfolio_approval_responses", nil)
+      State.set("optimization_portfolio_child_snapshots", nil)
+      Stage.set("finalization")
+      return {status = result.status, run_key = params.run_key, result = result}
+    elseif result.status == "WAITING_FOR_APPROVAL" then
+      pending = result.approval_requests[1]
+      if pending == nil then
+        State.set("optimization_portfolio_approval_responses", nil)
+        Stage.set("finalization")
+        return {status = "INCOMPLETE", run_key = params.run_key, result = result}
+      end
+      State.set("optimization_portfolio_pending_action", pending)
+    else
+      error("Optimization portfolio run returned an unsupported nonterminal status: " .. tostring(result.status))
+    end
+  end

@@ -158,3 +158,28 @@ class TestProcedureTaskCreation:
         assert parts[0] == "procedure", f"First part should be 'procedure', got '{parts[0]}'"
         assert parts[1] == "run", f"Second part should be 'run', got '{parts[1]}'"
         assert parts[2] == procedure_id, f"Third part should be procedure ID, got '{parts[2]}'"
+
+    def test_operator_identity_is_carried_into_the_generic_procedure_task(self, service, mock_client):
+        service._get_or_create_task_with_stages_for_procedure(
+            procedure_id="proc-portfolio",
+            account_id="test-account",
+            dispatch_mode="local",
+            procedure_name="Optimization Portfolio Run",
+            procedure_type="Portfolio Optimization",
+            display_title="Account-wide optimization portfolio",
+            display_scope="All scorecards",
+        )
+
+        create_call = next(
+            call_args for call_args in mock_client.execute.call_args_list
+            if "createTask" in str(call_args)
+        )
+        task_input = create_call[0][1]["input"]
+        metadata = json.loads(task_input["metadata"])
+
+        assert task_input["type"] == "Procedure"
+        assert task_input["description"] == "Account-wide optimization portfolio — All scorecards"
+        assert metadata["procedure_name"] == "Optimization Portfolio Run"
+        assert metadata["procedure_type"] == "Portfolio Optimization"
+        assert metadata["display_title"] == "Account-wide optimization portfolio"
+        assert metadata["display_scope"] == "All scorecards"

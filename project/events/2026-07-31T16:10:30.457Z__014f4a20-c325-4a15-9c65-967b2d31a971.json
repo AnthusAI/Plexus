@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "014f4a20-c325-4a15-9c65-967b2d31a971",
+  "issue_id": "plx-9100a82e-8573-4ea8-b3c0-b4fcf42eeda9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T16:10:30.457Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Resume a living report by exact Task identity",
+    "description": "As an operator, I want a retried optimization attempt to resume the one Report already linked to its Task, so that the Report URL and revision history remain stable regardless of account report volume.\n\nObserved behavior: resume searched only the 500 most recent account Reports. When the existing Task-linked Report fell outside that bounded scan, the service created a second Report for the same Task and restarted revision numbering.\n\nFeature: Task-authoritative living Report resume\n\nScenario: Existing Report is outside an account scan window\nGiven a Task already has one linked living Report\nAnd more than 500 newer Reports exist in the account\nWhen the same active optimization attempt resumes\nThen the service resolves the Report directly through the Task relationship\nAnd reuses its fixed ReportBlocks and latest revision\nAnd creates no Report or ReportBlock\n\nScenario: Task has no linked Report\nGiven a new run Task has no linked Report\nWhen the living report starts\nThen exactly one Report and its fixed ReportBlocks are created\n\nScenario: Conflicting Report identity is observed\nGiven more than one Report claims the same Task identity\nWhen resume validates the relationship\nThen the service fails closed with explicit integrity evidence\nAnd does not silently choose or create another Report\n\nOut of scope: GraphQL schema or resource changes; deleting or rewriting historical Reports.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 0,
+    "assignee": "ryan.porter",
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

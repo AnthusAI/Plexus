@@ -1,0 +1,25 @@
+{
+  "id": "plx-71252c0f-2e1f-4d5a-ad6c-175083ed069b",
+  "title": "Publish exhaustive portfolio ranking into living report",
+  "description": "A production-shaped read-only portfolio run completed exhaustive ranking but failed while publishing the ranking milestone into its living Report. Preserve the fatal-publication rule while making the full ranked packet publishable.\n\nFeature: Durable ranking milestone\n\nScenario: Publish a large exhaustive rank packet\nGiven an account-wide rank packet contains hundreds of score rows and complete coverage\nWhen the portfolio runner publishes the ranking milestone\nThen the living Report receives a reconciled evidence revision and workbook\nAnd the run continues into deterministic assessment\n\nScenario: Expose the underlying publication cause\nGiven ranking publication fails\nWhen the portfolio runner records the failure\nThen the durable failure evidence includes the underlying cause\nAnd the workflow remains failed closed",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4977dae3-67ca-43bc-a81d-8d38059277c9",
+      "author": "ryan.porter",
+      "text": "Root cause reproduced with a failing outside-in test: the stakeholder projection added Rank to all score rows, but the workbook allowlist permitted Rank only on two sheets, so deterministic validation rejected the first feedback-investment row. Rank is now an explicit column on every score-level sheet and optimization outcomes retain their one-based rank. Evidence: 53 focused portfolio/report tests pass.",
+      "created_at": "2026-07-30T18:16:48.575016Z"
+    }
+  ],
+  "created_at": "2026-07-30T18:08:29.386227Z",
+  "updated_at": "2026-07-30T18:16:48.575016Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,61 @@
+{
+  "id": "plx-cb9db380-4d06-4374-90ef-216110d5a559",
+  "title": "Present a paginated action inbox",
+  "description": "As an account user, I want pending decisions and key run updates in the dashboard sidebar, so that important work remains visible and actionable without introducing another persistence system.\n\nFeature: Dashboard action inbox over existing procedure messages\n\nScenario: Review and resolve actions\n  Given an account has more history than one message page\n  When a user opens the action inbox\n  Then existing PENDING_* ChatMessages are listed newest first with cursor pagination\n  And key updates are deduplicated\n  And resource links resolve through dashboard routing\n  And submitting a response creates one existing child RESPONSE ChatMessage\n  And the browser does not mutate the parent or dispatch a model\n\nScenario: Present authoritative state\n  Given one or more child responses exist\n  When the inbox renders the parent action\n  Then only the parent responseStatus and responseOwner identify the accepted response\n  And losing or invalid candidates remain visible but cannot replace it\n\nScenario: Preserve legacy conversations and infrastructure\n  Given an existing procedure uses ChatMessage HITL\n  When the action inbox is introduced\n  Then the existing interaction remains readable\n  And no model, table, index, association, function, queue, custom GraphQL operation, or AWS resource is added.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "94937681-c6af-4fd9-835d-1ab292ef8499",
+      "author": "ryan.porter",
+      "text": "UI implementation started in the integration worktree. Scope is limited to an injectable Action Inbox presentation in the account sidebar: paginated actions, deduplicated milestone updates, typed resource deep links, and structured response states. Legacy ChatMessage HITL remains unchanged; no schema, resolver, or report-backend changes. Writing dashboard behavior tests first.",
+      "created_at": "2026-07-29T16:50:43.206536Z"
+    },
+    {
+      "id": "becce6cc-dcfe-40db-9bd4-0d9ecc66528f",
+      "author": "ryan.porter",
+      "text": "Implemented the UI slice with an injectable typed ActionRequest datasource and provider. The right sidebar now presents an Action Inbox rather than the duplicate chat container. Covered newest-first action ordering, cursor pagination/deduplication, key milestone update dedupe, typed resource routing, structured responses with precondition fingerprints, and terminal/submission-error states. Legacy ChatMessage HITL stays on its existing components. Focused Jest tests, web typecheck, and Storybook build pass. Remaining integration dependency: wire the authoritative datasource adapter into the provider; the default UI reports that the source is not connected rather than reading ChatMessage.",
+      "created_at": "2026-07-29T16:58:42.925789Z"
+    },
+    {
+      "id": "2f6fc889-93c1-45b9-98f0-bb447c62bf31",
+      "author": "ryan.porter",
+      "text": "Starting the authoritative data-wiring increment: add an Amplify-backed Action Inbox adapter for paginated newest-first actions, deduplicated milestone updates, and fingerprinted ActionRequest responses. Behavior tests will be written before production wiring. Legacy ChatMessage HITL remains separate; no schema, resolver, report-backend, or project-directory edits.",
+      "created_at": "2026-07-29T17:01:57.061357Z"
+    },
+    {
+      "id": "3ad23e9a-fac0-4f1f-8e22-7b2ce05cd0e1",
+      "author": "ryan.porter",
+      "text": "Zero-resource redesign implemented in the integration worktree. The inbox now pages the existing account/createdAt ChatMessage index, derives actions from structured control metadata, submits only child RESPONSE messages, and treats parent responseStatus/responseOwner as authoritative. Focused dashboard tests, web/backend typechecks, and Storybook build pass. No client information is recorded here.",
+      "created_at": "2026-07-29T17:41:30.288862Z"
+    },
+    {
+      "id": "4a6a2fd3-3e56-4d1d-a9c9-ee0f2ac38f5d",
+      "author": "ryan.porter",
+      "text": "Validation pass started for the existing ChatMessage Action Inbox. Scope: verify that human-readable target labels remain presentation-only while exact opaque target identifiers flow unchanged into structured responses; add only necessary outside-in coverage; rerun focused dashboard tests, typechecks, Storybook build, and the zero-resource audit. No new model, operation, function, table, or infrastructure path is in scope.",
+      "created_at": "2026-07-29T18:05:57.611818Z"
+    },
+    {
+      "id": "379f1ac5-0403-4d70-b2da-c7206caabd2a",
+      "author": "ryan.porter",
+      "text": "Validation complete for human-readable target presentation with opaque response identity. The dashboard renders target names from canonical precondition metadata, does not expose raw target identifiers as labels, and submits the original identifiers unchanged in the structured decision rows. Upstream coordinator coverage confirms those exact approved identifiers drive dispatch. Evidence: focused dashboard tests passed (12), the focused coordinator behavior passed, web and backend typechecks passed, Storybook built successfully, package and whitespace diffs are clean, and the source/Amplify audits found no action-specific model, operation, function, table, or resource additions. Existing unrelated artifact-transfer and console infrastructure remains unchanged by this pass.",
+      "created_at": "2026-07-29T18:08:35.525240Z"
+    },
+    {
+      "id": "510d11db-0dd0-49e9-8552-872d88745ad2",
+      "author": "ryan.porter",
+      "text": "Complete Node 20 dashboard validation: typecheck passed in 11.90 seconds; Jest coverage passed 92 suites/682 tests with 1 suite/11 tests skipped in 28.97 seconds; aggregate coverage was 46.32% lines, 45.24% statements, 39.12% functions, and 36.91% branches; Storybook built in 31.35 seconds; the required Chromium binary was already installed. The default parallel browser run reported 7 failures and 696 passes because every smoke test in one legacy gauge story hit the same test-runner initialization error. A complete cold-cache serial rerun passed all 90 suites/703 tests in 162.23 seconds without source changes, including that entire story and the Action Inbox story. No tracked files were changed by validation.",
+      "created_at": "2026-07-29T19:29:17.023415Z"
+    }
+  ],
+  "created_at": "2026-07-29T16:47:56.745073Z",
+  "updated_at": "2026-07-29T19:29:17.023415Z",
+  "closed_at": null,
+  "custom": {}
+}

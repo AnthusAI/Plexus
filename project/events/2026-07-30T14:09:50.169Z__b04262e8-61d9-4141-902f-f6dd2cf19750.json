@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b04262e8-61d9-4141-902f-f6dd2cf19750",
+  "issue_id": "plx-5e4567af-a4b1-4cbc-b976-d4468b61b72e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T14:09:50.169Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Make optimization runs self-identifying in operator views",
+    "description": "As an optimization operator, I want every optimization run to identify its kind, human-readable scope, and current lifecycle state from the Procedure dashboard through the living Report, so that I can distinguish concurrent work without opening raw evidence.\n\nIncluded:\n- Distinguish account-wide portfolio, scorecard-scoped portfolio, and single-score optimization identities.\n- Use human-readable scorecard and score names in operator presentation.\n- Apply one consistent identity to Procedure, Task, Report title/subtitle, and Report cover.\n- Show the current lifecycle phase and status separately from the durable run identity.\n- Preserve opaque IDs only in machine evidence and validated responses.\n\nExcluded:\n- New GraphQL models, indexes, associations, storage, or infrastructure.\n- Automatic score mutation, evaluation, promotion, or feedback-setting changes.\n- Client-specific naming rules.\n\nFeature: Self-identifying optimization runs\n\nScenario: Account-wide portfolio run is recognizable\n  Given an optimization run covers every eligible scorecard\n  When an operator views the Procedures dashboard or its living Report\n  Then the run is labeled as an account-wide portfolio optimization\n  And its current lifecycle phase and status are visible\n\nScenario: Scorecard-scoped portfolio run is recognizable\n  Given an optimization run is limited to one or more scorecards\n  When an operator views the Procedures dashboard or its living Report\n  Then the run is labeled as a scorecard-scoped portfolio optimization\n  And the human-readable scope is shown without opaque identifiers\n\nScenario: Single-score run is recognizable\n  Given an optimization run targets exactly one score\n  When an operator views the Procedures dashboard or its living Report\n  Then the run is labeled as a single-score optimization\n  And the human-readable scorecard and score names are shown\n\nScenario: Identity remains stable while progress changes\n  Given a living optimization run advances through analysis, approval, execution, and review\n  When each durable milestone is published\n  Then the run identity and URL remain stable\n  And only the lifecycle phase, status, progress, and next checkpoint change\n\nScenario: Presentation remains safe\n  Given the run evidence contains opaque identifiers and restricted details\n  When operator-facing identity is rendered\n  Then raw identifiers and restricted evidence are not exposed\n  And no new backend resource is required",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

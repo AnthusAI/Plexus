@@ -1,0 +1,43 @@
+{
+  "id": "plx-dc3eb599-10b8-4ba6-a448-93f7da76eb8e",
+  "title": "Publish actionable score briefs in living optimization reports",
+  "description": "As an optimization stakeholder, I want each score drill-down to show its actual questions and provide a revision-pinned shareable brief, so that I can act without opening raw evidence.\n\nOut of scope:\n- New GraphQL models, schema changes, or infrastructure resources.\n- Raw feedback, transcripts, prompts, or opaque IDs in stakeholder artifacts.\n- Automatic score, guideline, feedback-setting, or champion mutations.\n\nFeature: Actionable score-level reporting\n\nScenario: Publish one stakeholder-safe brief per score\nGiven a living optimization Report publishes a milestone with score findings\nWhen score-level artifacts are generated\nThen each score receives one revision-pinned Markdown brief\nAnd the brief explains its state, evidence counts, rationale, next action, and related questions or issues\nAnd the artifact remains discoverable through the revision manifest without being attached directly to the Task\n\nScenario: Show actual questions in the score drill-down\nGiven a score has stakeholder questions or structural issues\nWhen an operator expands that score in the Report\nThen the actual stakeholder-safe finding and next action are visible\nAnd the score brief can be opened from the same expanded section\n\nScenario: Preserve stakeholder safety\nGiven score findings contain spreadsheet-like text or internal references\nWhen a score brief and presentation are published\nThen only allowlisted stakeholder fields appear\nAnd no raw evidence or opaque identifier is exposed.",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "abf2bf91-36c3-413b-952e-2b649d208677",
+      "author": "ryan.porter",
+      "text": "Started outside-in implementation. The first specification will require one manifest-indexed Markdown brief per score and require the scorecard presentation to carry the exact revision-pinned brief descriptor plus the actual stakeholder-safe question text for that score. Child artifacts remain off the Task attachment list.",
+      "created_at": "2026-07-30T16:51:12.654150Z"
+    },
+    {
+      "id": "0bf9865a-6dba-49f0-a36f-e44f3b0c4cbf",
+      "author": "ryan.porter",
+      "text": "Focused implementation is green: 47 Python report/portfolio tests, 4 dashboard report tests, and dashboard frontend/backend typechecks pass. A synthetic production-backed visual run then created its Task but did not reach initial Report publication before the local process ended; the Task was explicitly failed instead of leaving a phantom running item. That startup defect is tracked separately. Score-brief code itself remains proven by the focused suites.",
+      "created_at": "2026-07-30T16:55:28.053405Z"
+    },
+    {
+      "id": "66e49df1-b41b-4886-8c79-d68df8801315",
+      "author": "ryan.porter",
+      "text": "Final focused checkpoint passes: 47 Python report/portfolio tests, the score drill-down dashboard interaction test, and dashboard frontend typechecking. Each score now has a manifest-indexed revision-pinned Markdown brief; expanded score details show the actual matched question or issue, its next action, and a direct brief link. No schema/resource change and no operational mutation were introduced. Ready for commit; keep open until landing.",
+      "created_at": "2026-07-30T16:56:15.806765Z"
+    },
+    {
+      "id": "f380ce31-3a5f-4387-aa0d-593060106302",
+      "author": "ryan.porter",
+      "text": "Production dogfooding exposed a scale cost in the current score-brief contract: the first account-wide ranking milestone serially uploads 1,105 score briefs before the durable revision advances. Subsequent milestones may regenerate the same portfolio again. Preserve stakeholder drill-down and revision-pinned briefs, but add a production-scale specification for prompt milestone visibility and reuse or lazy materialization of unchanged/non-actionable child artifacts.",
+      "created_at": "2026-07-31T15:27:44.839051Z"
+    }
+  ],
+  "created_at": "2026-07-30T16:50:38.252184Z",
+  "updated_at": "2026-07-31T15:27:44.839051Z",
+  "closed_at": null,
+  "custom": {}
+}

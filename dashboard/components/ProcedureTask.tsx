@@ -120,6 +120,8 @@ export interface ProcedureTaskData extends BaseTaskData {
     name: string
   } | null
   procedureType?: string
+  displayTitle?: string
+  displayScope?: string
   status?: string
   taskId?: string
   task?: {
@@ -157,6 +159,107 @@ export interface ProcedureTaskData extends BaseTaskData {
   } | null
   feedbackEvaluationSummary?: ProcedureFeedbackEvaluationSummary | null
   createdByUserId?: string | null
+}
+
+type ProcedureOperatorIdentity = {
+  type: string
+  displayTitle: string
+  displayScope?: string
+}
+
+const asStringList = (value: unknown): string[] => (
+  Array.isArray(value)
+    ? value
+        .filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+        .map((item) => item.trim())
+    : []
+)
+
+const selectedScorecardScope = (runParameters: Record<string, any>): string | undefined => {
+  const ids = Array.isArray(runParameters.scorecard_ids) ? runParameters.scorecard_ids : []
+  const prefixes = asStringList(runParameters.scorecard_name_prefixes)
+  if (ids.length === 0 && prefixes.length === 0) return undefined
+
+  const parts: string[] = []
+  if (ids.length > 0) {
+    parts.push(`${ids.length} selected scorecard${ids.length === 1 ? '' : 's'}`)
+  }
+  if (prefixes.length > 0) {
+    const quoted = prefixes.map((prefix) => `"${prefix.replaceAll('"', "'")}"`)
+    const prefixList = quoted.length === 1
+      ? quoted[0]
+      : quoted.length === 2
+        ? `${quoted[0]} or ${quoted[1]}`
+        : `${quoted.slice(0, -1).join(', ')}, or ${quoted.at(-1)}`
+    parts.push(`scorecard names beginning with ${prefixList}`)
+  }
+  return parts.join(' plus ')
+}
+
+const feedbackSurveyTitle = (
+  runParameters: Record<string, any>,
+  storedTitle: string,
+  storedKind: unknown,
+): string => {
+  const prefixes = asStringList(runParameters.scorecard_name_prefixes)
+  if (prefixes.length === 1) return `Feedback survey: ${prefixes[0]}`
+  if (/^Feedback survey:/i.test(storedTitle)) return storedTitle
+  if (storedKind === 'account_wide_portfolio' || /account-wide/i.test(storedTitle)) {
+    return 'Feedback survey: All'
+  }
+  const ids = Array.isArray(runParameters.scorecard_ids) ? runParameters.scorecard_ids : []
+  if (ids.length === 0 && prefixes.length === 0 && !storedTitle) return 'Feedback survey: All'
+  return 'Feedback survey: Selected scorecards'
+}
+
+const procedureOperatorIdentity = (
+  procedure: ProcedureTaskData,
+  taskMetadata: Record<string, any>,
+): ProcedureOperatorIdentity => {
+  const rawType = procedure.procedureType || procedure.task?.type || 'Procedure'
+  const semanticText = `${rawType} ${procedure.title || ''}`
+  const isOptimization = /optimiz/i.test(semanticText)
+  const scorecardName = procedure.scorecard?.name?.trim()
+  const scoreName = procedure.score?.name?.trim()
+  const runParameters = taskMetadata.run_parameters && typeof taskMetadata.run_parameters === 'object'
+    ? taskMetadata.run_parameters
+    : {}
+  const selectedScope = selectedScorecardScope(runParameters)
+  const storedIdentity = taskMetadata.operator_identity && typeof taskMetadata.operator_identity === 'object'
+    ? taskMetadata.operator_identity as Record<string, any>
+    : {}
+  const storedTitle = typeof storedIdentity.display_title === 'string'
+    ? storedIdentity.display_title.trim()
+    : ''
+  const storedScope = typeof storedIdentity.display_scope === 'string'
+    ? storedIdentity.display_scope.trim()
+    : ''
+
+  if (isOptimization && scoreName) {
+    return {
+      type: 'Single-score optimization',
+      displayTitle: procedure.displayTitle || 'Single-score optimization',
+      displayScope: procedure.displayScope || [scorecardName, scoreName].filter(Boolean).join(' / '),
+    }
+  }
+
+  if (/portfolio/i.test(rawType) || /portfolio/i.test(procedure.title || '')) {
+    return {
+      type: 'Feedback survey',
+      displayTitle: feedbackSurveyTitle(
+        runParameters,
+        procedure.displayTitle || storedTitle,
+        storedIdentity.kind,
+      ),
+      displayScope: procedure.displayScope || storedScope || selectedScope || 'All scorecards',
+    }
+  }
+
+  return {
+    type: rawType === 'Procedure Run' && isOptimization ? 'Optimization Procedure' : rawType,
+    displayTitle: procedure.displayTitle || procedure.title || rawType,
+    displayScope: procedure.displayScope,
+  }
 }
 
 export interface ProcedureTaskProps {
@@ -933,7 +1036,7 @@ export default function ProcedureTask({
     ? 'FAILED'
     : hasStalledStatus
       ? 'STALLED'
-    : taskStatus === 'RUNNING'
+    : taskStatus === 'RUNNING' || taskStatus === 'WAITING_FOR_CHILDREN'
       ? 'RUNNING'
       : taskStatus === 'COMPLETED'
         ? 'COMPLETED'
@@ -977,6 +1080,9 @@ export default function ProcedureTask({
 
   const taskStatusMessage = (() => {
     if (hasArchivedStatus) return 'Archived'
+    if (taskStatus === 'WAITING_FOR_CHILDREN') {
+      return 'Waiting for optimizer child procedures to finish.'
+    }
     const stageItems = procedure.task?.stages?.items ?? []
     if (!stageItems.length) return undefined
     if (effectiveTaskStatus === 'FAILED') {
@@ -1006,6 +1112,78 @@ export default function ProcedureTask({
     }
     return rawMetadata && typeof rawMetadata === 'object' && !Array.isArray(rawMetadata) ? rawMetadata : {}
   }, [procedure.task?.metadata])
+  const optimizationTerminalOutcome = useMemo(() => {
+    const raw = String(
+      (taskMetadata as Record<string, any>).optimization_run_final_status
+      || procedure.status
+      || '',
+    ).trim().toUpperCase()
+    if (raw === 'INCOMPLETE' || raw === 'BLOCKED') return raw
+    if (raw === 'COMPLETE_WITH_UNRESOLVED_ACTIONS') return 'COMPLETED_WITH_UNRESOLVED_ACTIONS'
+    if (raw === 'COMPLETED_WITH_UNRESOLVED_ACTIONS') return raw
+    return undefined
+  }, [procedure.status, taskMetadata])
+  const optimizationIncompleteReason = useMemo(() => {
+    const latestRevision = (taskMetadata as Record<string, any>).latest_revision
+    const overview = latestRevision && typeof latestRevision === 'object'
+      ? latestRevision.overview
+      : undefined
+    if (!overview || typeof overview !== 'object') return ''
+    const explicitReason = String(overview.analysis_incomplete_reason || '')
+    if (explicitReason) return explicitReason
+    const nonNegative = (value: unknown): number | null => (
+      typeof value === 'number' && Number.isFinite(value) && value >= 0
+        ? value
+        : null
+    )
+    const scheduled = nonNegative(overview.diagnosis_scheduled_count)
+    const completed = nonNegative(overview.diagnosis_completed_count)
+    const deferred = nonNegative(overview.diagnosis_deferred_count)
+    const incomplete = nonNegative(overview.diagnosis_incomplete_count)
+    const executionFailures = nonNegative(
+      overview.diagnosis_execution_failure_count
+      ?? overview.semantic_budget_failure_count,
+    )
+    const prerequisiteFailures = nonNegative(
+      overview.diagnosis_prerequisite_failure_count,
+    )
+    const budgetExhausted = nonNegative(overview.semantic_budget_exhausted_count)
+    const budgetDeferred = nonNegative(overview.semantic_budget_deferred_count)
+    if (
+      overview.inventory_coverage_status === 'complete'
+      && overview.analysis_coverage_status === 'incomplete'
+      && scheduled !== null
+      && completed !== null
+      && deferred !== null
+      && incomplete === 0
+      && executionFailures === 0
+      && prerequisiteFailures === 0
+      && budgetExhausted === 0
+      && budgetDeferred === 0
+      && deferred > 0
+      && completed >= scheduled
+    ) {
+      return 'configured_count_limit'
+    }
+    return ''
+  }, [taskMetadata])
+  const optimizationStatusMessage = optimizationTerminalOutcome === 'INCOMPLETE'
+    ? optimizationIncompleteReason === 'configured_count_limit'
+      ? 'Analysis incomplete: configured run limit reached'
+      : optimizationIncompleteReason === 'budget_exhausted'
+        ? 'Analysis incomplete: semantic-analysis budget exhausted'
+        : optimizationIncompleteReason === 'inventory_incomplete'
+          ? 'Incomplete portfolio inventory'
+          : optimizationIncompleteReason === 'diagnosis_execution_failure'
+            || optimizationIncompleteReason === 'diagnosis_prerequisite_failure'
+            || optimizationIncompleteReason === 'incomplete_diagnosis_evidence'
+            ? 'Analysis incomplete: scheduled diagnoses need repair'
+            : 'Incomplete evidence'
+    : optimizationTerminalOutcome === 'BLOCKED'
+      ? 'Blocked pending resolution'
+      : optimizationTerminalOutcome === 'COMPLETED_WITH_UNRESOLVED_ACTIONS'
+        ? 'Analysis complete with unresolved actions'
+        : undefined
   const hasLocalProcedureRuntime = useMemo(() => {
     const runtime = (taskMetadata as Record<string, any>).runtime
     const hasRuntimeIdentity = runtime && typeof runtime === 'object' && (
@@ -1023,6 +1201,26 @@ export default function ProcedureTask({
     )
   }, [procedure.id, procedure.task?.command, procedure.task?.target, procedure.task?.type, taskMetadata])
   const dispatchMode = typeof taskMetadata.dispatch_mode === 'string' ? taskMetadata.dispatch_mode : undefined
+  const operatorIdentity = useMemo(
+    () => procedureOperatorIdentity(procedure, taskMetadata as Record<string, any>),
+    [procedure, taskMetadata],
+  )
+  const operatorDescription = useMemo(() => {
+    const description = procedure.description || procedure.task?.description
+    if (!description) return undefined
+    const normalized = description.trim()
+    if (
+      normalized === `Procedure workflow for ${procedure.id}` ||
+      /^Procedure workflow for [0-9a-f]{8}-[0-9a-f-]{27}$/i.test(normalized) ||
+      (
+        operatorIdentity.type === 'Feedback survey' &&
+        /^(Account-wide|Scorecard-scoped) optimization portfolio\b/i.test(normalized)
+      )
+    ) {
+      return undefined
+    }
+    return description
+  }, [operatorIdentity.type, procedure.description, procedure.id, procedure.task?.description])
   const dispatchDisplayMode = procedure.task ? (dispatchMode || (hasLocalProcedureRuntime ? 'local' : undefined)) : 'pending'
   const dispatchIndicator = useMemo(() => {
     if (dispatchDisplayMode === 'pending') {
@@ -1056,9 +1254,9 @@ export default function ProcedureTask({
 
   const taskObject = {
     id: procedure.id,
-    type: 'Optimization Procedure',
-    name: procedure.title,
-    description: procedure.description,
+    type: operatorIdentity.type === 'Feedback survey' ? '' : operatorIdentity.type,
+    name: operatorIdentity.displayTitle,
+    description: operatorDescription,
     scorecard: procedure.scorecard?.name || stateScorecardName || '',
     score: procedure.score?.name || stateScoreName || '',
     time: procedure.createdAt,
@@ -1073,6 +1271,7 @@ export default function ProcedureTask({
     estimatedCompletionAt: procedure.task?.estimatedCompletionAt,
     completedAt: procedure.task?.completedAt,
     status: effectiveTaskStatus,
+    terminalOutcome: optimizationTerminalOutcome,
     errorMessage: procedure.task?.errorMessage || procedure.errorMessage,
     dispatchStatus: procedure.task?.dispatchStatus,
     dispatchMode: dispatchDisplayMode,
@@ -1176,6 +1375,16 @@ export default function ProcedureTask({
                   )}
                 </div>
               )}
+              {!props.task.scorecard && taskObject.name && (
+                <div className="font-semibold text-sm min-w-0">
+                  <span className="truncate">{taskObject.name}</span>
+                </div>
+              )}
+              {!props.task.scorecard && operatorIdentity.displayScope && (
+                <div className="text-sm text-muted-foreground min-w-0">
+                  <span className="truncate">{operatorIdentity.displayScope}</span>
+                </div>
+              )}
               <DispatchIndicator />
               <Timestamp time={props.task.time} variant="relative" />
               <ProgressBarTiming
@@ -1226,7 +1435,9 @@ export default function ProcedureTask({
         <div className="p-0 flex flex-col items-start w-full max-w-full">
           <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
             <div className="flex flex-col leading-none min-w-0 flex-1 overflow-hidden">
-              {hasGridActions && (
+              {operatorIdentity.type !== 'Feedback survey' && (
+                hasGridActions || operatorIdentity.type !== 'Optimization Procedure'
+              ) && (
                 <div className="mb-1 flex items-center gap-1.5 text-sm font-semibold min-w-0">
                   <Waypoints className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   <span className="truncate">{taskObject.type}</span>
@@ -1240,6 +1451,16 @@ export default function ProcedureTask({
               {props.task.score && props.task.score.trim() !== '' && (
                 <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
                   <span className="truncate">{props.task.score}</span>
+                </div>
+              )}
+              {!props.task.scorecard && taskObject.name && (
+                <div className="font-semibold text-sm min-w-0">
+                  <span className="truncate">{taskObject.name}</span>
+                </div>
+              )}
+              {!props.task.scorecard && operatorIdentity.displayScope && (
+                <div className="text-sm text-muted-foreground min-w-0">
+                  <span className="truncate">{operatorIdentity.displayScope}</span>
                 </div>
               )}
               <DispatchIndicator />
@@ -1294,7 +1515,8 @@ export default function ProcedureTask({
       estimatedCompletionAt={taskObject.estimatedCompletionAt}
       status={taskObject.status || 'PENDING'}
       command={taskObject.command}
-      statusMessage={taskStatusMessage}
+      statusMessage={optimizationStatusMessage || taskStatusMessage}
+      terminalOutcome={optimizationTerminalOutcome}
       errorMessage={taskObject.errorMessage}
       dispatchStatus={taskObject.dispatchStatus}
       dispatchMode={taskObject.dispatchMode}

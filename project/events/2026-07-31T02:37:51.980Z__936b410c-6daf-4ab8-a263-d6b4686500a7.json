@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "936b410c-6daf-4ab8-a263-d6b4686500a7",
+  "issue_id": "plx-11c5b24d-0b88-478f-81e1-eeeb0e4842bb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T02:37:51.980Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Publish semantic budget evidence and operator controls",
+    "description": "Update procedure parameters, packets, fingerprints, living Report, workbook, score rationale, CLI/MCP/docs/skill, and production pilot packet with reconciled semantic budget evidence.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

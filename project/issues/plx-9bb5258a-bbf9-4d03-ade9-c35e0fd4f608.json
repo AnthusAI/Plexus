@@ -1,0 +1,18 @@
+{
+  "id": "plx-9bb5258a-bbf9-4d03-ade9-c35e0fd4f608",
+  "title": "Launch approved optimization targets exactly once",
+  "description": "As an account operator, I want each approved optimization target to launch at most once, so that retries cannot duplicate costly or mutating work.\n\nFeature: Idempotent optimizer launch\n\nScenario: Resume after an uncertain launch result\n  Given an exact target batch with current approval and evidence fingerprints\n  And the launch intent has a stable idempotency key\n  When the portfolio worker restarts after the child procedure was created\n  Then it reconnects to the same child procedure\n  And it does not create a second optimizer procedure\n\nScenario: Reject stale work before launch\n  Given approval was granted for frozen target evidence\n  When champion, feedback, cooldown, configuration, or packet evidence changes\n  Then that target is rejected before optimizer dispatch\n  And unaffected approved siblings may continue\n\nScenario: Preserve explicit limits\n  Given an approved target batch\n  When optimizer launch is requested\n  Then cost, sample, iteration, and concurrency limits are all forwarded\n  And an absent required limit fails closed",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-07-30T22:42:41.108274Z",
+  "updated_at": "2026-07-30T22:42:41.108274Z",
+  "closed_at": null,
+  "custom": {}
+}

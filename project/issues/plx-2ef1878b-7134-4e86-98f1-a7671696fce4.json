@@ -1,0 +1,37 @@
+{
+  "id": "plx-2ef1878b-7134-4e86-98f1-a7671696fce4",
+  "title": "Publish progress while materializing portfolio milestone artifacts",
+  "description": "After exhaustive assessment completes, the portfolio worker may spend several minutes generating and uploading the run workbook, evidence packet, and per-scorecard stakeholder artifacts. The living Report remains on the final assessment count with no indication that publication is active.\n\nFeature: Observable portfolio artifact publication\n\nScenario: Assessment milestone artifacts are being materialized\n  Given deterministic assessment is complete\n  When stakeholder artifacts are generated, validated, or uploaded\n  Then the living Report shows a publication phase distinct from assessment and semantic diagnosis\n  And it reports completed versus total artifacts grouped by safe artifact kind\n  And it reports elapsed time and the next durable milestone\n  And it never exposes object keys or opaque resource identifiers\n\nScenario: Artifact publication fails\n  Given one or more required milestone artifacts cannot be validated or published\n  When the publication attempt terminates\n  Then the Report identifies the failed artifact kind and incomplete milestone\n  And it does not imply semantic diagnosis or optimization began.\n\nNo client information is included.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f36c9800-cf01-4775-9d05-c6a35b19e294",
+      "author": "ryan.porter",
+      "text": "Started outside-in implementation. First executable specification will cover a distinct aggregate artifact-publication phase after assessment; it must disclose safe completed/total artifact-kind counts, elapsed time, next durable milestone, and fail closed without implying later analysis.",
+      "created_at": "2026-07-31T13:53:11.186838Z"
+    },
+    {
+      "id": "37bee634-5599-4b15-befc-31c17c3083f5",
+      "author": "ryan.porter",
+      "text": "Implemented with outside-in specs. Assessment publication now emits compact `publication` progress before/after artifact generation and upload, with aggregate completed/total counts only for safe artifact categories, elapsed time, and the next durable milestone. Failed publication records the active safe category and marks the milestone incomplete without claiming diagnosis started. Dashboard whitelists and renders only the safe categories; no schema/resources or workbook revisions per substep. Focused Plexus specs: 2 passed. Focused dashboard spec: passed. Dashboard typecheck: passed. A broader current-suite assertion failure is owned by the concurrent ranking-progress change (new Ranking / Inventory text versus stale assertion), so it was not altered here.",
+      "created_at": "2026-07-31T13:58:17.979871Z"
+    },
+    {
+      "id": "c65ebffb-50c3-4407-94ef-baf04bb0f475",
+      "author": "ryan.porter",
+      "text": "Production dogfooding exposed that the published aggregate counts are not actually incremental. A ranking milestone planned 1,262 artifacts (including 1,105 score briefs), but the callback only changes the active artifact kind; completed counts remain at 2 until every child artifact finishes. The Report therefore cannot show real throughput or ETA during the longest publication phase. This violates the completed-versus-total scenario and needs a red production-scale specification before repair.",
+      "created_at": "2026-07-31T15:27:44.654093Z"
+    }
+  ],
+  "created_at": "2026-07-31T13:52:37.317115Z",
+  "updated_at": "2026-07-31T15:27:44.654093Z",
+  "closed_at": null,
+  "custom": {}
+}

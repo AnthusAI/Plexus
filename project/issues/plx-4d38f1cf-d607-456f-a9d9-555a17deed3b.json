@@ -1,0 +1,25 @@
+{
+  "id": "plx-4d38f1cf-d607-456f-a9d9-555a17deed3b",
+  "title": "Surface semantic evidence access failures before diagnosis",
+  "description": "As an optimization operator, I want required semantic-evidence access failures to be identified before model-backed diagnosis and explained plainly, so that a credential problem is never reported as an unexplained incomplete score diagnosis.\n\nFeature: Semantic evidence prerequisite failures\n\nScenario: Required rubric evidence cannot be read\n  Given a portfolio run can read production records through the application API\n  But its worker cannot read a required rubric-evidence source\n  When semantic diagnosis preflight runs\n  Then the run records a typed required-evidence failure\n  And it does not spend semantic-model budget for that target\n  And it does not launch an optimizer for that target\n  And the living Report names the unavailable evidence category and a safe operator next action\n\nScenario: Failure details are safe\n  Given a required evidence read fails with provider-specific details\n  When the failure is published to stakeholder and operator views\n  Then the stakeholder view uses a concise sanitized explanation\n  And restricted evidence preserves the failure class without exposing credentials, object keys, raw content, or secrets\n\nScenario: Evidence access is healthy\n  Given all required evidence sources pass preflight\n  When semantic diagnosis begins\n  Then the existing diagnosis, budget, and automatic-execution policies continue unchanged\n\nOut of scope: new GraphQL resources, schema changes, automatic promotion, guideline edits, feedback-setting changes, and client-specific data.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ec34b9ca-eec8-4e7a-be58-6d3f10412fde",
+      "author": "ryan.porter",
+      "text": "Production-backed dogfood evidence showed required rubric-memory reads failing after a model-backed contradiction check had already run, while the stakeholder result collapsed the cause to an unexplained incomplete diagnosis. Current source now includes a fail-closed storage-authority preflight and typed stakeholder projection; focused validation passed as part of the 294-test portfolio/runtime suite. Live acceptance remains pending refreshed worker authorization and a new run loaded from current source.",
+      "created_at": "2026-07-31T17:54:29.942861Z"
+    }
+  ],
+  "created_at": "2026-07-31T17:50:45.580830Z",
+  "updated_at": "2026-07-31T17:54:29.942861Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-c3cbce3c-ad22-46c3-9cb9-5088222b8fa1",
+  "title": "Preserve array values across the Lua host boundary",
+  "description": "As a procedure author, I want structured array parameters to remain arrays when passed into Python host modules, so exact scoped operations receive their documented contract.\n\nOut of scope: relaxing selector validation or adding another execution path.\n\nFeature: Lua host array conversion\n\n  Scenario: Pass an array through a host module call\n    Given a JSON array was decoded into a sequential Lua table\n    When a procedure calls a Python host module with that value\n    Then the Python handler receives a list in the same order\n    And nested mappings remain mappings\n\n  Scenario: Preserve non-sequential Lua mappings\n    Given a Lua table has non-sequential or named keys\n    When it crosses the host boundary\n    Then the Python handler receives a mapping without discarded entries",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "65c5e00f-4f57-4c37-83de-138c8558b04d",
+      "author": "ryan.porter",
+      "text": "The registered host boundary already preserves sequential Lua tables. The reproduced value was a string because the procedure CLI did not parse JSON arrays in --set. The caller-side fix and regressions are tracked by plx-497e08; no host-boundary change is needed.",
+      "created_at": "2026-07-29T19:14:35.802821Z"
+    }
+  ],
+  "created_at": "2026-07-29T19:08:13.370090Z",
+  "updated_at": "2026-07-29T19:14:35.983072Z",
+  "closed_at": "2026-07-29T19:14:35.983072Z",
+  "custom": {}
+}

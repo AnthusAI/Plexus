@@ -150,10 +150,15 @@ plexus.optimization.rank({
 The ranker also enforces the fixed seven-day score-activity cooldown. It freezes
 one UTC `as_of` timestamp and uses the later of the score record's `updatedAt`
 and the newest version's `createdAt`. Activity exactly at the 168-hour cutoff
-is still inside the cooldown. Recently edited scores remain visible under
-`unranked` with reason `recent_score_activity`, their opaque newest-version ID,
-activity source and timestamp, cutoff, and eligibility timestamp. Do not bypass
-this fixed policy or reinterpret a recently modified score as a candidate.
+is still inside the cooldown. Policy gating must never erase or renumber the
+underlying evidence priority. Every analyzed score retains `evidence_rank` from
+the complete pre-policy order. Eligible rows additionally receive
+`candidate_rank`; deferred rows remain visible under `unranked` with
+`policy_disposition`, `policy_reason`, and `eligible_for_optimization=false`.
+Recently edited scores use reason `recent_score_activity` and retain their
+opaque newest-version ID, activity source and timestamp, cutoff, and eligibility
+timestamp. Do not bypass this fixed policy or reinterpret a recently modified
+score as a candidate.
 Missing or malformed activity evidence fails closed and makes the portfolio
 incomplete. A direct assessment reports `cooldown_active` with
 `wait_for_cooldown`; an approved run rechecks live activity immediately before
@@ -161,6 +166,13 @@ dispatch and rejects any newly modified target without starting its optimizer.
 If a scalar champion ID does not resolve through the champion relationship,
 the score is structurally ineligible and remains visible as
 `unresolved_champion_reference`; it is not an activity-coverage failure.
+
+In stakeholder output, show the original evidence-ranked distribution before
+policy gates, then overlay the action disposition: selected for deeper review,
+eligible below the current selection budget, cooldown, structurally blocked, or
+incomplete. Always show the reason and availability time when applicable. Keep
+semantic-review selection separate from optimizer-launch approval; “selected
+for review” does not mean that an optimizer has been authorized.
 
 ## Three-Phase Rubric-Memory SOP
 
@@ -218,6 +230,18 @@ rubric-memory citations for policy claims, hypotheses, version notes, SME
 questions, and "cannot improve" conclusions.
 
 ## Operating Rules
+
+### Semantic-budget release and pilot gate
+
+Follow **Tactus release/main -> Plexus pin/lock -> local/sandbox -> production read-only**.
+The semantic model and pricing policy are frozen by Plexus and
+must not be caller-overridden. Before any dogfood or provider run, explicitly
+verify identity and budget: authenticated operator/account scope, optimizer
+`max_cost_usd`, decimal-string `max_semantic_cost_usd`, maximum diagnoses, and
+the exact model/pricing version. A production pilot is read-only until a
+separate mutation authorization exists. Unknown, exhausted, deferred, or
+otherwise incomplete semantic evidence is a failure/next action, never an
+optimization-ready result.
 
 Read [references/feedback-cohorts.md](references/feedback-cohorts.md) before
 building or accepting optimizer evaluation cohorts.

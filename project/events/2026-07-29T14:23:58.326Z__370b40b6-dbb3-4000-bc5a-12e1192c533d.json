@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "370b40b6-dbb3-4000-bc5a-12e1192c533d",
+  "issue_id": "plx-70eb3fcd-be9a-4584-bbe7-d28a42f19f62",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T14:23:58.326Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Correct optimization persistence terminology",
+    "description": "As an optimization-tool user, I want public guidance to describe the canonical artifact persistence interface, so that I do not depend on a retired storage-specific contract.\n\nFeature: Canonical optimization persistence terminology\n\nScenario: Public optimization guidance describes persistence\nGiven the integrated optimization tools and documentation\nWhen a user reads the runtime contract, CLI help, or optimizer guidance\nThen persistence is described as artifact persistence\nAnd no public contract promises a storage-specific Report/S3 path\n\nExcludes changes to persistence behavior or storage architecture.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

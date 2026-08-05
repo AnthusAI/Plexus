@@ -231,6 +231,22 @@ class Procedure(BaseModel):
         return cls.from_dict(result['createProcedure'], client)
 
     @classmethod
+    def get_by_id(cls, id: str, client: '_BaseAPIClient') -> Optional['Procedure']:
+        """Return an existing Procedure, or ``None`` when the ID is absent."""
+        query = """
+        query GetProcedure($id: ID!) {
+            getProcedure(id: $id) {
+                %s
+            }
+        }
+        """ % cls.fields()
+        result = client.execute(query, {'id': id})
+        if not result or 'getProcedure' not in result:
+            raise RuntimeError(f"Failed to get Procedure {id}")
+        data = result.get('getProcedure')
+        return cls.from_dict(data, client) if data is not None else None
+
+    @classmethod
     def list_by_account(cls, accountId: str, client: '_BaseAPIClient', limit: int = 100) -> List['Procedure']:
         """List procedures for an account, ordered by most recent first.
         

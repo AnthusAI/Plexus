@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "66ae84f5-8fb2-4055-9ddf-e710edcb737d",
+  "issue_id": "plx-9446d76d-11c9-419c-923e-a697144a1c39",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T16:47:53.030Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Accept canonical complete living-report final status",
+    "description": "As an operator, I want a successfully published living optimization Report to reach a consistent terminal state, so that its cover content and dashboard lifecycle never disagree.\n\nFeature: Living optimization Report finalization\n\nScenario: Canonical complete status finalizes a published Report\nGiven a living optimization Report has a durable final revision\nWhen the orchestrator finalizes the run with status complete\nThen the Report and Task are marked terminal without an exception\nAnd the stored final status is canonical and consistent\n\nScenario: Unsupported terminal status remains rejected\nGiven a living optimization Report exists\nWhen finalization receives an unknown status\nThen finalization fails before changing the Report or Task\n\nExcludes changes to score data, infrastructure resources, or Amplify schema.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

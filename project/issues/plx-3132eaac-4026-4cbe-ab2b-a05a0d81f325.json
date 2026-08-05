@@ -1,0 +1,25 @@
+{
+  "id": "plx-3132eaac-4026-4cbe-ab2b-a05a0d81f325",
+  "title": "Split optimization milestone publication from detail enrichment",
+  "description": "Commit the immutable core milestone before detailed artifacts, defer enrichment off the analysis and launch path, and require reconciled final details before completion.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "84d7da2e-68ae-4489-9f5a-60c4ea41a7f4",
+      "author": "ryan.porter",
+      "text": "Implementing the report-service split under the linked bug. The core revision will remain the authority before deferred score and scorecard artifacts are attempted.",
+      "created_at": "2026-08-03T18:13:44.860697Z"
+    }
+  ],
+  "created_at": "2026-08-03T18:12:36.632845Z",
+  "updated_at": "2026-08-03T18:13:44.860697Z",
+  "closed_at": null,
+  "custom": {}
+}

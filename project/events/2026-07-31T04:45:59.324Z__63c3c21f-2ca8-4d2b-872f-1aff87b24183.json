@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "63c3c21f-2ca8-4d2b-872f-1aff87b24183",
+  "issue_id": "plx-42848233-4fb7-4e6c-aedf-7b017ad79c19",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T04:45:59.324Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Execute policy-selected optimization candidates automatically",
+    "description": "As an account operator, I want periodic portfolio optimization to execute policy-selected candidates without waiting for a blocking approval, so that unattended runs can make bounded progress while unsafe or ambiguous targets remain stopped.\n\nFeature: Automatic portfolio optimization execution\n\nScenario: Run eligible candidates automatically\n  Given a portfolio run has automatic execution mode frozen into its run identity\n  And deterministic analysis has produced current, complete, ready, non-stale, non-cooldown candidates\n  When the run reaches optimization execution\n  Then it launches only those policy-selected candidates\n  And every launch remains within the exact cost, sample, iteration, and concurrency limits\n  And it does not create a blocking optimization-approval action\n\nScenario: Preserve optional human approval mode\n  Given a portfolio run has approval-required execution mode frozen into its run identity\n  When ready candidates are selected\n  Then the run publishes an evidence-bound approval action\n  And it launches only independently approved current targets\n\nScenario: Refuse unsafe automatic launches\n  Given a target has stakeholder ambiguity, structural repair needs, incomplete evidence, stale evidence, active cooldown, or another readiness blocker\n  When automatic execution policy is applied\n  Then the target is not launched\n  And the living Report shows its rejection reason and next action\n\nScenario: Report automatic execution clearly\n  Given an automatic portfolio run selects, launches, or rejects targets\n  When the living Report is revised\n  Then the same Report identifies the frozen execution mode\n  And it reconciles selected, launched, and rejected targets with reasons\n  And no champion is promoted automatically\n\nOut of scope:\n- Automatic champion promotion.\n- Automatic guideline or feedback-setting changes.\n- Launching targets with policy ambiguity or incomplete evidence.\n- New GraphQL models, resources, or schema changes.",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+    "labels": []
+  }
+}

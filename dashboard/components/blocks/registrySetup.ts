@@ -27,6 +27,7 @@ import RecentFeedback from './RecentFeedback';
 import ScoreChampionVersionTimeline from './ScoreChampionVersionTimeline';
 import ScorecardHistory from './ScorecardHistory';
 import ScoreResultsReport from './ScoreResultsReport';
+import OptimizationRunStatus from './OptimizationRunStatus';
 
 // Register all block components
 // Register the default block handler first
@@ -53,3 +54,4 @@ registerBlock('RecentFeedback', RecentFeedback as BlockComponent);
 registerBlock('ScoreChampionVersionTimeline', ScoreChampionVersionTimeline as BlockComponent);
 registerBlock('ScorecardHistory', ScorecardHistory as BlockComponent);
 registerBlock('ScoreResultsReport', ScoreResultsReport as BlockComponent);
+registerBlock('OptimizationRunStatus', OptimizationRunStatus as BlockComponent);

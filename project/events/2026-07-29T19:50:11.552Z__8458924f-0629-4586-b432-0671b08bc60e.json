@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8458924f-0629-4586-b432-0671b08bc60e",
+  "issue_id": "plx-b75473cd-5001-468a-86f4-fa98824e8cd6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T19:50:11.552Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Reject optimization approvals when frozen evidence changes",
+    "description": "As a portfolio operator, I want a structured approval to authorize only the exact evidence shown to the reviewer, so that recomputed targets cannot inherit stale approval.\n\nFeature: Frozen optimization approval evidence\n\nScenario: Evidence changes before procedure resume\n  Given a pending optimization approval for an exact target and assessment fingerprint\n  And the portfolio is recomputed with a different fingerprint, champion version, feedback watermark, or target set\n  When the saved human response is reconciled\n  Then the response does not approve the recomputed target\n  And no optimizer is dispatched\n  And a fresh approval remains required\n\nScenario: Evidence remains identical\n  Given a pending optimization approval for an exact frozen target batch\n  When the procedure resumes with a valid response and identical preconditions\n  Then only that exact batch may be accepted.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

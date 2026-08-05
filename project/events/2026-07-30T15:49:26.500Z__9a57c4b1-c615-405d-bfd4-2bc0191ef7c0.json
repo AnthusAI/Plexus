@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9a57c4b1-c615-405d-bfd4-2bc0191ef7c0",
+  "issue_id": "plx-f2b411a9-46d0-4ef2-9537-7272c8edc3e2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T15:49:26.500Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Configure canonical dashboard links for report artifacts",
+    "description": "As an account operator, I want to configure the canonical dashboard base URL in existing account settings, so that generated report and artifact links open the correct deployed dashboard without adding backend resources.\n\nOut of scope:\n- GraphQL schema changes or new infrastructure resources.\n- Artifact authorization or retention-policy changes.\n- Persisting signed object-storage URLs.\n\nFeature: Configure canonical dashboard links\n\nScenario: Save a valid dashboard base URL\nGiven an account has existing settings\nWhen an operator saves an HTTPS dashboard base URL\nThen the URL is stored under the reporting namespace\nAnd all unrelated settings remain unchanged\n\nScenario: Leave the URL unset\nGiven an account has no canonical dashboard URL\nWhen an operator saves the account settings\nThen the reporting URL remains optional\nAnd existing menu settings continue to work\n\nScenario: Reject an unsafe or malformed URL\nGiven an operator enters a non-HTTP web URL or a URL containing credentials\nWhen the settings are validated\nThen the account settings are not saved\nAnd the operator sees an actionable validation message\n\nScenario: Preserve backward compatibility\nGiven an account only has legacy menu settings\nWhen the dashboard reads those settings\nThen the settings remain valid\nAnd report-link configuration is treated as absent",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "currency": "USD",
+  "models": {
+    "openai:gpt-5-mini-2025-08-07": {
+      "cached_input_usd_per_million": "0.025",
+      "input_usd_per_million": "0.250",
+      "output_usd_per_million": "2.000"
+    }
+  },
+  "pricing_version": "openai-2025-08-07-v1",
+  "schema_version": "semantic-pricing-v1",
+  "unit_tokens": 1000000
+}

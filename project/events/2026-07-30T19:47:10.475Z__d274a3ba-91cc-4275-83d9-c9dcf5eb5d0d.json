@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d274a3ba-91cc-4275-83d9-c9dcf5eb5d0d",
+  "issue_id": "plx-3888aafa-9c01-49db-b4aa-30bf0981de7a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T19:47:10.475Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Present incomplete optimization runs consistently",
+    "description": "Keep the Report record, embedded procedure summary, and living report lifecycle aligned when evidence is incomplete.\n\nFeature: Consistent optimization terminal status\n  Scenario: A portfolio run finishes with incomplete evidence\n    Given an optimization portfolio run cannot complete its required evidence\n    When the procedure and living Report reach a terminal state\n    Then the Report record is presented as incomplete rather than completed\n    And the embedded procedure summary presents the same incomplete outcome\n    And neither surface implies the analysis completed successfully\n\n  Scenario: A portfolio run completes all required evidence\n    Given an optimization portfolio run completes all required evidence\n    When the procedure and living Report reach a terminal state\n    Then both surfaces present the run as completed",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": "ryan.porter",
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

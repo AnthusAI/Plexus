@@ -196,6 +196,26 @@ describe('ProcedureTask optimizer auth flow', () => {
     expect(screen.queryByText('Local')).not.toBeInTheDocument()
   })
 
+  it('renders a child-waiting parent as active instead of pending or complete', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          task: {
+            ...baseProcedure.task,
+            status: 'WAITING_FOR_CHILDREN',
+            dispatchStatus: 'WAITING_FOR_CHILDREN',
+            metadata: JSON.stringify({ dispatch_policy: 'resume_once' }),
+          },
+        }}
+      />
+    )
+
+    expect(screen.getByText('Waiting for optimizer child procedures to finish.')).toBeInTheDocument()
+    expect(screen.queryByText('Pending...')).not.toBeInTheDocument()
+  })
+
   it('loads metadata without apiKey auth mode and does not call the proxy route', async () => {
     const metadataState = {
       state: {
@@ -357,6 +377,176 @@ describe('ProcedureTask optimizer auth flow', () => {
 
     expect(screen.getByLabelText('Procedure actions')).toBeInTheDocument()
     expect(screen.getByText(/^Optimization Procedure$/)).toBeInTheDocument()
+  })
+
+  it('identifies an account-wide portfolio run by kind, title, and scope', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          title: 'Optimization Portfolio Run',
+          procedureType: 'Portfolio Optimization',
+          scorecardId: undefined,
+          scoreId: undefined,
+          scorecard: null,
+          score: null,
+          task: {
+            ...baseProcedure.task,
+            description: 'Procedure workflow for 4e2ca776-9b77-407e-b9ef-5a081d6d5bd3',
+            metadata: JSON.stringify({
+              procedure_type: 'Portfolio Optimization',
+              run_parameters: {},
+            }),
+          },
+        }}
+        controlButtons={<button type="button">actions</button>}
+      />
+    )
+
+    expect(screen.getByText('Feedback survey: All')).toBeInTheDocument()
+    expect(screen.queryByText(/^Feedback survey$/)).not.toBeInTheDocument()
+    expect(screen.getByText('All scorecards')).toBeInTheDocument()
+    expect(screen.queryByText(/^Optimization Procedure$/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Portfolio Optimization$/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/4e2ca776/)).not.toBeInTheDocument()
+  })
+
+  it('identifies scorecard-scoped and single-score optimization work without showing opaque ids', () => {
+    const { rerender } = render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          title: 'Optimization Portfolio Run',
+          procedureType: 'Portfolio Optimization',
+          scorecardId: undefined,
+          scoreId: undefined,
+          scorecard: null,
+          score: null,
+          task: {
+            ...baseProcedure.task,
+            metadata: JSON.stringify({
+              procedure_type: 'Portfolio Optimization',
+              run_parameters: {
+                scorecard_ids: ['3f9b66cb-a2b6-40e1-a435-69d04f476633'],
+                scorecard_name_prefixes: ['Example'],
+              },
+            }),
+          },
+        }}
+      />
+    )
+
+    expect(screen.getByText('Feedback survey: Example')).toBeInTheDocument()
+    expect(screen.getByText('1 selected scorecard plus scorecard names beginning with "Example"')).toBeInTheDocument()
+    expect(screen.queryByText(/3f9b66cb/)).not.toBeInTheDocument()
+
+    rerender(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          title: 'Feedback Alignment Optimizer',
+          procedureType: 'Optimizer Procedure',
+          scorecard: { name: 'Example Support' },
+          score: { name: 'Clear greeting' },
+        }}
+      />
+    )
+
+    expect(screen.getByText('Single-score optimization')).toBeInTheDocument()
+    expect(screen.getByText('Example Support')).toBeInTheDocument()
+    expect(screen.getByText('Clear greeting')).toBeInTheDocument()
+  })
+
+  it('prefers the frozen search phrase over stale account-wide display metadata', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          title: 'Optimization Portfolio Run',
+          procedureType: 'Portfolio Optimization',
+          displayTitle: 'Feedback survey: All',
+          displayScope: 'All scorecards',
+          scorecard: null,
+          score: null,
+          task: {
+            ...baseProcedure.task,
+            metadata: JSON.stringify({
+              procedure_type: 'Portfolio Optimization',
+              display_title: 'Feedback survey: All',
+              display_scope: 'All scorecards',
+              run_parameters: {
+                scorecard_name_prefixes: ['Example Search'],
+              },
+              operator_identity: {
+                kind: 'scorecard_scoped_portfolio',
+                display_title: 'Feedback survey: Example Search',
+                display_scope: 'scorecard names beginning with "Example Search"',
+              },
+            }),
+          },
+        } as any}
+      />,
+    )
+
+    expect(screen.getByText('Feedback survey: Example Search')).toBeInTheDocument()
+    expect(screen.queryByText('Feedback survey: All')).not.toBeInTheDocument()
+  })
+
+  it('shows an incomplete portfolio outcome instead of a completed success', () => {
+    render(
+      <ProcedureTask
+        variant="detail"
+        procedure={{
+          ...baseProcedure,
+          title: 'Optimization Portfolio Run',
+          status: 'INCOMPLETE',
+          procedureType: 'Portfolio Optimization',
+          scorecard: null,
+          score: null,
+          task: {
+            ...baseProcedure.task,
+            status: 'COMPLETED',
+            metadata: JSON.stringify({
+              procedure_type: 'Portfolio Optimization',
+              optimization_run_final_status: 'incomplete',
+              latest_revision: {
+                overview: {
+                  inventory_coverage_status: 'complete',
+                  analysis_coverage_status: 'incomplete',
+                  diagnosis_scheduled_count: 4,
+                  diagnosis_completed_count: 4,
+                  diagnosis_deferred_count: 18,
+                  diagnosis_incomplete_count: 0,
+                  diagnosis_prerequisite_failure_count: 0,
+                  semantic_budget_failure_count: 0,
+                  semantic_budget_exhausted_count: 0,
+                  semantic_budget_deferred_count: 0,
+                },
+              },
+              operator_identity: {
+                kind: 'scorecard_scoped_portfolio',
+                display_title: 'Scorecard-scoped optimization portfolio',
+                display_scope: 'Selected scorecards',
+              },
+            }),
+            stages: {
+              items: [
+                { id: 'analysis', name: 'Analysis', order: 1, status: 'COMPLETED' },
+                { id: 'finalization', name: 'Finalization', order: 2, status: 'COMPLETED' },
+              ],
+            },
+          },
+        } as any}
+      />
+    )
+
+    expect(screen.getByText('Analysis incomplete: configured run limit reached')).toBeInTheDocument()
+    expect(screen.getByText('Incomplete')).toBeInTheDocument()
+    expect(screen.queryByText(/^Complete$/)).not.toBeInTheDocument()
   })
 
   it('reserves a blank accuracy bar slot in grid mode before feedback summary is loaded', () => {

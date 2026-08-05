@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c729ecd9-ade8-4845-b5ce-9dd9794a8fe2",
+  "issue_id": "plx-a85f73d0-a107-4e1d-8f19-1d35600046f6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T14:44:40.954Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Correct Console score-workflow status summaries",
+    "description": "As a Console user, I want score-workflow summaries to reflect the terminal evaluation state and the complete chat history, so that I do not receive contradictory or stale validation guidance.\n\nFeature: Accurate score-workflow summaries\n\nScenario: Failed evaluation summary\n  Given a chat contains evaluation evidence with a failed terminal status\n  When the workflow summary is displayed\n  Then the heading identifies the evaluation as failed\n  And the guidance does not describe it as queued\n\nScenario: Validation exists in another chat message\n  Given a score change is recorded in one chat message\n  And completed or queued validation evidence exists in another message in the same chat\n  When the workflow summary is displayed\n  Then the chat does not claim that no validation run was found\n  And the validation evidence is summarized once\n\nOut of scope: changing score data, dispatching evaluations, or altering task state.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-656ef752-3367-4abf-9132-a8031757dcc3",
+    "labels": []
+  }
+}

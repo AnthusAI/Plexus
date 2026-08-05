@@ -1,0 +1,18 @@
+{
+  "id": "plx-a5d694aa-900b-4fd4-bcf1-ca3fcd2b046b",
+  "title": "Report incomplete semantic diagnoses honestly",
+  "description": "Distinguish a diagnosis call returning incomplete evidence from a completed semantic diagnosis, and keep its remediation guidance visible.\n\nFeature: Semantic diagnosis completion\n  Scenario: A selected diagnosis returns complete evidence\n    Given semantic diagnosis completes with full coverage\n    When the living report updates diagnosis coverage\n    Then the completed count increases\n    And the score uses the diagnosed state, rationale, and next action\n\n  Scenario: A selected diagnosis returns incomplete evidence\n    Given semantic diagnosis returns incomplete coverage or an incomplete state\n    When the living report updates diagnosis coverage\n    Then the completed count does not increase\n    And the incomplete count increases\n    And the report does not claim all selected diagnoses completed\n    And the run cannot become optimization-ready",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-07-30T19:05:24.854684Z",
+  "updated_at": "2026-07-30T19:07:13.317574Z",
+  "closed_at": null,
+  "custom": {}
+}

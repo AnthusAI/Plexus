@@ -1,0 +1,49 @@
+{
+  "id": "plx-3d16ab33-6f1b-46ad-990a-fb7bd86fe42f",
+  "title": "Publish meaningful progress during exhaustive portfolio ranking",
+  "description": "Account-wide ranking can spend many minutes between the initial Report revision and the completed ranking milestone. During that interval the living Report remains at zero and operators cannot distinguish active scorecard enumeration, feedback analysis, or a stalled worker.\n\nFeature: Observable exhaustive ranking\n\nScenario: Ranking advances\n  Given an exhaustive portfolio ranking is running\n  When scorecard pages, activity evidence, or feedback batches complete\n  Then the existing living Report publishes throttled aggregate progress\n  And it reports inspected versus discovered scorecards or completed versus total analysis work when totals are known\n  And it reports elapsed time and the next checkpoint\n  And it does not expose opaque identifiers or create a workbook revision per page\n\nScenario: Ranking stalls or fails\n  Given no ranking progress has been recorded within the documented heartbeat interval\n  When an operator views the Report\n  Then the Report distinguishes delayed, retrying, incomplete, and failed states from ordinary active progress.\n\nNo client information is included.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "codex",
+  "creator": null,
+  "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9e389fb7-3483-44db-b6d9-c9fd8b4426a8",
+      "author": "ryan.porter",
+      "text": "Started outside-in implementation. I will add executable observable specifications for throttled aggregate ranking progress (inventory, activity-evidence, feedback phases and delayed/retry/incomplete/failure states) before production changes. Scope is intentionally aggregate-only and reuses the existing Report progress path; no API resources or ranking-policy changes.",
+      "created_at": "2026-07-31T13:34:47.013593Z"
+    },
+    {
+      "id": "65ea470f-b0bc-4289-a62d-6f8122aad35e",
+      "author": "ryan.porter",
+      "text": "Implemented the observable-ranking path with outside-in specs. The live Report now receives throttled aggregate-only inventory, activity-evidence, and feedback-analysis progress through the existing progress publisher; retries and incomplete coverage are explicit, elapsed time and the next checkpoint are included, and no workbook revision is created for a progress update. The dashboard renders ranking counts even when the final total is not yet known and derives a delayed status from the heartbeat. Focused results:  passed;  passed;  passed; dashboard  Jest suite passed (22 tests); dashboard web typecheck passed. Paused before broader-suite remediation because concurrent execution-mode changes currently own five unrelated run-report failures.",
+      "created_at": "2026-07-31T13:40:40.538165Z"
+    },
+    {
+      "id": "6e9bfaf3-dcc0-4504-8ed5-1845c4ea5d50",
+      "author": "ryan.porter",
+      "text": "Correction to prior progress note: implemented the observable-ranking path with outside-in specs. The live Report now receives throttled aggregate-only inventory, activity-evidence, and feedback-analysis progress through the existing progress publisher; retries and incomplete coverage are explicit, elapsed time and the next checkpoint are included, and no workbook revision is created for a progress update. The dashboard renders ranking counts even when the final total is not yet known and derives a delayed status from the heartbeat. Focused results: execute runtime rank progress spec passed; run-report ranking progress spec passed; portfolio-run callback spec passed; dashboard OptimizationRunStatus Jest suite passed (22 tests); dashboard web typecheck passed. Paused before broader-suite remediation because concurrent execution-mode changes own five unrelated run-report failures.",
+      "created_at": "2026-07-31T13:40:55.612122Z"
+    },
+    {
+      "id": "14335660-c02d-4ed6-a045-1840481d2df0",
+      "author": "ryan.porter",
+      "text": "Follow-up regression fixed: aggregate feedback progress now consumes the established bounded ThreadPoolExecutor map interface instead of requiring submit/as_completed. This preserves deterministic request-order result assembly and worker-limit behavior while publishing only every configured aggregate interval. Verification: focused bounded-worker plus ranking-progress specs passed; full execute runtime suite passed 274 tests; combined portfolio-run and run-report suites passed 210 tests; diff check passed.",
+      "created_at": "2026-07-31T13:51:54.693575Z"
+    },
+    {
+      "id": "3cd423f5-46fa-4a6e-87a5-eca7eac06ec9",
+      "author": "ryan.porter",
+      "text": "Progress: corrected aggregate feedback-analysis progress so a per-scorecard failure is never counted as a completed analysis. Added an outside-in runtime specification using the default batch: at the five-scorecard checkpoint, one failed scorecard produces four successful analyses and an incomplete state; no active terminal N/N event is emitted. Validation passed: runtime contracts (278), portfolio/report tests (213), dashboard status tests (27), dashboard typecheck, and diff check. Awaiting review; no commit or deployment.",
+      "created_at": "2026-07-31T14:24:19.717805Z"
+    }
+  ],
+  "created_at": "2026-07-31T13:34:13.943123Z",
+  "updated_at": "2026-07-31T14:24:19.717805Z",
+  "closed_at": null,
+  "custom": {}
+}

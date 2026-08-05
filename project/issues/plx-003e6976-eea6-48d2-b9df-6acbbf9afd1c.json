@@ -1,0 +1,49 @@
+{
+  "id": "plx-003e6976-eea6-48d2-b9df-6acbbf9afd1c",
+  "title": "Publish zero-target execution decisions after successful diagnosis",
+  "description": "As an optimization operator, I need a bounded portfolio run with no safe optimizer target to publish its execution decision and finalize cleanly, so that a valid no-target outcome is not reported as a platform failure.\n\nFeature: Zero-target execution decision publication\n\nScenario: Diagnosis finds no safe optimization target\n  Given exhaustive ranking and assessment are complete\n  And every bounded semantic diagnosis resolves to a repair or non-executable disposition\n  When automatic execution policy selects zero targets\n  Then the approval or execution-decision core milestone publishes successfully\n  And the same Report states that no safe target was selected\n  And no optimizer child Procedure or Task is created\n  And final detail reconciliation may proceed normally\n\nScenario: Core decision publication fails\n  Given diagnosis evidence is already durably published\n  When the next authoritative decision milestone cannot publish\n  Then the run fails closed with the underlying failure class visible in sanitized diagnostics\n  And no optimizer child is launched",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1bb279c7-b9c3-4fec-b9b2-29a5ec007f66",
+      "author": "ryan.porter",
+      "text": "Production dogfood reproduced the sanitized scenario after complete ranking, assessment, and bounded diagnosis. The diagnosis core revision was durable, the automatic policy selected no executable target, and the subsequent decision milestone failed before any child launch. Investigation is focused on preserving the exact underlying publication error and making zero-target publication deterministic.",
+      "created_at": "2026-08-03T19:21:03.033001Z"
+    },
+    {
+      "id": "e615443c-d703-42e6-b1a6-23faee8afaa5",
+      "author": "ryan.porter",
+      "text": "Investigation result: the frozen zero-target decision packet rebuilds its stakeholder projection, workbook, and aggregate presentation deterministically, so the observed production failure occurred before any next-revision artifact upload. Added operation-level sanitized failure classification, a fail-closed status-block overlay, and regression coverage. Browser acceptance also exposed that a stale next action could classify a canonical not-selected score as automatic work; canonical disposition now wins. Focused validation: 255 backend tests, 34 dashboard report tests, dashboard typecheck, 776 dashboard coverage tests, 91 Storybook suites / 704 Chromium tests, and the complete Python 3.12 suite with 4519 passing. Python 3.11 full validation is running. No optimizer child, score mutation, or champion promotion occurred.",
+      "created_at": "2026-08-03T19:37:30.647101Z"
+    },
+    {
+      "id": "6438d642-ae2a-426d-aea9-ef9c7ca32c97",
+      "author": "ryan.porter",
+      "text": "Validation completed for the fail-closed zero-target reporting repair. Canonical non-selected dispositions no longer inherit stale execution actions; completed zero-target policy emits the no-safe-target conclusion; and publication failures overlay the latest durable presentation with sanitized operation and exception class. Python 3.11 and 3.12 full suites are green with 4519 passing tests each, alongside focused backend and dashboard coverage. The original publication authority failure is not claimed fixed until a future explicitly approved pilot confirms the newly classified operation; no additional production run was started.",
+      "created_at": "2026-08-03T19:54:11.338682Z"
+    },
+    {
+      "id": "2c783ef1-53f8-46d9-983c-7d12a67d668e",
+      "author": "ryan.porter",
+      "text": "The explicitly bounded follow-up pilot reproduced the failure after complete ranking, 700/700 assessment, and four of four semantic diagnoses. Improved diagnostics localized the failure to stakeholder_view_validation with ValueError during the zero-target execution-decision core milestone. This disproves the earlier authority/checkpoint hypothesis. No optimizer child or operational mutation occurred. Next step is an offline frozen-packet reproduction and failing regression before changing source; no additional pilot will start until that validation is green.",
+      "created_at": "2026-08-03T20:23:45.220338Z"
+    },
+    {
+      "id": "cc6363a1-43fa-4f11-b905-27b755e28c96",
+      "author": "ryan.porter",
+      "text": "Root cause is now reproduced from the immutable frozen production packet: automatic execution selected one candidate and classified 699 others, including missing-diagnosis rows. The execution overlay correctly added state=incomplete, but the safe workbook schema omitted State from Portfolio and Optimization Outcomes, so stakeholder_view_validation rejected its own projection before upload. Added an outside-in regression that first failed with the exact ValueError, then added stakeholder-visible State columns to both sheets. Exact frozen-packet replay now validates 1105 portfolio rows and generates the workbook successfully; focused report/action/portfolio suites pass 254 tests. Browser verification confirms the failed run now displays the sanitized operation and exception class. No further pilot has started.",
+      "created_at": "2026-08-03T20:28:47.630515Z"
+    }
+  ],
+  "created_at": "2026-08-03T19:20:56.200905Z",
+  "updated_at": "2026-08-03T20:28:47.630515Z",
+  "closed_at": null,
+  "custom": {}
+}

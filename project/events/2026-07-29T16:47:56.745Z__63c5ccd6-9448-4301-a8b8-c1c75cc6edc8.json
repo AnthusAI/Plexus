@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "63c5ccd6-9448-4301-a8b8-c1c75cc6edc8",
+  "issue_id": "plx-cb9db380-4d06-4374-90ef-216110d5a559",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T16:47:56.745Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Present a paginated action inbox",
+    "description": "As an account user, I want pending decisions and key run updates in the dashboard sidebar, so that important work remains visible and actionable.\n\nFeature: Dashboard action inbox\n\nScenario: Review and resolve actions\n  Given an account has more history than one message page\n  When a user opens the action inbox\n  Then unresolved actions are listed newest first with cursor pagination\n  And key updates are deduplicated\n  And resource links resolve through dashboard routing\n  And a valid structured response is submitted through the authoritative action operation\n\nScenario: Preserve legacy conversations\n  Given an existing procedure uses chat-message HITL\n  When the action inbox is introduced\n  Then the existing interaction remains readable\n  And new action workflows do not select arbitrary chat responses as decisions",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

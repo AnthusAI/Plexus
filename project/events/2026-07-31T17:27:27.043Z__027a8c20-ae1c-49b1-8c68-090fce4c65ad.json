@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "027a8c20-ae1c-49b1-8c68-090fce4c65ad",
+  "issue_id": "plx-d8fe003e-6201-47cd-a72f-5a333df11333",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T17:27:27.043Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Resume deferred local portfolio runs automatically",
+    "description": "As an operator, I want a locally launched portfolio run to resume its own scheduled publication retry, so that a transient artifact-publication interruption cannot leave the run overdue indefinitely.\n\nOut of scope: general account-wide task dispatch, schema changes, automatic promotion, and exposing sensitive artifact identifiers or provider error content.\n\nFeature: Targeted continuation of a deferred local run\n\nScenario: The exact deferred run resumes when due\nGiven a locally launched portfolio run has durably deferred a retry for a UTC time\nAnd the original execution process exits\nWhen the retry time becomes due\nThen a targeted continuation process rearms and executes only that exact Procedure and Task\nAnd the run continues from its durable checkpoint\n\nScenario: An unrelated pending task is not executed\nGiven other account tasks are pending\nWhen the targeted continuation becomes due\nThen only the exact deferred parent Task is claimed\nAnd no account-wide pending-task scan is used\n\nScenario: A publication interruption preserves resumable evidence\nGiven a milestone publishes many verified artifacts\nWhen publication is interrupted after a partial batch\nThen the verified descriptors are durably indexed in bounded batches\nAnd the retry reuses verified artifacts instead of uploading them again\n\nScenario: Failure telemetry remains safe and useful\nGiven milestone publication raises an exception\nWhen the run records a retryable publication failure\nThen it records the exception class, operation category, completed count, total count, and retry classification\nAnd it records no artifact names, keys, opaque resource IDs, or content",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-5d24d7a2-4e21-434e-be5f-03509ae5a483",
+  "title": "Document structured HITL release sequencing",
+  "description": "Document the durable release order for the living optimization report workflow: release the structured-HITL Tactus changes first, update and lock Plexus to that released version, rerun local and sandbox acceptance, then deploy Plexus. Include rollback and verification checkpoints so the dependency cannot be forgotten while unrelated releases are in flight.",
+  "type": "chore",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3cd250eb-33c4-41fc-8822-14909f52d005",
+      "author": "ryan.porter",
+      "text": "Verified the local integration branch and structured-HITL dependency branch remain unpushed. Confirmed the expected cloud identity and that Plexus still pins the current released Tactus version, which does not contain the required structured HITL contract. Preparing a durable deployment runbook covering Tactus-first release order, temporary local source testing, release pinning, clean validation without source overrides, sandbox acceptance, deployment gates, and rollback.",
+      "created_at": "2026-07-29T20:49:39.660294Z"
+    }
+  ],
+  "created_at": "2026-07-29T20:42:58.265373Z",
+  "updated_at": "2026-07-29T20:49:39.660294Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "eb1b80b0-439f-4b48-95cc-29cfc6f75d0a",
+  "issue_id": "plx-52c25dcc-cdc0-4702-897b-912844c2ad29",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T22:44:49.902Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Define portfolio disposition and contradiction projections",
+    "description": "Implement the deterministic projection for story plx-d092bf: one primary score disposition, separate evidence-health and activity axes, conservative incomplete handling, contradiction categories and stable priority ordering, ordinary-language rationale, and action routing. Reuse decision packets and do not add another semantic parser.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

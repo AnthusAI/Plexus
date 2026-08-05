@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "749a9d3b-e09c-4bf5-b3c8-00843afe85a0",
+  "issue_id": "plx-e77c5016-6ddb-46d0-a33d-30ab2fac01a0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T22:44:50.190Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Present optimizer lifecycle and terminal outcomes in the living Report",
+    "description": "Implement story plx-8d2d31 across the Report projection, workbook and scorecard artifacts, and dashboard presentation. Preserve frozen selection evidence, add meaningful child lifecycle revisions and per-score timelines, reconcile all exported counts, surface major contradictions, and create evidence-bound promotion requests without automatic promotion.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

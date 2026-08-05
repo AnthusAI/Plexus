@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "47a69fa2-d0ff-491e-babc-3eafe51329be",
+  "issue_id": "plx-5a441445-9326-4c5b-959c-d9a2ef82d803",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T16:47:56.481Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Make human actions atomic and auditable",
+    "description": "As an account operator, I want human decisions to be durable and race-safe, so that procedures act on one authorized response with current evidence.\n\nFeature: Authoritative human action requests\n\nScenario: Accept one account response\n  Given an open action with current preconditions\n  When two authenticated users from the same account respond concurrently\n  Then exactly one valid response is accepted\n  And the winning responder and events are recorded\n  And the other response is reported as already resolved\n\nScenario: Reject unsafe responses\n  Given an action is stale, expired, cancelled, or belongs to another account\n  When a user attempts to respond\n  Then the response is not accepted\n  And no dependent procedure or mutation resumes",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

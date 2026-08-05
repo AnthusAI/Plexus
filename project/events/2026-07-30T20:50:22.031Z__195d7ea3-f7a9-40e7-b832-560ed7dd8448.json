@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "195d7ea3-f7a9-40e7-b832-560ed7dd8448",
+  "issue_id": "plx-5d71f361-a0d7-4fba-b5ae-9ce0459a0093",
+  "event_type": "field_updated",
+  "occurred_at": "2026-07-30T20:50:22.031Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "As an optimization operator, I want every ranked priority row to show comparable visual signals for opportunity, feedback volume, and disagreement, so that I can judge relative scale without opening a chart tooltip.\n\nOut of scope: changing ranking calculations or policy gates.\n\nFeature: Ranked priority signal visualization\n\nScenario: Compare ranking opportunity in the priority list\nGiven a report contains multiple ranked score opportunities\nWhen the operator views the priority list\nThen each row shows a ranking-opportunity bar scaled consistently across the visible list\nAnd the exact reviewed-disagreement count remains readable\n\nScenario: Compare feedback evidence in the priority list\nGiven ranked scores have different valid feedback volumes and disagreement rates\nWhen the operator views the priority list\nThen each row shows a feedback-volume bar scaled consistently across the visible list\nAnd the exact valid-feedback count and disagreement percentage remain readable\n\nScenario: Handle missing or zero evidence\nGiven a ranked row has missing or zero signal evidence\nWhen the operator views the priority list\nThen the row remains readable without implying positive evidence\nAnd the list layout remains stable.",
+        "to": "As an optimization operator, I want every ranked priority row to show comparable visual signals for opportunity, feedback volume, and disagreement rate, so that I can judge relative scale without opening a chart tooltip.\n\nOut of scope: changing ranking calculations or policy gates.\n\nFeature: Ranked priority signal visualization\n\nScenario: Compare ranking opportunity in the priority list\nGiven a report contains multiple ranked score opportunities\nWhen the operator views the priority list\nThen each row shows a ranking-opportunity bar scaled consistently across the visible list\nAnd the exact reviewed-disagreement count remains readable\n\nScenario: Compare feedback evidence in the priority list\nGiven ranked scores have different valid feedback volumes and disagreement rates\nWhen the operator views the priority list\nThen each row shows a feedback-volume bar scaled consistently across the visible list\nAnd each row shows a disagreement-rate bar on a fixed zero-to-one-hundred-percent scale\nAnd the exact valid-feedback count and disagreement percentage remain readable\n\nScenario: Handle missing or zero evidence\nGiven a ranked row has missing or zero signal evidence\nWhen the operator views the priority list\nThen the row remains readable without implying positive evidence\nAnd the list layout remains stable."
+      }
+    }
+  }
+}

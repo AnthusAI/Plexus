@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "55c7094f-846c-4497-ab17-5a801c902bdc",
+  "issue_id": "plx-9fc32607-abff-4516-a36e-2958b442162e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-31T17:40:07.583Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Continue independent semantic diagnoses after an incomplete candidate",
+    "description": "As an optimization operator, I want each selected score to receive its own semantic diagnosis when evidence and budget remain available, so that one inconclusive score cannot prevent unrelated candidates from reaching automatic optimization.\n\nOut of scope: increasing the frozen semantic budget, bypassing evidence gates, automatically promoting versions, or continuing after an unknown provider outcome or authority failure.\n\nFeature: Independent semantic diagnosis coverage\n\nScenario: An ordinary incomplete diagnosis does not stop its siblings\nGiven three exact targets are selected for semantic diagnosis\nAnd the first target returns complete transport evidence but an inconclusive semantic result\nWhen the portfolio run continues\nThen the second and third targets are still diagnosed\nAnd only the incomplete target remains ineligible for optimization\n\nScenario: A safety-critical semantic failure stops further spend\nGiven multiple targets remain\nWhen a diagnosis reports budget exhaustion, an unknown provider outcome, or an authority-publication failure\nThen later diagnoses are deferred with the exact structured reason\nAnd no target with incomplete evidence becomes optimization-ready\n\nScenario: A resumed partial diagnosis completes remaining targets\nGiven a durable diagnosis milestone records completed or incomplete results for only part of its scheduled scope\nWhen the same run resumes with unchanged evidence and budget\nThen it diagnoses only the remaining exact targets\nAnd preserves the already published diagnosis evidence",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}

@@ -47,7 +47,13 @@ console = Console()
 DEFAULT_CELERY_QUEUE_NAME = "plexus-celery-development"
 VALID_DISPATCH_MODES = {"celery", "local"}
 DEFAULT_LOCAL_DISPATCH_TIMEOUT_SECONDS = 900
-PROCEDURE_WAITING_STATUSES = {"WAITING_FOR_HUMAN"}
+PROCEDURE_WAITING_STATUSES = {
+    "WAITING_FOR_HUMAN",
+    "WAITING_FOR_CHILDREN",
+    "WAITING_FOR_TIME",
+}
+PROCEDURE_DURABLE_WAIT_STATUSES = {"WAITING_FOR_CHILDREN", "WAITING_FOR_TIME"}
+PROCEDURE_ACTIVE_STATUSES = {"PENDING", "RUNNING"}
 PROCEDURE_SUCCESS_STATUSES = {"COMPLETED", "COMPLETE"}
 PROCEDURE_FAILURE_STATUSES = {"FAILED", "ERROR"}
 
@@ -184,10 +190,15 @@ def _list_pending_tasks_for_account(
     items = response.get("listTaskByAccountIdAndUpdatedAt", {}).get("items", [])
     pending = []
     for task in items:
-        if task.get("dispatchStatus") != "PENDING" or task.get("status") != "PENDING":
+        metadata = _normalize_metadata(task.get("metadata"))
+        is_initial = task.get("status") == "PENDING"
+        is_durable_resume = (
+            task.get("status") in PROCEDURE_DURABLE_WAIT_STATUSES
+            and metadata.get("dispatch_policy") == "resume_once"
+        )
+        if task.get("dispatchStatus") != "PENDING" or not (is_initial or is_durable_resume):
             continue
 
-        metadata = _normalize_metadata(task.get("metadata"))
         if metadata.get("dispatch_mode") == "console_async_worker":
             # Console chat responses are dispatched by the dedicated
             # dispatchConsoleChat mutation, not by the generic task dispatcher.
@@ -240,6 +251,68 @@ def _claim_task_for_dispatch(task: Task, dispatcher_id: str, mode: str) -> bool:
         updatedAt=datetime.datetime.now(timezone.utc).isoformat(),
     )
     return True
+
+
+def _fail_ambiguous_dispatch_claim(
+    client: PlexusDashboardClient,
+    task: Task,
+    *,
+    dispatcher_id: str,
+    exception_class: str,
+) -> None:
+    """Terminalize an exclusively-held claim after ambiguous publication."""
+    failed_at = datetime.datetime.now(timezone.utc).isoformat()
+    metadata = _normalize_metadata(task.metadata)
+    metadata["dispatch_failure_at"] = failed_at
+    mutation = """
+    mutation FailAmbiguousDispatchClaim(
+      $input: UpdateTaskInput!
+      $condition: ModelTaskConditionInput
+    ) {
+      updateTask(input: $input, condition: $condition) {
+        id
+        status
+        dispatchStatus
+        workerNodeId
+      }
+    }
+    """
+    response = client.execute(
+        mutation,
+        {
+            "input": {
+                "id": task.id,
+                "status": "FAILED",
+                "dispatchStatus": "ERROR",
+                "workerNodeId": None,
+                "metadata": json.dumps(metadata),
+                "errorMessage": "Broker publication failed before acknowledgement",
+                "errorDetails": json.dumps({
+                    "phase": "celery_send",
+                    "exception_class": exception_class,
+                }),
+                "completedAt": failed_at,
+                "updatedAt": failed_at,
+            },
+            "condition": {
+                "and": [
+                    {"dispatchStatus": {"eq": "DISPATCHING"}},
+                    {"workerNodeId": {"eq": dispatcher_id}},
+                    {"status": {"eq": task.status}},
+                ]
+            },
+        },
+    )
+    released = response.get("updateTask") if isinstance(response, dict) else None
+    if (
+        not isinstance(released, dict)
+        or released.get("id") != task.id
+        or released.get("status") != "FAILED"
+        or released.get("dispatchStatus") != "ERROR"
+    ):
+        raise RuntimeError(
+            f"Task {task.id} ambiguous dispatch claim was not safely terminalized"
+        )
 
 
 def _resolve_dispatcher_account_id(client: PlexusDashboardClient, identifier: Optional[str]) -> str:
@@ -322,7 +395,11 @@ def _map_procedure_status_to_task_status(procedure_status: Optional[str]) -> Opt
     if not procedure_status:
         return None
     status = procedure_status.upper()
+    if status in PROCEDURE_DURABLE_WAIT_STATUSES:
+        return status
     if status in PROCEDURE_WAITING_STATUSES:
+        return "RUNNING"
+    if status in PROCEDURE_ACTIVE_STATUSES:
         return "RUNNING"
     if status in PROCEDURE_SUCCESS_STATUSES:
         return "COMPLETED"
@@ -818,11 +895,20 @@ def dispatcher(account: Optional[str], interval: float, limit: int, once: bool, 
                     continue
 
                 if mode == "celery":
-                    celery_task = get_celery_app().send_task(
-                        'plexus.execute_command',
-                        args=[task.command],
-                        kwargs={'target': task.target or "default/command", 'task_id': task.id}
-                    )
+                    try:
+                        celery_task = get_celery_app().send_task(
+                            'plexus.execute_command',
+                            args=[task.command],
+                            kwargs={'target': task.target or "default/command", 'task_id': task.id}
+                        )
+                    except Exception as exc:
+                        _fail_ambiguous_dispatch_claim(
+                            client,
+                            task,
+                            dispatcher_id=dispatcher_id,
+                            exception_class=type(exc).__name__,
+                        )
+                        raise
                     task.update(
                         accountId=task.accountId,
                         type=task.type,
@@ -893,7 +979,23 @@ def dispatcher(account: Optional[str], interval: float, limit: int, once: bool, 
                     if result.returncode == 0:
                         procedure_id = _extract_procedure_id_from_task(task, metadata)
                         procedure_status = _get_procedure_status_for_local_command(client, procedure_id)
-                        mapped_task_status = _map_procedure_status_to_task_status(procedure_status) or "COMPLETED"
+                        mapped_task_status = _map_procedure_status_to_task_status(procedure_status) or "RUNNING"
+                        if procedure_status in PROCEDURE_DURABLE_WAIT_STATUSES:
+                            refreshed_task = Task.get_by_id(task.id, client)
+                            if refreshed_task is None:
+                                logging.error(
+                                    "Could not reload durable waiting task %s; preserving the runner's persisted state",
+                                    task.id,
+                                )
+                                processed += 1
+                                continue
+                            logging.info(
+                                "Locally executed task %s entered %s; preserving the runner's durable Task state",
+                                task.id,
+                                procedure_status,
+                            )
+                            processed += 1
+                            continue
                         metadata["procedure_id"] = procedure_id
                         metadata["procedure_status_after_command"] = procedure_status
                         metadata["phase"] = "persist_results"
@@ -904,7 +1006,11 @@ def dispatcher(account: Optional[str], interval: float, limit: int, once: bool, 
                             "status": mapped_task_status,
                             "target": task.target,
                             "command": task.command,
-                            "dispatchStatus": "DISPATCHED",
+                            "dispatchStatus": (
+                                "WAITING_FOR_CHILDREN"
+                                if procedure_status == "WAITING_FOR_CHILDREN"
+                                else "DISPATCHED"
+                            ),
                             "workerNodeId": dispatcher_id,
                             "startedAt": started_at,
                             "stdout": result.stdout[-200000:] if result.stdout else None,

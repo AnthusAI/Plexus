@@ -1,0 +1,85 @@
+{
+  "id": "plx-d60ab088-632c-443c-92d7-bd586163c98b",
+  "title": "Preserve authenticated recovery for long portfolio runs",
+  "description": "A long-running local portfolio dogfood attempt completed ranking and substantial assessment progress, then lost Plexus application authentication. The procedure failed before diagnosis, and required terminal task-output artifact persistence failed through the same unavailable authorization path. Published evidence must remain immutable, and a renewed session must resume safely rather than silently starting over.\n\nFeature: Recover long portfolio runs after application-session expiry\n\nScenario: Authentication expires during analysis\n  Given a portfolio run has published durable start and ranking evidence\n  And assessment is still running\n  When the application session becomes unavailable\n  Then the run records an actionable authentication interruption when authority permits\n  And it does not label the analysis complete\n  And no optimization is launched\n\nScenario: Resume after renewed authentication\n  Given a failed or interrupted attempt has immutable checkpoints and a frozen run identity\n  When an operator renews the application session and resumes the procedure\n  Then recovery verifies the exact Task, Report, Procedure, run specification, checkpoint, and evidence fingerprint\n  And it continues only from authoritative durable evidence\n  And it never silently duplicates already completed work or creates an unrelated successful attempt\n\nScenario: Terminal artifact persistence loses authorization\n  Given procedure output persistence is required\n  When artifact-ticket authorization is unavailable\n  Then the request fails visibly without an inline fallback\n  And previously published Report evidence remains available\n  And the operator receives a concrete reauthentication and recovery next action\n\nSanitized observation: an exhaustive run stopped partway through assessment after application authentication became unavailable, and required task-output artifact persistence also failed. No client identity, score data, or opaque run identifiers are stored here.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c570fa21-f49d-454e-bced-2ce2e9035b60",
+      "author": "ryan.porter",
+      "text": "Dogfood evidence recorded: the interrupted run had already published immutable start and ranking revisions and was partway through exhaustive assessment. Application authentication became unavailable; the procedure failed before semantic diagnosis, and the required terminal task-output attachment could not obtain an artifact ticket. No optimizer or protected mutation occurred. Next work must prove exact-checkpoint recovery after renewed authentication and preserve the failed attempt rather than relabeling it successful.\n",
+      "created_at": "2026-07-31T09:53:07.484338Z"
+    },
+    {
+      "id": "5e86dbee-937a-447f-be42-84a22fd9accf",
+      "author": "ryan.porter",
+      "text": "Read-only investigation: the observed interruption is a missing local application refresh credential, not a rejected refresh grant. The run had committed start/ranking evidence and live assessment progress, but partial assessment rows were not committed as an immutable checkpoint. Existing recovery is not an explicit authenticated-portfolio recovery contract; implementation must preserve the active attempt, verify its frozen identity and committed revision after reauthentication, and resume only the unfinished deterministic work. Separate the primary authentication interruption from the secondary required-output artifact publication failure in operator-facing evidence. No client-specific information recorded.",
+      "created_at": "2026-07-31T11:00:21.960652Z"
+    },
+    {
+      "id": "69e11e75-2a87-49b0-a16e-8a895c8dd11f",
+      "author": "ryan.porter",
+      "text": "Increment 1A started: add outside-in auth-layer specifications for missing credential, confirmed invalid/revoked refresh, and transient refresh transport failure. Scope is limited to cognito.py and its focused tests; portfolio and recovery code remain untouched.",
+      "created_at": "2026-07-31T12:02:53.791383Z"
+    },
+    {
+      "id": "2da449ef-ace2-4faf-a380-b6bf6646f1dd",
+      "author": "ryan.porter",
+      "text": "Increment 1A red/green evidence: added focused outside-in specifications. Red: collection failed because the new typed auth outcomes were not implemented. Green: focused auth suite passes (24 tests) after the minimal auth-layer change; static style check passes and git diff --check is clean. Behavior now distinguishes absent local refresh credential, explicit OAuth invalid_grant, and unproven refresh transport failure. Only explicit invalid_grant clears the keychain credential; a transient failure preserves it and a subsequent refresh succeeds. Portfolio/checkpoint code was not changed.",
+      "created_at": "2026-07-31T12:48:07.268849Z"
+    },
+    {
+      "id": "8e0b7533-d8d2-4ac9-83cc-a96cb3b26603",
+      "author": "ryan.porter",
+      "text": "Increment 1A review follow-up, red-first: a regression using a real HTTP 400 response showed that response truthiness discarded the explicit invalid_grant evidence when the HTTP client raised directly. The auth layer now selects the attached response by explicit presence. New contracts cover direct invalid_grant rejection, 5xx, malformed error content, other OAuth 400 errors, typed base compatibility, and exception chaining. Refresh-focused set passes 27 tests; style and scoped diff checks pass. The two fixed-port loopback tests await release of an unrelated active interactive login listener before the complete file is rerun.",
+      "created_at": "2026-07-31T12:54:32.065982Z"
+    },
+    {
+      "id": "32ab4718-f18a-4d84-bac6-1e3a002f0bae",
+      "author": "ryan.porter",
+      "text": "Increment 1A review follow-up is fully green after the interactive callback listener exited: complete auth suite 29 passed; scoped flake8 and git diff --check passed. The explicit invalid_grant path deletes the credential and preserves the HTTP error as its cause; 5xx, malformed/non-JSON content, non-invalid_grant 400 responses, and timeouts retain the credential and raise a typed transient failure with exception chaining. No portfolio or recovery code changed.",
+      "created_at": "2026-07-31T12:56:30.292547Z"
+    },
+    {
+      "id": "fff5bf6e-a2b9-4737-82bc-ac44694865c8",
+      "author": "ryan.porter",
+      "text": "Increment 1B started. Scope is an optimization-portfolio-only authority preflight before any stakeholder-visible Task, Report, or procedure claim. It will reuse the existing Cognito auth service and typed outcomes; no credential serialization, resources, or ordinary-command behavior changes. Outside-in specs will demonstrate no mutation on missing, rejected, or transient authority.",
+      "created_at": "2026-07-31T13:08:03.377659Z"
+    },
+    {
+      "id": "5ebfc648-e649-4c62-81c2-7150991010ac",
+      "author": "ryan.porter",
+      "text": "Read-only design: durable partial assessment checkpoint increment.\n\nDecision: retain the existing immutable milestone/workbook model. Each existing ten-score assessment progress boundary additionally commits one JSON Task attachment; it never creates a workbook, ReportBlock, or scorecard-artifact revision. The Report parameter pointer is the only commit point, so interrupted uploads are orphaned and ignored.\n\nAttachment contract assessment_batch_checkpoint.v1:\n- identity: run_key, account_id, procedure_task_id, report_id;\n- frozen binding: canonical run_spec_sha256, rank_packet_sha256, rank_evidence_fingerprint, ranking_revision;\n- contiguous batch: sequence (one-based), prior_sequence, prior_payload_sha256, total_ranked, start_index, end_index, ordered target_refs, and the exact assessment packets;\n- integrity: canonical JSON bytes uploaded through existing TASK_ATTACHMENT tickets; descriptor carries object_key, content_type, size_bytes, sha256, task_id, source_revision, and a generated immutable filename.\n\nReport metadata stores only assessment_checkpoint_latest: schema/kind plus the latest verified attachment descriptor and identity/binding fields. Each payload points to the prior descriptor/checksum, forming a contiguous immutable chain. No inline assessment rows, no new GraphQL resources, no ReportBlock change, and no new workbook revision.\n\nState machine:\n1. Ranking milestone is fully committed.\n2. Assessment computes up to ten rows in memory.\n3. Upload and optional read-back verify one immutable JSON attachment; attach it to the existing Task.\n4. Conditionally advance the Report metadata pointer only if it still names the expected prior sequence/checksum. Then publish existing live progress. If either pointer or progress publication fails, stop retryably; never assess beyond the last committed batch.\n5. On resume, load the normal ranking checkpoint, then follow assessment_checkpoint_latest backwards through attachment descriptors. Verify attachment checksums and contiguous chain before restoring rows. Resume at end_index plus one. A completed final partial batch is reused to publish the normal assessment milestone rather than recomputed.\n6. Once the normal assessment milestone commits, the chain remains historical evidence but is no longer an active resume source.\n\nRecovery validation (fail closed with OptimizationRunIntegrityError): payload and descriptor must match current Task ID, Report ID, account, run_key, canonical frozen run spec, ranking revision, full rank-packet SHA, rank evidence fingerprint, sequence/previous-sequence/previous-payload digest, exact ranked target order, exact row count and index range. Missing/malformed/reordered/duplicate/out-of-range rows, skipped sequence, mismatched predecessor, changed rank/spec/account/task/report, or checksum failure are integrity failures. Ticket/auth/read failures are retryable publication errors and preserve the active attempt.\n\nRunner integration: before assessment, ask the report service for a validated partial checkpoint bound to the loaded ranking packet; initialize assessment_rows and loop index from it. After each current ten-row boundary, call append_assessment_batch before publish_progress. Do not change ranking, diagnosis, optimizer dispatch, or promotion semantics.\n\nOutside-in tests:\n- ten-row and final-short batches persist immutable TASK_ATTACHMENT JSON with read-back checksum and no added workbook/milestone revision;\n- recovery restores a two-batch chain and calls assess only on remaining exact ranked targets;\n- interruption after commit but before progress resumes without duplicate assessment;\n- interruption before pointer commit ignores orphan upload and safely reruns only that uncommitted batch;\n- reject altered run/account/task/report/spec/rank revision/rank fingerprint, checksum, target order, duplicate/missing target, gap/reordered sequence, wrong predecessor, malformed descriptor, and stale concurrent pointer;\n- ticket/authority failure remains retryable and leaves prior chain usable;\n- full final assessment milestone supersedes the chain as active resume state.\n\nMinimal production files: plexus/optimization/run_report.py (checkpoint descriptor, attachment commit/load/verification); plexus/optimization/portfolio_run.py (batch-boundary persistence and resume cursor). Test files: corresponding run_report_test.py and portfolio_run_test.py; update only any runtime test doubles whose strict report-service contract must expose the two methods. No code edited in this design pass.",
+      "created_at": "2026-07-31T13:29:09.016449Z"
+    },
+    {
+      "id": "b7af5192-bde5-4fa5-9d67-6fdf3a0a583c",
+      "author": "ryan.porter",
+      "text": "Increment 1B runtime preflight is implemented and at a coherent tested point. The default stateful portfolio execution path obtains an access token through CognitoAuthService before it constructs a dashboard client or reads/creates Task, Report, or ChatMessage state. Missing session, confirmed refresh rejection, and transient refresh failure propagate as their existing typed actionable outcomes. Outside-in contracts demonstrate no client/account/stakeholder mutation for each outcome, successful token acquisition precedes client construction, and read-only ranking does not invoke this portfolio-only preflight. Focused runtime set: 5 passed. Complete runtime suite: 273 passed. git diff --check passed. No credentials are serialized and no resources/schema are changed. Paused after this coherent point for the active production snapshot/launch.",
+      "created_at": "2026-07-31T13:29:45.250527Z"
+    },
+    {
+      "id": "e2efb196-324b-4204-b003-9abff1a92525",
+      "author": "ryan.porter",
+      "text": "Production dogfooding of Increment 1B confirmed a remaining boundary: the YAML CLI path creates the outer Procedure, Task, and TaskStages before the Tactus runtime invokes the portfolio-specific application-authority preflight. The preflight still protects Report creation and portfolio work, but it does not yet satisfy the stricter scenario that missing authority causes zero stakeholder-state mutation. Follow-up must move or duplicate the typed authority check into the procedure CLI/service path before create-or-claim, with outside-in proof that no Procedure/Task is created when authority is unavailable.",
+      "created_at": "2026-07-31T13:30:37.208656Z"
+    },
+    {
+      "id": "2a3487ec-f6cd-45c0-b587-55dff10a9ed3",
+      "author": "ryan.porter",
+      "text": "Reproduced the post-login rough edge as a transient OAuth refresh transport failure with the durable credential intact. Added a bounded automatic retry policy: up to three total token attempts with 0.2s and 0.5s delays; only explicit invalid_grant deletes the credential and it is never retried. Failing-first retry specs now pass. Focused auth/CLI validation: 33 passed; diff check clean; three fresh live whoami processes all succeeded.",
+      "created_at": "2026-07-31T14:38:24.084947Z"
+    }
+  ],
+  "created_at": "2026-07-31T07:36:09.489539Z",
+  "updated_at": "2026-07-31T14:38:24.084947Z",
+  "closed_at": null,
+  "custom": {}
+}

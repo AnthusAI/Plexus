@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "3e66dbb9-c007-41e6-b864-c8f7009f4fc5",
+  "issue_id": "plx-21b9c35a-98b6-4463-92dd-bae9efc261ec",
+  "event_type": "field_updated",
+  "occurred_at": "2026-07-31T18:21:38.847Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "changes": {
+      "assignee": {
+        "from": null,
+        "to": "ryan.porter"
+      }
+    }
+  }
+}

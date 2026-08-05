@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "36bf4c17-0711-48dd-8be7-182306859517",
+  "issue_id": "plx-98b9af0c-4729-4196-bd95-ce013c354f98",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-29T16:47:55.954Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Maintain one living optimization run report",
+    "description": "As an account operator, I want one durable report to follow a periodic optimization run, so that the status and evidence remain available at one stable location.\n\nFeature: Living optimization run report\n\nScenario: Start and update one report\n  Given a periodic optimization run with a frozen scope and time window\n  When the run publishes successive milestones\n  Then one running task and one report are reused\n  And each milestone appears in the existing report\n  And immutable evidence revisions remain available\n\nScenario: Fail on report divergence\n  Given a periodic optimization run has advanced\n  When its report milestone cannot be durably published\n  Then the run fails\n  And it does not continue with stakeholder state behind procedure state",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+    "labels": []
+  }
+}

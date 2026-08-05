@@ -26,10 +26,23 @@ import requests
 KEYRING_SERVICE = "plexus"
 KEYRING_USERNAME = "cognito-refresh-token"
 DEFAULT_REDIRECT_URI = "http://127.0.0.1:8765/callback"
+REFRESH_RETRY_DELAYS_SECONDS = (0.2, 0.5)
 
 
 class ApplicationAuthenticationRequired(ValueError):
     """Raised when a user must sign in again before using the application API."""
+
+
+class MissingApplicationSession(ApplicationAuthenticationRequired):
+    """Raised when no durable CLI refresh credential is available."""
+
+
+class RefreshCredentialRejected(ApplicationAuthenticationRequired):
+    """Raised when the authorization server confirms a refresh credential is invalid."""
+
+
+class RefreshTransportFailure(ApplicationAuthenticationRequired):
+    """Raised when a refresh attempt failed without proving the credential invalid."""
 
 
 class LoopbackCallbackError(ApplicationAuthenticationRequired):
@@ -197,11 +210,13 @@ class CognitoAuthService:
         credential_store: Optional[RefreshTokenStore] = None,
         http: Any = requests,
         browser_opener: Callable[[str], bool] = webbrowser.open,
+        sleeper: Callable[[float], None] = time.sleep,
     ):
         self.config = config or CognitoAuthConfig.from_environment()
         self.credential_store = credential_store or KeyringRefreshTokenStore()
         self.http = http
         self.browser_opener = browser_opener
+        self.sleeper = sleeper
         self._tokens: Optional[TokenSet] = None
 
     @staticmethod
@@ -352,24 +367,53 @@ class CognitoAuthService:
     def _refresh_tokens(self) -> TokenSet:
         refresh_token = self.credential_store.get()
         if not refresh_token:
-            raise ApplicationAuthenticationRequired("No Plexus application session is available. Run `plexus login` to authenticate.")
-        try:
-            response = self.http.post(
-                f"{self.config.domain}/oauth2/token",
-                data={
-                    "grant_type": "refresh_token",
-                    "client_id": self.config.client_id,
-                    "refresh_token": refresh_token,
-                },
-                timeout=15,
+            raise MissingApplicationSession(
+                "No Plexus application session is available. Run `plexus login` to authenticate."
             )
-            response.raise_for_status()
-            return self._tokens_from_response(response.json())
-        except Exception as exc:
-            self.credential_store.delete()
-            raise ApplicationAuthenticationRequired(
-                "The Plexus application session expired or was revoked. Run `plexus login` to authenticate."
-            ) from exc
+        last_error: Optional[Exception] = None
+        for attempt in range(len(REFRESH_RETRY_DELAYS_SECONDS) + 1):
+            response = None
+            try:
+                response = self.http.post(
+                    f"{self.config.domain}/oauth2/token",
+                    data={
+                        "grant_type": "refresh_token",
+                        "client_id": self.config.client_id,
+                        "refresh_token": refresh_token,
+                    },
+                    timeout=15,
+                )
+                response.raise_for_status()
+                return self._tokens_from_response(response.json())
+            except Exception as exc:
+                if self._is_confirmed_refresh_rejection(response, exc):
+                    self.credential_store.delete()
+                    raise RefreshCredentialRejected(
+                        "The Plexus application session expired or was revoked. Run `plexus login` to authenticate."
+                    ) from exc
+                last_error = exc
+                if attempt < len(REFRESH_RETRY_DELAYS_SECONDS):
+                    self.sleeper(REFRESH_RETRY_DELAYS_SECONDS[attempt])
+
+        raise RefreshTransportFailure(
+            "The Plexus application session is temporarily unavailable after automatic retries. "
+            "Retry the request; run `plexus login` only if the problem persists."
+        ) from last_error
+
+    @staticmethod
+    def _is_confirmed_refresh_rejection(response: Any, error: Exception) -> bool:
+        """Return true only for OAuth's explicit invalid-refresh response."""
+        error_response = getattr(error, "response", None)
+        candidate = error_response if error_response is not None else response
+        if candidate is None:
+            return False
+        if getattr(candidate, "status_code", None) not in {400, 401}:
+            return False
+        try:
+            payload = candidate.json()
+        except Exception:
+            return False
+        return isinstance(payload, Mapping) and payload.get("error") == "invalid_grant"
 
     @staticmethod
     def _tokens_from_response(payload: Mapping[str, Any]) -> TokenSet:

@@ -1,0 +1,31 @@
+{
+  "id": "plx-d74f1a9b-d1a8-4a48-ac1a-28fb816a5d57",
+  "title": "Publish revisioned scorecard summaries and CSV exports",
+  "description": "As an optimization stakeholder, I want revisioned scorecard summaries and quantitative exports, so that I can understand and share run findings at the appropriate level of detail.\n\nOut of scope:\n- New GraphQL models, storage resources, or authorization roles.\n- Artifact retention changes.\n- Persisting signed download URLs.\n\nFeature: Revisioned scorecard artifacts\n\nScenario: Publish stakeholder-safe scorecard artifacts\nGiven a living optimization report reaches a meaningful milestone\nWhen scorecard findings have changed\nThen the run publishes one Markdown summary and one CSV for each scorecard\nAnd the CSV contains one row per score\nAnd every artifact is indexed by an immutable revision descriptor\n\nScenario: Reuse unchanged scorecard content\nGiven a scorecard summary has not changed since the prior milestone\nWhen a new run revision is published\nThen the manifest may reference the unchanged artifact descriptor\nAnd no duplicate content upload is required\n\nScenario: Produce safe spreadsheet data\nGiven score names or findings begin with spreadsheet formula characters\nWhen a scorecard CSV is generated\nThen those values are escaped as plain text\nAnd the CSV remains readable by common spreadsheet software\n\nScenario: Reconcile artifact counts\nGiven a revision contains scorecard exports\nWhen publication validation runs\nThen scorecard and score row counts match the presentation evidence\nAnd checksum, size, content type, task key, logical id, and source revision are recorded\n\nScenario: Keep task attachments bounded\nGiven a run contains many scorecards\nWhen a revision is published\nThen only root run artifacts are attached directly to the Task\nAnd child scorecard artifacts are discoverable through the revision manifest",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f8270576-db3a-4f13-8c6a-4bec95c59693",
+      "author": "ryan.porter",
+      "text": "Implemented the first artifact foundation with outside-in tests. Each published portfolio milestone now creates one stakeholder-safe Markdown summary and one Excel-compatible CSV per scorecard, indexes them with logical kind, content type, size, SHA-256, task key, source revision, and scorecard display name, and keeps these child artifacts out of the bounded Task attachment list. Formula-like CSV values are escaped and opaque identifiers remain absent from stakeholder projections. The combined report and portfolio focused suite passes: 44 tests.",
+      "created_at": "2026-07-30T15:56:05.954949Z"
+    },
+    {
+      "id": "2589e9d0-0536-4a48-a5a0-7c995f960799",
+      "author": "ryan.porter",
+      "text": "Production dogfooding confirmed 51 scorecard summaries, 51 CSVs, and 51 presentations are produced alongside 1,105 score briefs at the ranking milestone. The existing reuse-unchanged scenario is not implemented in the current publication loop; every child artifact is uploaded for every revision. Add red coverage for descriptor reuse when content is byte-identical so later milestones do not duplicate unchanged files.",
+      "created_at": "2026-07-31T15:27:45.038438Z"
+    }
+  ],
+  "created_at": "2026-07-30T15:52:12.175063Z",
+  "updated_at": "2026-07-31T15:27:45.038438Z",
+  "closed_at": null,
+  "custom": {}
+}

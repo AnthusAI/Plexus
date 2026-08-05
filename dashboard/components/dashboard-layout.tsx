@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { ChatInterface } from "@/components/chat-interface"
+import { ActionInbox } from "@/components/action-inbox"
 import { ResizeHandle } from "@/components/ui/resize-handle"
 
 import BrandableLogo from './BrandableLogo'
@@ -478,11 +478,11 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     className="h-8 w-8 p-0 group"
                     onClick={toggleRightSidebar}
                   >
-                    <MessageSquare className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
+                  <Inbox className="h-4 w-4 flex-shrink-0 text-navigation-icon" />
                   </DashboardButton>
                 </TooltipTrigger>
                 <TooltipContent side="left">
-                  Expand chat feed
+                  Expand action inbox
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -501,11 +501,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           <>
             <div className="flex-grow overflow-hidden">
               {selectedAccount ? (
-                <ChatInterface
-                  accountId={selectedAccount.id}
-                  showInput={true}
-                  showVoiceButtons={false}
-                />
+                <ActionInbox accountId={selectedAccount.id} />
               ) : (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">
@@ -529,7 +525,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     </DashboardButton>
                   </TooltipTrigger>
                   <TooltipContent side="left">
-                    Collapse chat feed
+                  Collapse action inbox
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>

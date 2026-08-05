@@ -3,11 +3,37 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from math import isfinite
 from typing import Any, Callable, Mapping, Sequence
 
 
 _SUCCESS_STATES = {"COMPLETED", "SUCCESS", "SUCCEEDED"}
 _FAILURE_STATES = {"FAILED", "CANCELLED", "CANCELED"}
+
+
+def _alignment_metric_evidence(baseline: Any, candidate: Any) -> dict[str, float | None]:
+    """Return comparable finite AC1 values without inventing missing evidence."""
+    def finite_number(value: Any) -> float | None:
+        if isinstance(value, bool):
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if isfinite(number) else None
+
+    baseline_value = finite_number(baseline)
+    candidate_value = finite_number(candidate)
+    delta = (
+        round(candidate_value - baseline_value, 12)
+        if baseline_value is not None and candidate_value is not None
+        else None
+    )
+    return {
+        "baseline": baseline_value,
+        "candidate": candidate_value,
+        "delta": delta,
+    }
 
 
 def refresh_target_freshness(
@@ -125,11 +151,39 @@ def build_indexed_optimizer_review_evidence(
     best = _mapping(indexed.get("best"))
     review_artifacts = _mapping(indexed.get("review_artifacts"))
     effective_status = str(summary.get("effective_status") or "").upper()
+    all_cycles_rejected = _all_cycles_rejected(indexed.get("cycles"))
     candidate_version = best.get("winning_version_id") or best.get(
         "last_accepted_version_id"
     )
     recent_id = best.get("best_feedback_evaluation_id")
     historical_id = best.get("best_accuracy_evaluation_id")
+    if (
+        historical_id == baseline.get("original_accuracy_evaluation_id")
+        and candidate_version != baseline.get("version_id")
+    ):
+        historical_id = (
+            _indexed_winning_candidate_accuracy_evaluation_id(
+                indexed,
+                candidate_version,
+            )
+            or historical_id
+        )
+    terminal_all_candidates_rejected = _terminal_all_candidates_rejected(
+        indexed,
+        effective_status=effective_status,
+        baseline_version=baseline.get("version_id"),
+        winning_version=candidate_version,
+        artifacts_complete=review_artifacts.get("artifacts_complete") is True,
+        rca_complete=review_artifacts.get("rca_complete") is True,
+        read_evaluation=read_evaluation,
+    )
+    terminal_baselines_already_good = _terminal_baselines_already_good(
+        indexed,
+        effective_status=effective_status,
+        baseline_version=baseline.get("version_id"),
+        winning_version=candidate_version,
+        read_evaluation=read_evaluation,
+    )
     evidence_ids = [
         str(value)
         for value in (procedure_id, recent_id, historical_id)
@@ -147,10 +201,30 @@ def build_indexed_optimizer_review_evidence(
         "prediction_collapse": None,
         "rca_complete": False,
         "artifacts_complete": review_artifacts.get("artifacts_complete") is True,
-        "measurable_safe_improvement": None,
+        "measurable_safe_improvement": (
+            False
+            if terminal_all_candidates_rejected or terminal_baselines_already_good
+            else None
+        ),
         "candidate_version_id": candidate_version,
         "evidence_ids": evidence_ids,
+        "alignment_evidence": {
+            "recent": _alignment_metric_evidence(
+                baseline.get("feedback_alignment"), best.get("feedback_alignment")
+            ),
+            "regression": _alignment_metric_evidence(
+                baseline.get("accuracy_alignment"), best.get("accuracy_alignment")
+            ),
+        },
     }
+    # Some indexed manifests retain the frozen baseline evaluations as the
+    # "best" pair when every candidate was rejected. Those IDs are not proof
+    # that an interrupted or otherwise incomplete rejection set exhausted the
+    # search, so never let that normal winner path classify it as safe.
+    if all_cycles_rejected:
+        return base_result
+    if terminal_baselines_already_good:
+        return base_result
     if (
         effective_status not in _SUCCESS_STATES
         or not candidate_version
@@ -217,6 +291,175 @@ def build_indexed_optimizer_review_evidence(
 
 def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
+
+
+def _all_cycles_rejected(cycles: Any) -> bool:
+    return (
+        isinstance(cycles, list)
+        and bool(cycles)
+        and all(
+            isinstance(cycle, Mapping)
+            and cycle.get("accepted") is False
+            and str(cycle.get("status") or "").lower() == "rejected"
+            for cycle in cycles
+        )
+    )
+
+
+def _indexed_winning_candidate_accuracy_evaluation_id(
+    indexed: Mapping[str, Any],
+    winning_version_id: Any,
+) -> str | None:
+    if not winning_version_id:
+        return None
+    evaluation_ids = {
+        str(candidate["accuracy_evaluation_id"])
+        for cycle in indexed.get("cycles") or []
+        if isinstance(cycle, Mapping)
+        for candidate in cycle.get("candidates") or []
+        if isinstance(candidate, Mapping)
+        and candidate.get("version_id") == winning_version_id
+        and candidate.get("accuracy_evaluation_id")
+    }
+    return next(iter(evaluation_ids)) if len(evaluation_ids) == 1 else None
+
+
+def _alignment_at_least(value: Any, minimum: float) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value >= minimum
+    )
+
+
+def _terminal_baselines_already_good(
+    indexed: Mapping[str, Any],
+    *,
+    effective_status: str,
+    baseline_version: Any,
+    winning_version: Any,
+    read_evaluation: Callable[[str], Mapping[str, Any]],
+) -> bool:
+    summary = _mapping(indexed.get("summary"))
+    procedure = _mapping(indexed.get("procedure"))
+    baseline = _mapping(indexed.get("baseline"))
+    completion_reason = summary.get("completion_reason")
+    if completion_reason == "baselines_already_good":
+        if summary.get("stop_reason") != "already_good":
+            return False
+    elif completion_reason != "legacy_baselines_already_good":
+        return False
+
+    feedback_evaluation_id = baseline.get("original_feedback_evaluation_id")
+    accuracy_evaluation_id = baseline.get("original_accuracy_evaluation_id")
+    completed_cycles = summary.get("completed_cycles")
+    if (
+        effective_status not in _SUCCESS_STATES
+        or str(procedure.get("status") or "").upper() != "COMPLETED"
+        or str(procedure.get("task_status") or "").upper() != "COMPLETED"
+        or type(completed_cycles) is not int
+        or completed_cycles != 0
+        or indexed.get("cycles") != []
+        or not baseline_version
+        or winning_version != baseline_version
+        or not feedback_evaluation_id
+        or not accuracy_evaluation_id
+        or feedback_evaluation_id == accuracy_evaluation_id
+        or not _alignment_at_least(baseline.get("feedback_alignment"), 0.99)
+        or not _alignment_at_least(baseline.get("accuracy_alignment"), 0.99)
+    ):
+        return False
+    try:
+        feedback_evaluation = _mapping(read_evaluation(str(feedback_evaluation_id)))
+        accuracy_evaluation = _mapping(read_evaluation(str(accuracy_evaluation_id)))
+    except Exception:  # noqa: BLE001 - missing evidence fails closed
+        return False
+    return (
+        feedback_evaluation.get("id") == feedback_evaluation_id
+        and accuracy_evaluation.get("id") == accuracy_evaluation_id
+        and _evaluation_complete(feedback_evaluation)
+        and _evaluation_complete(accuracy_evaluation)
+        and feedback_evaluation.get("score_version_id") == baseline_version
+        and accuracy_evaluation.get("score_version_id") == baseline_version
+    )
+
+
+def _terminal_all_candidates_rejected(
+    indexed: Mapping[str, Any],
+    *,
+    effective_status: str,
+    baseline_version: Any,
+    winning_version: Any,
+    artifacts_complete: bool,
+    rca_complete: bool,
+    read_evaluation: Callable[[str], Mapping[str, Any]],
+) -> bool:
+    summary = _mapping(indexed.get("summary"))
+    cycles = indexed.get("cycles")
+    baseline = _mapping(indexed.get("baseline"))
+    original_recent_id = baseline.get("original_feedback_evaluation_id")
+    original_historical_id = baseline.get("original_accuracy_evaluation_id")
+    completed_cycles = summary.get("completed_cycles")
+    if (
+        effective_status not in _SUCCESS_STATES
+        or not artifacts_complete
+        or not rca_complete
+        or not baseline_version
+        or winning_version != baseline_version
+        or str(summary.get("stop_reason") or "").lower() != "max_iterations"
+        or type(completed_cycles) is not int
+        or completed_cycles < 1
+        or not isinstance(cycles, list)
+        or not cycles
+        or completed_cycles != len(cycles)
+        or not original_recent_id
+        or not original_historical_id
+        or original_recent_id == original_historical_id
+    ):
+        return False
+    for cycle in cycles:
+        if not isinstance(cycle, Mapping):
+            return False
+        if cycle.get("accepted") is not False:
+            return False
+        if str(cycle.get("status") or "").lower() != "rejected":
+            return False
+        candidates = cycle.get("candidates")
+        if not isinstance(candidates, list) or not candidates:
+            return False
+        for candidate in candidates:
+            if not isinstance(candidate, Mapping):
+                return False
+            candidate_version = candidate.get("version_id")
+            feedback_evaluation_id = candidate.get("feedback_evaluation_id")
+            accuracy_evaluation_id = candidate.get("accuracy_evaluation_id")
+            if (
+                not candidate_version
+                or not feedback_evaluation_id
+                or not accuracy_evaluation_id
+                or feedback_evaluation_id == accuracy_evaluation_id
+            ):
+                return False
+            try:
+                feedback_evaluation = _mapping(
+                    read_evaluation(str(feedback_evaluation_id))
+                )
+                accuracy_evaluation = _mapping(
+                    read_evaluation(str(accuracy_evaluation_id))
+                )
+            except Exception:  # noqa: BLE001 - missing evidence fails closed
+                return False
+            if not (
+                _evaluation_complete(feedback_evaluation)
+                and _evaluation_complete(accuracy_evaluation)
+                and feedback_evaluation.get("score_version_id") == candidate_version
+                and accuracy_evaluation.get("score_version_id") == candidate_version
+                and _evaluation_baseline_id(feedback_evaluation) == original_recent_id
+                and _evaluation_baseline_id(accuracy_evaluation)
+                == original_historical_id
+            ):
+                return False
+    return True
 
 
 def _evaluation_complete(evaluation: Mapping[str, Any]) -> bool:

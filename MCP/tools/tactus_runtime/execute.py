@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import difflib
+from hashlib import sha256
 import json
 import logging
 import os
@@ -40,6 +41,53 @@ SCORE_AUDIT_DIFF_TEXT_MAX_CHARS = 20_000
 SCORE_AUDIT_UNIFIED_DIFF_MAX_CHARS = 20_000
 FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY = 4
 FEEDBACK_ALIGNMENT_SCORECARD_CONCURRENCY = 5
+OPTIMIZATION_RANK_INVENTORY_PAGE_SIZE = 100
+# Long portfolio reads must remain observable, but report status is not an
+# event log.  These aggregate intervals deliberately avoid a report write per
+# scorecard page/result while still giving an operator regular confirmation of
+# forward progress.
+OPTIMIZATION_RANK_PROGRESS_INTERVAL = 5
+_MISSING_CONFIGURATION_DIGEST_INPUT = b"plexus:optimization:missing-configuration:v1"
+_MISSING_GUIDELINES_DIGEST_INPUT = b"plexus:optimization:missing-guidelines:v1"
+
+
+def _frozen_assessment_input_digest(
+    value: Any,
+    *,
+    missing_marker: bytes,
+) -> tuple[str, str]:
+    """Return a stable digest and presence state for an assessment input.
+
+    The assessment itself consumes configurations and guidelines as text.  Its
+    durable packet must preserve a precondition for that exact text without
+    serializing it into an agent-facing handoff.  Empty values have the same
+    semantic meaning as absent values in the existing assessment logic, so
+    both use an explicit, versioned marker rather than an ambiguous null.
+    """
+    if value is None or value == "":
+        return sha256(missing_marker).hexdigest(), "missing"
+    if isinstance(value, bytes):
+        content = value
+    else:
+        content = str(value).encode("utf-8")
+    return sha256(content).hexdigest(), "present"
+
+
+def _same_iso_timestamp(left: Any, right: Any) -> bool:
+    """Compare equivalent ISO-8601 instants, not their wire formatting."""
+    if left == right:
+        return True
+    if not isinstance(left, str) or not isinstance(right, str):
+        return False
+    try:
+        from datetime import datetime, timezone
+
+        return (
+            datetime.fromisoformat(left.replace("Z", "+00:00")).astimezone(timezone.utc)
+            == datetime.fromisoformat(right.replace("Z", "+00:00")).astimezone(timezone.utc)
+        )
+    except ValueError:
+        return False
 
 
 PLEXUS_DOCS_DIR = os.path.normpath(
@@ -636,6 +684,8 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("report_configurations_list", "report", "configurations_list"),
     ("report_list", "report", "list"),
     ("report_info", "report", "info"),
+    ("report_artifacts", "report", "artifacts"),
+    ("report_artifact", "report", "artifact"),
     ("report_blocks", "report", "blocks"),
     ("report_run", "report", "run"),
     ("procedure_info", "procedure", "info"),
@@ -665,6 +715,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("optimization_run", "optimization", "run"),
     ("optimization_review", "optimization", "review"),
     ("optimization_summary", "optimization", "summary"),
+    ("optimization_portfolio_run", "optimization", "portfolio_run"),
     ("api_list", "api", "list"),
     ("model_frontier_plan", "model_frontier", "plan"),
     ("model_frontier_build_result_row", "model_frontier", "build_result_row"),
@@ -825,6 +876,8 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("report", "configurations_list"): _method_spec("_call_report_read", planning_allowed=True),
     ("report", "list"): _method_spec("_call_report_read", planning_allowed=True),
     ("report", "info"): _method_spec("_call_report_read", planning_allowed=True),
+    ("report", "artifacts"): _method_spec("_call_report_read", planning_allowed=True),
+    ("report", "artifact"): _method_spec("_call_report_read", planning_allowed=True),
     ("report", "blocks"): _method_spec("_call_report_read", planning_allowed=True),
     ("dataset", "build_from_feedback_window"): _method_spec("_call_dataset", planning_allowed=True),
     ("dataset", "check_associated"): _method_spec("_call_dataset", planning_allowed=True),
@@ -863,12 +916,30 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("optimization", "run"): _method_spec("_call_optimization", planning_allowed=False),
     ("optimization", "review"): _method_spec("_call_optimization", planning_allowed=True),
     ("optimization", "summary"): _method_spec("_call_optimization", planning_allowed=True),
+    # This starts/resumes the durable Report and may later launch approved
+    # optimizers, so it is intentionally unavailable in Console planning mode.
+    ("optimization", "portfolio_run"): _method_spec("_call_optimization", planning_allowed=False),
 }
 
 
 DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     key: spec.handler for key, spec in RUNTIME_METHOD_SPECS.items()
 }
+
+
+def _require_optimization_application_authority() -> None:
+    """Refresh the local application session before portfolio state exists.
+
+    Portfolio runs can execute long enough for a caller's existing bearer
+    token to become unusable.  Require an access token from the operating
+    system keychain before the portfolio path reads or creates its durable
+    Task/Report/ChatMessage state.  The typed Cognito failures deliberately
+    propagate unchanged: each already includes operator-specific recovery
+    guidance and none proves it is safe to begin the run.
+    """
+    from plexus.auth.cognito import CognitoAuthService
+
+    CognitoAuthService().get_access_token()
 
 
 def _default_scorecards_list(args: dict[str, Any]) -> Any:
@@ -2293,7 +2364,10 @@ def _aggregate_feedback_alignment_window(
     days: int,
     window_start: str | None = None,
     window_end: str | None = None,
-) -> dict[tuple[str, str], dict[tuple[str, str], int]]:
+) -> tuple[
+    dict[tuple[str, str], dict[tuple[str, str], int]],
+    dict[tuple[str, str], str],
+]:
     """Stream one complete feedback window into compact per-score pair counts.
 
     Portfolio analysis needs only final/predicted label pairs.  Keeping raw
@@ -2322,6 +2396,7 @@ def _aggregate_feedback_alignment_window(
                 initialAnswerValue
                 finalAnswerValue
                 isInvalid
+                updatedAt
             }
             nextToken
         }
@@ -2347,6 +2422,7 @@ def _aggregate_feedback_alignment_window(
         "nextToken": None,
     }
     aggregates: dict[tuple[str, str], Counter[tuple[str, str]]] = defaultdict(Counter)
+    feedback_watermarks: dict[tuple[str, str], tuple[datetime, str]] = {}
 
     while True:
         response = client.execute(query, variables)
@@ -2372,17 +2448,36 @@ def _aggregate_feedback_alignment_window(
                 "plexus.feedback.alignment_batch feedback-window data was missing"
             )
         for item in page.get("items") or []:
-            if not isinstance(item, dict) or item.get("isInvalid"):
+            if not isinstance(item, dict):
                 continue
             scorecard_id = str(item.get("scorecardId") or "").strip()
             score_id = str(item.get("scoreId") or "").strip()
+            target_key = (scorecard_id, score_id)
+            updated_at = item.get("updatedAt")
+            if scorecard_id and score_id and isinstance(updated_at, str) and updated_at:
+                try:
+                    parsed_updated_at = datetime.fromisoformat(
+                        updated_at.replace("Z", "+00:00")
+                    ).astimezone(timezone.utc)
+                except (TypeError, ValueError):
+                    parsed_updated_at = None
+                if parsed_updated_at is not None and (
+                    target_key not in feedback_watermarks
+                    or parsed_updated_at > feedback_watermarks[target_key][0]
+                ):
+                    feedback_watermarks[target_key] = (parsed_updated_at, updated_at)
+            if item.get("isInvalid"):
+                continue
             initial = item.get("initialAnswerValue")
             final = item.get("finalAnswerValue")
             if scorecard_id and score_id and initial is not None and final is not None:
-                aggregates[(scorecard_id, score_id)][(final, initial)] += 1
+                aggregates[target_key][(final, initial)] += 1
         next_token = page.get("nextToken")
         if not next_token:
-            return {key: dict(counts) for key, counts in aggregates.items()}
+            return (
+                {key: dict(counts) for key, counts in aggregates.items()},
+                {key: value for key, (_parsed, value) in feedback_watermarks.items()},
+            )
         variables["nextToken"] = next_token
 
 
@@ -2393,6 +2488,7 @@ def _default_feedback_alignment_batch(
     _prefetched_feedback_pair_counts: dict[
         tuple[str, str], dict[tuple[str, str], int]
     ] | None = None,
+    _prefetched_feedback_watermarks: dict[tuple[str, str], str] | None = None,
     _prefetched_account_id: str | None = None,
     _prefetched_scorecard_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -2447,6 +2543,13 @@ def _default_feedback_alignment_batch(
         }
     """
     raw_scorecards = args.get("scorecards")
+    progress_callback = args.get("_optimization_rank_progress")
+
+    def publish_progress(event: Mapping[str, Any]) -> None:
+        """Relay private portfolio-ranking progress without affecting output."""
+        if not callable(progress_callback):
+            return
+        progress_callback(dict(event))
     prefetched_scorecards_by_id: dict[str, dict[str, Any]] = {}
     portfolio_selection_rule: str | None = None
     has_explicit_scorecard = any(
@@ -2527,6 +2630,7 @@ def _default_feedback_alignment_batch(
             "scorecard_name",
             "scorecard_id",
             "scorecard_limit",
+            "_optimization_rank_progress",
         ):
             single_args.pop(key, None)
 
@@ -2540,19 +2644,37 @@ def _default_feedback_alignment_batch(
             args,
             "plexus.feedback.alignment_batch",
         )
-        portfolio_feedback_pair_counts = _aggregate_feedback_alignment_window(
+        (
+            portfolio_feedback_pair_counts,
+            portfolio_feedback_watermarks,
+        ) = _aggregate_feedback_alignment_window(
             portfolio_client,
             account_id=portfolio_account_id,
             days=int(float(args.get("days", 7))),
             window_start=args.get("window_start"),
             window_end=args.get("window_end"),
         )
+        target_count = len(scorecard_identifiers)
+        publish_progress({
+            "phase": "ranking",
+            "subphase": "feedback_analysis",
+            "state": "active",
+            "current": 0,
+            "total": target_count,
+            "unit": "scorecards",
+            "message": (
+                "Shared feedback evidence is loaded; analyzing the selected "
+                f"{target_count} scorecards."
+            ),
+            "next_checkpoint": "The next update follows an aggregate feedback-analysis batch.",
+        })
 
         def analyze_scorecard(identifier: str) -> dict[str, Any]:
             try:
                 return _default_feedback_alignment_batch(
                     {**single_args, "scorecard": identifier},
                     _prefetched_feedback_pair_counts=portfolio_feedback_pair_counts,
+                    _prefetched_feedback_watermarks=portfolio_feedback_watermarks,
                     _prefetched_account_id=portfolio_account_id,
                     _prefetched_scorecard_data=prefetched_scorecards_by_id.get(identifier),
                 )
@@ -2567,20 +2689,104 @@ def _default_feedback_alignment_batch(
         # local after the single feedback-window read.  Avoid thread startup
         # and scheduling overhead on that latency-critical path.  Explicit
         # named scorecard lists still use bounded parallel reads below.
+        def publish_batch_progress(
+            *, processed_count: int, successful_count: int, failed_count: int
+        ) -> None:
+            """Publish an honest aggregate checkpoint before rank validates output.
+
+            A batch worker can fail independently.  Until the rank adapter has
+            validated the returned coverage, a progress event must describe
+            processed work rather than imply that every yielded result was a
+            successful analysis.
+            """
+            if failed_count:
+                publish_progress({
+                    "phase": "ranking",
+                    "subphase": "feedback_analysis",
+                    "state": "incomplete",
+                    "current": successful_count,
+                    "total": target_count,
+                    "unit": "scorecards",
+                    "message": (
+                        "Feedback analysis has processed "
+                        f"{processed_count} of {target_count} scorecards; "
+                        f"{successful_count} completed and {failed_count} failed."
+                    ),
+                    "next_checkpoint": (
+                        "Feedback analysis continues, but the ranking will remain "
+                        "incomplete unless every selected scorecard succeeds."
+                    ),
+                })
+                return
+            publish_progress({
+                "phase": "ranking",
+                "subphase": "feedback_analysis",
+                "state": "active",
+                "current": successful_count,
+                "total": target_count,
+                "unit": "scorecards",
+                "message": (
+                    "Feedback analysis completed for "
+                    f"{successful_count} of {target_count} scorecards."
+                ),
+                "next_checkpoint": (
+                    "Feedback analysis continues until every selected scorecard is covered."
+                ),
+            })
+
         if portfolio_selection_rule is not None:
-            scorecard_results = [
-                analyze_scorecard(identifier) for identifier in scorecard_identifiers
-            ]
+            scorecard_results = []
+            successful_count = 0
+            failed_count = 0
+            for index, identifier in enumerate(scorecard_identifiers, start=1):
+                result = analyze_scorecard(identifier)
+                scorecard_results.append(result)
+                if result.get("error"):
+                    failed_count += 1
+                else:
+                    successful_count += 1
+                if (
+                    index % OPTIMIZATION_RANK_PROGRESS_INTERVAL == 0
+                    and index < target_count
+                ):
+                    publish_batch_progress(
+                        processed_count=index,
+                        successful_count=successful_count,
+                        failed_count=failed_count,
+                    )
         else:
             with ThreadPoolExecutor(
                 max_workers=min(
                     FEEDBACK_ALIGNMENT_SCORECARD_CONCURRENCY,
-                    len(scorecard_identifiers),
+                    target_count,
                 )
             ) as executor:
-                scorecard_results = list(
-                    executor.map(analyze_scorecard, scorecard_identifiers)
-                )
+                # Keep the established ``map`` contract: it applies bounded
+                # concurrency while yielding responses in target order.  That
+                # stable order is part of the public batch result; the progress
+                # signal is intentionally aggregate, so it does not need to
+                # expose the nondeterministic order in which worker futures
+                # happened to complete.
+                scorecard_results = []
+                successful_count = 0
+                failed_count = 0
+                for completed, result in enumerate(
+                    executor.map(analyze_scorecard, scorecard_identifiers), start=1
+                ):
+                    scorecard_results.append(result)
+                    if result.get("error"):
+                        failed_count += 1
+                    else:
+                        successful_count += 1
+                    if (
+                        completed % OPTIMIZATION_RANK_PROGRESS_INTERVAL == 0
+                        and completed < target_count
+                    ):
+                        publish_batch_progress(
+                            processed_count=completed,
+                            successful_count=successful_count,
+                            failed_count=failed_count,
+                        )
         failed_count = sum(
             1 for scorecard_result in scorecard_results
             if scorecard_result.get("error")
@@ -2600,6 +2806,16 @@ def _default_feedback_alignment_batch(
         }
         if portfolio_selection_rule is not None:
             result["selection_rule"] = portfolio_selection_rule
+        # The rank adapter owns the only successful N/N status after it has
+        # independently reconciled coverage and returned rows.  The batch may
+        # immediately surface a known failure, but never claims terminal
+        # success on its own.
+        if failed_count:
+            publish_batch_progress(
+                processed_count=len(scorecard_results),
+                successful_count=completed_count,
+                failed_count=failed_count,
+            )
         return result
 
     from plexus.cli.feedback.feedback_service import FeedbackService
@@ -2731,6 +2947,13 @@ def _default_feedback_alignment_batch(
             for (item_scorecard_id, score_id), counts in _prefetched_feedback_pair_counts.items()
             if item_scorecard_id == scorecard_id
         }
+    prefetched_watermarks_by_score: dict[str, str] = {
+        score_id: watermark
+        for (item_scorecard_id, score_id), watermark in (
+            _prefetched_feedback_watermarks or {}
+        ).items()
+        if item_scorecard_id == scorecard_id
+    }
 
     async def analyze_scores() -> list[dict[str, Any] | None]:
         semaphore = asyncio.Semaphore(FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY)
@@ -2830,6 +3053,7 @@ def _default_feedback_alignment_batch(
                     "disagreements": disagreements,
                     "disagreement_rate": disagreement_rate,
                     "reviewed_error_opportunity": reviewed_error_opportunity,
+                    "feedback_watermark": prefetched_watermarks_by_score.get(score_id),
                     # These distributions are computed after invalid rows and
                     # incomplete initial/final label pairs are excluded by the
                     # shared analyzer.  Preserve them for investment policy.
@@ -2973,7 +3197,7 @@ def _default_evaluation_info(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _default_optimization_persist(packet: dict[str, Any]) -> Any:
-    """Persist one exact decision packet through the canonical Report/S3 path."""
+    """Persist one exact decision packet through artifact persistence."""
     from plexus.cli.shared.client_utils import create_client
     from plexus.optimization.persistence import persist_decision_packet
 
@@ -3653,7 +3877,14 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
-    """Run plexus.score.set_champion directly — mirrors plexus_score_set_champion."""
+    """Promote a score version, optionally guarded by its current champion.
+
+    ``expected_champion_version_id`` is an optimistic-concurrency precondition
+    for report-derived follow-ups.  When supplied, the live champion is read
+    immediately before the promotion mutation and must match exactly.  This
+    does not replace the runtime's normal Human.approve confirmation for the
+    destructive operation.
+    """
 
     import uuid as _uuid
     from datetime import datetime, timezone
@@ -3665,9 +3896,14 @@ def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
 
     score_id = args.get("score_id") or args.get("id")
     version_id = args.get("version_id") or args.get("version")
+    expected_champion_version_id = args.get("expected_champion_version_id")
     if not score_id or not version_id:
         raise ValueError(
             "plexus.score.set_champion requires score_id and version_id"
+        )
+    if expected_champion_version_id is not None and not str(expected_champion_version_id):
+        raise ValueError(
+            "plexus.score.set_champion expected_champion_version_id must be non-empty when supplied"
         )
 
     client = create_client()
@@ -3730,11 +3966,104 @@ def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
         )
         previous_version_meta = prev_result.get("getScoreVersion") or {}
 
-    promo_result = client.execute(
-        "mutation UpdateScore($input: UpdateScoreInput!) { "
-        "updateScore(input: $input) { id championVersionId } }",
-        {"input": {"id": str(score_id), "championVersionId": str(version_id)}},
-    )
+    if expected_champion_version_id is not None:
+        # Do this as the final read before the mutation.  A report finding is
+        # immutable, but its captured champion can become stale at any time.
+        # Do not turn an unavailable read into an unguarded promotion.
+        try:
+            current_result = client.execute(
+                """
+                query GetCurrentChampionForPrecondition($scoreId: ID!) {
+                    getScore(id: $scoreId) { id championVersionId }
+                }
+                """,
+                {"scoreId": str(score_id)},
+            )
+            current_score = current_result.get("getScore") or {}
+            current_champion_version_id = current_score.get("championVersionId")
+        except Exception:  # nosec B110 - deliberately fail closed below
+            current_score = {}
+            current_champion_version_id = None
+
+        if not current_score or current_champion_version_id is None:
+            return {
+                "success": False,
+                "error": "CHAMPION_PRECONDITION_UNAVAILABLE",
+                "message": "Cannot promote: the current champion could not be verified.",
+                "scoreId": str(score_id),
+                "versionId": str(version_id),
+            }
+        if str(current_champion_version_id) != str(expected_champion_version_id):
+            return {
+                "success": False,
+                "error": "CHAMPION_PRECONDITION_FAILED",
+                "message": (
+                    "Cannot promote: the score's champion changed since this "
+                    "follow-up was created."
+                ),
+                "scoreId": str(score_id),
+                "versionId": str(version_id),
+            }
+
+    promotion_input: dict[str, Any] = {
+        "input": {"id": str(score_id), "championVersionId": str(version_id)}
+    }
+    if expected_champion_version_id is not None:
+        promotion_query = (
+            "mutation UpdateScore($input: UpdateScoreInput!, "
+            "$condition: ModelScoreConditionInput) { "
+            "updateScore(input: $input, condition: $condition) { "
+            "id championVersionId } }"
+        )
+        promotion_input["condition"] = {
+            "championVersionId": {"eq": str(expected_champion_version_id)}
+        }
+    else:
+        promotion_query = (
+            "mutation UpdateScore($input: UpdateScoreInput!) { "
+            "updateScore(input: $input) { id championVersionId } }"
+        )
+
+    def _is_conditional_rejection(value: Any) -> bool:
+        message = str(value).lower()
+        return (
+            "conditionalcheckfailed" in message
+            or "conditional request failed" in message
+            or "condition failed" in message
+        )
+
+    try:
+        promo_result = client.execute(promotion_query, promotion_input)
+    except Exception as exc:
+        if (
+            expected_champion_version_id is not None
+            and _is_conditional_rejection(exc)
+        ):
+            return {
+                "success": False,
+                "error": "CHAMPION_PRECONDITION_FAILED",
+                "message": (
+                    "Cannot promote: the score's champion changed since this "
+                    "follow-up was created."
+                ),
+                "scoreId": str(score_id),
+                "versionId": str(version_id),
+            }
+        raise
+    if (
+        expected_champion_version_id is not None
+        and _is_conditional_rejection(promo_result)
+    ):
+        return {
+            "success": False,
+            "error": "CHAMPION_PRECONDITION_FAILED",
+            "message": (
+                "Cannot promote: the score's champion changed since this "
+                "follow-up was created."
+            ),
+            "scoreId": str(score_id),
+            "versionId": str(version_id),
+        }
     if not promo_result or "updateScore" not in promo_result:
         raise RuntimeError(
             f"plexus.score.set_champion: mutation failed: {promo_result}"
@@ -3901,7 +4230,9 @@ def _default_score_contradictions(args: dict[str, Any]) -> dict[str, Any]:
         except Exception:
             pass
 
-    result = ScoreRubricConsistencyService().generate_from_api(
+    result = ScoreRubricConsistencyService(
+        semantic_authority=args.get("_semantic_authority")
+    ).generate_from_api(
         client=client,
         scorecard_identifier=str(scorecard_identifier),
         score_identifier=str(score_identifier),
@@ -3910,6 +4241,32 @@ def _default_score_contradictions(args: dict[str, Any]) -> dict[str, Any]:
         item_text=item_text,
     )
     return result.to_parameters_payload()
+
+
+def _semantic_diagnosis_must_fail_closed(exc: Exception) -> bool:
+    """Return whether continuing could make another unauthorized model contact."""
+    from plexus.optimization.run_report import (
+        OptimizationRunIntegrityError,
+        OptimizationRunPublicationError,
+    )
+    from plexus.optimization.semantic_authority import SemanticAuthorityError
+    from plexus.optimization.semantic_budget import SemanticBudgetError
+
+    fail_closed: tuple[type[BaseException], ...] = (
+        SemanticAuthorityError,
+        SemanticBudgetError,
+        OptimizationRunIntegrityError,
+        OptimizationRunPublicationError,
+    )
+    try:
+        from tactus.protocols.model_attempt import (
+            ModelAttemptOutcomeUnknown,
+            ModelAttemptRejected,
+        )
+        fail_closed += (ModelAttemptOutcomeUnknown, ModelAttemptRejected)
+    except ImportError:
+        pass
+    return isinstance(exc, fail_closed)
 
 
 def _default_item_last(args: dict[str, Any]) -> Any:
@@ -4438,19 +4795,344 @@ def _serialize_datetime(value: Any) -> Any:
     return value
 
 
-def _serialize_report_model(report: Any) -> dict[str, Any]:
+_REPORT_INLINE_ARTIFACT_BYTES = 32 * 1024
+_REPORT_INFO_MAX_BYTES = 20 * 1024
+_REPORT_INFO_HANDOFF_BYTES = 18 * 1024
+_REPORT_INLINE_CONTENT_TYPES = frozenset({
+    "application/json",
+    "text/markdown",
+    "text/csv",
+})
+
+
+def _report_run_metadata(report: Any) -> dict[str, Any]:
+    parameters = getattr(report, "parameters", None)
+    parameters = parameters if isinstance(parameters, Mapping) else {}
+    run = parameters.get("optimization_run")
+    return dict(run) if isinstance(run, Mapping) else {}
+
+
+def _report_revision_record(
+    report: Any,
+    revision_number: Any = None,
+) -> dict[str, Any] | None:
+    run = _report_run_metadata(report)
+    latest = run.get("latest_revision")
+    latest = dict(latest) if isinstance(latest, Mapping) else None
+    if revision_number is None or str(revision_number).strip() == "":
+        return latest
+    try:
+        wanted = int(revision_number)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("report revision must be an integer") from exc
+    if wanted < 1:
+        raise ValueError("report revision must be positive")
+    if latest is not None and int(latest.get("number") or -1) == wanted:
+        return latest
+    revisions = run.get("revisions")
+    if isinstance(revisions, list):
+        for item in revisions:
+            if isinstance(item, Mapping) and int(item.get("number") or -1) == wanted:
+                return dict(item)
+    raise ValueError(f"Report revision not found: {wanted}")
+
+
+def _compact_report_revision(value: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
     return {
+        key: value.get(key)
+        for key in (
+            "number",
+            "milestone",
+            "published_at",
+            "detail_status",
+            "detail_source_revision",
+        )
+        if value.get(key) is not None
+    }
+
+
+def _serialize_report_model(report: Any) -> dict[str, Any]:
+    """Return agent-safe metadata without parameters, block output, or history."""
+    run = _report_run_metadata(report)
+    latest = _report_revision_record(report)
+    overview = latest.get("overview") if isinstance(latest, Mapping) else None
+    overview = overview if isinstance(overview, Mapping) else {}
+    result = {
         "id": getattr(report, "id", None),
         "accountId": getattr(report, "accountId", None),
         "name": getattr(report, "name", None),
         "taskId": getattr(report, "taskId", None),
         "reportConfigurationId": getattr(report, "reportConfigurationId", None),
-        "parameters": getattr(report, "parameters", None) or {},
-        "output": getattr(report, "output", None),
         "createdAt": _serialize_datetime(getattr(report, "createdAt", None)),
         "updatedAt": _serialize_datetime(getattr(report, "updatedAt", None)),
         "createdByUserId": getattr(report, "createdByUserId", None),
+        "run_key": run.get("run_key"),
+        "lifecycle_status": overview.get("lifecycle_status"),
+        "latest_revision": _compact_report_revision(latest),
     }
+    compact = {key: value for key, value in result.items() if value is not None}
+    # Keep the revision key stable for historical Reports that predate living
+    # Report manifests so callers do not have to distinguish absent from null.
+    compact["latest_revision"] = result["latest_revision"]
+    return compact
+
+
+def _report_decision_summary(
+    revision: Mapping[str, Any] | None,
+) -> dict[str, str] | None:
+    """Interpret the latest safe overview without rewriting immutable evidence.
+
+    This keeps ``report.info`` useful for completed Reports whose published
+    handoff predates a more precise conclusion rule.  The verified handoff
+    remains available unchanged for artifact discovery; this compact summary
+    is the current reader's interpretation of the stored overview fields.
+    """
+    if not isinstance(revision, Mapping):
+        return None
+    overview = revision.get("overview")
+    if not isinstance(overview, Mapping):
+        return None
+    from plexus.optimization.report_actions import build_decision_summary
+
+    raw_counts = overview.get("primary_disposition_counts")
+    disposition_counts = raw_counts if isinstance(raw_counts, Mapping) else {}
+    summary = build_decision_summary(overview, disposition_counts)
+    if summary.get("headline", "").startswith("The configured run limit left"):
+        execution_failure_known = (
+            overview.get("diagnosis_execution_failure_count") is not None
+            or overview.get("semantic_budget_failure_count") is not None
+        )
+        required_zero_counts_known = all(
+            overview.get(key) is not None
+            for key in (
+                "diagnosis_incomplete_count",
+                "diagnosis_prerequisite_failure_count",
+                "semantic_budget_exhausted_count",
+                "semantic_budget_deferred_count",
+            )
+        )
+        if not execution_failure_known or not required_zero_counts_known:
+            return None
+    return summary
+
+
+def _load_report_for_runtime_account(
+    args: dict[str, Any],
+    api_name: str,
+) -> tuple[Any, str, Any]:
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.dashboard.api.models.report import Report
+
+    report_id = str(args.get("report_id") or args.get("id") or "").strip()
+    if not report_id:
+        raise ValueError(f"{api_name} requires report_id or id")
+    client = create_client()
+    if not client:
+        raise RuntimeError(f"{api_name}: could not create dashboard client")
+    account_id = _resolve_runtime_account_id(client, args, api_name)
+    report = Report.get_by_id(report_id, client)
+    if report is None:
+        raise ValueError(f"Report not found: {report_id}")
+    if getattr(report, "accountId", None) != account_id:
+        raise PermissionError(
+            f"Report {report_id} does not belong to the current runtime account"
+        )
+    return client, account_id, report
+
+
+def _validated_report_artifact_descriptor(
+    descriptor: Any,
+    *,
+    report: Any,
+    require_logical_id: bool,
+) -> dict[str, Any]:
+    if not isinstance(descriptor, Mapping):
+        raise RuntimeError("Report artifact descriptor is malformed")
+    value = dict(descriptor)
+    task_id = str(value.get("task_id") or "")
+    if not task_id or task_id != str(getattr(report, "taskId", "") or ""):
+        raise RuntimeError("Report artifact descriptor belongs to a different Task")
+    object_key = str(value.get("object_key") or "")
+    filename = object_key.rsplit("/", 1)[-1]
+    if not object_key or not filename or filename in {".", ".."}:
+        raise RuntimeError("Report artifact descriptor has an invalid object key")
+    content_type = str(value.get("content_type") or "").strip().lower()
+    digest = str(value.get("sha256") or "").strip().lower()
+    try:
+        size_bytes = int(value.get("size_bytes"))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("Report artifact descriptor has an invalid size") from exc
+    if size_bytes < 0 or not content_type or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise RuntimeError("Report artifact descriptor is incomplete")
+    logical_id = str(value.get("logical_id") or "").strip()
+    if require_logical_id and not logical_id:
+        raise RuntimeError("Report manifest artifact has no logical ID")
+    value.update({
+        "task_id": task_id,
+        "object_key": object_key,
+        "filename": filename,
+        "content_type": content_type,
+        "sha256": digest,
+        "size_bytes": size_bytes,
+    })
+    return value
+
+
+def _download_report_artifact_bytes(
+    client: Any,
+    report: Any,
+    descriptor: Mapping[str, Any],
+    *,
+    artifact_store: Any = None,
+) -> bytes:
+    from plexus.storage.graphql_artifact_store import (
+        ArtifactTransferRequest,
+        GraphQLArtifactStore,
+    )
+
+    value = _validated_report_artifact_descriptor(
+        descriptor, report=report, require_logical_id=False,
+    )
+    request = ArtifactTransferRequest(
+        operation="READ",
+        resource_type="TASK",
+        resource_id=value["task_id"],
+        artifact_type="TASK_ATTACHMENT",
+        filename=value["filename"],
+        content_type=value["content_type"],
+        size_bytes=value["size_bytes"],
+        sha256=value["sha256"],
+    )
+    content = (artifact_store or GraphQLArtifactStore(client)).download_bytes(request)
+    if not isinstance(content, bytes):
+        raise RuntimeError("Report artifact download did not return bytes")
+    if len(content) != value["size_bytes"]:
+        raise RuntimeError("Report artifact size verification failed")
+    if sha256(content).hexdigest() != value["sha256"]:
+        raise RuntimeError("Report artifact checksum verification failed")
+    return content
+
+
+def _parse_json_report_artifact(content: bytes, *, label: str) -> Mapping[str, Any]:
+    try:
+        value = json.loads(content.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"{label} is not valid UTF-8 JSON") from exc
+    if not isinstance(value, Mapping):
+        raise RuntimeError(f"{label} must contain a JSON object")
+    return value
+
+
+def _report_artifact_index(
+    args: dict[str, Any],
+    *,
+    artifact_store: Any = None,
+    loaded_report: tuple[Any, str, Any] | None = None,
+) -> tuple[Any, str, Any, dict[str, Any], list[dict[str, Any]]]:
+    client, account_id, report = loaded_report or _load_report_for_runtime_account(
+        args, "plexus.report.artifacts",
+    )
+    revision = _report_revision_record(report, args.get("revision"))
+    if revision is None:
+        raise ValueError("Report has no revisioned artifact manifest")
+    manifest_descriptor = _validated_report_artifact_descriptor(
+        revision.get("manifest"), report=report, require_logical_id=False,
+    )
+    manifest = _parse_json_report_artifact(
+        _download_report_artifact_bytes(
+            client, report, manifest_descriptor, artifact_store=artifact_store,
+        ),
+        label="Report revision manifest",
+    )
+    revision_number = int(revision.get("number") or 0)
+    if int(manifest.get("revision") or 0) != revision_number:
+        raise RuntimeError("Report revision manifest does not match the requested revision")
+    artifacts: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add_manifest_artifacts(items: Any) -> None:
+        if not isinstance(items, list):
+            raise RuntimeError("Report artifact manifest has an invalid artifact list")
+        for item in items:
+            value = _validated_report_artifact_descriptor(
+                item, report=report, require_logical_id=True,
+            )
+            logical_id = str(value["logical_id"])
+            if logical_id in seen:
+                raise RuntimeError("Report artifact manifest contains duplicate logical IDs")
+            seen.add(logical_id)
+            artifacts.append(value)
+
+    add_manifest_artifacts(manifest.get("artifacts") or [])
+    detail_descriptor = revision.get("detail_manifest")
+    if isinstance(detail_descriptor, Mapping):
+        detail_value = _validated_report_artifact_descriptor(
+            detail_descriptor, report=report, require_logical_id=False,
+        )
+        detail_manifest = _parse_json_report_artifact(
+            _download_report_artifact_bytes(
+                client, report, detail_value, artifact_store=artifact_store,
+            ),
+            label="Report detail manifest",
+        )
+        if int(detail_manifest.get("source_revision") or 0) != revision_number:
+            raise RuntimeError("Report detail manifest does not match the requested revision")
+        source_checksum = detail_manifest.get("source_manifest_checksum")
+        if source_checksum and str(source_checksum) != manifest_descriptor["sha256"]:
+            raise RuntimeError("Report detail manifest does not match its core manifest")
+        add_manifest_artifacts(detail_manifest.get("artifacts") or [])
+    return client, account_id, report, revision, artifacts
+
+
+def _report_artifact_dashboard_url(
+    client: Any,
+    report: Any,
+    revision_number: int,
+    descriptor: Mapping[str, Any],
+) -> str | None:
+    existing = descriptor.get("dashboard_url")
+    if isinstance(existing, str) and existing.strip():
+        return existing.strip()
+    generator = getattr(client, "generate_deep_link", None)
+    if not callable(generator):
+        return None
+    from urllib.parse import urlencode
+
+    base = generator(
+        "/lab/reports/{reportId}", {"reportId": str(getattr(report, "id", ""))}
+    )
+    separator = "&" if "?" in str(base) else "?"
+    return f"{base}{separator}{urlencode({'revision': revision_number, 'artifact': descriptor['logical_id']})}"
+
+
+def _public_report_artifact_metadata(
+    client: Any,
+    report: Any,
+    revision_number: int,
+    descriptor: Mapping[str, Any],
+) -> dict[str, Any]:
+    result = {
+        key: descriptor.get(key)
+        for key in (
+            "logical_id",
+            "kind",
+            "display_name",
+            "scope",
+            "content_type",
+            "size_bytes",
+            "sha256",
+            "source_revision",
+            "scorecard_name",
+            "score_name",
+        )
+        if descriptor.get(key) is not None
+    }
+    result["dashboard_url"] = _report_artifact_dashboard_url(
+        client, report, revision_number, descriptor,
+    )
+    return result
 
 
 def _serialize_report_block_model(block: Any, *, include_output: bool) -> dict[str, Any]:
@@ -4514,29 +5196,141 @@ def _default_report_list(args: dict[str, Any]) -> dict[str, Any]:
     return {"account_id": account_id, "count": len(items), "items": items}
 
 
-def _default_report_info(args: dict[str, Any]) -> dict[str, Any]:
-    """Fetch one persisted report by id for the runtime account."""
+def _default_report_info(
+    args: dict[str, Any],
+    *,
+    _artifact_store: Any = None,
+) -> dict[str, Any]:
+    """Return compact Report metadata plus the verified latest agent handoff."""
+    client, account_id, report = _load_report_for_runtime_account(
+        args, "plexus.report.info",
+    )
+    result = _serialize_report_model(report)
+    result["agent_handoff"] = None
+    latest = _report_revision_record(report)
+    decision_summary = _report_decision_summary(latest)
+    if decision_summary is not None:
+        result["decision_summary"] = decision_summary
+    if latest is None or not isinstance(latest.get("manifest"), Mapping):
+        return result
+    _client, _account_id, _report, revision, artifacts = _report_artifact_index(
+        {**args, "revision": latest.get("number")},
+        artifact_store=_artifact_store,
+        loaded_report=(client, account_id, report),
+    )
+    handoff_descriptor = next(
+        (
+            descriptor for descriptor in artifacts
+            if descriptor.get("logical_id") == "agent_handoff"
+            or descriptor.get("kind") == "agent_handoff"
+        ),
+        None,
+    )
+    if handoff_descriptor is None:
+        return result
+    if int(handoff_descriptor["size_bytes"]) > _REPORT_INFO_HANDOFF_BYTES:
+        raise RuntimeError("Agent handoff exceeds the compact Report response limit")
+    handoff = _parse_json_report_artifact(
+        _download_report_artifact_bytes(
+            client, report, handoff_descriptor, artifact_store=_artifact_store,
+        ),
+        label="Agent handoff",
+    )
+    if str(handoff.get("report_id") or "") != str(getattr(report, "id", "")):
+        raise RuntimeError("Agent handoff belongs to a different Report")
+    if int(handoff.get("revision") or 0) != int(revision.get("number") or 0):
+        raise RuntimeError("Agent handoff belongs to a different Report revision")
+    result["agent_handoff"] = dict(handoff)
+    if len(json.dumps(result, separators=(",", ":"), default=str).encode("utf-8")) >= _REPORT_INFO_MAX_BYTES:
+        raise RuntimeError("Compact Report response exceeds the 20 KB limit")
+    return result
 
-    from plexus.cli.shared.client_utils import create_client
-    from plexus.dashboard.api.models.report import Report
 
-    report_id = str(args.get("id") or args.get("report_id") or "").strip()
-    if not report_id:
-        raise ValueError("plexus.report.info requires id or report_id")
+def _default_report_artifacts(
+    args: dict[str, Any],
+    *,
+    _artifact_store: Any = None,
+) -> dict[str, Any]:
+    """List manifest-backed Report artifacts without returning their contents."""
+    client, account_id, report, revision, artifacts = _report_artifact_index(
+        args, artifact_store=_artifact_store,
+    )
+    kind = str(args.get("kind") or "").strip()
+    if kind:
+        artifacts = [item for item in artifacts if str(item.get("kind") or "") == kind]
+    limit = _coerce_positive_int(args.get("limit"), default=25, maximum=100)
+    raw_cursor = args.get("cursor")
+    try:
+        offset = int(raw_cursor) if raw_cursor not in (None, "") else 0
+    except (TypeError, ValueError) as exc:
+        raise ValueError("plexus.report.artifacts cursor is invalid") from exc
+    if offset < 0 or offset > len(artifacts):
+        raise ValueError("plexus.report.artifacts cursor is out of range")
+    selected = artifacts[offset: offset + limit]
+    next_offset = offset + len(selected)
+    revision_number = int(revision.get("number") or 0)
+    return {
+        "account_id": account_id,
+        "report_id": str(getattr(report, "id", "")),
+        "revision": revision_number,
+        "count": len(selected),
+        "artifacts": [
+            _public_report_artifact_metadata(
+                client, report, revision_number, descriptor,
+            )
+            for descriptor in selected
+        ],
+        "next_cursor": str(next_offset) if next_offset < len(artifacts) else None,
+    }
 
-    client = create_client()
-    if not client:
-        raise RuntimeError("plexus.report.info: could not create dashboard client")
 
-    account_id = _resolve_runtime_account_id(client, args, "plexus.report.info")
-    report = Report.get_by_id(report_id, client)
-    if report is None:
-        raise ValueError(f"Report not found: {report_id}")
-    if getattr(report, "accountId", None) != account_id:
-        raise PermissionError(
-            f"Report {report_id} does not belong to the current runtime account"
+def _default_report_artifact(
+    args: dict[str, Any],
+    *,
+    _artifact_store: Any = None,
+) -> dict[str, Any]:
+    """Read one exact manifest member, inlining only bounded safe text."""
+    client, _account_id, report, revision, artifacts = _report_artifact_index(
+        args, artifact_store=_artifact_store,
+    )
+    logical_id = str(args.get("logical_id") or "").strip()
+    if not logical_id:
+        raise ValueError("plexus.report.artifact requires logical_id")
+    descriptor = next(
+        (item for item in artifacts if str(item.get("logical_id") or "") == logical_id),
+        None,
+    )
+    if descriptor is None:
+        raise ValueError(
+            f"Artifact {logical_id!r} is not a member of the requested Report revision"
         )
-    return _serialize_report_model(report)
+    revision_number = int(revision.get("number") or 0)
+    result = _public_report_artifact_metadata(
+        client, report, revision_number, descriptor,
+    )
+    base_content_type = str(descriptor["content_type"]).split(";", 1)[0].strip()
+    if (
+        int(descriptor["size_bytes"]) > _REPORT_INLINE_ARTIFACT_BYTES
+        or base_content_type not in _REPORT_INLINE_CONTENT_TYPES
+    ):
+        result["inlined"] = False
+        return result
+    content = _download_report_artifact_bytes(
+        client, report, descriptor, artifact_store=_artifact_store,
+    )
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError("Report artifact is not valid UTF-8") from exc
+    if base_content_type == "application/json":
+        try:
+            result["content"] = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Report JSON artifact is malformed") from exc
+    else:
+        result["content"] = text
+    result["inlined"] = True
+    return result
 
 
 def _default_report_blocks(args: dict[str, Any]) -> dict[str, Any]:
@@ -8428,6 +9222,42 @@ def _default_rubric_memory_recent_entries(args: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _default_optimization_diagnosis_preflight(
+    _args: dict[str, Any],
+    *,
+    s3_client: Any | None = None,
+) -> dict[str, Any]:
+    """Prove rubric-memory storage authority before any semantic model spend."""
+    from plexus.rubric_memory.s3_corpus import RUBRIC_MEMORY_BUCKET_ENV_VAR
+
+    bucket_name = str(os.environ.get(RUBRIC_MEMORY_BUCKET_ENV_VAR) or "").strip()
+    if not bucket_name:
+        return {
+            "complete": False,
+            "failure_category": "required_evidence_unavailable",
+            "message": (
+                "Required rubric-memory storage is not configured; "
+                "repair worker configuration and resume."
+            ),
+        }
+    try:
+        if s3_client is None:
+            import boto3
+
+            s3_client = boto3.client("s3")
+        s3_client.list_objects_v2(Bucket=bucket_name, MaxKeys=1)
+    except Exception:
+        return {
+            "complete": False,
+            "failure_category": "required_evidence_unavailable",
+            "message": (
+                "Required rubric-memory storage authorization is unavailable; "
+                "refresh worker AWS credentials and resume."
+            ),
+        }
+    return {"complete": True, "authority": "rubric_memory_storage"}
+
+
 def _default_rubric_memory_evidence_pack(args: dict[str, Any]) -> dict[str, Any]:
     """Generate rubric-memory citation context for a disputed score item."""
     from plexus.cli.shared.client_utils import create_client
@@ -8455,7 +9285,11 @@ def _default_rubric_memory_evidence_pack(args: dict[str, Any]) -> dict[str, Any]
         client, scorecard_identifier, score_identifier, score_id_hint
     )
 
-    provider = RubricMemoryContextProvider(api_client=client)
+    authority = args.get("_model_attempt_authority")
+    provider = RubricMemoryContextProvider(
+        api_client=client,
+        **({"model_attempt_authority": authority} if authority is not None else {}),
+    )
     method = provider.generate_for_score_item if synthesize else provider.retrieve_for_score_item
 
     context = _run_async_from_sync(
@@ -8489,6 +9323,7 @@ def _default_rubric_memory_sme_question_gate(args: dict[str, Any]) -> dict[str, 
         RubricMemoryCitationContext,
         RubricMemorySMEQuestionGateRequest,
         RubricMemorySMEQuestionGateService,
+        TactusRubricMemorySMEQuestionGateSynthesizer,
         candidate_agenda_items_from_markdown,
     )
 
@@ -8523,7 +9358,11 @@ def _default_rubric_memory_sme_question_gate(args: dict[str, Any]) -> dict[str, 
         candidate_agenda_items=candidate_items,
         optimizer_context=optimizer_context,
     )
-    result = _run_async_from_sync(RubricMemorySMEQuestionGateService().gate(request))
+    result = _run_async_from_sync(RubricMemorySMEQuestionGateService(
+        synthesizer=TactusRubricMemorySMEQuestionGateSynthesizer(
+            model_attempt_authority=args.get("_model_attempt_authority")
+        )
+    ).gate(request))
     return {"success": True, **result.model_dump(mode="json")}
 
 
@@ -8552,6 +9391,19 @@ class _Namespace:
                 return _runtime_api_error_value(self._name, method_name, exc)
 
         return call
+
+
+class _PortfolioAssessmentContext:
+    """Ephemeral exact-ID configuration reader state for one portfolio run.
+
+    It deliberately never enters a decision packet, checkpoint, Report, or
+    public optimization operation.  A procedure retry starts a new context and
+    either resumes its durable assessment checkpoint or reads current facts
+    again before any new assessment is emitted.
+    """
+
+    def __init__(self) -> None:
+        self.client: Any | None = None
 
 
 class PlexusRuntimeModule:
@@ -8608,7 +9460,13 @@ class PlexusRuntimeModule:
         procedure_optimize: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         procedure_archive: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         optimization_handlers: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] | None = None,
+        optimization_portfolio_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        optimization_report_service_factory: Callable[[str, str, dict[str, Any]], Any] | None = None,
+        optimization_action_service_factory: Callable[[Any], Any] | None = None,
         optimization_persister: Callable[[dict[str, Any]], Any] | None = None,
+        optimization_child_step: Callable[..., Mapping[str, Any]] | None = None,
+        optimization_child_request: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        optimization_diagnosis_preflight: Callable[[dict[str, Any]], Mapping[str, Any]] | None = None,
         guidelines_validator: Callable[[str], dict[str, Any]] | None = None,
         terminal_class_resolver: Callable[[str], Any] | None = None,
         review_evidence_loader: Callable[[str], dict[str, Any]] | None = None,
@@ -8771,6 +9629,8 @@ class PlexusRuntimeModule:
             "configurations_list": self._report_configurations_list,
             "list": _default_report_list,
             "info": _default_report_info,
+            "artifacts": _default_report_artifacts,
+            "artifact": _default_report_artifact,
             "blocks": _default_report_blocks,
         }
         if report_readers:
@@ -8808,6 +9668,19 @@ class PlexusRuntimeModule:
             if optimization_persister is not None
             else _default_optimization_persist
         )
+        self._optimization_report_service_factory = optimization_report_service_factory
+        self._optimization_action_service_factory = optimization_action_service_factory
+        self._optimization_child_step = optimization_child_step
+        self._optimization_child_request = optimization_child_request
+        self._optimization_diagnosis_preflight = (
+            optimization_diagnosis_preflight
+            if optimization_diagnosis_preflight is not None
+            else (
+                (lambda _request: {"complete": True, "authority": "injected_diagnosis"})
+                if optimization_handlers and "diagnose" in optimization_handlers
+                else _default_optimization_diagnosis_preflight
+            )
+        )
         self._guidelines_validator = guidelines_validator
         self._terminal_class_resolver = terminal_class_resolver
         self._review_evidence_loader = review_evidence_loader
@@ -8815,6 +9688,17 @@ class PlexusRuntimeModule:
             method: self._default_optimization_handler(method)
             for method in ("rank", "assess", "diagnose", "run", "review", "summary")
         }
+        # Only the living portfolio coordinator receives this validator.  The
+        # public optimization.run handler uses the same freshness/approval
+        # checks but cannot launch without Report publication authority.
+        self._optimization_run_validator = self._default_optimization_handler(
+            "run", durable_publication_authority=True,
+        )
+        self._optimization_handlers["portfolio_run"] = (
+            optimization_portfolio_runner
+            if optimization_portfolio_runner is not None
+            else self._default_optimization_portfolio_runner
+        )
         if optimization_handlers:
             self._optimization_handlers.update(optimization_handlers)
         self._stream_handler = stream_handler
@@ -9651,14 +10535,58 @@ class PlexusRuntimeModule:
 
         as_of_datetime = datetime.now(timezone.utc).replace(microsecond=0)
         as_of = as_of_datetime.isoformat().replace("+00:00", "Z")
+        started_monotonic = time.monotonic()
+        progress_callback = args.get("_optimization_rank_progress")
+
+        def publish_progress(
+            *,
+            subphase: str,
+            state: str,
+            current: int,
+            total: int | None,
+            unit: str,
+            message: str,
+            next_checkpoint: str,
+        ) -> None:
+            """Publish aggregate ranking status through the living-Report callback.
+
+            This callback is private to the portfolio runner.  It deliberately
+            carries counts and generic phase names only—never scorecard or
+            score identifiers—and does not change ranking evidence.
+            """
+            if not callable(progress_callback):
+                return
+            progress_callback({
+                "phase": "ranking",
+                "subphase": subphase,
+                "state": state,
+                "current": current,
+                "total": total,
+                "unit": unit,
+                "message": message,
+                "elapsed_seconds": max(0, int(time.monotonic() - started_monotonic)),
+                "next_checkpoint": next_checkpoint,
+                "heartbeat_interval_seconds": 90,
+            })
+
         cards: list[dict[str, Any]] = []
         failures: list[dict[str, Any]] = []
         next_token: Any = None
         pages = 0
+        publish_progress(
+            subphase="inventory",
+            state="active",
+            current=0,
+            total=None,
+            unit="scorecards",
+            message="Starting exhaustive scorecard inventory.",
+            next_checkpoint="The next update follows inventory progress or a retry.",
+        )
         while True:
             page_args = {
                 "return_metadata": True,
                 "_include_scores": True,
+                "limit": OPTIMIZATION_RANK_INVENTORY_PAGE_SIZE,
                 "next_token": next_token,
                 "account_id": args.get("account_id"),
                 "as_of": as_of,
@@ -9669,9 +10597,28 @@ class PlexusRuntimeModule:
                     page = self._scorecards_lister(page_args)
                     break
                 except Exception as exc:  # noqa: BLE001 - preserve coverage evidence
+                    if attempt == 0:
+                        publish_progress(
+                            subphase="inventory",
+                            state="retrying",
+                            current=len(cards),
+                            total=None,
+                            unit="scorecards",
+                            message="Retrying the exhaustive scorecard inventory after a temporary delay.",
+                            next_checkpoint="One inventory retry is in progress before coverage is marked incomplete.",
+                        )
                     if attempt:
                         failures.append({"page": pages + 1, "error": str(exc)})
             if page is None:
+                publish_progress(
+                    subphase="inventory",
+                    state="incomplete",
+                    current=len(cards),
+                    total=None,
+                    unit="scorecards",
+                    message="Scorecard inventory could not complete after its retry; ranking will remain incomplete.",
+                    next_checkpoint="Publish the incomplete coverage result rather than assign an exact priority.",
+                )
                 break
             pages += 1
             if isinstance(page, dict):
@@ -9680,6 +10627,16 @@ class PlexusRuntimeModule:
             else:
                 items, next_token = page, None
             cards.extend(item for item in items if isinstance(item, dict))
+            if pages % OPTIMIZATION_RANK_PROGRESS_INTERVAL == 0:
+                publish_progress(
+                    subphase="inventory",
+                    state="active",
+                    current=len(cards),
+                    total=None,
+                    unit="scorecards",
+                    message=f"Exhaustive inventory has inspected {len(cards)} scorecards across {pages} pages.",
+                    next_checkpoint="The next update follows more inventory pages or scope resolution.",
+                )
             if not next_token:
                 break
 
@@ -9759,6 +10716,38 @@ class PlexusRuntimeModule:
         if failures or not matched_ids:
             return base_payload
 
+        publish_progress(
+            subphase="activity_evidence",
+            state="active",
+            current=len(selected_cards),
+            total=len(selected_cards),
+            unit="scorecards",
+            message=(
+                "Inventory and score-activity evidence are complete for "
+                f"{len(selected_cards)} scorecards in scope."
+            ),
+            next_checkpoint="Starting one frozen feedback-analysis batch for the selected scope.",
+        )
+
+        def feedback_progress(event: Mapping[str, Any]) -> None:
+            source = dict(event)
+            publish_progress(
+                subphase=str(source.get("subphase") or "feedback_analysis"),
+                state=str(source.get("state") or "active"),
+                current=int(source.get("current") or 0),
+                total=(
+                    int(source["total"])
+                    if source.get("total") is not None
+                    else None
+                ),
+                unit=str(source.get("unit") or "scorecards"),
+                message=str(source.get("message") or "Feedback analysis is running."),
+                next_checkpoint=str(
+                    source.get("next_checkpoint")
+                    or "The next update follows aggregate feedback-analysis progress."
+                ),
+            )
+
         try:
             alignment = self._feedback_aligner_batch({
                 "scorecards": matched_ids,
@@ -9767,14 +10756,25 @@ class PlexusRuntimeModule:
                 "window_end": window["end"],
                 "account_id": args.get("account_id"),
                 "as_of": as_of,
+                "_optimization_rank_progress": feedback_progress,
             })
         except Exception as exc:  # noqa: BLE001 - partial is observable, never exact
             coverage["complete"] = False
             coverage["failures"].append({"stage": "feedback_alignment", "error": str(exc)})
+            publish_progress(
+                subphase="feedback_analysis",
+                state="incomplete",
+                current=0,
+                total=len(matched_ids),
+                unit="scorecards",
+                message="Feedback analysis did not complete; ranking will remain incomplete.",
+                next_checkpoint="Publish the incomplete coverage result rather than assign an exact priority.",
+            )
             return base_payload
 
         downstream_coverage = alignment.get("coverage") if isinstance(alignment, dict) else None
         expected_targets = len(matched_ids)
+        reported_completed_count: int | None = None
         if not isinstance(downstream_coverage, dict):
             coverage["complete"] = False
             coverage["failures"].append({
@@ -9784,6 +10784,12 @@ class PlexusRuntimeModule:
         else:
             reported_targets = downstream_coverage.get("target_count")
             completed_targets = downstream_coverage.get("completed_count")
+            if (
+                isinstance(completed_targets, int)
+                and not isinstance(completed_targets, bool)
+                and 0 <= completed_targets <= expected_targets
+            ):
+                reported_completed_count = completed_targets
             if downstream_coverage.get("complete") is not True:
                 coverage["complete"] = False
                 coverage["failures"].extend(
@@ -9900,6 +10906,38 @@ class PlexusRuntimeModule:
                 "error": "analysis result omitted discovered scorecards",
                 "scorecard_ids": missing_scorecards,
             })
+        observed_completed_count = len(analyzed_scorecards)
+        completed_for_progress = (
+            observed_completed_count
+            if reported_completed_count is None
+            else min(reported_completed_count, observed_completed_count)
+        )
+        if coverage["complete"] is True:
+            publish_progress(
+                subphase="feedback_analysis",
+                state="active",
+                current=expected_targets,
+                total=expected_targets,
+                unit="scorecards",
+                message=(
+                    "Feedback analysis coverage is complete for all "
+                    f"{expected_targets} scorecards in scope."
+                ),
+                next_checkpoint="Reconcile complete feedback evidence with score activity and publish the ranked result.",
+            )
+        else:
+            publish_progress(
+                subphase="feedback_analysis",
+                state="incomplete",
+                current=completed_for_progress,
+                total=expected_targets,
+                unit="scorecards",
+                message=(
+                    "Feedback analysis coverage is incomplete; "
+                    f"{completed_for_progress} of {expected_targets} scorecards completed."
+                ),
+                next_checkpoint="Publish incomplete coverage rather than assign an exact ranking.",
+            )
         return {
             "scores": rows,
             "coverage": coverage,
@@ -9998,6 +11036,136 @@ class PlexusRuntimeModule:
             "evidence": dict(evidence),
         })
 
+    @staticmethod
+    def _new_portfolio_assessment_context() -> _PortfolioAssessmentContext:
+        """Create the non-serializable context shared by one portfolio pass."""
+        return _PortfolioAssessmentContext()
+
+    @staticmethod
+    def _portfolio_assessment_score_info(
+        context: _PortfolioAssessmentContext,
+        *,
+        account_id: str,
+        scorecard_id: str,
+        score_id: str,
+        expected_champion_version: str,
+    ) -> dict[str, Any]:
+        """Read only the exact score and its current champion configuration.
+
+        Portfolio assessment already holds opaque exact IDs from exhaustive
+        ranking.  Calling the general score-info command for each row makes it
+        re-resolve the scorecard, enumerate every sibling, list versions, and
+        only then fetch this champion.  This narrow path retains the same
+        current champion/configuration facts while avoiding that repeated
+        discovery work.  Ownership mismatches are structural evidence failures
+        rather than data that an assessment may silently accept.
+        """
+        if context.client is None:
+            from plexus.cli.shared.client_utils import create_client
+
+            context.client = create_client()
+        client = context.client
+        if client is None:
+            raise RuntimeError(
+                "portfolio assessment could not create an authenticated dashboard client"
+            )
+
+        query = """
+        query GetPortfolioAssessmentScore($score_id: ID!) {
+            getScore(id: $score_id) {
+                id
+                name
+                key
+                externalId
+                description
+                type
+                championVersionId
+                updatedAt
+                isDisabled
+                scorecard { id name accountId }
+                championVersion {
+                    id
+                    scoreId
+                    configuration
+                    guidelines
+                    createdAt
+                    updatedAt
+                    note
+                    isFeatured
+                    parentVersionId
+                    metadata
+                }
+            }
+        }
+        """
+        result = client.execute(query, {"score_id": score_id})
+        if not isinstance(result, Mapping) or result.get("errors"):
+            raise RuntimeError(
+                "portfolio assessment exact score configuration read failed"
+            )
+        score = result.get("getScore")
+        if not isinstance(score, Mapping) or str(score.get("id") or "") != score_id:
+            raise RuntimeError("portfolio assessment exact score was not found")
+        scorecard = score.get("scorecard")
+        if not isinstance(scorecard, Mapping) or str(scorecard.get("id") or "") != scorecard_id:
+            raise RuntimeError(
+                "portfolio assessment score does not belong to the requested scorecard"
+            )
+        if not account_id:
+            raise RuntimeError("portfolio assessment active account is required")
+        if str(scorecard.get("accountId") or "") != account_id:
+            raise RuntimeError(
+                "portfolio assessment scorecard does not belong to the active account"
+            )
+        if not expected_champion_version:
+            raise RuntimeError(
+                "portfolio assessment frozen champion version is required"
+            )
+
+        champion_id = str(score.get("championVersionId") or "").strip()
+        champion = score.get("championVersion")
+        if bool(champion_id) != (champion is not None):
+            raise RuntimeError(
+                "portfolio assessment champion relationship is incomplete"
+            )
+        if not isinstance(champion, Mapping):
+            raise RuntimeError(
+                "portfolio assessment champion relationship is incomplete"
+            )
+        if champion_id != expected_champion_version:
+            raise RuntimeError(
+                "portfolio assessment champion changed since frozen ranking"
+            )
+        if (
+            str(champion.get("id") or "") != champion_id
+            or str(champion.get("scoreId") or "") != score_id
+        ):
+            raise RuntimeError(
+                "portfolio assessment champion configuration does not belong to the requested score"
+            )
+        version = dict(champion) if isinstance(champion, Mapping) else None
+        return {
+            "found": True,
+            "scoreId": score_id,
+            "scoreName": score.get("name"),
+            "scoreKey": score.get("key"),
+            "externalId": score.get("externalId"),
+            "type": score.get("type"),
+            "championVersionId": champion_id,
+            "updatedAt": score.get("updatedAt"),
+            "isDisabled": score.get("isDisabled", False),
+            "location": {
+                "scorecardId": scorecard_id,
+                "scorecardName": scorecard.get("name"),
+            },
+            "description": score.get("description"),
+            "code": version.get("configuration") if version else None,
+            "guidelines": version.get("guidelines") if version else None,
+            "targetVersionId": champion_id if version else None,
+            "isChampionVersion": bool(version),
+            "versionDetails": version,
+        }
+
     def _optimization_assessment_payload(self, args: dict[str, Any]) -> dict[str, Any]:
         scorecard_id = str(args.get("scorecard_id") or "")
         score_id = str(args.get("score_id") or "")
@@ -10064,12 +11232,61 @@ class PlexusRuntimeModule:
             for key in ("valid_feedback_count", "total_items", "totalItems")
         ):
             failures.append("frozen feedback metrics are required")
+        if not evidence.get("feedback_watermark"):
+            failures.append("frozen feedback watermark is required")
+        context = args.get("_portfolio_assessment_context")
+        frozen_champion_version = str(
+            evidence.get("champion_version")
+            or evidence.get("championVersionId")
+            or ""
+        ).strip()
         try:
-            info = self._score_info({"scorecard_identifier": scorecard_id, "score_identifier": score_id})
+            if isinstance(context, _PortfolioAssessmentContext):
+                info = self._portfolio_assessment_score_info(
+                    context,
+                    account_id=str(args.get("account_id") or ""),
+                    scorecard_id=scorecard_id,
+                    score_id=score_id,
+                    expected_champion_version=frozen_champion_version,
+                )
+            else:
+                # Public single-score assessment retains the generic resolver
+                # path, including its flexible name/key/version semantics.
+                info = self._score_info({
+                    "scorecard_identifier": scorecard_id,
+                    "score_identifier": score_id,
+                })
         except Exception as exc:  # noqa: BLE001
-            return {"scorecard_id": scorecard_id, "score_id": score_id, "coverage": {"complete": False, "failures": [str(exc)]}, "coverage_complete": False}
+            coverage = dict(evidence.get("coverage") or {})
+            return {
+                **evidence,
+                "account_id": args.get("account_id"),
+                "scorecard_id": scorecard_id,
+                "score_id": score_id,
+                "scope": {"scorecard_id": scorecard_id, "score_id": score_id},
+                "window": window,
+                "coverage": {
+                    **coverage,
+                    "complete": False,
+                    "failures": [*failures, str(exc)],
+                },
+                "coverage_complete": False,
+                "coverage_failures": [*failures, str(exc)],
+                "champion_version": frozen_champion_version or None,
+                "feedback_watermark": evidence.get("feedback_watermark"),
+            }
         code = info.get("code") if isinstance(info, dict) else None
         guidelines = info.get("guidelines") if isinstance(info, dict) else None
+        configuration_digest, configuration_digest_state = (
+            _frozen_assessment_input_digest(
+                code,
+                missing_marker=_MISSING_CONFIGURATION_DIGEST_INPUT,
+            )
+        )
+        guideline_digest, guideline_digest_state = _frozen_assessment_input_digest(
+            guidelines,
+            missing_marker=_MISSING_GUIDELINES_DIGEST_INPUT,
+        )
         terminal_classes: list[str] = []
         terminal_resolved = False
         if code:
@@ -10126,10 +11343,14 @@ class PlexusRuntimeModule:
             "window": window,
             "coverage": {**coverage, "complete": complete, "failures": failures},
             "coverage_complete": complete, "coverage_failures": failures,
-            "champion_version": info.get("championVersionId"),
+            "champion_version": frozen_champion_version or info.get("championVersionId"),
             "configuration_readable": bool(code), "terminal_classes_resolved": terminal_resolved,
             "reachable_classes": terminal_classes, "final_label_counts": counts,
             "guideline_state": guideline_state,
+            "configuration_digest": configuration_digest,
+            "configuration_digest_state": configuration_digest_state,
+            "guideline_digest": guideline_digest,
+            "guideline_digest_state": guideline_digest_state,
             "feedback_watermark": evidence.get("feedback_watermark"),
         }
 
@@ -10154,6 +11375,19 @@ class PlexusRuntimeModule:
             "version": score_version_id,
             "score_version_id": score_version_id,
         }
+        semantic_coordinator = args.get("_semantic_budget_coordinator")
+        target_id = f"{scorecard_id}:{score_id}"
+        if semantic_coordinator is not None:
+            base["_semantic_authority"] = semantic_coordinator.view(
+                target_id=target_id,
+                call_site="score_rubric_consistency",
+                max_attempts=2,
+            )
+            base["_model_attempt_authority"] = semantic_coordinator.view(
+                target_id=target_id,
+                call_site="rubric_evidence_synthesis",
+                max_attempts=3,
+            )
         results: dict[str, Any] = {}
         for name, handler in (
             ("contradictions", self._score_contradictions),
@@ -10166,6 +11400,8 @@ class PlexusRuntimeModule:
                 if isinstance(value, dict) and (value.get("pending") or value.get("handle_id")):
                     failures.append(f"{name} pending")
             except Exception as exc:  # noqa: BLE001
+                if _semantic_diagnosis_must_fail_closed(exc):
+                    raise
                 failures.append(str(exc))
         rubric_context = results.get("rubric_evidence") or results.get("rubric_memory") or {}
         gate_args = {
@@ -10180,15 +11416,29 @@ class PlexusRuntimeModule:
                 "rubric_evidence": results.get("rubric_evidence") or {},
             }),
         }
+        if semantic_coordinator is not None:
+            gate_args["_model_attempt_authority"] = semantic_coordinator.view(
+                target_id=target_id,
+                call_site="rubric_memory_sme_question_gate",
+                max_attempts=2,
+            )
         try:
             value = self._rubric_memory_sme_question_gate(gate_args)
             results["sme_gate"] = value
             if isinstance(value, dict) and (value.get("pending") or value.get("handle_id")):
                 failures.append("sme_gate pending")
         except Exception as exc:  # noqa: BLE001
+            if _semantic_diagnosis_must_fail_closed(exc):
+                raise
             failures.append(str(exc))
         contradictions = results.get("contradictions") or {}
         sme = results.get("sme_gate") or {}
+        conflict_claim = (
+            str(contradictions.get("paragraph") or "").strip()
+            if isinstance(contradictions, dict)
+            and contradictions.get("status") == "potential_conflict"
+            else ""
+        )
         stakeholder_questions: list[str] = []
         if isinstance(sme, dict):
             # The typed SME gate publishes final agenda items, not a generic
@@ -10203,7 +11453,7 @@ class PlexusRuntimeModule:
                 question = str(item.get("final_text") or item.get("original_text") or "").strip()
                 if question:
                     stakeholder_questions.append(question)
-        return {
+        payload = {
             "account_id": args.get("account_id"), "scorecard_id": scorecard_id, "score_id": score_id,
             "scope": {"scorecard_id": scorecard_id, "score_id": score_id},
             "assessment": args.get("assessment") or args.get("assessment_packet") or {},
@@ -10221,6 +11471,12 @@ class PlexusRuntimeModule:
             "coverage_complete": not failures, "coverage_failures": failures,
             "evidence_ids": [value.get("id") for value in results.values() if isinstance(value, dict) and value.get("id")],
         }
+        if conflict_claim:
+            # This is the model's stakeholder-safe diagnosis paragraph, not
+            # raw feedback or an opaque artifact reference. Preserve it so a
+            # later repair workstream can state the actual detected conflict.
+            payload["guideline_code_conflict_claim"] = conflict_claim
+        return payload
 
     def _optimization_review_payload(self, args: dict[str, Any]) -> dict[str, Any]:
         procedure_id = str(args.get("procedure_id") or "")
@@ -10256,7 +11512,10 @@ class PlexusRuntimeModule:
             return {"evidence": {"procedure_id": procedure_id, "terminal": False, "incomplete": True, "error": str(exc)}}
 
     def _default_optimization_handler(
-        self, method: str
+        self,
+        method: str,
+        *,
+        durable_publication_authority: bool = False,
     ) -> Callable[[dict[str, Any]], Any]:
         """Return a thin adapter to the shared decision service.
 
@@ -10309,7 +11568,10 @@ class PlexusRuntimeModule:
                         continue
                     if (
                         source.get("champion_version") != current["champion_version"]
-                        or source.get("feedback_watermark") != current["feedback_watermark"]
+                        or not _same_iso_timestamp(
+                            source.get("feedback_watermark"),
+                            current["feedback_watermark"],
+                        )
                     ):
                         # Retain the target for the common public validator so
                         # it returns the precise stale-assessment reason rather
@@ -10332,6 +11594,40 @@ class PlexusRuntimeModule:
                     "current_fingerprints": current_fingerprints,
                 }
             result = helper(method, args, **dependencies)
+            if method == "assess" and isinstance(result, dict):
+                # The pure decision layer intentionally projects only fields
+                # that affect readiness. These frozen-input preconditions are
+                # transport-owned assessment facts: retain them in the packet
+                # for agent handoffs without exposing the source text.
+                digest_fields: dict[str, Any] = {}
+                for key in (
+                    "configuration_digest",
+                    "configuration_digest_state",
+                    "guideline_digest",
+                    "guideline_digest_state",
+                ):
+                    if key in args:
+                        result[key] = args[key]
+                        digest_fields[key] = args[key]
+                if digest_fields and isinstance(result.get("evidence"), Mapping):
+                    # A digest is a launch/promotion precondition, so it must
+                    # be included in the same evidence fingerprint that
+                    # guards every later optimizer action.
+                    result["evidence"] = {
+                        **dict(result["evidence"]),
+                        **digest_fields,
+                    }
+                    fingerprint = decision.evidence_fingerprint({
+                        "account_id": result.get("account_id"),
+                        "scope": result.get("scope") or {},
+                        "window": result.get("window") or {},
+                        "policy_version": result.get("policy_version"),
+                        "champion_version": result.get("champion_version"),
+                        "feedback_watermark": result.get("feedback_watermark"),
+                        "evidence": result["evidence"],
+                    })
+                    result["evidence_fingerprint"] = fingerprint
+                    result["fingerprint"] = fingerprint
             if method != "run" or not isinstance(result, dict):
                 return result
 
@@ -10347,61 +11643,292 @@ class PlexusRuntimeModule:
                     continue
                 if (
                     target.get("champion_version") not in (None, current["champion_version"])
-                    or target.get("feedback_watermark") not in (None, current["feedback_watermark"])
+                    or (
+                        target.get("feedback_watermark") is not None
+                        and not _same_iso_timestamp(
+                            target.get("feedback_watermark"),
+                            current["feedback_watermark"],
+                        )
+                    )
                 ):
                     rejected.append({"target": target, "reason": "stale_assessment"})
                     continue
                 accepted_targets.append(target)
 
             # Validation is pure and returns only explicitly accepted opaque
-            # targets.  Dispatch each accepted target through the existing
-            # optimizer entry point; never create score versions or promote a
-            # champion here.
-            dispatches: list[dict[str, Any]] = []
-            for target in accepted_targets:
-                if not isinstance(target, dict):
-                    continue
-                dispatch_args = {
-                    key: value
-                    for key, value in args.items()
-                    if key not in {"approved", "targets", "current_fingerprints", "persist", "concurrency", "max_concurrency"}
-                }
-                dispatch_args.update({
-                    "scorecard": target["scorecard_id"],
-                    "score": target["score_id"],
-                })
-                dispatch_row = {
-                    "target": {
-                        "scorecard_id": target["scorecard_id"],
-                        "score_id": target["score_id"],
-                    },
-                }
-                try:
-                    dispatch_row.update({
-                        "status": "dispatched",
-                        "result": self._procedure_optimize(dispatch_args),
-                    })
-                except Exception as exc:  # noqa: BLE001 - preserve per-target coverage
-                    dispatch_row.update({"status": "failed", "error": str(exc)})
-                dispatches.append(dispatch_row)
-            failed_dispatches = sum(
-                row.get("status") == "failed" for row in dispatches
-            )
+            # targets. Actual Procedure/Task creation is owned by the living
+            # Report coordinator, which durably publishes every phase before
+            # enabling its following mutation.
+            run_key = str(args.get("run_key") or "").strip()
+            if not run_key:
+                rejected.extend({
+                    "target": target,
+                    "reason": "missing_frozen_run_key",
+                } for target in accepted_targets)
+                accepted_targets = []
+            if accepted_targets and not durable_publication_authority:
+                rejected.extend({
+                    "target": target,
+                    "reason": "durable_publication_authority_required",
+                } for target in accepted_targets)
+                accepted_targets = []
             return {
                 **result,
                 "accepted": bool(accepted_targets) and not rejected,
                 "accepted_targets": accepted_targets,
                 "rejected": rejected,
-                "dispatches": dispatches,
+                "dispatches": [],
                 "dispatch_coverage": {
-                    "target_count": len(dispatches),
-                    "dispatched_count": len(dispatches) - failed_dispatches,
-                    "failed_count": failed_dispatches,
-                    "complete": failed_dispatches == 0,
+                    "target_count": 0,
+                    "dispatched_count": 0,
+                    "failed_count": 0,
+                    "complete": not rejected,
                 },
             }
 
         return invoke
+
+    def _default_optimization_portfolio_runner(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Run the one report-first portfolio coordinator through existing APIs.
+
+        The outer Tactus procedure supplies accumulated responses from its
+        structured ``Human.review`` checkpoints as ``approval_responses``.
+        Each response includes the exact request that was shown, so the
+        coordinator can reject stale evidence before dispatch. If no matching
+        response is present, the Task/Report stays running and the coordinator
+        returns the next pending review; it never creates a score version
+        merely to make progress.
+        """
+        from plexus.chat import ChatMessageActionService
+        from plexus.cli.shared.client_utils import create_client
+        from plexus.dashboard.api.models.account import Account
+        from plexus.dashboard.api.models.task import Task
+        from plexus.optimization.portfolio_run import (
+            OptimizationPortfolioRunner,
+            PortfolioRunDependencies,
+        )
+        from plexus.optimization.optimizer_dispatch import OptimizerTaskDispatchService
+        from plexus.optimization.optimizer_dispatch_backend import (
+            GraphQLOptimizerDispatchBackend,
+        )
+        from plexus.optimization.run_report import (
+            OptimizationRunReportService,
+            dashboard_base_url_from_account_settings,
+        )
+
+        account_id = str(args.get("account_id") or "").strip()
+        if not account_id:
+            raise ValueError("optimization.portfolio_run requires account_id")
+        # This is intentionally scoped to the default portfolio execution
+        # path. It must happen before client construction, Task lookup, Report
+        # creation, or action publication so failed local authentication never
+        # leaves stakeholder-visible partial state behind.
+        if self._optimization_report_service_factory is None:
+            _require_optimization_application_authority()
+        procedure_task_id = str(self._runtime_context.get("task_id") or "").strip()
+
+        def report_request(request: Mapping[str, Any]) -> dict[str, Any]:
+            return {
+                **dict(request),
+                **({"procedure_task_id": procedure_task_id} if procedure_task_id else {}),
+            }
+
+        # The report service and optimizer child dispatcher intentionally share
+        # one authenticated GraphQL client. The child dispatcher is the sole
+        # production launch path; it creates durable Procedure/Task records and
+        # never uses an in-process or subprocess optimizer fallback.
+        client = None
+        if self._optimization_report_service_factory is None:
+            client = create_client()
+            if client is None:
+                raise RuntimeError("optimization.portfolio_run requires an authenticated dashboard client")
+            account = Account.get_by_id(account_id, client)
+            dashboard_base_url = dashboard_base_url_from_account_settings(account.settings)
+            def report_service_factory(run_key, request):
+                existing_task = None
+                if procedure_task_id:
+                    existing_task = Task.get_by_id(procedure_task_id, client)
+                    if existing_task is None:
+                        raise RuntimeError(
+                            "optimization.portfolio_run Procedure Task was not found"
+                        )
+                return OptimizationRunReportService(
+                    client=client,
+                    account_id=account_id,
+                    run_key=run_key,
+                    report_configuration_id=request.get("report_configuration_id"),
+                    dashboard_base_url=dashboard_base_url,
+                    existing_task=existing_task,
+                )
+        else:
+            report_service_factory = lambda run_key, request: self._optimization_report_service_factory(
+                account_id, run_key, report_request(request)
+            )
+
+        child_step = self._optimization_child_step
+        child_request = self._optimization_child_request
+        if child_step is None or child_request is None:
+            optimizer_source: str | None = None
+            optimizer_source_digest: str | None = None
+            optimizer_dispatch: OptimizerTaskDispatchService | None = None
+
+            def _optimizer_child_runtime() -> tuple[str, str, OptimizerTaskDispatchService]:
+                nonlocal client, optimizer_source, optimizer_source_digest, optimizer_dispatch
+                if optimizer_dispatch is not None:
+                    assert optimizer_source is not None and optimizer_source_digest is not None
+                    return optimizer_source, optimizer_source_digest, optimizer_dispatch
+                if client is None:
+                    client = create_client()
+                if client is None:
+                    raise RuntimeError(
+                        "optimization.portfolio_run requires an authenticated dashboard client "
+                        "for durable optimizer child dispatch"
+                    )
+                optimizer_source_path = os.path.join(
+                    PLEXUS_PROJECT_ROOT,
+                    "plexus",
+                    "procedures",
+                    "feedback_alignment_optimizer.yaml",
+                )
+                try:
+                    with open(optimizer_source_path, "rb") as optimizer_source_file:
+                        optimizer_source_bytes = optimizer_source_file.read()
+                except OSError as exc:
+                    raise RuntimeError(
+                        "optimization.portfolio_run could not load feedback_alignment_optimizer.yaml"
+                    ) from exc
+                if not optimizer_source_bytes:
+                    raise RuntimeError(
+                        "optimization.portfolio_run optimizer procedure source is empty"
+                    )
+                optimizer_source = optimizer_source_bytes.decode("utf-8")
+                optimizer_source_digest = sha256(optimizer_source_bytes).hexdigest()
+                optimizer_dispatch = OptimizerTaskDispatchService(
+                    GraphQLOptimizerDispatchBackend(client)
+                )
+                return optimizer_source, optimizer_source_digest, optimizer_dispatch
+
+            def _child_request(base: Mapping[str, Any]) -> Mapping[str, Any]:
+                optimizer_source, optimizer_source_digest, _ = _optimizer_child_runtime()
+                request = dict(base)
+                request["optimizer_yaml"] = optimizer_source
+                # Kept alongside the source as explicit immutable provenance.
+                # The dispatch service recomputes and embeds this digest in its
+                # launch spec rather than trusting caller data.
+                request["optimizer_yaml_sha256"] = optimizer_source_digest
+                return request
+
+            def _child_step(
+                request: Mapping[str, Any],
+                state: Mapping[str, Any] | None,
+                *,
+                may_mutate: bool,
+            ) -> Mapping[str, Any]:
+                _, optimizer_source_digest, optimizer_dispatch = _optimizer_child_runtime()
+                supplied = request.get("optimizer_yaml_sha256")
+                if supplied != optimizer_source_digest:
+                    raise RuntimeError(
+                        "optimizer child request source digest does not match "
+                        "the checked-in procedure source"
+                    )
+                return optimizer_dispatch.step(
+                    request,
+                    state,
+                    may_mutate=may_mutate,
+                )
+
+            child_step = _child_step
+            child_request = _child_request
+
+        action_service = (
+            self._optimization_action_service_factory(client)
+            if self._optimization_action_service_factory is not None
+            else ChatMessageActionService(client)
+            if client is not None
+            else None
+        )
+        procedure_id = str(args.get("procedure_id") or self._trace_id or "").strip()
+        session_id = str(args.get("session_id") or "").strip() or None
+
+        def create_action(payload: dict[str, Any]) -> Mapping[str, Any]:
+            if action_service is None or not procedure_id:
+                raise RuntimeError(
+                    "optimization.portfolio_run requires ChatMessage action authority"
+                )
+            persisted = action_service.create_or_get(
+                payload,
+                procedure_id=procedure_id,
+                session_id=session_id,
+            )
+            message = persisted.get("action") if isinstance(persisted, Mapping) else None
+            message_id = message.get("id") if isinstance(message, Mapping) else None
+            resolution = (
+                action_service.resolve_first_valid_response(
+                    str(message_id),
+                    account_id=account_id,
+                    procedure_id=procedure_id,
+                )
+                if message_id
+                else None
+            )
+            return {**dict(persisted), "resolution": resolution}
+
+        def publish_update(payload: dict[str, Any]) -> Mapping[str, Any]:
+            if action_service is None or not procedure_id or not hasattr(action_service, "publish_update"):
+                raise RuntimeError(
+                    "optimization.portfolio_run requires ChatMessage update authority"
+                )
+            return action_service.publish_update(
+                payload,
+                procedure_id=procedure_id,
+                session_id=session_id,
+            )
+
+        # This context is intentionally request-scoped. It is not part of the
+        # frozen decision evidence and cannot survive/rewrite a checkpoint;
+        # durable assessment packets remain the replay boundary.
+        portfolio_assessment_context = self._new_portfolio_assessment_context()
+
+        def operation(name: str) -> Callable[[dict[str, Any]], Any]:
+            def invoke(payload: dict[str, Any]) -> Any:
+                operation_payload = _merge_runtime_context_args(
+                    dict(payload), self._runtime_context,
+                )
+                if name == "assess":
+                    operation_payload["_portfolio_assessment_context"] = (
+                        portfolio_assessment_context
+                    )
+                return self._optimization_handlers[name](operation_payload)
+
+            return invoke
+
+        runner = OptimizationPortfolioRunner(
+            PortfolioRunDependencies(
+                rank=operation("rank"),
+                assess=operation("assess"),
+                diagnose=operation("diagnose"),
+                summary=operation("summary"),
+                dispatch=lambda payload: self._optimization_run_validator(
+                    _merge_runtime_context_args(dict(payload), self._runtime_context)
+                ),
+                review=operation("review"),
+                report_service=report_service_factory,
+                # Persisted procedure resumes use the evidence-bound
+                # approval_responses map. An unbound response must never be
+                # accepted through this compatibility dependency.
+                human_review=lambda _request: {"decisions": []},
+                create_action=create_action,
+                publish_update=(
+                    publish_update
+                    if action_service is not None and hasattr(action_service, "publish_update")
+                    else None
+                ),
+                optimizer_child_step=child_step,
+                optimizer_child_request=child_request,
+                diagnosis_preflight=self._optimization_diagnosis_preflight,
+            )
+        )
+        return runner.run({**args, "wait_for_human": True})
 
     def _call_optimization(
         self, namespace: str, method: str, args: Any = None
@@ -10415,10 +11942,11 @@ class PlexusRuntimeModule:
         try:
             parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
             result = self._optimization_handlers[method](parsed)
-            if parsed.get("persist") is True:
+            if parsed.get("persist") is True and method != "portfolio_run":
                 if self._optimization_persister is None:
                     raise RuntimeError(
-                        "plexus.optimization persistence requires a configured Report/S3 handler"
+                        "plexus.optimization persistence requires a configured "
+                        "artifact persistence handler"
                     )
                 # The persistence path receives precisely the caller-visible
                 # packet.  Its return is intentionally ignored: no inline
@@ -11742,8 +13270,8 @@ async def _execute_tactus_tool(
 
 
 EXECUTE_TACTUS_DESCRIPTION = """\
-Execute a short Tactus (Lua) snippet inside the Plexus runtime. This is the
-single Plexus MCP tool; use it for every Plexus operation.
+Execute a short Tactus (Lua) snippet inside the Plexus runtime. Use it for
+Plexus work.
 
 Runtime ground rules:
 - `plexus` is a global. Do NOT write `local plexus = require("plexus")`.
@@ -11752,9 +13280,8 @@ Runtime ground rules:
   `return` only when you want a custom output shape.
 - Always use table arguments: `plexus.score.info{ id = "..." }`.
 - Errors are structured (`error.code`, `error.message`, `error.retryable`).
-- Destructive ops (champion promotion, score updates, deletes, feedback
-  invalidation) request `Human.approve` automatically; pass
-  `no_confirm = true` only when the user explicitly approved.
+- Destructive ops require `Human.approve`; use `no_confirm = true` only after
+  explicit approval. `set_champion` accepts `expected_champion_version_id`.
 - Long-running calls (`plexus.evaluation.run`, `plexus.report.run`,
   `plexus.procedure.run`) must use `async = true`. They dispatch immediately
   and return a handle — no `budget` table needed.
@@ -11774,12 +13301,16 @@ Complete coverage contract:
   coverage, drift, rubric clarity, and fixability separately.
 
 Optimization: `plexus.optimization.rank/assess/diagnose/review/summary` plan;
-`plexus.optimization.run` needs `approved = true`, at most five exact targets,
-and never promotes a champion; `persist = true` has no inline output fallback.
+`plexus.optimization.run` needs `approved = true`, <=5 exact targets, and never promotes a champion.
+`persist = true` has no inline output fallback.
+`plexus.optimization.portfolio_run` owns one Report, returns
+`Human.review` approval, then dispatches individually approved exact targets.
 Rank scope: opaque `scorecard_ids` or literal case-insensitive
 `scorecard_name_prefixes`; empty arrays are invalid.
 `score-activity-cooldown-v1`: frozen UTC `as_of`; 168-hour inclusive cutoff on
 the later of `score.updatedAt` or newest score-version `createdAt`;
+rows retain pre-policy `evidence_rank`; eligible rows get `candidate_rank`;
+deferred rows keep their policy disposition and reason;
 `recent_score_activity`; missing evidence is incomplete; assessment returns
 `cooldown_active`/`wait_for_cooldown`; run rechecks live activity before dispatch.
 An unresolved scalar champion ID is structurally unranked as
@@ -11791,10 +13322,8 @@ canonical `namespace_method` forms, including `docs_list/docs_get`,
 `skills_list/skills_get`, handle operations, and one helper per advertised API.
 - Fall back to `plexus.<namespace>.<method>{...}` for anything else.
 
-The complete account-wide research program is documented outside this
-always-present schema. Load
-`evaluation-feedback.batch-operations-cookbook` for the full metadata
-pagination, retry, bounded batch, compact aggregation, and coverage example.
+Load `evaluation-feedback.batch-operations-cookbook` for the
+account-wide pagination and aggregation example.
 
 Examples:
 

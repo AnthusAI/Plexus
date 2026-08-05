@@ -1,0 +1,25 @@
+{
+  "id": "plx-1137d3d4-d5d3-4bbb-b12b-8251fe43761b",
+  "title": "Render aggregate living-report presentation on the Report cover",
+  "description": "The living-report service publishes a specialized aggregate status block, but the Report cover omits the block reference, so operators see only the legacy prose projection.\n\nFeature: Living-report aggregate presentation\n\nScenario: Open a published living optimization Report\n  Given the Report has a published OptimizationRunStatus block\n  And that block points to a verified stakeholder-presentation artifact\n  When an operator opens the Report detail view\n  Then the Report cover renders the aggregate optimization presentation\n  And the compact prose remains available as supporting context\n\nScenario: Open the Report before aggregate evidence exists\n  Given the Report status block exists but its first presentation revision is not yet available\n  When an operator opens the Report detail view\n  Then the cover presents an honest loading or unavailable state\n  And it does not invent aggregate findings\n\nOut of scope:\n- New GraphQL models or infrastructure resources.\n- Changing the immutable artifact contract.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan.porter",
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4b2c1e1e-e678-4153-88f2-f1516eadcbd8",
+      "author": "ryan.porter",
+      "text": "Dogfood reproduced the defect against a fresh production-backed Report: the specialized status block and immutable presentation descriptor were present, but the cover rendered only prose because it omitted the normal report-block code fence. Added the cover reference plus a dashboard ReportTask integration specification. Validation is green: 46 focused Python tests, 11 dashboard tests, and TypeScript compilation. No schema or infrastructure resources changed. The bounded test run completed in 4m44s with zero model cost and no operational mutations.",
+      "created_at": "2026-07-30T16:37:04.776140Z"
+    }
+  ],
+  "created_at": "2026-07-30T16:33:04.039531Z",
+  "updated_at": "2026-07-30T16:37:04.776140Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,4 +1,5 @@
 from contextlib import nullcontext
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -14,7 +15,20 @@ async def test_tactus_execution_options_are_passed_to_procedure_parameters():
     service = ProcedureService(client)
     service.get_procedure_info = Mock(return_value=SimpleNamespace(
         scorecard_name="Demo", score_name="Score",
-        procedure=SimpleNamespace(scorecardId="scorecard-1", scoreId="score-1"),
+        procedure=SimpleNamespace(
+            scorecardId="scorecard-1",
+            scoreId="score-1",
+            metadata=json.dumps({
+                "optimizer_launch_spec": {
+                    "limits": {
+                        "max_cost_usd": 2,
+                        "max_samples": 20,
+                        "max_iterations": 1,
+                        "max_concurrency": 3,
+                    }
+                }
+            }),
+        ),
     ))
     service.get_procedure_yaml = Mock(return_value="name: Feedback Alignment Optimizer\nclass: Tactus\n")
     captured = {}
@@ -42,6 +56,14 @@ async def test_tactus_execution_options_are_passed_to_procedure_parameters():
 
     assert captured["context"]["dry_run"] is True
     assert captured["context"]["max_iterations"] == 1
+    assert captured["context"]["scorecard"] == "Demo"
+    assert captured["context"]["score"] == "Score"
+    assert captured["context"]["scorecard_id"] == "scorecard-1"
+    assert captured["context"]["score_id"] == "score-1"
+    assert captured["context"]["max_cost_usd"] == 2
+    assert captured["context"]["max_samples"] == 20
+    assert captured["context"]["max_iterations"] == 1
+    assert captured["context"]["max_parallel_evaluations"] == 3
 
 
 @pytest.mark.asyncio

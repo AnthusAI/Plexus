@@ -1,0 +1,37 @@
+{
+  "id": "plx-db00faf2-768a-4da2-b181-d47749f80b70",
+  "title": "Budget all portfolio semantic diagnosis call sites",
+  "description": "Route consistency, repair, and SME-gate attempts through one authority; bound tokens and retries; preserve partial evidence; reject unsafe calls before provider contact.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e6890748-1a34-43be-a961-6cd7b709c90a",
+      "author": "ryan.porter",
+      "text": "Implementation resumed after supported Tactus model-attempt authority contract stabilized. Beginning test-first Plexus integration of one Report-persisted semantic budget across direct consistency diagnosis and procedure-backed SME diagnosis, with exact model/pricing, fail-closed replay, and zero-call paths. No provider or cloud calls will be made.",
+      "created_at": "2026-07-31T03:09:54.157840Z"
+    },
+    {
+      "id": "a1c6b2bf-0a7e-43c5-861b-58bd7b44caae",
+      "author": "ryan.porter",
+      "text": "Implemented and verified the Report-persisted semantic diagnosis authority. Key decisions: stable reservation identity is run + target + semantic call site + attempt; provider-derived attempt IDs and exact request hashes are immutable evidence, so request drift conflicts. One shared Decimal ledger is declared after Report start, published before contact, reconciled after contact, and replayed from versioned JSON-native payloads. Direct consistency uses the pinned model, full canonical-payload byte/token bound, max_retries=0, and two attempts including repair. Tactus SME/evidence synthesis receive explicit model, token, attempt, run ID, and authority settings; empty SME agendas make zero calls. Portfolio failures preserve partial evidence, stop later semantic calls, suppress analysis-ready state, and remain incomplete. Verification: focused Plexus matrix 487 passed; supported Tactus authority contract 28 passed; py_compile and git diff --check passed. Controlled mutation proof turned reserve-before-contact, shared-cap, and authority-propagation tests red individually, then restored green. Ruff is not installed in this checkout, so that lint command was unavailable. No provider, cloud, commit, push, or deployment actions were performed.",
+      "created_at": "2026-07-31T03:35:22.999891Z"
+    },
+    {
+      "id": "ab06b5e1-ecd7-46aa-86c1-d64e9a05b881",
+      "author": "ryan.porter",
+      "text": "Reviewer edge follow-up completed test-first. Two new regressions were confirmed red: omitted semantic cap plus omitted budget still invoked diagnosis, and a nonthrowing incomplete diagnosis packet was counted as completed. The production fix now derives the missing-budget blocker from the effective scheduled scope and treats returned incomplete packets as incomplete evidence: they remain durable, do not increment completed_count, stop later diagnoses, suppress analysis-ready/approval, and participate in resume consistency checks. Focused edge rerun: 2 passed. Full portfolio suite: 66 passed. Full Plexus semantic-budget matrix: 489 passed, warnings only. Supported Tactus model-attempt authority contract: 28 passed. py_compile and git diff --check passed. Older diagnosis fixtures now declare an explicit positive decimal-string semantic budget, and their Report doubles expose ledger persistence; omission tests remain budgetless and fail closed. No provider, cloud, commit, push, deployment, or Tactus version/edit actions were performed. Task remains in_progress because the change has not landed.",
+      "created_at": "2026-07-31T03:44:01.751304Z"
+    }
+  ],
+  "created_at": "2026-07-31T02:37:51.788290Z",
+  "updated_at": "2026-07-31T03:44:01.751304Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c0265c24-289c-4b3c-96e7-dcfd74ebe337",
+  "issue_id": "plx-814a214c-b225-4b98-b6c4-89854f4bf1b1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-30T16:03:03.486Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Fix living-report text media types for artifact tickets",
+    "description": "The living-report publisher declares text artifact content types with charset parameters, but the existing artifact-ticket contract accepts only a type and subtype. Real task-attachment ticket creation therefore rejects Markdown and CSV artifacts even though local fake-store tests pass.\n\nFeature: Publish text artifacts through the production ticket contract\n\nScenario: Upload Markdown and CSV task attachments\nGiven a living report publishes scorecard text artifacts\nWhen it requests existing task-attachment write tickets\nThen Markdown uses text/markdown\nAnd CSV uses text/csv\nAnd the ticket contract accepts both requests\n\nScenario: Keep character encoding deterministic\nGiven a text artifact omits a charset media-type parameter\nWhen it is decoded\nThen Markdown remains UTF-8\nAnd CSV remains UTF-8 with its existing spreadsheet-compatible byte-order marker",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+    "labels": []
+  }
+}
