@@ -70,6 +70,14 @@ Feature: Portable command lifecycle
     Then heartbeat scheduling stops before completion
     And no heartbeat can run after execution returns
 
+  Scenario: A running command cooperatively settles a durable cancellation
+    Given an announced command delivery with automatic heartbeats
+    And cancellation is requested while the command is running
+    And an executor that fires a heartbeat and observes cancellation
+    When worker "worker-one" processes the delivery
+    Then cancellation is stored before the delivery is acknowledged
+    And no completion or failure is stored
+
   Scenario: The legacy Celery command worker remains available
     When the legacy Celery command modules are imported
     Then both legacy modules are importable
