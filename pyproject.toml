@@ -121,6 +121,9 @@ worker = ["graphviz", "pandas", "pyarrow", "contractions", "seaborn", "openpyxl"
 # Direct dependencies used by the interactive Console worker in addition to
 # the scoring runtime. Keep broad service infrastructure out of this image.
 console = ["celery", "fastmcp", "requests-aws4auth"]
+# Runtime dependencies for the portable container worker.  Integrations add
+# their executor package separately and select it through the runtime factory.
+command-worker = ["boto3", "celery"]
 google-vertexai = [
     "langchain-google-vertexai",
 ]
