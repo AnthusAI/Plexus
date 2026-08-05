@@ -14,6 +14,7 @@
     "schema:contract": "npx --yes tsx scripts/generate-control-plane-contract.ts",
     "schema:contract:check": "npx --yes tsx scripts/generate-control-plane-contract.ts --check",
     "dev:dispatch": "bash -c 'eval \"$(./scripts/load-dev-env.sh)\"; for v in PLEXUS_API_URL PLEXUS_API_KEY PLEXUS_ACCOUNT_KEY OPENAI_API_KEY; do if [ -z \"${!v:-}\" ]; then echo \"Missing $v for dev:dispatch\" >&2; exit 1; fi; done; PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT=false PLEXUS_DISPATCH_MODE=local PYTHONPATH=\"..${PYTHONPATH:+:$PYTHONPATH}\" poetry run python -m plexus.cli command dispatcher --interval 0.5 --loglevel INFO'",
+    "dev:dispatch:local": "bash ./scripts/dev-local-task-dispatcher.sh",
     "build": "next build --webpack",
     "build:fast": "NEXT_TYPESCRIPT_CHECK=0 next build --webpack",
     "start": "next start",
