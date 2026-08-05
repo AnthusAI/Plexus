@@ -3,10 +3,9 @@ from pathlib import Path
 import aws_cdk as cdk
 import aws_cdk.assertions as assertions
 import pytest
-from aws_cdk import Duration
+from aws_cdk import Duration, aws_iam
 
 from plexus.infrastructure.command_service import CommandServiceStateStack
-
 
 ENV = cdk.Environment(account="123456789012", region="us-east-1")
 
@@ -49,6 +48,10 @@ def test_state_stack_synthesizes_durable_table_and_encrypted_queues() -> None:
             "BillingMode": "PAY_PER_REQUEST",
             "SSESpecification": {"SSEEnabled": True},
             "PointInTimeRecoverySpecification": {"PointInTimeRecoveryEnabled": True},
+            "TimeToLiveSpecification": {
+                "AttributeName": "expires_at_epoch",
+                "Enabled": True,
+            },
             "DeletionProtectionEnabled": False,
         },
     )
@@ -153,6 +156,30 @@ def test_state_stack_applies_optional_alarm_topic_action() -> None:
     )
     alarm = next(iter(alarms.values()))
     assert len(alarm["Properties"]["AlarmActions"]) == 1
+
+
+def test_lifecycle_worker_grant_is_limited_to_metadata_reads_and_updates() -> None:
+    app = cdk.App()
+    stack = _stack(app)
+    worker = aws_iam.Role(
+        stack,
+        "WorkerRole",
+        assumed_by=aws_iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
+    )
+    stack.grant_lifecycle_worker(worker)
+
+    policies = assertions.Template.from_stack(stack).find_resources("AWS::IAM::Policy")
+    statements = [
+        statement
+        for policy in policies.values()
+        for statement in policy["Properties"]["PolicyDocument"]["Statement"]
+    ]
+    assert any(
+        statement["Action"] == ["dynamodb:GetItem", "dynamodb:UpdateItem"]
+        and statement["Resource"]
+        == {"Fn::GetAtt": ["CommandStateTable92D4D8AD", "Arn"]}
+        for statement in statements
+    )
 
 
 def test_state_stack_uses_stable_logical_ids() -> None:

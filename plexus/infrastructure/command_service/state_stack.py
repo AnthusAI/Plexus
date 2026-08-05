@@ -11,11 +11,11 @@ from aws_cdk import (
     aws_cloudwatch as cloudwatch,
     aws_cloudwatch_actions as cloudwatch_actions,
     aws_dynamodb as dynamodb,
+    aws_iam as iam,
     aws_sns as sns,
     aws_sqs as sqs,
 )
 from constructs import Construct
-
 
 _NAME_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 _MIN_RETENTION_SECONDS = 60
@@ -24,7 +24,13 @@ _MAX_VISIBILITY_SECONDS = 12 * 60 * 60
 
 
 class CommandServiceStateStack(Stack):
-    """Durable state and delivery primitives for a command service."""
+    """Durable state and delivery primitives for a command service.
+
+    The command repository stores each canonical lifecycle record at
+    ``pk=COMMAND#<command_id>, sk=META``. The record includes immutable command
+    identity, the canonical request digest, lifecycle status, numeric fence,
+    lease metadata, and ``expires_at_epoch`` for TTL cleanup.
+    """
 
     def __init__(
         self,
@@ -135,6 +141,7 @@ class CommandServiceStateStack(Stack):
                     point_in_time_recovery_enabled=True
                 )
             ),
+            time_to_live_attribute="expires_at_epoch",
             deletion_protection=table_deletion_protection,
             removal_policy=RemovalPolicy.RETAIN,
         )
@@ -186,6 +193,15 @@ class CommandServiceStateStack(Stack):
             )
 
         self._add_outputs(resource_prefix=resource_prefix, environment=environment)
+
+    def grant_lifecycle_worker(self, grantee: iam.IGrantable) -> iam.Grant:
+        """Grant only the metadata reads and fenced updates needed by a worker."""
+
+        return iam.Grant.add_to_principal(
+            grantee=grantee,
+            actions=["dynamodb:GetItem", "dynamodb:UpdateItem"],
+            resource_arns=[self.table.table_arn],
+        )
 
     def _add_outputs(self, *, resource_prefix: str, environment: str) -> None:
         export_prefix = f"{resource_prefix}-{environment}-command-service"
