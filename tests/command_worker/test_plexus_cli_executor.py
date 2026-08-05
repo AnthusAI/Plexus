@@ -9,6 +9,7 @@ import pytest
 
 from plexus.cli.shared.CommandProgress import CommandProgress
 from plexus.command_worker.executors import PlexusCliExecutor
+from plexus.command_worker.executors.plexus_cli import create_executor
 from plexus.command_worker.models import CommandEnvelope
 
 
@@ -48,6 +49,10 @@ def envelope(payload) -> CommandEnvelope:
         created_at=datetime(2026, 8, 5, tzinfo=timezone.utc),
         payload=payload,
     )
+
+
+def test_runtime_plugin_factory_creates_the_cli_executor() -> None:
+    assert isinstance(create_executor(), PlexusCliExecutor)
 
 
 def test_executor_invokes_cli_with_typed_argv_and_reports_progress() -> None:

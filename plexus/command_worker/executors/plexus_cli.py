@@ -102,3 +102,8 @@ class PlexusCliExecutor:
         if len(encoded) <= _MAX_RESULT_OUTPUT_BYTES:
             return value
         return encoded[:_MAX_RESULT_OUTPUT_BYTES].decode("utf-8", errors="ignore")
+
+
+def create_executor() -> PlexusCliExecutor:
+    """Runtime plugin factory for the portable command-worker entrypoint."""
+    return PlexusCliExecutor()
