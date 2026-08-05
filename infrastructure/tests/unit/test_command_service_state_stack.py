@@ -52,6 +52,7 @@ def test_state_stack_synthesizes_durable_table_and_encrypted_queues() -> None:
                 "AttributeName": "expires_at_epoch",
                 "Enabled": True,
             },
+            "StreamSpecification": {"StreamViewType": "NEW_AND_OLD_IMAGES"},
             "DeletionProtectionEnabled": False,
         },
     )
@@ -182,6 +183,44 @@ def test_lifecycle_worker_grant_is_limited_to_metadata_reads_and_updates() -> No
     )
 
 
+def test_state_projection_grant_is_limited_to_the_table_stream() -> None:
+    app = cdk.App()
+    stack = _stack(app)
+    projector = aws_iam.Role(
+        stack,
+        "ProjectorRole",
+        assumed_by=aws_iam.ServicePrincipal("lambda.amazonaws.com"),
+    )
+    stack.grant_state_projection(projector)
+
+    policies = assertions.Template.from_stack(stack).find_resources("AWS::IAM::Policy")
+    statements = [
+        statement
+        for policy in policies.values()
+        for statement in policy["Properties"]["PolicyDocument"]["Statement"]
+    ]
+    assert any(
+        set(statement["Action"])
+        == {
+            "dynamodb:DescribeStream",
+            "dynamodb:GetRecords",
+            "dynamodb:GetShardIterator",
+        }
+        and statement["Resource"]
+        == {
+            "Fn::GetAtt": [
+                "CommandStateTable92D4D8AD",
+                "StreamArn",
+            ]
+        }
+        for statement in statements
+    )
+    assert any(
+        statement["Action"] == "dynamodb:ListStreams" and statement["Resource"] == "*"
+        for statement in statements
+    )
+
+
 def test_state_stack_uses_stable_logical_ids() -> None:
     resources = assertions.Template.from_stack(_stack()).to_json()["Resources"]
 
@@ -226,6 +265,7 @@ def test_state_stack_publishes_stable_useful_outputs() -> None:
     for output_id, export_suffix in (
         ("CommandStateTableName", "state-table-name"),
         ("CommandStateTableArn", "state-table-arn"),
+        ("CommandStateTableStreamArn", "state-table-stream-arn"),
         ("CommandQueueUrl", "queue-url"),
         ("CommandQueueArn", "queue-arn"),
         ("CommandDeadLetterQueueUrl", "dead-letter-queue-url"),

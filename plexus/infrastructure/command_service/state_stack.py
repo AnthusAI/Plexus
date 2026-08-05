@@ -142,6 +142,7 @@ class CommandServiceStateStack(Stack):
                 )
             ),
             time_to_live_attribute="expires_at_epoch",
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
             deletion_protection=table_deletion_protection,
             removal_policy=RemovalPolicy.RETAIN,
         )
@@ -203,11 +204,21 @@ class CommandServiceStateStack(Stack):
             resource_arns=[self.table.table_arn],
         )
 
+    def grant_state_projection(self, grantee: iam.IGrantable) -> iam.Grant:
+        """Grant read-only access to the canonical lifecycle change stream."""
+
+        return self.table.grant_stream_read(grantee)
+
     def _add_outputs(self, *, resource_prefix: str, environment: str) -> None:
         export_prefix = f"{resource_prefix}-{environment}-command-service"
         outputs = (
             ("CommandStateTableName", self.table.table_name, "state-table-name"),
             ("CommandStateTableArn", self.table.table_arn, "state-table-arn"),
+            (
+                "CommandStateTableStreamArn",
+                self.table.table_stream_arn,
+                "state-table-stream-arn",
+            ),
             ("CommandQueueUrl", self.queue.queue_url, "queue-url"),
             ("CommandQueueArn", self.queue.queue_arn, "queue-arn"),
             (
