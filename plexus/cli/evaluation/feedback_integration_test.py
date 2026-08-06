@@ -8,7 +8,7 @@ without mocking internal implementation details.
 import pytest
 from click.testing import CliRunner
 from unittest.mock import MagicMock, patch
-from plexus.cli.evaluation.evaluations import feedback
+from plexus.cli.evaluation.evaluations import _resolve_feedback_task_id, feedback
 from plexus.feedback_analysis_preflight import FeedbackAnalysisPreflightError
 
 
@@ -80,6 +80,20 @@ class TestFeedbackCommandIntegration:
             '--max-category-summary-items', '25'
         ])
         assert result.exit_code != 2, f"Argument parsing failed: {result.output}"
+
+    def test_feedback_command_uses_dispatched_task_context_when_task_id_is_omitted(
+        self,
+        monkeypatch,
+    ):
+        """A worker-owned task remains the progress target for dispatched work."""
+        monkeypatch.setenv("PLEXUS_DISPATCH_TASK_ID", "dispatch-task-123")
+
+        assert _resolve_feedback_task_id(None) == "dispatch-task-123"
+
+    def test_feedback_command_keeps_an_explicit_task_id(self, monkeypatch):
+        monkeypatch.setenv("PLEXUS_DISPATCH_TASK_ID", "dispatch-task-123")
+
+        assert _resolve_feedback_task_id("explicit-task-456") == "explicit-task-456"
 
     def test_feedback_command_rejects_removed_max_samples_option(self):
         """Hard cutover: removed --max-samples should be rejected."""

@@ -2123,6 +2123,13 @@ def _build_evaluation_task_metadata(
         metadata["procedure_id"] = procedure_id
     return metadata
 
+def _resolve_feedback_task_id(task_id: Optional[str]) -> Optional[str]:
+    """Prefer an explicit task ID, then inherit the dispatcher task context."""
+    if task_id:
+        return task_id
+    return (os.getenv("PLEXUS_DISPATCH_TASK_ID") or "").strip() or None
+
+
 @evaluate.command()
 @click.option('--scorecard', 'scorecard', default=None, help='Scorecard identifier (ID, name, key, or external ID)')
 @click.option('--yaml', is_flag=True, help='Load scorecard from individual YAML files (from fetch_score_configurations) instead of the API')
@@ -4399,6 +4406,8 @@ def feedback(
         plexus evaluate feedback --scorecard "SampleScorecard" --score "SampleScore" --days 30 --version abc123
     
     """
+    task_id = _resolve_feedback_task_id(task_id)
+
     from plexus.cli.shared.client_utils import create_client
     from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
     from plexus.cli.report.utils import resolve_account_id_for_command
