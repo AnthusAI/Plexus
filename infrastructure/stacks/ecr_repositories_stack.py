@@ -15,6 +15,7 @@ from aws_cdk import (
 from constructs import Construct
 from .shared.constants import (
     CONSOLE_WORKER_REPOSITORY_BASE,
+    COMMAND_WORKER_REPOSITORY_BASE,
     LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE,
 )
 
@@ -50,10 +51,28 @@ class EcrRepositoriesStack(Stack):
         # Create ECR repositories for staging
         self.staging_repository = self._create_repository("staging")
         self.console_worker_staging_repository = self._create_console_worker_repository("staging")
+        self.command_worker_staging_repository = self._create_command_worker_repository("staging")
 
         # Create ECR repositories for production
         self.production_repository = self._create_repository("production")
         self.console_worker_production_repository = self._create_console_worker_repository("production")
+        self.command_worker_production_repository = self._create_command_worker_repository("production")
+
+    def _create_command_worker_repository(self, environment: str) -> ecr.Repository:
+        return ecr.Repository(
+            self,
+            f"CommandWorker{environment.title()}Repository",
+            repository_name=f"{COMMAND_WORKER_REPOSITORY_BASE}-{environment}",
+            image_scan_on_push=True,
+            image_tag_mutability=ecr.TagMutability.IMMUTABLE,
+            lifecycle_rules=[
+                ecr.LifecycleRule(
+                    description="Keep the last 20 command worker images",
+                    max_image_count=20,
+                )
+            ],
+            removal_policy=RemovalPolicy.RETAIN,
+        )
 
     def _create_repository(self, environment: str) -> ecr.Repository:
         """

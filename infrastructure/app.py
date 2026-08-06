@@ -7,6 +7,7 @@ from stacks.console_worker_image_pipeline_stack import ConsoleWorkerImagePipelin
 from stacks.lambda_score_processor_stack import LambdaScoreProcessorStack
 from stacks.prod_to_staging_data_mirror_stack import ProdToStagingDataMirrorStack
 from stacks.score_processor_image_pipeline_stack import ScoreProcessorImagePipelineStack
+from stacks.command_worker_image_pipeline_stack import CommandWorkerImagePipelineStack
 from stacks.shared.constants import LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE
 from pipelines.production_pipeline import ProductionPipelineStack
 
@@ -94,6 +95,15 @@ ScoreProcessorImagePipelineStack(
     branch="main",
     env=env,
     description="Manual pipeline for building the production Lambda score processor image"
+)
+
+CommandWorkerImagePipelineStack(
+    app,
+    "plexus-command-worker-production-image-pipeline",
+    environment="production",
+    branch="main",
+    env=env,
+    description="Manual pipeline for publishing the portable command worker image",
 )
 
 ProdToStagingDataMirrorStack(
