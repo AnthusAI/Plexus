@@ -7,6 +7,11 @@ import manifest from "../../../../services/private-graphql-proxy/schema/amplify-
 describe("local Amplify compatibility shims", () => {
   beforeEach(() => {
     jest.restoreAllMocks()
+    delete process.env.NEXT_PUBLIC_PLEXUS_LOCAL_SUBSCRIPTION_POLL_MS
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
   })
 
   function storageResponse(text: string, status = 200) {
@@ -129,15 +134,34 @@ describe("local Amplify compatibility shims", () => {
     }
   })
 
-  it("returns no-op subscriptions synchronously from client.graphql", () => {
+  it("delivers Task updates by polling the local control plane", async () => {
+    jest.useFakeTimers()
+    process.env.NEXT_PUBLIC_PLEXUS_LOCAL_SUBSCRIPTION_POLL_MS = "25"
+    const task = { id: "task-1", status: "PENDING", updatedAt: "one" }
+    ;(globalThis as any).fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { listTasks: { items: [task], nextToken: null } } }),
+    } as Response))
     const client = generateClient() as any
     const subscription = client.graphql({
-      query: "subscription LocalNoop { onCreateEvaluation { id } }",
+      query: "subscription LocalTaskUpdates { onUpdateTask { id status updatedAt } }",
     })
+    const next = jest.fn()
+    const handle = subscription.subscribe({ next })
 
-    expect(typeof subscription.subscribe).toBe("function")
-    expect(subscription.subscribe()).toMatchObject({
-      unsubscribe: expect.any(Function),
+    for (let index = 0; index < 50 && jest.getTimerCount() === 0; index += 1) {
+      await Promise.resolve()
+    }
+    expect(jest.getTimerCount()).toBeGreaterThan(0)
+    expect(next).not.toHaveBeenCalled()
+    task.status = "COMPLETED"
+    task.updatedAt = "two"
+    await jest.advanceTimersByTimeAsync(25)
+
+    expect(next).toHaveBeenCalledWith({
+      data: { onUpdateTask: expect.objectContaining({ id: "task-1", status: "COMPLETED" }) },
     })
+    handle.unsubscribe()
   })
 })
