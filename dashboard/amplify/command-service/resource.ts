@@ -1,4 +1,4 @@
-import { CfnOutput, Duration, Fn, Stack, StackProps } from 'aws-cdk-lib';
+import { CfnOutput, Duration, Fn, Stack } from 'aws-cdk-lib';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
@@ -34,7 +34,7 @@ export function isLongLivedCommandServiceEnvironment(value: string): boolean {
   return value === 'production' || value === 'staging';
 }
 
-export interface CommandServiceStackProps extends StackProps {
+export interface CommandServiceProps {
   readonly taskTable: ITable;
   readonly taskTableStreamArn: string;
   readonly apiUrl: string;
@@ -58,17 +58,18 @@ export interface CommandServiceStackProps extends StackProps {
  * Application resources for the Task-authoritative command service.
  *
  * Networking and the worker image repository belong to a separately deployed
- * foundation. This stack imports that contract and may be replaced independently.
+ * foundation. This construct imports that contract into its owning Amplify stack.
  */
-export class CommandServiceStack extends Stack {
+export class CommandService extends Construct {
   public readonly commandQueue: sqs.Queue;
   public readonly commandDeadLetterQueue: sqs.Queue;
   public readonly dispatcherFailureQueue: sqs.Queue;
   public readonly dispatcherFunction: lambda.Function;
   public readonly workerService: ecs.FargateService;
 
-  constructor(scope: Construct, id: string, props: CommandServiceStackProps) {
-    super(scope, id, props);
+  constructor(scope: Construct, id: string, props: CommandServiceProps) {
+    super(scope, id);
+    const stack = Stack.of(this);
     const environment = resolveCommandServiceEnvironment(props.environmentName);
     const prefix = (props.servicePrefix || 'plexus').trim().toLowerCase();
     if (!prefix) {
@@ -194,7 +195,7 @@ export class CommandServiceStack extends Stack {
     });
     taskRole.addToPolicy(new iam.PolicyStatement({
       actions: ['ecs:GetTaskProtection', 'ecs:UpdateTaskProtection'],
-      resources: [`${this.formatArn({ service: 'ecs', resource: 'task', resourceName: `${cluster.clusterName}/*` })}`],
+      resources: [`${stack.formatArn({ service: 'ecs', resource: 'task', resourceName: `${cluster.clusterName}/*` })}`],
       conditions: { ArnEquals: { 'ecs:cluster': cluster.clusterArn } },
     }));
     taskDefinition.addContainer('CommandWorkerContainer', {
