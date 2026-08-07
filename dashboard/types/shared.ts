@@ -21,7 +21,7 @@ export interface RingData {
   innerRing: Array<{ category: string; value: number; fill: string }>
 }
 
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed'
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
 
 export interface TaskProgress {
   processedItems?: number
@@ -31,4 +31,4 @@ export interface TaskProgress {
   completedAt?: string
   elapsedTime?: string
   estimatedTimeRemaining?: string
-} 
+}

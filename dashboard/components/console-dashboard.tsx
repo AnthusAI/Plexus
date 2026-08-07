@@ -13,7 +13,7 @@ import { useConsoleArtifact } from "@/components/console/use-console-artifact"
 import ScorecardContext from "@/components/ScorecardContext"
 import { activityConfig, TaskDispatchButton, type TaskDispatchConfig, type TaskUiAction } from "@/components/task-dispatch"
 import { Button } from "@/components/ui/button"
-import { createTask } from "@/utils/data-operations"
+import { submitCommand } from "@/lib/submit-command"
 
 
 function ArtifactPlaceholder({
@@ -127,14 +127,7 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
     }
 
     try {
-      const task = await createTask({
-        type: "Procedure Run",
-        target: `procedure/run/${selectedProcedureId}`,
-        command: `procedure run ${selectedProcedureId}`,
-        accountId: selectedAccountId,
-        dispatchStatus: "PENDING",
-        status: "PENDING",
-      })
+      const task = await submitCommand(selectedAccountId, 'procedure.run', { procedureId: selectedProcedureId })
       if (task) {
         toast.success("Console REPL run queued")
       } else {

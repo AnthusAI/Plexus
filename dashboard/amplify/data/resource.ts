@@ -88,6 +88,12 @@ export const createArtifactTransferTicketsHandler = defineFunction({
     resourceGroupName: 'data',
 });
 
+export const submitCommandHandler = defineFunction({
+    entry: './resolvers/submitCommand.ts',
+    resourceGroupName: 'data',
+});
+export const cancelCommandHandler = defineFunction({ entry: './resolvers/cancelCommand.ts', resourceGroupName: 'data' });
+
 const schema = a.schema({
     Account: a
         .model({
@@ -114,7 +120,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read'])
         ])
         .secondaryIndexes((idx: (field: AccountIndexFields) => any) => [
             idx("key")
@@ -160,7 +167,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read'])
         ])
         .secondaryIndexes((idx: (field: ScorecardIndexFields) => any) => [
             idx("accountId"),
@@ -180,7 +188,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read'])
         ])
         .secondaryIndexes((idx: (field: ScorecardSectionIndexFields) => any) => [
             idx("scorecardId")
@@ -221,7 +230,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read'])
         ])
         .secondaryIndexes((idx: (field: ScoreIndexFields) => any) => [
             idx("sectionId"),
@@ -256,7 +266,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read', 'create'])
         ])
         .secondaryIndexes((idx) => [
             idx("scoreId").sortKeys(["createdAt"]),
@@ -310,8 +321,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
-            // Public access removed - use API key authentication for unauthenticated access
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read', 'create', 'update'])
         ])
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -347,7 +358,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read'])
         ])
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -409,7 +421,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read', 'create', 'update'])
         ])
         .secondaryIndexes((idx) => [
             idx("accountId"),
@@ -455,7 +468,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read', 'create', 'update'])
         ])
         .secondaryIndexes((index) => [
             index("accountId").sortKeys(["updatedAt"]),
@@ -480,7 +494,23 @@ const schema = a.schema({
             target: a.string().required(),
             command: a.string().required(),
             description: a.string(),
-            dispatchStatus: a.string(),
+            dispatchStatus: a.string().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            idempotencyKey: a.string().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            idempotencyNamespace: a.string().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            submittedBy: a.string().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            idempotencyDigest: a.string().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            digestAlgorithm: a.string().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            digestCanonicalizationVersion: a.integer().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            lifecycleStatus: a.string().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            leaseOwner: a.string().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            leaseExpiresAt: a.datetime().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            fencingToken: a.integer().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            cancellationRequestedAt: a.datetime().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            progressFraction: a.float().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            progressMessage: a.string().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            progressDetails: a.json().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            commandResult: a.json().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
+            commandPayload: a.json().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])]),
             metadata: a.json(),
             createdAt: a.datetime(),
             startedAt: a.datetime(),
@@ -509,14 +539,56 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
-            // Public access removed - use API key authentication for unauthenticated access
+            allow.authenticated(),
+            // IAM workload identities use generated Task get/create/update;
+            // protected command fields above remain field-authorized.
+            allow.authenticated('identityPool').to(['read', 'create', 'update'])
         ])
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId")
         ]),
+
+    CommandSubmissionResult: a.customType({
+        taskId: a.id().required(),
+        id: a.id().required(),
+        accountId: a.id().required(),
+        type: a.string().required(),
+        status: a.string().required(),
+        target: a.string(),
+        command: a.string(),
+        dispatchStatus: a.string().required(),
+        lifecycleStatus: a.string(),
+        commandPayload: a.json(),
+        createdAt: a.datetime(),
+        updatedAt: a.datetime(),
+    }),
+
+    CommandCancellationResult: a.customType({
+        taskId: a.id().required(),
+        accountId: a.id().required(),
+        dispatchStatus: a.string().required(),
+    }),
+
+    submitCommand: a
+        .mutation()
+        .arguments({
+            accountId: a.id().required(),
+            action: a.string().required(),
+            arguments: a.json().required(),
+            idempotencyKey: a.string(),
+        })
+        .returns(a.ref('CommandSubmissionResult'))
+        .authorization((allow) => [allow.authenticated()])
+        .handler(a.handler.function(submitCommandHandler)),
+
+    cancelCommand: a
+        .mutation()
+        .arguments({ accountId: a.id().required(), taskId: a.id().required() })
+        .returns(a.ref('CommandCancellationResult'))
+        .authorization((allow) => [allow.authenticated()])
+        .handler(a.handler.function(cancelCommandHandler)),
 
     TaskStage: a
         .model({
@@ -535,8 +607,9 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
-            // Public access removed - use API key authentication for unauthenticated access
+            allow.authenticated(),
+            // ECS uses IAM AppSync operations.
+            allow.authenticated('identityPool').to(['read', 'create', 'update'])
         ])
         .secondaryIndexes((idx: (field: TaskStageIndexFields) => any) => [
             idx("taskId")
@@ -640,7 +713,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read'])
             // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx: (field: ReportConfigurationIndexFields) => any) => [
@@ -668,7 +742,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read', 'create', 'update'])
         ])
         .secondaryIndexes((idx: (field: ReportIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -696,7 +771,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read', 'create', 'update'])
             // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx: (field: ReportBlockIndexFields) => any) => [
@@ -732,7 +808,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read'])
         ])
         .secondaryIndexes((idx: (field: FeedbackItemIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -827,7 +904,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read'])
         ])
         .secondaryIndexes((idx: (field: DataSourceIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -854,7 +932,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read'])
         ])
         .secondaryIndexes((idx: (field: DataSourceVersionIndexFields) => any) => [
             idx("dataSourceId").sortKeys(["createdAt"])
@@ -886,7 +965,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read'])
         ])
         .secondaryIndexes((idx: (field: DataSetIndexFields) => any) => [
             idx("accountId").sortKeys(["createdAt"]),
@@ -934,7 +1014,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read', 'create', 'update'])
         ])
         .secondaryIndexes((idx: (field: ProcedureIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -968,7 +1049,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read', 'create', 'update'])
         ])
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -1022,7 +1104,8 @@ const schema = a.schema({
         })
         .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.authenticated('identityPool').to(['read', 'create', 'update'])
         ])
         .secondaryIndexes((idx) => [
             idx("sessionId").sortKeys(["sequenceNumber"]),

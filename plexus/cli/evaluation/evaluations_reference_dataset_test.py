@@ -9,6 +9,7 @@ import pandas as pd
 from click.testing import CliRunner
 
 from plexus.cli.evaluation.evaluations import (
+    _resolve_accuracy_account,
     _mark_metrics_terminal_before_optional_rca,
     assert_dataset_materialized_for_accuracy,
     accuracy,
@@ -23,6 +24,19 @@ from plexus.cli.evaluation.evaluations import (
     list_associated_datasets_for_score,
     validate_dataset_materialization,
 )
+
+
+def test_accuracy_resolves_real_account_key_from_bound_account_id(monkeypatch):
+    client = SimpleNamespace(_resolve_account_id=MagicMock(return_value="account-id"))
+    account = SimpleNamespace(id="account-id", key="account-key")
+    get_by_id = MagicMock(return_value=account)
+    monkeypatch.setattr(
+        "plexus.cli.evaluation.evaluations.Account.get_by_id",
+        get_by_id,
+    )
+
+    assert _resolve_accuracy_account(client) is account
+    get_by_id.assert_called_once_with("account-id", client)
 
 
 def test_metrics_are_terminal_before_optional_root_cause_analysis():

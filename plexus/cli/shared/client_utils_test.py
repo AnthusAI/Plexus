@@ -13,6 +13,7 @@ pytestmark = pytest.mark.unit
 def test_create_client_uses_explicit_cognito_locally_without_api_key(monkeypatch):
     monkeypatch.setattr(client_utils, "load_config", lambda: None)
     monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "acct-key")
+    monkeypatch.setenv("PLEXUS_ACCOUNT_ID", "acct-id")
     monkeypatch.setenv("PLEXUS_API_URL", "https://runtime.example/graphql")
     monkeypatch.setenv("PLEXUS_API_KEY", "runtime-key")
     monkeypatch.setenv("NEXT_PUBLIC_PLEXUS_API_URL", "https://frontend.example/graphql")
@@ -26,6 +27,7 @@ def test_create_client_uses_explicit_cognito_locally_without_api_key(monkeypatch
             captured["api_key"] = api_key
             captured["auth_mode"] = auth_mode
             captured["account_key"] = context.account_key if context else None
+            captured["account_id"] = context.account_id if context else None
             self.api_url = api_url
             self.context = context
 
@@ -37,6 +39,7 @@ def test_create_client_uses_explicit_cognito_locally_without_api_key(monkeypatch
     assert captured["api_key"] is None
     assert captured["auth_mode"] == "cognito"
     assert captured["account_key"] == "acct-key"
+    assert captured["account_id"] == "acct-id"
 
 
 def test_create_client_uses_iam_for_lambda_without_api_key(monkeypatch):

@@ -53,9 +53,7 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialO
       return
     }
 
-    const command = generator.generate(options)
-    console.log('Generated evaluation command:', command)
-    onDispatch(command, action.target)
+    onDispatch({ ...options }, action.target)
   }
 
   return (

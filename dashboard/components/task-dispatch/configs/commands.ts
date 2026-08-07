@@ -66,9 +66,7 @@ export const commands = {
   demo: createSimpleCommand(() => 'command demo'),
 
   evaluation: {
-    accuracy: createEvaluationCommand('accuracy'),
-    consistency: createEvaluationCommand('consistency'),
-    alignment: createEvaluationCommand('alignment')
+    accuracy: createEvaluationCommand('accuracy')
   },
 
   optimization: createSimpleCommand(() => 'optimize')
@@ -76,4 +74,4 @@ export const commands = {
 
 // Type helpers
 export type CommandType = keyof typeof commands
-export type EvaluationType = keyof typeof commands.evaluation 
+export type EvaluationType = keyof typeof commands.evaluation

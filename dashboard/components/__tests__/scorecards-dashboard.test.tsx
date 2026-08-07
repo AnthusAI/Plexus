@@ -130,18 +130,35 @@ jest.mock('../scorecards/ScorecardGrid', () => {
 })
 
 jest.mock('../scorecards/ScorecardComponent', () => {
-  return function MockScorecardComponent({ variant, onClick, score, onEdit }: any) {
+  return function MockScorecardComponent({ variant, onClick, score, onEdit, onTaskCreated }: any) {
     if (variant === 'detail') {
       return (
         <div data-testid="scorecard-detail">
           <h2>{score.name || 'New Scorecard'}</h2>
           <div>Detail view for {score.id || 'new scorecard'}</div>
+          <button type="button" onClick={() => onTaskCreated?.({
+            id: 'task-live-1',
+            accountId: 'account-1',
+            type: 'Prediction Test',
+            status: 'PENDING',
+            target: 'prediction',
+            command: 'predict --scorecard Test',
+            dispatchStatus: 'READY',
+            lifecycleStatus: 'ANNOUNCED',
+            createdAt: '2026-08-06T00:00:00Z',
+          })}>Announce task</button>
         </div>
       )
     }
     return null
   }
 })
+
+jest.mock('../Task', () => ({
+  Task: ({ task }: any) => <div data-testid="live-task-pane">{task.id}:{task.status}:{task.dispatchStatus}</div>,
+  TaskHeader: () => null,
+  TaskContent: () => null,
+}))
 
 jest.mock('../scorecards/ScorecardDetailView', () => {
   return function MockScorecardDetailView() {
@@ -375,6 +392,18 @@ describe('ScorecardsComponent', () => {
       
       // Should NOT call get() for just selecting - only for editing
       expect(mockAmplifyClient.amplifyClient.Scorecard.get).not.toHaveBeenCalled()
+    })
+
+    it('selects the authoritative Task and opens its realtime pane from onTaskCreated', async () => {
+      const user = userEvent.setup()
+      render(<ScorecardsComponent />)
+
+      await user.click(await screen.findByTestId('scorecard-scorecard-1'))
+      await user.click(await screen.findByRole('button', { name: 'Announce task' }))
+
+      expect(await screen.findByTestId('live-task-pane')).toHaveTextContent(
+        'task-live-1:PENDING:READY',
+      )
     })
 
     it('should handle edit button click and call API with proper error handling', async () => {

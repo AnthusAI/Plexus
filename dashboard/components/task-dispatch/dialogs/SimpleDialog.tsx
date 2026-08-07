@@ -28,7 +28,7 @@ export function SimpleDialog({ action, isOpen, onClose, onDispatch }: TaskDialog
   const handleDispatch = () => {
     // If command is a string, use it directly
     if (typeof action.command === 'string') {
-      onDispatch(action.command, action.target)
+      onDispatch({}, action.target)
       onClose()
       return
     }
@@ -48,7 +48,7 @@ export function SimpleDialog({ action, isOpen, onClose, onDispatch }: TaskDialog
     }
 
     const generatedCommand = generator.generate()
-    onDispatch(generatedCommand, action.target)
+    onDispatch({}, action.target)
     onClose()
   }
 
@@ -92,4 +92,4 @@ export function SimpleDialog({ action, isOpen, onClose, onDispatch }: TaskDialog
       </DialogContent>
     </Dialog>
   )
-} 
+}

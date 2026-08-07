@@ -46,7 +46,7 @@ export interface TaskStageConfig {
   color: string
   name: string
   order: number
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'STALLED'
   processedItems?: number
   totalItems?: number
   startedAt?: string
@@ -64,7 +64,7 @@ export interface TaskStatusProps {
   totalItems?: number
   startedAt?: string
   estimatedCompletionAt?: string
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'STALLED'
   terminalOutcome?: string
   command?: string
   statusMessage?: string
@@ -243,7 +243,7 @@ export const TaskStatus = React.memo(({
     if (runningStage) return runningStage.name;
 
     // Only fall back to task-level status when no stage is actively running
-    if (status === 'FAILED' || status === 'STALLED' || status === 'COMPLETED') return 'completion';
+    if (status === 'FAILED' || status === 'CANCELLED' || status === 'STALLED' || status === 'COMPLETED') return 'completion';
 
     // If no running stage, find the first PENDING stage (sorted by order)
     const pendingStage = [...stageConfigs].sort((a, b) => a.order - b.order).find(s => s.status === 'PENDING');
@@ -284,14 +284,14 @@ export const TaskStatus = React.memo(({
     const hasStages = orderedStages.length > 0;
     const lastStageCompleted = hasStages && orderedStages[orderedStages.length - 1].status === 'COMPLETED';
     const allStagesCompleted = hasStages && orderedStages.every(s => s.status === 'COMPLETED');
-    const completionActive = !['FAILED', 'STALLED'].includes(status) && (status === 'COMPLETED' || allStagesCompleted) && lastStageCompleted;
+    const completionActive = !['FAILED', 'CANCELLED', 'STALLED'].includes(status) && (status === 'COMPLETED' || allStagesCompleted) && lastStageCompleted;
     orderedStages.push({
       key: 'completion',
       label: terminalOutcomeView?.label || 'Complete',
       color: completionActive
         ? terminalOutcomeView?.color || 'bg-true'
         : (status === 'FAILED' ? 'bg-false' : 'bg-neutral'),
-      status: completionActive ? 'COMPLETED' : ((status === 'FAILED' || status === 'STALLED') ? status : 'PENDING'),
+      status: completionActive ? 'COMPLETED' : ((status === 'FAILED' || status === 'CANCELLED' || status === 'STALLED') ? status : 'PENDING'),
       completed: completionActive
     });
 
@@ -355,6 +355,7 @@ export const TaskStatus = React.memo(({
     terminalOutcomeView ? 'neutral' :
     status === 'COMPLETED' ? 'primary' :
     status === 'FAILED' ? 'false' :
+    status === 'CANCELLED' ? 'neutral' :
     'secondary'
   , [status, terminalOutcome]);
 
@@ -406,7 +407,9 @@ export const TaskStatus = React.memo(({
   const preExecutionStatus = shouldShowPreExecution ? getPreExecutionStatus() : null
   const showEmptyState = !hidePreExecutionStatus && dispatchMode !== 'pending' && dispatchMode !== 'local' && !stages.length && !preExecutionStatus && status === 'PENDING'
 
-  const displayMessage = isError && errorMessage ? errorMessage : statusMessage
+  const displayMessage = isError && errorMessage
+    ? errorMessage
+    : statusMessage || (status === 'CANCELLED' ? 'Cancelled' : undefined)
 
   const handleCommandClick = () => {
     if (commandDisplay === 'hide' || !onCommandDisplayChange) return;

@@ -8,6 +8,7 @@ export interface TaskActionBase {
 
 export interface TaskCommandAction extends TaskActionBase {
   actionType?: 'dispatch'
+  action?: 'evaluation.accuracy' | 'report.run'
   command: string | ((data: any) => string)
   target?: string
   dialogType: string
@@ -24,7 +25,7 @@ export interface TaskDialogProps {
   action: TaskCommandAction
   isOpen: boolean
   onClose: () => void
-  onDispatch: (command: string, target?: string) => Promise<void>
+  onDispatch: (arguments_: Record<string, unknown>, target?: string) => Promise<void>
 }
 
 export interface TaskDispatchConfig {

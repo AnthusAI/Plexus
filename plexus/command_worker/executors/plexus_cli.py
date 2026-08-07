@@ -17,6 +17,7 @@ from ..ports import ExecutionContext
 _CLI_LOCK = RLock()
 _TASK_ID_KEY = "task_id"
 _ARGV_KEY = "argv"
+_ACCOUNT_ID_ENV = "PLEXUS_ACCOUNT_ID"
 _MAX_RESULT_OUTPUT_BYTES = 65_536
 
 
@@ -47,23 +48,33 @@ class PlexusCliExecutor:
 
         stdout = io.StringIO()
         stderr = io.StringIO()
-        previous_argv = sys.argv
-        previous_task_id = os.environ.get("PLEXUS_DISPATCH_TASK_ID")
-        try:
-            with _CLI_LOCK, CommandProgress.bind_update_callback(
-                lambda state: self._report_progress(context, state)
-            ), redirect_stdout(stdout), redirect_stderr(stderr):
-                sys.argv = ["plexus", *argv]
-                if task_id is not None:
-                    os.environ["PLEXUS_DISPATCH_TASK_ID"] = task_id
-                self._invoke_cli()
-                context.raise_if_cancellation_requested()
-        finally:
-            sys.argv = previous_argv
-            if previous_task_id is None:
-                os.environ.pop("PLEXUS_DISPATCH_TASK_ID", None)
-            else:
-                os.environ["PLEXUS_DISPATCH_TASK_ID"] = previous_task_id
+        with _CLI_LOCK:
+            previous_argv = sys.argv
+            previous_task_id = os.environ.get("PLEXUS_DISPATCH_TASK_ID")
+            previous_account_id = os.environ.get(_ACCOUNT_ID_ENV)
+            try:
+                with CommandProgress.bind_update_callback(
+                    lambda state: self._report_progress(context, state)
+                ), redirect_stdout(stdout), redirect_stderr(stderr):
+                    sys.argv = ["plexus", *argv]
+                    # The envelope is verified against the authoritative Task
+                    # before execution. Bind its account ID without treating it
+                    # as the distinct legacy account-key configuration.
+                    os.environ[_ACCOUNT_ID_ENV] = envelope.tenant_id
+                    if task_id is not None:
+                        os.environ["PLEXUS_DISPATCH_TASK_ID"] = task_id
+                    self._invoke_cli()
+                    context.raise_if_cancellation_requested()
+            finally:
+                sys.argv = previous_argv
+                if previous_task_id is None:
+                    os.environ.pop("PLEXUS_DISPATCH_TASK_ID", None)
+                else:
+                    os.environ["PLEXUS_DISPATCH_TASK_ID"] = previous_task_id
+                if previous_account_id is None:
+                    os.environ.pop(_ACCOUNT_ID_ENV, None)
+                else:
+                    os.environ[_ACCOUNT_ID_ENV] = previous_account_id
 
         return {
             "argv": list(argv),
