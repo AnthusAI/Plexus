@@ -85,8 +85,9 @@ describe('CommandService', () => {
 
   it('preserves legacy Task dispatcher exports during the two-deployment migration', () => {
     const backend = readFileSync(path.join(process.cwd(), 'amplify/backend.ts'), 'utf8');
-    expect(backend).toContain('backend.data.stack.exportValue(taskTable.tableArn)');
-    expect(backend).toContain('backend.data.stack.exportValue(taskTable.tableStreamArn)');
+    expect(backend).toContain('backend.stack.exportValue(taskTable.tableArn)');
+    expect(backend).toContain('backend.stack.exportValue(taskTable.tableStreamArn)');
+    expect(backend).not.toContain('backend.data.stack.exportValue(taskTable.');
   });
 
   it('is a Data-owned construct with only a Data-to-Storage stack dependency', () => {
