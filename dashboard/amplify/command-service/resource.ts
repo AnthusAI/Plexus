@@ -195,6 +195,7 @@ export class CommandService extends Construct {
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'CommandWorkerTaskDefinition', {
       cpu: 1024,
       memoryLimitMiB: 4096,
+      ephemeralStorageGiB: 50,
       taskRole,
       executionRole,
       runtimePlatform: { cpuArchitecture: ecs.CpuArchitecture.X86_64, operatingSystemFamily: ecs.OperatingSystemFamily.LINUX },

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4fb80c21-2433-484a-ae07-574ed9f80879",
+  "issue_id": "plx-7a641410-81e3-45b6-ac06-9e3062ddbf7a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-05T20:12:55.420Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "As a platform operator, I want command ownership to be stored durably with leases and fencing, so that duplicate deliveries and failed workers cannot produce conflicting results.\n\nFeature: Durable command lifecycle ownership\n\nScenario: One worker obtains a command lease\nGiven an announced command envelope\nWhen a worker claims the command\nThen it receives a new fencing token and renewable lease\n\nScenario: A concurrent worker cannot execute an active command\nGiven a command with an unexpired lease\nWhen another worker claims the same envelope\nThen the claim is reported as active without a new fencing token\n\nScenario: A stale worker cannot settle a command\nGiven a replacement worker has claimed a newer fencing token\nWhen the prior worker reports progress or completion\nThen the store rejects that mutation\n\nScenario: A cancellation request is observed durably\nGiven a running claimed command\nWhen cancellation is requested\nThen the owner can settle it as cancelled\nAnd no later success settlement is accepted.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-36892abd-cc41-4a2c-ba59-ff3e51f88585",
+    "priority": 1,
+    "status": "open",
+    "title": "Durable command claims reject stale workers"
+  }
+}

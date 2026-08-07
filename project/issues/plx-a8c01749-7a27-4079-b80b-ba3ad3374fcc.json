@@ -1,0 +1,55 @@
+{
+  "id": "plx-a8c01749-7a27-4079-b80b-ba3ad3374fcc",
+  "title": "Prove Celery command adapter behavior across local and AWS runtimes",
+  "description": "Build a disposable, non-production spike that determines whether Celery can remain the portable command execution adapter without duplicating orchestration. The local layer must run the same synthetic lifecycle through plain and Celery emitters against the no-AWS dashboard control plane and compare observed Task/TaskStage state. The broker layer must use two workers, late acknowledgement, durable claims, renewable leases, fencing, cancellation, progress, recovery, and terminal duplicate handling. The AWS layer must be manually deployable and destroyable without existing pipelines, use task-role credentials, predefined SQS, two Fargate workers, accelerated visibility timeout, worker-kill recovery, and ECS task protection. The spike passes only through documented Celery APIs and must not modify legacy production dispatch or deployed pipelines.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bbea4c95-c634-484f-80be-69e97a39c3df",
+      "author": "derek.norrbom",
+      "text": "Local broker evidence: the disposable RabbitMQ/PostgreSQL harness passed normal completion, competing-worker duplicate delivery, hard prefork-child death followed by fenced recovery, cooperative cancellation after progress, and terminal redelivery. The harness uses Celery 5.6.3 documented configuration/APIs, two concurrency-one workers, durable leases, monotonic fences, and database-asserted side effects. This proves local broker portability and single-owner execution; it does not yet prove dashboard lifecycle parity or SQS/ECS behavior.",
+      "created_at": "2026-08-05T18:26:07.807531Z"
+    },
+    {
+      "id": "b99c05c4-e032-4f10-91ff-7aaa4719cc46",
+      "author": "derek.norrbom",
+      "text": "Implementing the isolated AWS spike under spikes/celery-command-adapter/aws. This work is synth/test-only: no deployment, no pipeline integration, and no existing runtime changes.",
+      "created_at": "2026-08-05T18:26:33.350664Z"
+    },
+    {
+      "id": "24a93ea7-757d-4ab0-ad75-e1e62ce5e643",
+      "author": "derek.norrbom",
+      "text": "Local control-plane evidence: the same deterministic Task/TaskStage lifecycle was executed directly and through a Celery task against the real no-AWS GraphQL proxy. The actual dashboard local polling adapter observed identical Task transitions (PENDING, RUNNING, COMPLETED) and stage progress (0 through 4, then COMPLETED), and normalized persisted GraphQL state matched. The proxy recorded no upstream requests. This separates the dashboard realtime contract from Celery transport behavior; browser rendering, production authentication, SQS, and ECS remain outside this result.",
+      "created_at": "2026-08-05T18:33:21.713810Z"
+    },
+    {
+      "id": "60f36d72-35c4-43dc-a131-0a57822be488",
+      "author": "derek.norrbom",
+      "text": "Completed the synth-only disposable AWS spike implementation under spikes/celery-command-adapter/aws. It is isolated from existing CDK apps and pipelines, requires a unique suffix, uses public-subnet Fargate with no NAT, and contains explicit probes for duplicate claims, visibility crossing, task-kill recovery, cooperative cancellation, and task protection. Validation: 7 focused pytest tests passed under Python 3.11; Ruff check/format passed; CDK synth passed; the worker image built and imported successfully. No AWS resources were deployed. The adapter intentionally uses public Celery retry behavior after SQS visibility expiry because documented Celery task APIs do not expose delivery-lease renewal; that impedance remains decision evidence.",
+      "created_at": "2026-08-05T18:36:56.622853Z"
+    },
+    {
+      "id": "ff2d8483-a7de-45c8-9e8b-723ef6abf85e",
+      "author": "derek.norrbom",
+      "text": "Disposable AWS evidence: a unique no-NAT VPC, SQS/DLQ, DynamoDB lifecycle table, and two-worker Fargate service was deployed, probed, and destroyed. After correcting asset platform and hardened temporary-directory startup issues, all five black-box scenarios passed: competing duplicate claim, 90-second execution across a 30-second SQS visibility timeout, forced owner-task recovery under a newer fence, cooperative cancellation, and ECS task protection during forced deployment. The adapter used task-role credentials and predefined queues only; no private Kombu APIs were used. The stack, command queue, lifecycle table, logs, service, cluster, and VPC were deleted. Finding: public Celery retry yields correct SQS recovery but creates duplicate/retry churn under short visibility; this needs an explicit operational decision for very long-running commands.",
+      "created_at": "2026-08-05T19:30:19.528556Z"
+    },
+    {
+      "id": "6d8ed4eb-36db-40f8-b421-cda9f4b9d152",
+      "author": "derek.norrbom",
+      "text": "Completed the bounded local and AWS evidence runs. The spike established dashboard lifecycle independence from Celery, safe multi-worker Celery behavior with durable ownership, and correct public-API SQS/Fargate recovery for the tested scenarios. The disposable AWS stack was destroyed. Follow-on work will adapt the existing Celery worker to the shared portable lifecycle contract; the unresolved long-running SQS retry-churn tradeoff is explicitly out of scope for this completed spike.",
+      "created_at": "2026-08-05T20:11:44.487833Z"
+    }
+  ],
+  "created_at": "2026-08-05T18:12:22.481524Z",
+  "updated_at": "2026-08-05T20:11:44.515930Z",
+  "closed_at": "2026-08-05T20:11:44.515930Z",
+  "custom": {}
+}

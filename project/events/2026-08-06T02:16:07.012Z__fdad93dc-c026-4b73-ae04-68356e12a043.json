@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "fdad93dc-c026-4b73-ae04-68356e12a043",
+  "issue_id": "plx-17c20240-5cc4-4b05-8b04-fec92ed2222e",
+  "event_type": "field_updated",
+  "occurred_at": "2026-08-06T02:16:07.012Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Compose the reusable deployment-specific command worker from the shared lifecycle, delivery adapter, durable state, and container platform interfaces. Preserve provider-neutral command semantics; keep dashboard integration and deployment-specific wiring outside the core command-worker package. Verify lifecycle resources, worker permissions, deployment health, and an end-to-end command path without consumer-specific configuration.",
+        "to": "Compose and validate the Plexus-owned command-service companion deployment from the existing portable lifecycle, Celery delivery adapter, durable state, container artifact, and always-on worker constructs. Keep it outside the Amplify stacks and the legacy mixed infrastructure application. Require a complete dashboard submission, execution, projection, and deployment proof before it is eligible for main."
+      },
+      "parent": {
+        "from": null,
+        "to": "plx-e220db10-ae46-44b7-9537-c4865b808ad0"
+      }
+    }
+  }
+}

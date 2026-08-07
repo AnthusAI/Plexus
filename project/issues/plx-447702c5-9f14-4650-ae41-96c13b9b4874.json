@@ -1,0 +1,34 @@
+{
+  "id": "plx-447702c5-9f14-4650-ae41-96c13b9b4874",
+  "title": "Experiment: use dashboard Task as authoritative command lifecycle",
+  "description": "Determine whether the existing Amplify dashboard Task model can be the single authoritative command lifecycle record. Experiment only: add scalar lease, digest, fencing, idempotency, and cancellation fields to dashboard/amplify/data/resource.ts without adding a Command model, relationship, or index. Prove CloudFormation resource-count/replacement behavior, conditional claim and fencing semantics, and dashboard Task subscription updates. Restore experimental files after validation; do not modify command-worker production code.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "65ed918c-5efc-4fd2-ba50-d95e916e11da",
+      "author": "derek.norrbom",
+      "text": "Started disposable Amplify schema experiment. Scope is limited to dashboard/amplify/data/resource.ts plus temporary local test artifacts; no worker production code, deployment, commit, or PR.",
+      "created_at": "2026-08-06T04:21:53.598416Z"
+    },
+    {
+      "id": "fd4684fa-afa6-4582-b6a9-41d2bcaab94d",
+      "author": "derek.norrbom",
+      "text": "Experiment complete. Baseline and six-field schema both synthesized data/amplifyData/ConnectionStack at 469 resources (delta 0); no logical resources were added/removed, Task key schema/GSIs stayed unchanged, and no replacement was indicated. Generated GraphQL exposed updateTask(condition: ModelTaskConditionInput) plus onUpdateTask. Live AppSync proof: claim A succeeded, concurrent claim B and stale fence update failed conditionally, cancellation settlement succeeded, post-cancel success was rejected, and onUpdateTask delivered the updated Task fields. Backend typecheck passed. Disposable sandbox and synthetic Tasks were deleted; resource.ts was restored with no diff.",
+      "created_at": "2026-08-06T04:44:05.372233Z"
+    }
+  ],
+  "created_at": "2026-08-06T04:21:51.339829Z",
+  "updated_at": "2026-08-06T04:44:08.728482Z",
+  "closed_at": "2026-08-06T04:44:08.728482Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

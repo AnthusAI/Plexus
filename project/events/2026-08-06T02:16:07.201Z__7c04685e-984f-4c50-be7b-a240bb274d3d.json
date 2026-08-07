@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "event_id": "7c04685e-984f-4c50-be7b-a240bb274d3d",
+  "issue_id": "plx-a5435951-cf08-43ea-b48d-b47921443e1a",
+  "event_type": "field_updated",
+  "occurred_at": "2026-08-06T02:16:07.201Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Create and run a local, repeatable proof for the portable command lifecycle and dashboard integration. Boot the local dashboard/control plane, prove the new execution path where it is wired, and identify remaining submission or projection gaps explicitly. Do not treat legacy dispatcher behavior as proof of the replacement path.",
+        "to": "Prove the actual portable command-service path from dashboard submission through durable announcement, Celery delivery, worker execution, lifecycle progress, Task and TaskStage projection, and terminal UI state. The existing local dispatcher is useful test support but does not satisfy this task. Require a repeatable local proof before an isolated AWS development deployment."
+      },
+      "parent": {
+        "from": null,
+        "to": "plx-e220db10-ae46-44b7-9537-c4865b808ad0"
+      },
+      "title": {
+        "from": "Establish local command lifecycle dashboard proof",
+        "to": "Prove portable command service end to end"
+      }
+    }
+  }
+}

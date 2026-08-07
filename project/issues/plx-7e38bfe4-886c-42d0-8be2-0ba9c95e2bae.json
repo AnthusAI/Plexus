@@ -1,0 +1,25 @@
+{
+  "id": "plx-7e38bfe4-886c-42d0-8be2-0ba9c95e2bae",
+  "title": "Publish portable command worker image",
+  "description": "Produce a genuinely buildable Plexus-owned command-worker container artifact and immutable publication path. The image must install the executor dependencies needed by supported dashboard commands, pass a real container build and startup smoke test, and publish a digest consumed by the companion deployment. Do not modify the mixed infrastructure application, Amplify environment variables, or existing production resources.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-17c20240-5cc4-4b05-8b04-fec92ed2222e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5108adf8-b03f-4096-bbca-0365172da6f5",
+      "author": "derek.norrbom",
+      "text": "## Validation correction\n\nThe previously merged Dockerfile was checked from a clean develop snapshot. Its image build fails because the build invokes plexus-command-worker --help, while the entrypoint immediately requires runtime environment bindings. The existing test only inspects Dockerfile strings and did not build the image. PR #554 was closed without deployment. Terra should correct the artifact and add a real build/startup smoke test before publication work resumes.",
+      "created_at": "2026-08-06T02:16:25.407803Z"
+    }
+  ],
+  "created_at": "2026-08-06T01:19:26.174634Z",
+  "updated_at": "2026-08-06T02:16:36.248534Z",
+  "closed_at": null,
+  "custom": {}
+}

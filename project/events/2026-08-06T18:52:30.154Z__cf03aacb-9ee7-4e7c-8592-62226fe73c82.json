@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cf03aacb-9ee7-4e7c-8592-62226fe73c82",
+  "issue_id": "plx-0ca6fcfc-e975-4241-a1b5-d79cf8d84a54",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-06T18:52:30.154Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Purpose: Investigate and improve generic security boundaries for repository-owned templates and configuration rendering.\n\nScope: Sanitized research, compatibility analysis, and future hardening work.\n\nExclusions: Client-specific configurations, data, incidents, and production deployment changes.\n\nDefinition of Done: Security boundary work is documented, tested with synthetic fixtures, and tracked through scoped child issues.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Harden template and configuration execution boundaries"
+  }
+}

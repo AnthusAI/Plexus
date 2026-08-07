@@ -1,0 +1,31 @@
+{
+  "id": "plx-2b7bcad5-3679-4742-80f4-f218ae5aaa58",
+  "title": "Implement opt-in sandbox command-service deployment",
+  "description": "Implement story `plx-22c9d5` without changing the default lightweight sandbox behavior.\n\nBounded scope:\n- define an explicit sandbox opt-in and a sanitized, collision-safe sandbox environment namespace;\n- reuse a shared non-production VPC/ECR foundation rather than provisioning one VPC per sandbox;\n- deploy sandbox-owned queue, dispatcher, ECS service, IAM, alarms, and bindings against the sandbox Task table and AppSync API;\n- require an immutable image digest and prohibit production secrets/configuration;\n- preserve the audited action authority manifest, one authoritative Task, real executor-owned TaskStages, conditional claim/fencing, cancellation, and image replacement safety;\n- ensure sandbox deletion removes only sandbox-owned application resources;\n- add executable behavior and focused synthesis/contract coverage before production edits;\n- document opt-in, image build/handoff, teardown, cost, and failure behavior.\n\nOut of scope: production deployment, staging promotion proof, extended-duration procedure proof, per-sandbox VPC/ECR foundations, static credentials, fallback dispatchers, a second lifecycle store, and unrelated scoring/container-hardening work.\n\nReturn for manager review before commit or deployment: red/green evidence, actual diff, resource/authority counts, exact local validation, proposed commit boundary, and a bounded live sandbox proof plan.",
+  "type": "task",
+  "status": "backlog",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2b59c45f-c531-48ae-acb3-0ad75fcd188c",
+      "author": "derek.norrbom",
+      "text": "## Manager handoff checkpoint\n\nStart from branch `feature/command-service-consolidation` at bookkeeping commit `4b4e5872e19deed3daf883861f817e4f923bfeb8`; the accepted atomic command-service code commit is `3d6c421743e3d5249aa773423f4e04df9e2792c8`.\n\nExisting unrelated worktree changes must remain untouched and excluded:\n- `.vscode/settings.json`\n- `plexus/infrastructure/scoring_service/network_stack.py`\n- `infrastructure/tests/unit/test_scoring_service_platform_stacks.py`\n- Kanbus-generated `project/` changes from subsequent comments\n\nFirst implementation slice is architecture/specification only: inspect current sandbox environment resolution, shared service-network foundation contracts, image handoff, command-service stack ownership, naming, teardown, and secret guards; write executable failing behavior/synthesis coverage; then return the bounded design and red evidence before broad implementation. Do not deploy, commit, push, open a PR, or modify the exclusions. Staging proof in `plx-925843` is paused until this task is reviewed.",
+      "created_at": "2026-08-07T05:15:21.948072Z"
+    },
+    {
+      "id": "5ceb6aa5-3558-4c8b-8a39-f763fcb3e4d3",
+      "author": "derek.norrbom",
+      "text": "## Manager sequencing decision — deferred pending staging proof\n\nThis task is deferred. We will first prove the already accepted ECS command-service integration in staging through `plx-925843`, because the current code supports the long-lived staging path while a full sandbox path is additional unproven architecture.\n\nNo sandbox implementation or deployment is currently authorized. Reassess this task after the staging proof identifies the real operational gaps and confirms whether a full sandbox path has sufficient development value.",
+      "created_at": "2026-08-07T05:36:43.424738Z"
+    }
+  ],
+  "created_at": "2026-08-07T05:15:06.808238Z",
+  "updated_at": "2026-08-07T05:36:43.424738Z",
+  "closed_at": null,
+  "custom": {}
+}

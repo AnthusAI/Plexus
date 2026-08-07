@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "1e6dd9b1-1a96-4b1a-84a7-ace71a359609",
+  "issue_id": "plx-04e73b58-e8a0-40c4-9bc1-d240876f5638",
+  "event_type": "field_updated",
+  "occurred_at": "2026-08-06T02:16:07.435Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "As an operator, I want the existing command worker to remain deployable while the new platform is validated, so that parallel migration does not interrupt current workloads.\n\nFeature: Isolated command-worker migration\n  Scenario: The portable worker runtime is introduced\n    Given the existing Celery command worker remains the active production path\n    When the new runtime and AWS service are built and deployed separately\n    Then existing Celery entrypoints and infrastructure remain unchanged\n    And the new service uses isolated queues, images, configuration, and resource names\n    And cutover requires an explicit future decision",
+        "to": "As an operator, I want the portable command service introduced without modifying unrelated deployed resources, so that validation cannot disrupt existing production workloads.\n\nFeature: Isolated command-service introduction\n  Scenario: The portable command service is deployed for validation\n    Given the current production resource inventory has been recorded\n    When the new companion service is deployed under distinct names\n    Then existing Amplify, scoring, and pipeline resources remain unchanged\n    And no legacy compatibility behavior is added without evidence of an active consumer\n    And activation requires an explicit future decision"
+      },
+      "title": {
+        "from": "Legacy command execution remains deployable during migration",
+        "to": "Existing production resources remain unchanged during command-service introduction"
+      }
+    }
+  }
+}

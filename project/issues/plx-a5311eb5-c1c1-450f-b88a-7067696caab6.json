@@ -1,0 +1,31 @@
+{
+  "id": "plx-a5311eb5-c1c1-450f-b88a-7067696caab6",
+  "title": "Wire local evaluation dispatch progress into dashboard proof",
+  "description": "Implement the approved local proof behavior from `plx-ab71e2`: local polling subscriptions must observe task/task-stage changes, and feedback evaluation commands must use the dispatcher-provided task context for progress tracking. Preserve the existing evaluation-record creation model. Validate with focused tests and a physical local dashboard run.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a5435951-cf08-43ea-b48d-b47921443e1a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "54fdfca5-205c-41d1-b95e-974d6a5f1093",
+      "author": "derek.norrbom",
+      "text": "Opened two focused implementation PRs. #551 makes feedback evaluation inherit `PLEXUS_DISPATCH_TASK_ID`, so its existing progress tracker attaches stages to the task the dispatcher claimed. #552 replaces the local adapter no-op subscriptions with bounded polling subscriptions; production retains its native subscription transport. Validation: feedback integration tests (15 passed), local Amplify subscription tests (5 passed), dashboard TypeScript check, and diff checks. Physical browser proof follows after both merge into develop.",
+      "created_at": "2026-08-06T00:10:49.633598Z"
+    },
+    {
+      "id": "96a93795-f161-4e35-9d6f-444704109c58",
+      "author": "derek.norrbom",
+      "text": "Merged #551 and #552 and completed a physical browser proof against the local control plane: a feedback evaluation moved through Setup, Processing, Analyzing, and Complete without reload; all 200 items completed and the task ended successfully. The remaining stderr presentation is tracked separately as plx-f7e6da.",
+      "created_at": "2026-08-06T00:28:52.484380Z"
+    }
+  ],
+  "created_at": "2026-08-06T00:07:29.507435Z",
+  "updated_at": "2026-08-06T00:28:52.517462Z",
+  "closed_at": "2026-08-06T00:28:52.517462Z",
+  "custom": {}
+}

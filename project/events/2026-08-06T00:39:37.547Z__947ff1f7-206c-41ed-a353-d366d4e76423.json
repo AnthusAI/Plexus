@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "947ff1f7-206c-41ed-a353-d366d4e76423",
+  "issue_id": "plx-a1ac7d43-c5a5-40c7-b6a6-3c39940c85fd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-06T00:39:37.547Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Create a Plexus-owned, deployment-neutral container artifact for the portable command worker. Include a dedicated Dockerfile/entrypoint, deterministic dependency installation, a narrow runtime dependency set, and an immutable image interface suitable for the companion Fargate stack. Do not reuse the legacy EC2/SSM command-worker deployment or embed client paths, credentials, account settings, or dashboard stack internals. Add focused build/import tests and document the artifact contract.",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-17c20240-5cc4-4b05-8b04-fec92ed2222e",
+    "priority": 1,
+    "status": "open",
+    "title": "Package portable command worker container artifact"
+  }
+}

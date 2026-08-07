@@ -107,6 +107,7 @@ describe('CommandService', () => {
     const template = Template.fromStack(createStack());
     expect(Object.keys(template.findResources('AWS::SQS::Queue'))).toHaveLength(3);
     template.resourceCountIs('AWS::ECS::Service', 1);
+    template.hasResourceProperties('AWS::ECS::TaskDefinition', { EphemeralStorage: { SizeInGiB: 50 } });
     template.hasResourceProperties('AWS::ECS::Service', { DeploymentConfiguration: { MinimumHealthyPercent: 100, MaximumPercent: 200 } });
     template.resourceCountIs('AWS::Lambda::EventSourceMapping', 1);
     template.hasResourceProperties('AWS::SQS::Queue', { VisibilityTimeout: 43200 });
