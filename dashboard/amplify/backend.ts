@@ -195,8 +195,8 @@ if (!taskTable.tableStreamArn) {
 // while CloudFormation removes that stack. Remove these only after every
 // long-lived environment has completed the command-service migration.
 if (!isSandbox) {
-    backend.data.stack.exportValue(taskTable.tableArn);
-    backend.data.stack.exportValue(taskTable.tableStreamArn);
+    backend.stack.exportValue(taskTable.tableArn);
+    backend.stack.exportValue(taskTable.tableStreamArn);
 }
 
 const itemTable = backend.data.resources.tables.Item;
