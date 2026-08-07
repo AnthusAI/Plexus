@@ -76,10 +76,22 @@
       "author": "derek.norrbom",
       "text": "Implemented and pushed the Kombu SQS runtime correction in PR #562: command-service-runtime now includes pycurl. Added a clean temporary-environment audit that installs only the runtime extra and constructs Kombu CurlClient, plus a supported-Python guard. Validation passed: focused dependency tests (4 passed), clean runtime audit, and Poetry lock consistency check.",
       "created_at": "2026-08-07T21:25:19.623087Z"
+    },
+    {
+      "id": "c77e57e0-e014-45ae-b61b-50be1f8c8ed5",
+      "author": "derek.norrbom",
+      "text": "Staging feedback-evaluation submission failed before queue dispatch: submitCommand sends commandPayload as an object to an AppSync AWSJSON Task field. Implementing the narrow serialization correction with resolver-level regression coverage; it will be delivered through a new feature-branch PR to staging.",
+      "created_at": "2026-08-07T23:30:29.290878Z"
+    },
+    {
+      "id": "bee37e56-4051-4a12-a3a5-e361de12cfd5",
+      "author": "derek.norrbom",
+      "text": "Opened staging PR #564 for the AppSync AWSJSON submission fix. The resolver now serializes commandPayload at the CreateTask boundary; focused submitCommand validation passed (29 tests). Awaiting staging deployment and an end-to-end feedback-evaluation submission proof.",
+      "created_at": "2026-08-07T23:31:22.802275Z"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-08-07T21:25:19.623087Z",
+  "updated_at": "2026-08-07T23:31:22.802275Z",
   "closed_at": null,
   "custom": {}
 }

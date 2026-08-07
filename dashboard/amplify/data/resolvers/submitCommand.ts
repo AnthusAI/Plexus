@@ -170,7 +170,7 @@ export const handler = async (event: Event) => {
   const accountTableName = required(process.env.ACCOUNT_TABLE_NAME, 'ACCOUNT_TABLE_NAME');
   const account = await dynamo.send(new GetItemCommand({ TableName: accountTableName, Key: { id: { S: accountId } }, ConsistentRead: true }));
   if (!account.Item) throw new Error('selected account was not found');
-  const input = { id, accountId, type, status: 'PENDING', target, command: argv.join(' '), dispatchStatus: 'READY', submittedBy, idempotencyNamespace: NAMESPACE, idempotencyKey, idempotencyDigest: digest, digestAlgorithm: 'sha256', digestCanonicalizationVersion: 1, commandPayload: payload, lifecycleStatus: 'ANNOUNCED', fencingToken: 0, createdAt: now, updatedAt: now };
+  const input = { id, accountId, type, status: 'PENDING', target, command: argv.join(' '), dispatchStatus: 'READY', submittedBy, idempotencyNamespace: NAMESPACE, idempotencyKey, idempotencyDigest: digest, digestAlgorithm: 'sha256', digestCanonicalizationVersion: 1, commandPayload: JSON.stringify(payload), lifecycleStatus: 'ANNOUNCED', fencingToken: 0, createdAt: now, updatedAt: now };
   let persistedTask: Record<string, unknown> = input;
   try {
     const created = await graphql('mutation CreateTask($input: CreateTaskInput!, $condition: ModelTaskConditionInput) { createTask(input: $input, condition: $condition) { id accountId type status target command dispatchStatus lifecycleStatus commandPayload createdAt updatedAt } }', { input, condition: { id: { attributeExists: false } } });

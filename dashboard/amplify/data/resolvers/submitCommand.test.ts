@@ -36,8 +36,10 @@ describe('submitCommand', () => {
     const payload = JSON.parse((mockFetch.mock.calls[0][0] as any).body);
     expect(payload.variables.condition).toEqual({ id: { attributeExists: false } });
     expect(payload.variables.input.accountId).toBe('account-1');
-    expect(payload.variables.input.commandPayload.argv).toEqual(['evaluate', 'accuracy', '--number-of-samples', '10', '--scorecard', 'Card', '--score', 'Score Name', '--fresh', '--task-id', payload.variables.input.id]);
-    expect(payload.variables.input.commandPayload.task_id).toBe(payload.variables.input.id);
+    expect(typeof payload.variables.input.commandPayload).toBe('string');
+    const commandPayload = JSON.parse(payload.variables.input.commandPayload);
+    expect(commandPayload.argv).toEqual(['evaluate', 'accuracy', '--number-of-samples', '10', '--scorecard', 'Card', '--score', 'Score Name', '--fresh', '--task-id', payload.variables.input.id]);
+    expect(commandPayload.task_id).toBe(payload.variables.input.id);
     expect(payload.variables.input.idempotencyDigest).toMatch(/^[a-f0-9]{64}$/);
   });
 
@@ -86,7 +88,8 @@ describe('submitCommand', () => {
       : action === 'report.run'
         ? [...argv.slice(0, 4), '--task-id', taskId, ...argv.slice(4)]
         : [...argv, '--task-id', taskId];
-    expect(payload.variables.input.commandPayload).toEqual({ argv: expectedArgv, task_id: taskId });
+    expect(typeof payload.variables.input.commandPayload).toBe('string');
+    expect(JSON.parse(payload.variables.input.commandPayload)).toEqual({ argv: expectedArgv, task_id: taskId });
   });
 
   it.each([
@@ -107,7 +110,8 @@ describe('submitCommand', () => {
     if (report === 'acceptance-rate-timeline') arguments_.bucketType = 'trailing_7d';
     await handler(event({ action: 'feedback.report', arguments: arguments_ }));
     const payload = JSON.parse((mockFetch.mock.calls[0][0] as any).body);
-    expect(payload.variables.input.commandPayload).toEqual({ argv, task_id: payload.variables.input.id });
+    expect(typeof payload.variables.input.commandPayload).toBe('string');
+    expect(JSON.parse(payload.variables.input.commandPayload)).toEqual({ argv, task_id: payload.variables.input.id });
   });
 
   it.each([
