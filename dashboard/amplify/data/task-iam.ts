@@ -1,4 +1,5 @@
 import * as iam from 'aws-cdk-lib/aws-iam';
+import { Construct } from 'constructs';
 
 export type TaskAppSyncPrincipal = iam.IRole;
 
@@ -13,17 +14,21 @@ function taskFieldArn(apiGraphqlArn: string, type: 'Query' | 'Mutation', field: 
  * sandboxes receive the same boundary as production and staging.
  */
 export function denyDashboardIdentityTaskMutations(
+  scope: Construct,
   dashboardIdentityRoles: readonly TaskAppSyncPrincipal[],
   apiGraphqlArn: string,
 ): void {
-  for (const role of dashboardIdentityRoles) {
-    role.addToPrincipalPolicy(new iam.PolicyStatement({
+  const policy = new iam.Policy(scope, 'DenyDashboardIdentityTaskMutations', {
+    statements: [new iam.PolicyStatement({
       effect: iam.Effect.DENY,
       actions: ['appsync:GraphQL'],
       resources: [
         taskFieldArn(apiGraphqlArn, 'Mutation', '*Task'),
       ],
-    }));
+    })],
+  });
+  for (const role of dashboardIdentityRoles) {
+    policy.attachToRole(role);
   }
 }
 

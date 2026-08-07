@@ -83,6 +83,7 @@ const authIamResources = backend.auth.resources as unknown as {
     unauthenticatedUserIamRole?: iam.IRole;
 };
 denyDashboardIdentityTaskMutations(
+    backend.data.stack,
     [
         backend.auth.resources.authenticatedUserIamRole,
         ...(authIamResources.unauthenticatedUserIamRole ? [authIamResources.unauthenticatedUserIamRole] : []),

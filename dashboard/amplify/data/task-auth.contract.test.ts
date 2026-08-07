@@ -27,21 +27,26 @@ describe('Task four-principal authorization contract', () => {
 
   it('synthesizes the dashboard identity-pool Task mutation deny for sandbox roles', () => {
     const app = new App();
-    const stack = new Stack(app, 'SandboxBackend');
-    const authenticated = new iam.Role(stack, 'AuthenticatedIdentityPoolRole', {
+    const authStack = new Stack(app, 'Auth');
+    const dataStack = new Stack(app, 'Data');
+    const authenticated = new iam.Role(authStack, 'AuthenticatedIdentityPoolRole', {
       assumedBy: new iam.AccountRootPrincipal(),
     });
-    const unauthenticated = new iam.Role(stack, 'UnauthenticatedIdentityPoolRole', {
+    const unauthenticated = new iam.Role(authStack, 'UnauthenticatedIdentityPoolRole', {
       assumedBy: new iam.AccountRootPrincipal(),
     });
     denyDashboardIdentityTaskMutations(
+      dataStack,
       [authenticated, unauthenticated],
       'arn:aws:appsync:us-east-1:123456789012:apis/example',
     );
+    app.synth();
 
-    const template = Template.fromStack(stack);
-    template.resourceCountIs('AWS::IAM::Policy', 2);
-    template.hasResourceProperties('AWS::IAM::Policy', {
+    const dataTemplate = Template.fromStack(dataStack);
+    const authTemplate = Template.fromStack(authStack);
+    dataTemplate.resourceCountIs('AWS::IAM::Policy', 1);
+    authTemplate.resourceCountIs('AWS::IAM::Policy', 0);
+    dataTemplate.hasResourceProperties('AWS::IAM::Policy', {
       PolicyDocument: {
         Statement: [{
           Effect: 'Deny',
@@ -50,6 +55,8 @@ describe('Task four-principal authorization contract', () => {
         }],
       },
     });
+    expect(dataStack.dependencies).toContain(authStack);
+    expect(authStack.dependencies).not.toContain(dataStack);
   });
 
   it('synthesizes only the service Task fields required by submit and cancel', () => {
