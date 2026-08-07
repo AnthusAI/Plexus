@@ -26,6 +26,15 @@ function resolveAction(action: CommandAction, visiting = new Set<string>()): { a
 
 export const LIFECYCLE_APPSYNC_ROOTS = [...manifest.lifecycleAppSyncRoots]
 export const REGISTERED_COMMAND_ACTIONS = Object.keys(entries).sort() as CommandAction[]
+export const WORKER_APPSYNC_AUTHORITY_GROUPS = [
+  { id: 'Lifecycle', source: 'lifecycle', roots: [...LIFECYCLE_APPSYNC_ROOTS] },
+  ...REGISTERED_COMMAND_ACTIONS.map((action) => ({
+    id: action.split(/[^A-Za-z0-9]+/).filter(Boolean)
+      .map((part) => `${part[0].toUpperCase()}${part.slice(1)}`).join(''),
+    source: action,
+    roots: [...entries[action].appsync].sort(),
+  })),
+].filter((group) => group.roots.length > 0)
 export const ACTION_AUTHORITY = Object.fromEntries(
   REGISTERED_COMMAND_ACTIONS.map((action) => [action, { ...resolveAction(action), evidence: [...entries[action].evidence] }]),
 ) as Record<CommandAction, { appsync: string[]; storage: StorageAuthority[]; evidence: string[] }>

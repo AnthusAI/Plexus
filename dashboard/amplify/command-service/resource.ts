@@ -13,7 +13,7 @@ import { Construct } from 'constructs';
 import { ITable } from 'aws-cdk-lib/aws-dynamodb';
 import { IBucket } from 'aws-cdk-lib/aws-s3';
 import { TaskStreamDispatcher } from '../functions/taskDispatcher/resource';
-import { LIFECYCLE_APPSYNC_ROOTS, WORKER_DOMAIN_APPSYNC_ROOTS, appSyncFieldArn } from './authority-manifest';
+import { WORKER_APPSYNC_AUTHORITY_GROUPS, appSyncFieldArn } from './authority-manifest';
 
 const IMAGE_URI_PATTERN = /^.+@sha256:[a-f0-9]{64}$/;
 const ENVIRONMENTS: Record<string, string> = {
@@ -159,11 +159,17 @@ export class CommandService extends Construct {
       'RuntimeConfigSecret',
       props.configSecretName,
     );
-    taskRole.addToPolicy(new iam.PolicyStatement({
-      actions: ['appsync:GraphQL'],
-      resources: [...LIFECYCLE_APPSYNC_ROOTS, ...WORKER_DOMAIN_APPSYNC_ROOTS]
-        .map((root) => appSyncFieldArn(props.apiGraphqlArn, root)),
-    }));
+    // Keep exact field-level authority without one indivisible policy statement.
+    // Direct action groups avoid inherited duplication and wildcard broadening.
+    for (const group of WORKER_APPSYNC_AUTHORITY_GROUPS) {
+      taskRole.addManagedPolicy(new iam.ManagedPolicy(this, `CommandWorker${group.id}AppSyncPolicy`, {
+        description: `Command worker AppSync authority for ${group.source}`,
+        statements: [new iam.PolicyStatement({
+          actions: ['appsync:GraphQL'],
+          resources: group.roots.map((root) => appSyncFieldArn(props.apiGraphqlArn, root)),
+        })],
+      }));
+    }
     taskRole.addToPolicy(new iam.PolicyStatement({
       actions: ['s3:GetObject'],
       resources: [

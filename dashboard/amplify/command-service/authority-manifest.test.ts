@@ -2,6 +2,7 @@ import {
   ACTION_AUTHORITY,
   LIFECYCLE_APPSYNC_ROOTS,
   REGISTERED_COMMAND_ACTIONS,
+  WORKER_APPSYNC_AUTHORITY_GROUPS,
   WORKER_DOMAIN_APPSYNC_ROOTS,
   WORKER_STORAGE_AUTHORITIES,
 } from './authority-manifest'
@@ -27,6 +28,21 @@ describe('command worker action authority manifest', () => {
     expect(LIFECYCLE_APPSYNC_ROOTS).toHaveLength(6)
     expect(new Set(LIFECYCLE_APPSYNC_ROOTS).size).toBe(6)
     expect(WORKER_DOMAIN_APPSYNC_ROOTS).not.toEqual(expect.arrayContaining(LIFECYCLE_APPSYNC_ROOTS))
+  })
+
+  it('packages only non-empty direct authority groups with stable unique ids', () => {
+    expect(WORKER_APPSYNC_AUTHORITY_GROUPS.map((group) => group.source)).toEqual([
+      'lifecycle',
+      'evaluation.accuracy',
+      'evaluation.feedback',
+      'feedback.report',
+      'prediction.run',
+      'procedure.run',
+    ])
+    expect(new Set(WORKER_APPSYNC_AUTHORITY_GROUPS.map((group) => group.id)).size)
+      .toBe(WORKER_APPSYNC_AUTHORITY_GROUPS.length)
+    expect([...new Set(WORKER_APPSYNC_AUTHORITY_GROUPS.flatMap((group) => group.roots))].sort())
+      .toEqual([...LIFECYCLE_APPSYNC_ROOTS, ...WORKER_DOMAIN_APPSYNC_ROOTS].sort())
   })
 
   it('limits direct AWS storage authority to the three workload buckets', () => {
