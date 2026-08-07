@@ -7424,7 +7424,7 @@ description = "PycURL -- A Python Interface To The cURL library"
 optional = true
 python-versions = ">=3.10"
 groups = ["main"]
-markers = "extra == \"infra\" or extra == \"all\""
+markers = "extra == \"command-service-runtime\" or extra == \"infra\" or extra == \"all\""
 files = [
     {file = "pycurl-7.46.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:7037aca22f10185cc3f1497077571cdcec1458225141a38814e8fc366d3a2820"},
     {file = "pycurl-7.46.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:9c16924777899f798e03594516cd00c5249b951c93ca366277c630ae9a416503"},
@@ -11214,7 +11214,7 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 
 [extras]
 all = ["azure-identity", "behave", "bertopic", "boto3", "celery", "contractions", "datasets", "fastapi", "fastmcp", "gensim", "gherkin-official", "graphviz", "hdbscan", "imbalanced-learn", "imblearn", "kaleido", "langchain", "langchain-anthropic", "langchain-aws", "langchain-community", "langchain-core", "langchain-google-vertexai", "langchain-ollama", "langchain-openai", "langgraph", "langgraph-checkpoint-postgres", "nltk", "numba", "ollama", "openai-cost-calculator", "openpyxl", "pandas", "psycopg", "pyairtable", "pyarrow", "pycurl", "pydot", "pydotplus", "qdrant-client", "requests-aws4auth", "scikit-learn", "seaborn", "sentence-transformers", "shap", "sqlalchemy", "tables", "tactus", "transformers", "umap-learn", "uvicorn", "xgboost"]
-command-service-runtime = ["biblicus", "boto3", "celery", "contractions", "graphviz", "langchain", "langchain-anthropic", "langchain-aws", "langchain-community", "langchain-core", "langchain-openai", "langgraph", "matplotlib", "nltk", "openpyxl", "pandas", "pyairtable", "pyarrow", "requests-aws4auth", "scikit-learn", "seaborn", "sentence-transformers", "tactus"]
+command-service-runtime = ["biblicus", "boto3", "celery", "contractions", "graphviz", "langchain", "langchain-anthropic", "langchain-aws", "langchain-community", "langchain-core", "langchain-openai", "langgraph", "matplotlib", "nltk", "openpyxl", "pandas", "pyairtable", "pyarrow", "pycurl", "requests-aws4auth", "scikit-learn", "seaborn", "sentence-transformers", "tactus"]
 command-worker = ["boto3", "celery"]
 console = ["celery", "fastmcp", "requests-aws4auth"]
 evaluation = ["biblicus", "sentence-transformers"]
@@ -11228,4 +11228,4 @@ worker = ["contractions", "graphviz", "openpyxl", "pandas", "pyarrow", "seaborn"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.13"
-content-hash = "7d89eb0c056fea84db40d10fe983b07a3c90b2467124771cfcef612b0cad8417"
+content-hash = "a7c59aa8eb099555acb6853616b7eecf5b462c8b6555e0e31a414fb35d699520"

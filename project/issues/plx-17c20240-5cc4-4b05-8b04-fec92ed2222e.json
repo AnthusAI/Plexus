@@ -64,10 +64,22 @@
       "author": "derek.norrbom",
       "text": "Opened staging PR #562 for the command-service deployment and explicit worker ephemeral-storage fix. Focused CDK resource test passed (20 tests). The ECS circuit-breaker startup blocker is addressed in the PR; dependency/image-size reduction remains a separate follow-up.",
       "created_at": "2026-08-07T19:39:54.776655Z"
+    },
+    {
+      "id": "ba2082ed-3aee-4175-815f-557d58c463f0",
+      "author": "derek.norrbom",
+      "text": "Follow-up staging evidence after the 50 GiB fix: ECS revision 3 reaches Celery ready state, then exits in Kombu SQS async polling because pycurl is absent (`ImportError: The curl client requires the pycurl library.`). Implementing a narrow command-worker runtime dependency and regression check.",
+      "created_at": "2026-08-07T21:18:05.080260Z"
+    },
+    {
+      "id": "97a91f91-d38e-40ac-8e85-6771aa5bd0e5",
+      "author": "derek.norrbom",
+      "text": "Implemented and pushed the Kombu SQS runtime correction in PR #562: command-service-runtime now includes pycurl. Added a clean temporary-environment audit that installs only the runtime extra and constructs Kombu CurlClient, plus a supported-Python guard. Validation passed: focused dependency tests (4 passed), clean runtime audit, and Poetry lock consistency check.",
+      "created_at": "2026-08-07T21:25:19.623087Z"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-08-07T19:39:54.776655Z",
+  "updated_at": "2026-08-07T21:25:19.623087Z",
   "closed_at": null,
   "custom": {}
 }
