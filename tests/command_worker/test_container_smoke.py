@@ -29,6 +29,7 @@ def test_command_service_runtime_declares_action_import_dependencies() -> None:
         "contractions",
         "graphviz",
         "pyairtable",
+        "pycurl",
     } <= set(extra)
 
 

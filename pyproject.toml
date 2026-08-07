@@ -127,7 +127,7 @@ console = ["celery", "fastmcp", "requests-aws4auth"]
 # list driven by supported command behavior rather than image-size targets.
 command-service-runtime = [
     # The root Click group imports the legacy analyze module during command registration.
-    "boto3", "celery", "requests-aws4auth", "pyairtable",
+    "boto3", "celery", "pycurl", "requests-aws4auth", "pyairtable",
     # Report processors import these at command registration time.
     "pandas", "pyarrow", "seaborn", "matplotlib", "scikit-learn", "openpyxl", "contractions", "graphviz",
     "nltk", "langchain", "langchain-core", "langchain-community", "langgraph",
