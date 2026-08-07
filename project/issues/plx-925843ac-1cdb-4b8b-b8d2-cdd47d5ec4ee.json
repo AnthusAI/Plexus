@@ -136,10 +136,112 @@
       "author": "derek.norrbom",
       "text": "## Authorized atomic code commit recorded\n\nCode commit: `3d6c421743e3d5249aa773423f4e04df9e2792c8`\nSubject: `feat(command-service): consolidate Task-authoritative execution`\n\nBoundary evidence:\n- Soft-reset the local incremental branch history to `develop`, cleared the inherited index, and staged the accepted integration with explicit exclusions.\n- Complete cached manifest contained 93 command-service code/test/documentation paths: 5,175 insertions and 2,668 deletions.\n- Verified absent from the code commit: `project/**`, `.vscode/settings.json`, `plexus/infrastructure/scoring_service/network_stack.py`, and `infrastructure/tests/unit/test_scoring_service_platform_stacks.py`.\n- Inspected cached names, status, and diff stat before committing.\n- `git diff --cached --check` passed.\n- No broad tests were rerun; manager-accepted validation carries forward: 157 focused Python tests passed with 7 existing deprecation warnings; 14 focused Jest suites/125 tests passed; backend and web TypeScript checks passed; shell syntax and non-project diff checks passed.\n- After the code commit, the only non-project worktree changes are the three explicitly excluded files.\n\nThis comment records the authorized commit only. The task remains in progress. No deployment, push, PR, task closure, or extended-duration follow-up was performed.\n",
       "created_at": "2026-08-07T05:05:28.370331Z"
+    },
+    {
+      "id": "08c3b8b2-54af-445d-b813-bff886990d77",
+      "author": "derek.norrbom",
+      "text": "## Manager consolidation acceptance and deployment-proof correction\n\nThe consolidation boundary is accepted. Verified `develop..HEAD` contains exactly:\n- `3d6c421743e3d5249aa773423f4e04df9e2792c8` — atomic command-service code integration, 93 paths, with no `project/` or excluded paths.\n- `4b4e5872e19deed3daf883861f817e4f923bfeb8` — Kanbus-generated `project/` paths only.\n\nThe remaining non-project worktree changes are exactly the three accepted exclusions. The prior focused validation remains applicable because consolidation changed history/commit grouping, not content.\n\n### Deployment-proof correction\nThe task description’s “retained sandbox” wording is now stale. The committed backend intentionally omits the ECS command service from Amplify sandboxes; a sandbox can only exercise the explicitly separate legacy proof harness and therefore cannot prove the integrated ECS path. The live non-production proof for this integration must use **staging**, after a manager-reviewed readiness gate. Production remains prohibited.\n\n### Next authorized slice — read-only staging readiness gate\nContinue on `plx-925843`; do not create a new task. Inspect, without deployment or source changes:\n- current AWS identity, region, Amplify app/branch mapping, and staging environment selection;\n- existence and consistency of the staging command-service foundation contract (VPC/subnets, ECR repository, image and Task-table SSM state);\n- deployment-role ARN and its narrow bootstrap/activity-gate requirements;\n- runtime config secret presence and required key names without reading or recording secret values;\n- immutable image build/handoff prerequisites, current active-Task gate state, and rollback/deferred-image behavior;\n- the exact foundation/application deployment sequence and bounded staging proof/rollback commands.\n\nReturn a sanitized go/no-go checklist with any missing prerequisite, exact proposed commands, expected mutations, rollback points, and proof cases. Do not deploy, push, open a PR, modify code, stage/commit, close the task, or start the extended-duration follow-up.",
+      "created_at": "2026-08-07T05:09:27.806808Z"
+    },
+    {
+      "id": "a7cedfd3-0f02-4249-9298-b8fa20e56f64",
+      "author": "derek.norrbom",
+      "text": "## Development-proof sequencing correction\n\nThe staging-only interpretation in manager comment `08c3b8b2` is superseded in part. Staging remains the required non-production promotion proof, but it should not be the primary development loop.\n\nThe command-service integration is unchanged and accepted at code commit `3d6c421743e3d5249aa773423f4e04df9e2792c8`. Before staging deployment proof, implement the explicitly opt-in full sandbox path specified by story `plx-22c9d5` and task `plx-2b7bca`. Default sandboxes remain lightweight; opted-in sandboxes reuse a shared non-production foundation and own isolated application resources bound to their Task table and AppSync API.\n\nThis ordering avoids validating one candidate in staging and then immediately changing its deployment architecture. `plx-925843` remains in progress, with its staging readiness/deployment proof resumed after the sandbox option returns through manager review. Production remains prohibited.",
+      "created_at": "2026-08-07T05:15:14.491345Z"
+    },
+    {
+      "id": "247621f1-ed3d-48ce-9733-ea7d85f46477",
+      "author": "derek.norrbom",
+      "text": "## Manager sequencing decision — staging proof resumes\n\nUser has approved the lowest-resistance path: prove the accepted ECS command-service integration in staging before adding a full sandbox deployment mode. The accepted integration remains `3d6c421743e3d5249aa773423f4e04df9e2792c8`, followed by bookkeeping `4b4e5872e19deed3daf883861f817e4f923bfeb8`.\n\nThe prior sandbox-first correction is superseded. No staging foundation currently exists; do not describe it as existing or shared. The immediate work is a read-only staging readiness/architecture gate, followed—only if prerequisites and manager review support it—by non-production foundation deployment, application deployment, and a bounded end-to-end proof. Production remains prohibited.\n\n`plx-2b7bca` is deferred until the staging proof establishes whether full sandbox execution provides enough value to justify its added deployment architecture. No sandbox implementation, deployment, commit, push, PR, or production work is authorized by this note.",
+      "created_at": "2026-08-07T05:36:43.356966Z"
+    },
+    {
+      "id": "156abe3d-e5ab-4548-a0cc-06b1a26c1121",
+      "author": "derek.norrbom",
+      "text": "## Staging readiness gate — blocked before mutation\n\nRead-only AWS and repository inspection established:\n- The staging Amplify branch exists in the configured account/region and has a non-production runtime-secret record.\n- The staging command-service foundation stack, its SSM contract, and command-worker ECR repository do not exist.\n- The deployed staging application still contains the pre-migration TaskDispatcher architecture.\n- The accepted branch cannot be deployed to `staging` as an isolated command-service change: `origin/staging` and `feature/command-service-consolidation` have diverged (2 staging-only commits; 461 commits on the accepted branch since their merge-base). A direct merge would carry a broad unreviewed staging release.\n\nDecision: do not deploy the foundation or application until the human selects the source-promotion boundary for staging. The safe options are to promote/review the normal `develop` release path into staging first, or explicitly authorize a distinct non-production deployment target. Do not force-push or use a branch/environment override to disguise a feature branch as staging.\n\nAdditional architecture finding: command submission requires authentication and confirms the Account record exists, but does not itself demonstrate caller-to-Account membership authorization. Treat staging proof as controlled access only and resolve the intended tenant authorization boundary before broader use or production.\n\nNo deployment, source change, commit, push, PR, or broad tests were performed.",
+      "created_at": "2026-08-07T05:38:23.651342Z"
+    },
+    {
+      "id": "8c1e037a-2774-4c3e-9163-b0e5efbeacda",
+      "author": "derek.norrbom",
+      "text": "## Staging promotion authorized\n\nThe human authorized promotion of the accepted command-service integration to staging. Promote the exact reviewed code tree at `3d6c421743e3d5249aa773423f4e04df9e2792c8`, excluding the later Kanbus bookkeeping commit. Create a normal non-force merge that records the existing staging history while retaining the reviewed feature tree; intentionally do not carry the two staging-only attachment-upload commits, which are absent from develop and include an unsafe production-bucket fallback. Verify the resulting tree and exclusions before pushing. Foundation/application deployment remains a separate manager gate after promotion.",
+      "created_at": "2026-08-07T05:52:59.525248Z"
+    },
+    {
+      "id": "910b9f58-4348-4919-afdb-abc56f55a065",
+      "author": "derek.norrbom",
+      "text": "## Source-branch correction for executable-bit fix\n\nThe staging-only mode fix is being corrected operationally: create a dedicated feature fix branch from accepted source commit `3d6c421743e3d5249aa773423f4e04df9e2792c8`, commit only the executable-bit change there, and promote it to staging through a pull request. Do not branch from staging and do not make further direct commits to staging, develop, or main. The staging retry remains a contained runtime probe only.",
+      "created_at": "2026-08-07T06:08:18.106017Z"
+    },
+    {
+      "id": "7c3d7532-ebbf-4e59-9a1e-0893803aff4b",
+      "author": "derek.norrbom",
+      "text": "## Staging build failure — ECR read permission correction authorized\n\nAmplify reached Docker image push but failed at ECR manifest inspection because the staging Amplify deployment role lacked `ecr:BatchGetImage`. The missing action is in the source foundation policy, not a runtime worker permission.\n\nAuthorized fix: on a feature branch based on the accepted source plus executable-bit fix, add only `ecr:BatchGetImage` and focused synthesis coverage; promote through a reviewed PR to staging; then update the staging foundation and re-run the staging Amplify build. Do not commit directly to staging, develop, or main, and do not branch from staging.",
+      "created_at": "2026-08-07T06:26:46.572411Z"
+    },
+    {
+      "id": "3dba7a09-effd-495d-8357-59145e496c73",
+      "author": "derek.norrbom",
+      "text": "## Amplify circular-dependency architecture correction authorized\n\nThe live staging deployment proved the standalone command-service custom stack cannot be ordered with Amplify Data, Storage, Auth, Console, and Backup nested stacks. Adopt the official Amplify resource-group pattern: refactor the command-service application from a nested CDK Stack into a Construct owned by `backend.data.stack`, remove `backend.createStack(\"CommandServiceStack\")`, and preserve one-way Data-to-Storage dependencies.\n\nImplement red-first on a new feature branch based on source commit `10f9c0814e8640034dea1f67d3a84af6f69e0525`; do not branch from or commit directly to staging, develop, or main. Require focused construct/dependency synthesis coverage, backend typecheck, direct review, and PR promotion before another staging deployment.",
+      "created_at": "2026-08-07T06:52:07.383366Z"
+    },
+    {
+      "id": "a6ce8e52-c8bf-4d52-8b3d-9c95ef7047ce",
+      "author": "derek.norrbom",
+      "text": "Architecture correction implemented on feature branch fix/command-service-amplify-stack-cycle. Replaced the standalone Amplify CommandService nested stack with a Construct owned by backend.data.stack; command-service SSM application-state parameters now share that stack. Focused CDK test synthesizes separate Data and Storage stacks and proves Data -> Storage with no Storage -> Data dependency. Validation: npm --prefix dashboard test -- --runInBand amplify/command-service/resource.test.ts (21 passed); npm --prefix dashboard run typecheck:backend (passed); git diff --check (passed). Direct review found no unrelated files in the change boundary. Next: commit on feature branch, PR to staging, then observe the Amplify deployment without cancellation.",
+      "created_at": "2026-08-07T06:57:34.817901Z"
+    },
+    {
+      "id": "c1977067-4224-49f8-8eca-7df374be3035",
+      "author": "derek.norrbom",
+      "text": "Staging job 14 removed CommandServiceStack from the cycle, confirming PR #557 fixed that edge. Correction to prior wording: the remaining cycle is not present on main; commit 3d6c421 introduced an Auth to Data edge by attaching the dashboard Task-mutation deny to Auth-owned identity roles while referencing the Data-owned AppSync API ARN. Data already depends on Auth, and Data also consumes Storage, so Amplify reports the connected Auth/Data/Storage/Console/Backup stack set. Smallest next slice: create the deny policy in backend.data.stack and attach it to the identity roles, preserving the deny while keeping only Data to Auth. Red-first focused topology test; no Console/Backup regrouping unless staging evidence proves it remains necessary.",
+      "created_at": "2026-08-07T15:21:17.687484Z"
+    },
+    {
+      "id": "df856471-20f4-4df1-9d2d-6dfc55ce5d07",
+      "author": "derek.norrbom",
+      "text": "Implemented the narrow Auth/Data cycle repair on feature branch fix/task-deny-stack-ownership. The dashboard Task mutation deny remains unchanged semantically, but its IAM Policy resource is now owned by backend.data.stack and attached to both Auth-owned identity roles. Focused synthesis contract proves Data depends on Auth and Auth does not depend on Data. Validation: npm --prefix dashboard test -- --runInBand amplify/data/task-auth.contract.test.ts (4 passed); npm --prefix dashboard run typecheck:backend (passed); git diff --check (passed). Scope is three files; no Console, Storage, Backup, command runtime, or production changes.",
+      "created_at": "2026-08-07T15:22:05.193690Z"
+    },
+    {
+      "id": "faf14c03-3dff-4343-81b2-477ead26f313",
+      "author": "derek.norrbom",
+      "text": "Staging job 15 passed Amplify synthesis and reached CloudFormation deployment, proving the Auth/Data cycle repair. Deployment rolled back because the existing legacy TaskDispatcherStack imports the Data stack Task table ARN and stream ARN exports while the new template removes that dispatcher and both automatic exports in one update. AWS list-imports confirms both exports are consumed only by the legacy TaskDispatcher stack. Next is the standard two-deployment CDK transition: temporarily preserve taskTable.tableArn and taskTable.tableStreamArn via Data stack exportValue, deploy to remove the legacy dispatcher, then remove the temporary exportValue calls in a follow-up feature PR. No production resources.",
+      "created_at": "2026-08-07T15:33:22.984747Z"
+    },
+    {
+      "id": "f7d7a4f0-01b2-4b5f-b920-254746486b61",
+      "author": "derek.norrbom",
+      "text": "Temporary export-preservation slice committed as e17f7d9 on fix/preserve-task-dispatcher-exports. Scope: backend.data.stack.exportValue for Task table ARN and stream ARN in non-sandbox environments, plus focused migration contract. Validation: targeted Jest migration contract passed; backend typecheck passed; git diff --check passed. Removal condition is explicit: keep until every long-lived environment has completed the legacy TaskDispatcher to command-service migration.",
+      "created_at": "2026-08-07T15:34:35.670626Z"
+    },
+    {
+      "id": "247ac445-65d2-43df-a75e-6d5f00850e91",
+      "author": "derek.norrbom",
+      "text": "Staging job 16 failed during CDK assembly before CloudFormation. Root cause: the temporary exportValue calls were placed on backend.data.stack, so Amplify saw AWS::StackName in a nested-stack export name and rejected it as unresolved. No resources changed. Correction: preserve the sibling Data-to-legacy-TaskDispatcher exports from backend.stack, their common parent. Red-first test will require parent-stack ownership; then focused test, backend typecheck, feature PR to staging.",
+      "created_at": "2026-08-07T15:54:41.107877Z"
+    },
+    {
+      "id": "0e365f5b-89f8-4d9e-a610-53be47530aaf",
+      "author": "derek.norrbom",
+      "text": "Corrected export ownership after job 16 assembly evidence: backend.stack now owns both temporary Task exports; backend.data.stack is explicitly prohibited by the focused contract. Validation: targeted migration Jest passed; backend typecheck passed; git diff --check passed. This remains a two-line runtime-neutral CloudFormation migration shim, not preservation of the legacy dispatcher.",
+      "created_at": "2026-08-07T15:58:05.323207Z"
+    },
+    {
+      "id": "18559353-5c2b-4611-bf3d-fb3d205d4326",
+      "author": "derek.norrbom",
+      "text": "Staging job 17 cleared synthesis and the legacy-export migration, then failed on CommandServiceCommandWorkerTaskRoleOverflowPolicy (AWS::IAM::ManagedPolicy) exceeding IAM PolicySize 6144. Other listed resources were cancelled. Design assessment: one worker intentionally needs the union of 6 lifecycle and 66 exact domain AppSync fields across six command actions; a single atomic statement prevents CDK from safely splitting it. Do not broaden to Query/* or Mutation/* and do not raise quotas. Proposed red-first slice: express the existing authority manifest as bounded managed-policy groups (lifecycle plus each action's direct roots), assert the exact union/no wildcard, assert every serialized policy stays under the IAM limit with margin, and assert CDK emits no automatic OverflowPolicy. If this does not synthesize cleanly, reconsider separate worker roles/pools rather than further policy workarounds.",
+      "created_at": "2026-08-07T17:20:48.773885Z"
+    },
+    {
+      "id": "43e06208-054c-4075-b718-53cb3473aef2",
+      "author": "derek.norrbom",
+      "text": "Implemented the reviewed IAM design on feature branch fix/bound-command-worker-iam-policies: six explicit exact-field managed policies (lifecycle plus five non-empty direct action groups), with SQS/S3/Bedrock/ECS authority remaining in the small inline policy. Effective authority is unchanged: tests prove the aggregate equals all 6 lifecycle plus 66 unique domain roots and contains no wildcard. Tests also prove no empty report.run policy, unique stable group ids, six attachments (under default 10), every policy <=5500 serialized characters, and no CDK OverflowPolicy. Validation: authority-manifest Jest 4/4; focused command-service IAM Jest 2/2; backend typecheck passed; git diff --check passed. Independent architecture review agrees this is semantic IAM packaging, not per-command isolation or a wildcard quota workaround.",
+      "created_at": "2026-08-07T17:23:38.296546Z"
     }
   ],
   "created_at": "2026-08-06T21:30:04.112864Z",
-  "updated_at": "2026-08-07T05:05:28.370331Z",
+  "updated_at": "2026-08-07T17:23:38.296546Z",
   "closed_at": null,
   "custom": {}
 }

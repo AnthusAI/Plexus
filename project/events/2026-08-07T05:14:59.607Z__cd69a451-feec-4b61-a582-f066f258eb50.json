@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cd69a451-feec-4b61-a582-f066f258eb50",
+  "issue_id": "plx-22c9d5b0-be68-4645-af4d-2cf115081b5b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-07T05:14:59.607Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "As a Plexus developer, I want to explicitly enable the full command-service execution path in my Amplify sandbox, so that I can test dashboard submission through the real dispatcher, queue, ECS worker, authoritative Task lifecycle, and realtime UI without first merging to staging.\n\nDefault sandboxes remain lightweight. The opt-in path must reuse a shared non-production foundation where safe, isolate sandbox application resources and Task/API bindings, use immutable worker images and non-production secrets, preserve active-command replacement safety, and clean up sandbox-owned resources. Production resources and secrets are out of scope.\n\nFeature: Optional sandbox command service\n\nScenario: Default sandbox remains lightweight\nGiven a developer creates a sandbox without the command-service opt-in\nWhen the sandbox backend is deployed\nThen no command-service ECS application resources are created\n\nScenario: Opted-in sandbox exercises the integrated path\nGiven the shared non-production foundation exists\nAnd the developer supplies an explicit sandbox command-service opt-in and immutable worker image\nWhen the sandbox backend is deployed\nThen sandbox-specific dispatch and worker application resources use that sandbox Task table and AppSync API\nAnd registered dashboard commands execute through the same Task-authoritative lifecycle used by staging\n\nScenario: Sandbox isolation fails closed\nGiven the opt-in configuration references production secrets, an invalid foundation contract, or a mutable image\nWhen deployment is evaluated\nThen deployment fails before command-service resources can run with that configuration\n\nScenario: Sandbox teardown preserves the shared foundation\nGiven an opted-in sandbox owns command-service application resources\nWhen the sandbox is deleted\nThen its queue, dispatcher, worker service, and bindings are removed\nAnd the shared non-production network and image repository remain available",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Opt into full command-service execution in developer sandboxes"
+  }
+}
