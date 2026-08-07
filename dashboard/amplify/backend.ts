@@ -2,7 +2,7 @@ import { defineBackend } from '@aws-amplify/backend';
 import { cancelCommandHandler, createArtifactTransferTicketsHandler, data, dispatchConsoleChatHandler, submitCommandHandler } from './data/resource.js';
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments, rubricMemory } from './storage/resource.js';
-import { CommandServiceStack, isLongLivedCommandServiceEnvironment } from './command-service/resource.js';
+import { CommandService, isLongLivedCommandServiceEnvironment } from './command-service/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
 import { denyDashboardIdentityTaskMutations, grantCancelCommandTaskAccess, grantSubmitCommandTaskAccess } from './data/task-iam.js';
 import { ConsoleChatResponderStack } from './functions/consoleRunWorker/resource.js';
@@ -265,7 +265,6 @@ backend.auth.resources.authenticatedUserIamRole.addToPrincipalPolicy(
 
 // The command service is long-lived-environment only. Sandboxes intentionally
 // have no command-service VPC, dispatcher, or ECS worker.
-let commandServiceStack: CommandServiceStack | undefined;
 let sandboxTaskDispatcherStack: TaskDispatcherStack | undefined;
 let consoleRunWorkerStack: ConsoleChatResponderStack | undefined;
 
@@ -296,18 +295,17 @@ if (isLongLivedCommandServiceEnvironment(commandServiceEnvironment)) {
     ).trim();
     const bedrockModelResources = (process.env.PLEXUS_COMMAND_WORKER_BEDROCK_MODEL_ARNS || 'arn:aws:bedrock:*::foundation-model/*')
         .split(',').map((value) => value.trim()).filter(Boolean);
-    const commandServiceCdkStack = backend.createStack('CommandServiceStack');
     const servicePrefix = (process.env.PLEXUS_SERVICE_PREFIX || 'plexus').trim().toLowerCase();
-    new ssm.StringParameter(commandServiceCdkStack, 'CommandServiceTaskTableName', {
+    new ssm.StringParameter(backend.data.stack, 'CommandServiceTaskTableName', {
         parameterName: `/${servicePrefix}/${commandServiceEnvironment}/command-service/task-table-name`,
         stringValue: taskTable.tableName,
     });
-    new ssm.StringParameter(commandServiceCdkStack, 'CommandServiceCurrentWorkerImage', {
+    new ssm.StringParameter(backend.data.stack, 'CommandServiceCurrentWorkerImage', {
         parameterName: `/${servicePrefix}/${commandServiceEnvironment}/command-service/current-worker-image-uri`,
         stringValue: workerImageUri,
     });
-    commandServiceStack = new CommandServiceStack(
-        commandServiceCdkStack,
+    new CommandService(
+        backend.data.stack,
         'CommandService',
         {
             taskTable,
