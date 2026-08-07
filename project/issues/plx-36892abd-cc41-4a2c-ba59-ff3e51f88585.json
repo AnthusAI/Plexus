@@ -1,0 +1,43 @@
+{
+  "id": "plx-36892abd-cc41-4a2c-ba59-ff3e51f88585",
+  "title": "Implement durable AWS lifecycle store for commands",
+  "description": "Implement the AWS persistence adapter required by the portable command lifecycle. It must provide atomic command claim, renewable lease, fencing, progress, cancellation, and terminal settlement for the existing command envelope. Keep it distinct from the Celery delivery adapter and dashboard projection so the command model remains shared across deployment targets. Reuse or revise the draft reusable AWS state stack as appropriate; do not introduce a separate command workflow.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3584af03-86a9-47bb-bf66-ca5917bf867d",
+      "author": "derek.norrbom",
+      "text": "Design review: keep the DynamoDB module focused on LifecycleStore, not a mixed transport/dashboard implementation. The reusable stack needs a documented META item layout, state TTL, and a narrow worker grant. Full command submission/outbox is a separate concern because DynamoDB cannot atomically write SQS. The spike conditional-fencing pattern is useful; its synthetic fields and non-portable shortcuts will not be promoted.",
+      "created_at": "2026-08-05T20:14:24.125363Z"
+    },
+    {
+      "id": "c1ad1c8e-04f2-4c09-8fa9-24856639e07b",
+      "author": "derek.norrbom",
+      "text": "Implemented the AWS lifecycle-store slice beneath the portable command contract. DynamoDB metadata uses pk=COMMAND#<command_id>, sk=META with immutable envelope verification, numeric fences, lease expiry enforcement, cooperative cancellation, and terminal settlement. The reusable state stack now documents that layout, enables TTL on expires_at_epoch, and exposes a narrow worker grant (GetItem/UpdateItem only). Submission/outbox and broker delivery remain intentionally separate. Local validation passed: python -m pytest infrastructure/tests/unit/test_command_service_state_stack.py tests/command_worker -q; python -m behave tests/command_worker/features; ruff check plexus/infrastructure/command_service plexus/command_worker/adapters infrastructure/tests/unit/test_command_service_state_stack.py tests/command_worker/test_dynamodb_lifecycle.py.",
+      "created_at": "2026-08-05T20:19:26.799230Z"
+    },
+    {
+      "id": "c37ba820-4639-4f84-99a7-14612242fb61",
+      "author": "derek.norrbom",
+      "text": "Rebased the durable AWS lifecycle-store branch onto merged develop after the shared lifecycle/Celery adapter landed. Removed duplicate history, reran focused validation (120 pytest tests and 30 behavior scenarios), and marked the existing develop PR ready for review: #539.",
+      "created_at": "2026-08-05T20:55:35.829711Z"
+    },
+    {
+      "id": "f3367116-93a0-4a67-8160-bd49014731a0",
+      "author": "derek.norrbom",
+      "text": "Implementation foundation landed and remains part of the consolidated design. Focused lifecycle, DynamoDB fencing, cancellation, behavior, lint, and infrastructure tests passed. Remaining dashboard integration and deployment proof are tracked separately under plx-835017, plx-17c202, and plx-a54359.",
+      "created_at": "2026-08-06T02:16:25.660455Z"
+    }
+  ],
+  "created_at": "2026-08-05T20:12:48.115988Z",
+  "updated_at": "2026-08-06T02:16:39.211334Z",
+  "closed_at": "2026-08-06T02:16:39.211334Z",
+  "custom": {}
+}

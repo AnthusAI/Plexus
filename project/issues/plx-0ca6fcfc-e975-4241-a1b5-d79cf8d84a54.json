@@ -1,0 +1,18 @@
+{
+  "id": "plx-0ca6fcfc-e975-4241-a1b5-d79cf8d84a54",
+  "title": "Harden template and configuration execution boundaries",
+  "description": "Purpose: Investigate and improve generic security boundaries for repository-owned templates and configuration rendering.\n\nScope: Sanitized research, compatibility analysis, and future hardening work.\n\nExclusions: Client-specific configurations, data, incidents, and production deployment changes.\n\nDefinition of Done: Security boundary work is documented, tested with synthetic fixtures, and tracked through scoped child issues.",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-08-06T18:52:30.154329Z",
+  "updated_at": "2026-08-06T18:52:32.615801Z",
+  "closed_at": null,
+  "custom": {}
+}

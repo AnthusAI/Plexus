@@ -1,0 +1,25 @@
+{
+  "id": "plx-8e63cd4c-947d-403f-81db-d036f6eaacc5",
+  "title": "Evaluate command lifecycle and dashboard state ownership",
+  "description": "Compare authoritative lifecycle ownership and dashboard synchronization options before implementing a projection. Evaluate correctness, user experience, operational cost, and portability across deployment targets. Record a defensible recommendation, rejection criteria, and validation plan without client-specific information.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b19e0c9e-9f57-4dd9-9b88-dace8586fe2c",
+      "author": "derek.norrbom",
+      "text": "Completed the ownership comparison and documented the decision. Evidence considered: the AWS TaskDispatcher conditionally claims PENDING tasks, but current task dispatch does not provide renewable leases, fencing tokens, immutable request identity, or portable authoritative lifecycle semantics. The record compares dashboard-authoritative state, dedicated lifecycle plus projection, and separate logical schemas in one database. Validation: git diff --check.",
+      "created_at": "2026-08-05T22:34:51.241852Z"
+    }
+  ],
+  "created_at": "2026-08-05T22:33:53.563721Z",
+  "updated_at": "2026-08-05T22:34:51.241852Z",
+  "closed_at": null,
+  "custom": {}
+}

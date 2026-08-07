@@ -1,0 +1,25 @@
+{
+  "id": "plx-60a64180-d627-4d92-ad5c-0475a379fbff",
+  "title": "Add durable command lifecycle projection foundation",
+  "description": "Expose durable command-state changes for independent projections without coupling worker execution to dashboard writes. Add reusable state-change contract, stream support and least-privilege access where appropriate, with focused validation. Keep client configuration and dashboard-specific credentials outside this task.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "247210a6-1abd-49cf-8fd2-da4b088d0167",
+      "author": "derek.norrbom",
+      "text": "Implemented the durable lifecycle projection foundation. CommandServiceStateStack now enables NEW_AND_OLD_IMAGES on the command-state table, publishes its stream ARN, and exposes a least-privilege stream-read grant for independent projectors. The table, queues, and existing logical IDs remain unchanged. Validation: python -m pytest infrastructure/tests/unit/test_command_service_state_stack.py infrastructure/tests/unit/test_command_service_worker_stack.py -q (44 passed); ruff and black checks; git diff --check; rcql -q --lang=python --scan-files ./plexus/infrastructure/command_service/state_stack.py --no-fail (0 findings).",
+      "created_at": "2026-08-05T22:07:51.110111Z"
+    }
+  ],
+  "created_at": "2026-08-05T22:06:52.687903Z",
+  "updated_at": "2026-08-05T22:07:51.110111Z",
+  "closed_at": null,
+  "custom": {}
+}

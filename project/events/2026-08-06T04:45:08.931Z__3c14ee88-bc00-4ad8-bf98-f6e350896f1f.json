@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "3c14ee88-bc00-4ad8-bf98-f6e350896f1f",
+  "issue_id": "plx-8350176a-8d4f-4581-bfb1-0792612e47a7",
+  "event_type": "field_updated",
+  "occurred_at": "2026-08-06T04:45:08.931Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Implement the missing control-plane integration for story plx-287b0f. A dashboard command must create one durable portable command with a typed envelope and stable Task identity; dispatch it through the selected Celery adapter; project authoritative progress, output, failure, cancellation, and terminal state into that same Task and its TaskStages; and tolerate idempotent replay. Preserve the existing Task UI contract. Do not use the legacy local dispatcher as the production bridge, add static cloud credentials, or introduce fallback routing.",
+        "to": "Implement the portable command lifecycle directly against the existing dashboard Task model, which is the single authoritative state visible to workers and the UI. Use Task.id as command identity; add or consume scalar lifecycle fields for idempotency digest, lease owner/expiry, fencing, and cancellation. Celery remains the delivery adapter in AWS and Kubernetes. Conditional mutations must reject stale workers and continue triggering Task subscriptions. Do not create a separate command-state table, projection consumer, compatibility fallback, or static cloud credentials. Prove idempotent submission, claim, renewal, progress, cancellation, terminal settlement, stale-worker rejection, and realtime UI updates against the local or sandbox Task store."
+      }
+    }
+  }
+}

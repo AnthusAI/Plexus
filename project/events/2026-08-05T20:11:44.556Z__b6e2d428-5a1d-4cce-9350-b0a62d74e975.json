@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b6e2d428-5a1d-4cce-9350-b0a62d74e975",
+  "issue_id": "plx-76f1e14e-1c06-4e29-821e-adb2da03097e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-05T20:11:44.556Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Refactor the reusable Celery command adapter so it uses the existing portable command envelope, lifecycle ownership, fencing, progress, cancellation, and settlement contract. Preserve the current dashboard Task and TaskStage projection. Do not add a separate AWS-only command system or modify deployed legacy infrastructure. Define observable behavior and focused specifications before implementation. Evaluate delivery-specific behavior behind the existing transport boundary; document the long-running SQS visibility tradeoff without private broker internals.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Adapt Celery command execution to portable lifecycle"
+  }
+}

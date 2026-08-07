@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b520ded2-1b95-4b45-8fd7-2fb210413294",
+  "issue_id": "plx-60a64180-d627-4d92-ad5c-0475a379fbff",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-05T22:06:52.688Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Expose durable command-state changes for independent projections without coupling worker execution to dashboard writes. Add reusable state-change contract, stream support and least-privilege access where appropriate, with focused validation. Keep client configuration and dashboard-specific credentials outside this task.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Add durable command lifecycle projection foundation"
+  }
+}

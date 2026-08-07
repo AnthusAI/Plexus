@@ -1,0 +1,43 @@
+{
+  "id": "plx-1b970748-b70c-4c74-860f-5bf74a5f4492",
+  "title": "Implement dashboard command executor adapter",
+  "description": "Implement the Plexus-owned executor that maps the portable durable command envelope and execution context to dashboard command execution and progress updates. Preserve provider-neutral command-worker contracts; do not retain legacy dispatcher fallback behavior. Include focused unit tests and document local validation.",
+  "type": "task",
+  "status": "blocked",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2167dd15-18d9-40fd-97f9-c1d3308ecc50",
+      "author": "derek.norrbom",
+      "text": "Completed the first executor-enabling slice: CommandProgress now stores progress state and callbacks in ContextVar bindings rather than process-wide class attributes. This prevents concurrent commands from cross-publishing lifecycle progress while preserving existing call sites. Added thread-isolation and nested-scope tests. Validation: python -m pytest plexus/cli/shared/command_progress_test.py plexus/cli/shared/command_tasks_test.py tests/command_worker -q (111 passed); ruff check plexus/cli/shared/CommandProgress.py plexus/cli/shared/command_progress_test.py; black and git diff checks; rcql -q --lang=python --scan-files ./plexus/cli/shared/CommandProgress.py --no-fail (0 findings).",
+      "created_at": "2026-08-05T21:57:45.431677Z"
+    },
+    {
+      "id": "3bd1d05b-857f-4ab2-81f5-28e85fee4469",
+      "author": "derek.norrbom",
+      "text": "Implemented the typed CLI execution core. PlexusCliExecutor consumes a strict argv-array payload, optionally exposes an established task-id environment binding, routes CommandProgress updates to the portable ExecutionContext, restores argv/environment after success or failure, and bounds captured output. Added scoped CommandProgress callback binding to prevent state bleed between executions. Validation: python -m pytest plexus/cli/shared/command_progress_test.py tests/command_worker/test_plexus_cli_executor.py tests/command_worker -q (112 passed); ruff and black checks; git diff --check; rcql -q --lang=python --scan-files ./plexus/command_worker/executors/* --no-fail (0 findings).",
+      "created_at": "2026-08-05T22:02:03.990845Z"
+    },
+    {
+      "id": "af062ad9-03e7-4176-b5f8-8bd1329f6c2a",
+      "author": "derek.norrbom",
+      "text": "Added the runtime plugin factory plexus.command_worker.executors.plexus_cli:create_executor, so the portable runtime can instantiate the typed CLI executor using its existing explicit plugin contract. Additional validation: python -m pytest tests/command_worker/test_plexus_cli_executor.py tests/command_worker/test_runtime_entrypoint.py -q (22 passed).",
+      "created_at": "2026-08-05T22:02:34.696957Z"
+    },
+    {
+      "id": "fb9d4c97-f4c7-4a2a-b760-c2c1af46e186",
+      "author": "derek.norrbom",
+      "text": "Design decision after implementing the typed executor: do not let the executor mark dashboard tasks terminal. Durable lifecycle completion occurs after Executor.execute returns; a lease-loss race could otherwise display completed in the dashboard when the command was not durably completed. The executor owns CLI invocation plus durable progress publication. A separate lifecycle-state projection must drive dashboard terminal status after the durable transition succeeds.",
+      "created_at": "2026-08-05T22:04:15.227388Z"
+    }
+  ],
+  "created_at": "2026-08-05T21:47:35.357347Z",
+  "updated_at": "2026-08-05T22:06:52.713691Z",
+  "closed_at": null,
+  "custom": {}
+}

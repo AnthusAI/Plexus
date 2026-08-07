@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "597fb478-a6aa-4739-8dde-70f3224befb2",
+  "issue_id": "plx-9ba805bf-84dc-4546-8f18-a2eff2dec7b1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-05T21:20:47.731Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Provide the portable runtime process used by a command-worker container. Configure delivery and durable lifecycle adapters from explicit environment bindings, load a consumer-supplied executor through a stable plugin boundary, and keep dashboard and consumer execution behavior out of the runtime. Add focused configuration and process-startup validation.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Implement portable command worker runtime entrypoint"
+  }
+}
