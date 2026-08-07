@@ -83,6 +83,12 @@ describe('CommandService', () => {
     expect(backend).not.toContain('if (!isSandbox || enableSandboxTaskDispatcher)');
   });
 
+  it('preserves legacy Task dispatcher exports during the two-deployment migration', () => {
+    const backend = readFileSync(path.join(process.cwd(), 'amplify/backend.ts'), 'utf8');
+    expect(backend).toContain('backend.data.stack.exportValue(taskTable.tableArn)');
+    expect(backend).toContain('backend.data.stack.exportValue(taskTable.tableStreamArn)');
+  });
+
   it('is a Data-owned construct with only a Data-to-Storage stack dependency', () => {
     const { app, data, storage, service } = createFixture();
     const backend = readFileSync(path.join(process.cwd(), 'amplify/backend.ts'), 'utf8');
