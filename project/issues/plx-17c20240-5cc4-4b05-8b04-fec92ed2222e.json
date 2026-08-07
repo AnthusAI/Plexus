@@ -58,10 +58,16 @@
       "author": "derek.norrbom",
       "text": "Validated the staging unblocker: the command-worker Fargate task now explicitly requests 50 GiB ephemeral storage, and the synthesized ECS task-definition assertion passes (`npm test -- --runInBand amplify/command-service/resource.test.ts`: 20 passed). The worker-image dependency-size remediation remains separate follow-up work.",
       "created_at": "2026-08-07T19:39:25.540783Z"
+    },
+    {
+      "id": "a3b00a3e-9703-4892-8b65-cb8122b59add",
+      "author": "derek.norrbom",
+      "text": "Opened staging PR #562 for the command-service deployment and explicit worker ephemeral-storage fix. Focused CDK resource test passed (20 tests). The ECS circuit-breaker startup blocker is addressed in the PR; dependency/image-size reduction remains a separate follow-up.",
+      "created_at": "2026-08-07T19:39:54.776655Z"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-08-07T19:39:25.540783Z",
+  "updated_at": "2026-08-07T19:39:54.776655Z",
   "closed_at": null,
   "custom": {}
 }
