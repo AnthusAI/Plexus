@@ -70,7 +70,11 @@ def test_foundation_publishes_isolated_network_and_image_contract() -> None:
         for statement in statements
         if "ecr:PutImage" in statement["Action"]
     )
-    assert {"ecr:PutImage", "ecr:DescribeImages"} <= set(ecr_actions)
+    assert {
+        "ecr:BatchGetImage",
+        "ecr:PutImage",
+        "ecr:DescribeImages",
+    } <= set(ecr_actions)
     assert {
         "Action": "ecr:GetAuthorizationToken",
         "Effect": "Allow",
