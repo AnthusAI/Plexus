@@ -173,7 +173,7 @@ export const handler = async (event: Event) => {
   const input = { id, accountId, type, status: 'PENDING', target, command: argv.join(' '), dispatchStatus: 'READY', submittedBy, idempotencyNamespace: NAMESPACE, idempotencyKey, idempotencyDigest: digest, digestAlgorithm: 'sha256', digestCanonicalizationVersion: 1, commandPayload: JSON.stringify(payload), lifecycleStatus: 'ANNOUNCED', fencingToken: 0, createdAt: now, updatedAt: now };
   let persistedTask: Record<string, unknown> = input;
   try {
-    const created = await graphql('mutation CreateTask($input: CreateTaskInput!, $condition: ModelTaskConditionInput) { createTask(input: $input, condition: $condition) { id accountId type status target command dispatchStatus lifecycleStatus commandPayload createdAt updatedAt } }', { input, condition: { id: { attributeExists: false } } });
+    const created = await graphql('mutation CreateTask($input: CreateTaskInput!, $condition: ModelTaskConditionInput) { createTask(input: $input, condition: $condition) { id accountId type status target command dispatchStatus lifecycleStatus commandPayload createdAt updatedAt } }', { input, condition: { id: { ne: id } } });
     if (created.createTask && typeof created.createTask === 'object') persistedTask = { ...input, ...created.createTask as Record<string, unknown>, id };
   } catch (error: unknown) {
     if (!String(error).toLowerCase().includes('conditional')) throw error;
