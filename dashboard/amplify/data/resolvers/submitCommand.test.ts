@@ -34,7 +34,7 @@ describe('submitCommand', () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: { createTask: { id: 'task' } } }) });
     await expect(handler(event())).resolves.toMatchObject({ accountId: 'account-1', dispatchStatus: 'READY' });
     const payload = JSON.parse((mockFetch.mock.calls[0][0] as any).body);
-    expect(payload.variables.condition).toEqual({ id: { attributeExists: false } });
+    expect(payload.variables.condition).toEqual({ id: { ne: payload.variables.input.id } });
     expect(payload.variables.input.accountId).toBe('account-1');
     expect(typeof payload.variables.input.commandPayload).toBe('string');
     const commandPayload = JSON.parse(payload.variables.input.commandPayload);
