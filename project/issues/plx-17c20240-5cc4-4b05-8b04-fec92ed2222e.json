@@ -88,10 +88,16 @@
       "author": "derek.norrbom",
       "text": "Opened staging PR #564 for the AppSync AWSJSON submission fix. The resolver now serializes commandPayload at the CreateTask boundary; focused submitCommand validation passed (29 tests). Awaiting staging deployment and an end-to-end feedback-evaluation submission proof.",
       "created_at": "2026-08-07T23:31:22.802275Z"
+    },
+    {
+      "id": "d930e77b-1855-429f-96a3-89e3f90a09a8",
+      "author": "derek.norrbom",
+      "text": "Staging submission reached the next AppSync contract error: submitCommand sends DynamoDB-only `attributeExists` inside ModelTaskConditionInput. The deployed GraphQL input accepts comparison operators (as used by cancelCommand), so the idempotency create condition will be corrected to an allowed non-equality check and covered by the resolver request-shape test.",
+      "created_at": "2026-08-08T00:03:00.141971Z"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-08-07T23:31:22.802275Z",
+  "updated_at": "2026-08-08T00:03:00.141971Z",
   "closed_at": null,
   "custom": {}
 }
