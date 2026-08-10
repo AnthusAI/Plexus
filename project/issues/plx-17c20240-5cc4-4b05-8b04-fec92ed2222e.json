@@ -124,10 +124,16 @@
       "author": "derek.norrbom",
       "text": "Branch-lineage recovery complete: feature/command-service-integration was rebuilt from clean pre-staging-merge commit 989b7d7e4 by normal merges of the original command-worker fix branches. The final IAM hardening was applied to the shared worker construct after its extraction, keeping sandbox and long-lived deployment paths aligned. Focused command-service tests and backend typecheck pass. The branch has no staging ancestry; its merge base with origin/staging is 989b7d7e4 rather than the current staging tip. The previous feature/command-service-consolidation branch is audit-only and will not be used for promotion.",
       "created_at": "2026-08-10T20:17:41.261413Z"
+    },
+    {
+      "id": "42f82175-7318-419d-aa11-49ebf585cb66",
+      "author": "derek.norrbom",
+      "text": "Deployment typecheck diagnosis: staging retained a partial resolution of the task-identity deny-policy change. task-iam.ts requires scope, roles, and apiGraphqlArn, while staging backend.ts passes only roles and apiGraphqlArn. The clean integration branch correctly passes backend.data.stack as the first argument and its backend typecheck passes. Promoting the clean integration branch to staging; this is a source-level correction only, with no new ECS infrastructure behavior.",
+      "created_at": "2026-08-10T20:19:22.045843Z"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-08-10T20:17:41.261413Z",
+  "updated_at": "2026-08-10T20:19:22.045843Z",
   "closed_at": null,
   "custom": {}
 }
