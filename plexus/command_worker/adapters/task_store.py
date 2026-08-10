@@ -10,6 +10,7 @@ the same atomic operations against the Task store.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Protocol
 
@@ -162,6 +163,11 @@ class GraphQLTaskStoreGateway:
     @staticmethod
     def _record(task: Mapping[str, Any]) -> CommandRecord:
         payload = task.get("commandPayload")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except json.JSONDecodeError as error:
+                raise ValueError("Task commandPayload JSON is invalid") from error
         if not isinstance(payload, Mapping):
             raise ValueError("Task commandPayload is missing or invalid")
         digest = RequestDigest(

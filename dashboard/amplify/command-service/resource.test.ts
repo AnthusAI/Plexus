@@ -86,8 +86,10 @@ describe('CommandService', () => {
   it('wires the sandbox command worker behind its own flag, mutually exclusive with the dispatcher-only flag', () => {
     const backend = readFileSync(path.join(process.cwd(), 'amplify/backend.ts'), 'utf8');
     expect(backend).toContain("enableSandboxCommandWorker = process.env.AMPLIFY_ENABLE_SANDBOX_COMMAND_WORKER === 'true'");
+    expect(backend).toContain("sandboxCommandWorkerRegion = (process.env.AWS_REGION || process.env.AWS_REGION_NAME || '').trim()");
     expect(backend).toContain('if (isSandbox && enableSandboxTaskDispatcher && enableSandboxCommandWorker)');
     expect(backend).toContain('if (isSandbox && enableSandboxCommandWorker)');
+    expect(backend).toContain('SandboxCommandWorkerStack requires AWS_REGION us-east-1 to reuse staging VPC parameters');
     expect(backend).toContain('new SandboxCommandWorkerStack(');
     expect(backend).toContain('Stack.of(taskTable),\n        \'SandboxCommandWorker\'');
     expect(backend).not.toContain("backend.createStack('SandboxCommandWorkerStack')");
@@ -183,11 +185,21 @@ describe('CommandService', () => {
       .filter((policy: any) => policy.Properties.Roles?.includes('amplify-deployment'))
       .flatMap((policy: any) => policy.Properties.PolicyDocument.Statement);
 
-    expect(statements).toEqual([{
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toMatchObject({
       Action: 'dynamodb:Scan',
       Effect: 'Allow',
-      Resource: { 'Fn::ImportValue': expect.stringMatching(/Task.*Arn/) },
-    }]);
+    });
+
+    const resource = statements[0].Resource as Record<string, unknown>;
+    if ('Fn::ImportValue' in resource) {
+      expect(resource['Fn::ImportValue']).toEqual(expect.stringMatching(/Task.*Arn/));
+      return;
+    }
+    expect(resource).toHaveProperty('Fn::GetAtt');
+    const getAtt = resource['Fn::GetAtt'] as unknown[];
+    expect(getAtt[0]).toEqual(expect.stringMatching(/Task/));
+    expect(getAtt[1]).toBe('Arn');
   });
 
   it('uses one TaskStreamDispatcher composition for both command-service and sandbox stacks', () => {

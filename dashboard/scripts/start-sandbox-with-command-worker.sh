@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DASHBOARD_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-REGION="${AWS_REGION:-${AWS_REGION_NAME:-us-west-2}}"
+REGION="${AWS_REGION:-${AWS_REGION_NAME:-us-east-1}}"
 PROFILE="${AWS_PROFILE:-}"
 CONFIG_SECRET_NAME="${PLEXUS_CONFIG_SECRET_NAME:-}"
 
@@ -22,8 +22,11 @@ Usage:
 Examples:
   $(basename "$0")
   $(basename "$0") -- --identifier my-sandbox
+  $(basename "$0") --region us-east-1
   $(basename "$0") --config-secret-name plexus/staging/config
 
+Default region is us-east-1 because the sandbox worker intentionally reuses
+the staging command-service VPC contract parameters from that region.
 Requires Docker running locally to build the worker image asset.
 EOF
 }
