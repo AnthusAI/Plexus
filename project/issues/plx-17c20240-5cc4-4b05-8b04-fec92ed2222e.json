@@ -114,44 +114,14 @@
       "created_at": "2026-08-10T20:01:18.694769Z"
     },
     {
-      "id": "1bb6630a-1306-4edd-8e13-aef7f3aea67e",
+      "id": "e7724873-16dc-497a-9f90-07281d64e8d3",
       "author": "derek.norrbom",
-      "text": "Branch-lineage recovery is now executing on feature/command-service-integration, created from clean pre-staging-merge commit 989b7d7e4. The prior feature/command-service-consolidation branch is preserved for audit and will not be used as the integration source. Original fix branches will be merged directly into the clean branch; staging is not a source.",
-      "created_at": "2026-08-10T20:12:41.599349Z"
-    },
-    {
-      "id": "6ba1a00d-c0b5-4ab2-8d75-097039c5f64e",
-      "author": "derek.norrbom",
-      "text": "Branch-lineage recovery complete: feature/command-service-integration was rebuilt from clean pre-staging-merge commit 989b7d7e4 by normal merges of the original command-worker fix branches. The final IAM hardening was applied to the shared worker construct after its extraction, keeping sandbox and long-lived deployment paths aligned. Focused command-service tests and backend typecheck pass. The branch has no staging ancestry; its merge base with origin/staging is 989b7d7e4 rather than the current staging tip. The previous feature/command-service-consolidation branch is audit-only and will not be used for promotion.",
-      "created_at": "2026-08-10T20:17:41.261413Z"
-    },
-    {
-      "id": "42f82175-7318-419d-aa11-49ebf585cb66",
-      "author": "derek.norrbom",
-      "text": "Deployment typecheck diagnosis: staging retained a partial resolution of the task-identity deny-policy change. task-iam.ts requires scope, roles, and apiGraphqlArn, while staging backend.ts passes only roles and apiGraphqlArn. The clean integration branch correctly passes backend.data.stack as the first argument and its backend typecheck passes. Promoting the clean integration branch to staging; this is a source-level correction only, with no new ECS infrastructure behavior.",
-      "created_at": "2026-08-10T20:19:22.045843Z"
-    },
-    {
-      "id": "75c41b3f-7cd3-486b-8131-3425211c3a3c",
-      "author": "derek.norrbom",
-      "text": "Staging end-to-end dispatch diagnosis: the ECS command worker is healthy and received the feedback-evaluation command, but rejects it before execution because the portable command envelope payload is not a JSON object. submitCommand correctly stores Task.commandPayload as AWSJSON text; TaskStreamDispatcher forwards that text without decoding it. The dispatcher must parse the AWSJSON field when building the portable command envelope, with regression coverage for the stored-string-to-worker-object boundary.",
-      "created_at": "2026-08-10T20:51:52.363721Z"
-    },
-    {
-      "id": "64022c93-abd8-4be9-88db-e81126443fd9",
-      "author": "derek.norrbom",
-      "text": "Sandbox deployment failure diagnosed: start-sandbox-with-command-worker defaults to us-west-2, but SandboxCommandWorkerStack intentionally borrows staging command-service VPC contract parameters that currently exist only in us-east-1. This yields CloudFormation Parameter Store lookup failures for /plexus/staging/command-service/{vpc-id,availability-zones,private-subnet-ids}. Implementing a fast-fail region guard for sandbox command-worker deployment and aligning script defaults/documentation to us-east-1 to prevent long failed deploy loops.",
-      "created_at": "2026-08-10T20:57:59.078619Z"
-    },
-    {
-      "id": "c91184b4-6564-4815-a7aa-37b65f7ce105",
-      "author": "derek.norrbom",
-      "text": "Staging still stalls at ANNOUNCED after payload-decode deploy. Live worker logs now show durable integrity verification failure on received tasks. Root cause: worker GraphQL Task gateway expects commandPayload to be an object, but AppSync returns AWSJSON Task fields as strings on getTask. The submitCommand digest is computed from object payload, so verification fails when gateway does not parse the string payload back to a JSON object. Implementing gateway-side AWSJSON parse with focused contract coverage.",
-      "created_at": "2026-08-10T22:14:11.533415Z"
+      "text": "PR #566 reports merge conflicts against staging. Investigating the exact conflicting files and a resolution that preserves the feature implementation while respecting the branch-direction rule; no direct staging commit will be made.",
+      "created_at": "2026-08-10T20:03:39.116015Z"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-08-10T22:14:13.720352Z",
+  "updated_at": "2026-08-10T20:03:39.116015Z",
   "closed_at": null,
   "custom": {}
 }
