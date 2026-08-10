@@ -6,7 +6,7 @@ import { readFileSync } from 'fs';
 import * as path from 'path';
 import { CommandService, isLongLivedCommandServiceEnvironment, resolveCommandServiceEnvironment } from './resource';
 import { TaskDispatcherStack, TaskStreamDispatcher } from '../functions/taskDispatcher/resource';
-import { LIFECYCLE_APPSYNC_ROOTS, WORKER_DOMAIN_APPSYNC_ROOTS, appSyncFieldArn } from './authority-manifest';
+import { LIFECYCLE_APPSYNC_ROOTS, WORKER_APPSYNC_AUTHORITY_GROUPS, WORKER_DOMAIN_APPSYNC_ROOTS, appSyncFieldArn } from './authority-manifest';
 
 const DIGEST = `123456789012.dkr.ecr.us-east-1.amazonaws.com/plexus-staging-command-worker@sha256:${'a'.repeat(64)}`;
 const DEPLOYMENT_ROLE_ARN = 'arn:aws:iam::123456789012:role/amplify-deployment';
@@ -128,16 +128,32 @@ describe('CommandService', () => {
 
   it('grants the six lifecycle roots plus the audited action-specific roots', () => {
     const template = Template.fromStack(createStack());
-    const statements = Object.values(template.findResources('AWS::IAM::Policy'))
+    const statements = [
+      ...Object.values(template.findResources('AWS::IAM::Policy')),
+      ...Object.values(template.findResources('AWS::IAM::ManagedPolicy')),
+    ]
       .flatMap((policy: any) => policy.Properties.PolicyDocument.Statement)
       .filter((statement: any) => statement.Action === 'appsync:GraphQL');
 
-    expect(statements).toHaveLength(1);
-    expect([...statements[0].Resource].sort()).toEqual([
+    expect(statements).toHaveLength(WORKER_APPSYNC_AUTHORITY_GROUPS.length);
+    expect([...new Set(statements.flatMap((statement: any) => statement.Resource))].sort()).toEqual([
       ...LIFECYCLE_APPSYNC_ROOTS,
       ...WORKER_DOMAIN_APPSYNC_ROOTS,
     ].map((root) => appSyncFieldArn('arn:aws:appsync:us-east-1:123456789012:apis/example', root)).sort());
-    expect(statements[0].Resource.every((resource: string) => !resource.includes('*'))).toBe(true);
+    expect(statements.flatMap((statement: any) => statement.Resource)
+      .every((resource: string) => !resource.includes('*'))).toBe(true);
+  });
+
+  it('keeps task-role managed policies bounded without CDK overflow splitting', () => {
+    const template = Template.fromStack(createStack());
+    const managedPolicies = template.findResources('AWS::IAM::ManagedPolicy');
+
+    expect(Object.keys(managedPolicies)).toHaveLength(WORKER_APPSYNC_AUTHORITY_GROUPS.length);
+    expect(Object.keys(managedPolicies).length).toBeLessThanOrEqual(10);
+    expect(Object.keys(managedPolicies).some((logicalId) => logicalId.includes('OverflowPolicy'))).toBe(false);
+    for (const policy of Object.values(managedPolicies) as any[]) {
+      expect(JSON.stringify(policy.Properties.PolicyDocument).length).toBeLessThanOrEqual(5500);
+    }
   });
 
   it('scopes direct worker storage access to audited object prefixes and exports bucket identities', () => {
