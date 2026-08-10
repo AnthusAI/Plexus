@@ -32,17 +32,6 @@ export function denyDashboardIdentityTaskMutations(
   }
 }
 
-export function grantSubmitCommandTaskAccess(role: iam.IGrantable, apiGraphqlArn: string): void {
-  role.grantPrincipal.addToPrincipalPolicy(new iam.PolicyStatement({
-    effect: iam.Effect.ALLOW,
-    actions: ['appsync:GraphQL'],
-    resources: [
-      taskFieldArn(apiGraphqlArn, 'Mutation', 'createTask'),
-      taskFieldArn(apiGraphqlArn, 'Query', 'getTask'),
-    ],
-  }));
-}
-
 export function grantCancelCommandTaskAccess(role: iam.IGrantable, apiGraphqlArn: string): void {
   role.grantPrincipal.addToPrincipalPolicy(new iam.PolicyStatement({
     effect: iam.Effect.ALLOW,

@@ -100,10 +100,28 @@
       "author": "derek.norrbom",
       "text": "Opened staging PR #565 for the valid AppSync Task condition fix. It replaces the invalid attributeExists operator with id ne and the focused submitCommand resolver test passes (29 tests). Awaiting merge/deployment before retrying the staging feedback evaluation.",
       "created_at": "2026-08-08T00:04:08.116661Z"
+    },
+    {
+      "id": "f16638ff-6b73-4448-9573-310f13c916b7",
+      "author": "derek.norrbom",
+      "text": "Live staging diagnosis: PR #565 deployed successfully and the submitCommand Lambda artifact contains condition { id: { ne: taskId } }. AppSync introspection confirms ModelTaskConditionInput has no id field, so the deployed error is the corrected condition still violating the generated schema. The prior resolver test only mocked the GraphQL boundary and did not validate the live generated input type. Implementing an idempotent create path that does not rely on unsupported ModelTaskConditionInput id conditions.",
+      "created_at": "2026-08-10T19:58:54.192846Z"
+    },
+    {
+      "id": "845a2b3e-5cb0-4d61-81e1-75d715342dfe",
+      "author": "derek.norrbom",
+      "text": "Implemented the atomic submission correction: submitCommand now performs a DynamoDB PutItem with ConditionExpression attribute_not_exists(id), reads/validates the prior Task on ConditionalCheckFailed, and no longer sends a ModelTaskConditionInput to AppSync. The Lambda has only Account GetItem plus Task GetItem/PutItem. Focused tests: 35 passed; dashboard typecheck passed. The Task DynamoDB stream remains the dispatch trigger.",
+      "created_at": "2026-08-10T20:01:18.694769Z"
+    },
+    {
+      "id": "e7724873-16dc-497a-9f90-07281d64e8d3",
+      "author": "derek.norrbom",
+      "text": "PR #566 reports merge conflicts against staging. Investigating the exact conflicting files and a resolution that preserves the feature implementation while respecting the branch-direction rule; no direct staging commit will be made.",
+      "created_at": "2026-08-10T20:03:39.116015Z"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-08-08T00:04:08.116661Z",
+  "updated_at": "2026-08-10T20:03:39.116015Z",
   "closed_at": null,
   "custom": {}
 }

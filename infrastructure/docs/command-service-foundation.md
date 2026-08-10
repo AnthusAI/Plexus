@@ -3,7 +3,12 @@
 Deploy the stable foundation first, then the matching Amplify environment.
 
 `main`/`production` uses the production foundation; `staging` uses the staging
-foundation. Sandboxes do not deploy this foundation or ECS resources.
+foundation. Sandboxes do not deploy this foundation or the long-lived
+`CommandServiceStack`. For fast dev iteration on the command worker without
+a staging deploy, a personal sandbox can instead borrow the staging
+foundation's VPC and run its own ECS worker built from a local Docker
+asset — see `dashboard/amplify/SANDBOX.md` ("Full Async Command-Service
+Iteration in Sandboxes").
 
 The Amplify build obtains the foundation's environment-scoped ECR repository
 URI from SSM, builds `plexus/command_worker/Dockerfile` from the repository

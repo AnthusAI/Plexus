@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "40490c66-2f8c-4a1e-8ce8-cb90d2243323",
+  "issue_id": "plx-aba73b78-6f78-4a38-aa4a-331bc8ebc654",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-08T00:29:50.235Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Provide a supported personal-sandbox workflow for fast end-to-end command-service iteration without relying on staging deployments. The workflow must keep sandbox resources isolated, allow the local dashboard to exercise the server submission boundary, and enable an isolated dispatcher queue to be consumed by a locally run command worker. Document setup, guardrails, and the verification path. Staging remains the final ECS, IAM, network, and deployment acceptance environment.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Enable sandbox async command-service iteration"
+  }
+}

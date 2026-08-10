@@ -1,0 +1,25 @@
+{
+  "id": "plx-4853811d-f173-479b-b27e-09ce9441dd01",
+  "title": "Add start-sandbox-with-command-worker.sh launcher script",
+  "description": "",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-aba73b78-6f78-4a38-aa4a-331bc8ebc654",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "25f1a77b-2960-4cd1-a138-57f226b42a8a",
+      "author": "derek.norrbom",
+      "text": "Added dashboard/scripts/start-sandbox-with-command-worker.sh, mirroring start-sandbox-with-console-worker.sh: sets the new flag, unsets AWS_BRANCH/AMPLIFY_ENV/PLEXUS_API_URL, refuses production config secret, runs npx ampx sandbox. Executable, bash -n clean.",
+      "created_at": "2026-08-10T19:15:40.489541Z"
+    }
+  ],
+  "created_at": "2026-08-10T18:45:25.138783Z",
+  "updated_at": "2026-08-10T19:15:40.499895Z",
+  "closed_at": "2026-08-10T19:15:40.499895Z",
+  "custom": {}
+}
