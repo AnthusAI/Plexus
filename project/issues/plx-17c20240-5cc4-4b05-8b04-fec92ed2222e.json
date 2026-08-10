@@ -130,10 +130,16 @@
       "author": "derek.norrbom",
       "text": "Deployment typecheck diagnosis: staging retained a partial resolution of the task-identity deny-policy change. task-iam.ts requires scope, roles, and apiGraphqlArn, while staging backend.ts passes only roles and apiGraphqlArn. The clean integration branch correctly passes backend.data.stack as the first argument and its backend typecheck passes. Promoting the clean integration branch to staging; this is a source-level correction only, with no new ECS infrastructure behavior.",
       "created_at": "2026-08-10T20:19:22.045843Z"
+    },
+    {
+      "id": "64022c93-abd8-4be9-88db-e81126443fd9",
+      "author": "derek.norrbom",
+      "text": "Sandbox deployment failure diagnosed: start-sandbox-with-command-worker defaults to us-west-2, but SandboxCommandWorkerStack intentionally borrows staging command-service VPC contract parameters that currently exist only in us-east-1. This yields CloudFormation Parameter Store lookup failures for /plexus/staging/command-service/{vpc-id,availability-zones,private-subnet-ids}. Implementing a fast-fail region guard for sandbox command-worker deployment and aligning script defaults/documentation to us-east-1 to prevent long failed deploy loops.",
+      "created_at": "2026-08-10T20:57:59.078619Z"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-08-10T20:19:22.045843Z",
+  "updated_at": "2026-08-10T20:57:59.078619Z",
   "closed_at": null,
   "custom": {}
 }

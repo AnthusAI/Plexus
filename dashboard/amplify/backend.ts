@@ -173,6 +173,7 @@ const isSandbox = process.env.AWS_BRANCH === undefined &&
 const enableSandboxConsoleWorker = process.env.AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER === 'true';
 const enableSandboxTaskDispatcher = process.env.AMPLIFY_ENABLE_SANDBOX_TASK_DISPATCHER === 'true';
 const enableSandboxCommandWorker = process.env.AMPLIFY_ENABLE_SANDBOX_COMMAND_WORKER === 'true';
+const sandboxCommandWorkerRegion = (process.env.AWS_REGION || process.env.AWS_REGION_NAME || '').trim();
 
 if (isSandbox && enableSandboxTaskDispatcher && enableSandboxCommandWorker) {
     throw new Error(
@@ -363,6 +364,11 @@ if (isSandbox && enableSandboxTaskDispatcher) {
 // image asset from the current checkout, so it never touches the long-lived
 // CommandServiceStack's environment restriction or activity-gate machinery.
 if (isSandbox && enableSandboxCommandWorker) {
+    if (sandboxCommandWorkerRegion && sandboxCommandWorkerRegion !== 'us-east-1') {
+        throw new Error(
+            `SandboxCommandWorkerStack requires AWS_REGION us-east-1 to reuse staging VPC parameters; received ${sandboxCommandWorkerRegion}`,
+        );
+    }
     const dataCfnResources = backend.data.resources.cfnResources as unknown as {
         cfnGraphqlApi?: { attrGraphQlUrl?: string; attrArn?: string };
     };
