@@ -144,3 +144,16 @@ def test_gateway_normalizes_conditional_graphql_exceptions() -> None:
     claim = gateway.claim_task(command.envelope, "worker-1", NOW, timedelta(minutes=1))
     assert claim.token == "1"
     assert not gateway.complete_task("task-1", "0", {"stale": True}, NOW)
+
+
+def test_gateway_accepts_awsjson_string_payloads_from_get_task() -> None:
+    client = RecordingConditionalClient()
+    gateway = GraphQLTaskStoreGateway(client)
+    command = _command()
+
+    gateway.announce_task(command, _fields())
+    client.tasks["task-1"]["commandPayload"] = '{"argv":["evaluate"]}'
+
+    record = gateway.get_command("tenant-1", "task-1")
+    assert record is not None
+    assert dict(record.payload) == {"argv": ("evaluate",)}
