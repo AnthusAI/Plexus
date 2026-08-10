@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import importlib.util
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from plexus.command_worker import (
     CommandRecord,
@@ -157,3 +160,63 @@ def test_gateway_accepts_awsjson_string_payloads_from_get_task() -> None:
     record = gateway.get_command("tenant-1", "task-1")
     assert record is not None
     assert dict(record.payload) == {"argv": ("evaluate",)}
+
+
+def test_dispatcher_and_gateway_preserve_awsjson_payload_integrity() -> None:
+    dispatcher_path = (
+        Path(__file__).resolve().parents[2]
+        / "dashboard"
+        / "amplify"
+        / "functions"
+        / "taskDispatcher"
+        / "index.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "task_dispatcher_contract", dispatcher_path
+    )
+    assert spec and spec.loader
+    dispatcher = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = dispatcher
+    spec.loader.exec_module(dispatcher)
+
+    payload = {"argv": ["evaluate", "feedback"], "task_id": "task-1"}
+    task = {
+        "id": "task-1",
+        "accountId": "tenant-1",
+        "target": "evaluation",
+        "idempotencyKey": "key-1",
+        "createdAt": NOW.isoformat(),
+        "commandPayload": '{"argv":["evaluate","feedback"],"task_id":"task-1"}',
+    }
+    message = dispatcher.envelope(task)
+    assert message["payload"] == payload
+
+    class ReadOnlyTaskClient:
+        def execute(self, document: str, variables: dict) -> dict:
+            if "query GetTask" not in document:
+                raise AssertionError(document)
+            return {
+                "getTask": {
+                    "id": "task-1",
+                    "accountId": "tenant-1",
+                    "target": "evaluation",
+                    "idempotencyKey": "key-1",
+                    "idempotencyNamespace": "command.submit:v1",
+                    "submittedBy": "principal-1",
+                    "createdAt": NOW.isoformat(),
+                    "updatedAt": NOW.isoformat(),
+                    "lifecycleStatus": "ANNOUNCED",
+                    "digestAlgorithm": "sha256",
+                    "digestCanonicalizationVersion": 1,
+                    "idempotencyDigest": request_digest(
+                        "evaluation", payload
+                    ).value,
+                    "commandPayload": '{"argv":["evaluate","feedback"],"task_id":"task-1"}',
+                }
+            }
+
+    gateway = GraphQLTaskStoreGateway(ReadOnlyTaskClient())
+    command = gateway.get_command("tenant-1", "task-1")
+    assert command is not None
+    assert dict(command.payload) == {"argv": ("evaluate", "feedback"), "task_id": "task-1"}
+    assert command.request_digest == request_digest(command.target, command.payload)

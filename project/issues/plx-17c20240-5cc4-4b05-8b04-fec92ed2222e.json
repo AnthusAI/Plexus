@@ -148,10 +148,16 @@
       "author": "derek.norrbom",
       "text": "Staging still stalls at ANNOUNCED after payload-decode deploy. Live worker logs now show durable integrity verification failure on received tasks. Root cause: worker GraphQL Task gateway expects commandPayload to be an object, but AppSync returns AWSJSON Task fields as strings on getTask. The submitCommand digest is computed from object payload, so verification fails when gateway does not parse the string payload back to a JSON object. Implementing gateway-side AWSJSON parse with focused contract coverage.",
       "created_at": "2026-08-10T22:14:11.533415Z"
+    },
+    {
+      "id": "7e2caf41-6940-4a21-ac26-4a6defe8e53b",
+      "author": "derek.norrbom",
+      "text": "Process hardening in progress: adding a command-worker preflight script and a cross-boundary payload contract test that exercises the AWSJSON path from Task dispatcher envelope construction through worker Task gateway record verification and digest matching. This is to gate staging promotion on local format compatibility across submit, dispatch, and worker verification boundaries.",
+      "created_at": "2026-08-10T22:22:28.308798Z"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-08-10T22:14:13.720352Z",
+  "updated_at": "2026-08-10T22:22:28.308798Z",
   "closed_at": null,
   "custom": {}
 }
