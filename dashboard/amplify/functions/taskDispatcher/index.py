@@ -1,5 +1,6 @@
 """Publish typed command envelopes from Task stream eligibility transitions."""
 
+import json
 import os
 from typing import Any, Mapping
 
@@ -29,6 +30,14 @@ def envelope(task: Mapping[str, Any]) -> dict[str, Any]:
     missing = [field for field in required if task.get(field) is None]
     if missing:
         raise ValueError("READY Task is missing " + ", ".join(missing))
+    payload = task["commandPayload"]
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError as error:
+            raise ValueError("READY Task commandPayload is not valid JSON") from error
+    if not isinstance(payload, Mapping):
+        raise ValueError("READY Task commandPayload must be a JSON object")
     return {
         "schema_version": 2,
         "command_id": task["id"],
@@ -36,7 +45,7 @@ def envelope(task: Mapping[str, Any]) -> dict[str, Any]:
         "target": task["target"],
         "idempotency_key": task["idempotencyKey"],
         "created_at": task["createdAt"],
-        "payload": task["commandPayload"],
+        "payload": dict(payload),
     }
 
 
