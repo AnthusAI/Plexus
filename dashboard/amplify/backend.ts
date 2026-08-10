@@ -5,7 +5,7 @@ import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachment
 import { CommandServiceStack, isLongLivedCommandServiceEnvironment } from './command-service/resource.js';
 import { SandboxCommandWorkerStack } from './command-service/sandbox-resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
-import { denyDashboardIdentityTaskMutations, grantCancelCommandTaskAccess, grantSubmitCommandTaskAccess } from './data/task-iam.js';
+import { denyDashboardIdentityTaskMutations, grantCancelCommandTaskAccess } from './data/task-iam.js';
 import { ConsoleChatResponderStack } from './functions/consoleRunWorker/resource.js';
 import { McpStack } from './mcp/mcp_stack.js';
 import { TopicMemoryVectorStoreStack } from './semantic-memory/vector_store_stack.js';
@@ -67,14 +67,17 @@ if (cancelCommandFunction) {
 if (submitCommandFunction) {
     const submitCommandCfn = submitCommandFunction.node.defaultChild as lambda.CfnFunction;
     submitCommandCfn.addPropertyOverride('Environment.Variables.ACCOUNT_TABLE_NAME', backend.data.resources.tables.Account.tableName);
-    const api = backend.data.resources.cfnResources.cfnGraphqlApi;
-    submitCommandCfn.addPropertyOverride('Environment.Variables.PLEXUS_API_URL', api.attrGraphQlUrl);
+    submitCommandCfn.addPropertyOverride('Environment.Variables.TASK_TABLE_NAME', backend.data.resources.tables.Task.tableName);
     submitCommandFunction.addToRolePolicy(new PolicyStatement({
         effect: Effect.ALLOW,
         actions: ['dynamodb:GetItem'],
         resources: [backend.data.resources.tables.Account.tableArn],
     }));
-    grantSubmitCommandTaskAccess(submitCommandFunction, api.attrArn);
+    submitCommandFunction.addToRolePolicy(new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem'],
+        resources: [backend.data.resources.tables.Task.tableArn],
+    }));
 }
 
 // This has to be part of the base backend rather than the long-lived command

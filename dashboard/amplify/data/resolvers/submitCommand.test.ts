@@ -13,6 +13,7 @@ import fetch from 'node-fetch';
 
 const mockSend = (DynamoDBClient as unknown as jest.Mock).mock.results[0].value.send as jest.Mock;
 const mockFetch = fetch as unknown as jest.Mock;
+const putInput = () => mockSend.mock.calls[1][0].input;
 
 const event = (overrides: Record<string, unknown> = {}) => ({
   arguments: { accountId: 'account-1', action: 'evaluation.accuracy', arguments: { scorecardName: 'Card', scoreName: 'Score Name', numberOfSamples: 10, loadFresh: true }, idempotencyKey: 'stable-key', ...overrides },
@@ -29,25 +30,43 @@ describe('submitCommand', () => {
     mockFetch.mockReset();
   });
 
-  it('uses AppSync identity and conditionally writes the typed command Task', async () => {
+  it('uses AppSync identity and conditionally writes the typed command Task directly to DynamoDB', async () => {
     mockSend.mockResolvedValueOnce({ Item: { id: { S: 'account-1' } } });
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: { createTask: { id: 'task' } } }) });
+    mockSend.mockResolvedValueOnce({});
     await expect(handler(event())).resolves.toMatchObject({ accountId: 'account-1', dispatchStatus: 'READY' });
-    const payload = JSON.parse((mockFetch.mock.calls[0][0] as any).body);
-    expect(payload.variables.condition).toEqual({ id: { ne: payload.variables.input.id } });
-    expect(payload.variables.input.accountId).toBe('account-1');
-    expect(typeof payload.variables.input.commandPayload).toBe('string');
-    const commandPayload = JSON.parse(payload.variables.input.commandPayload);
-    expect(commandPayload.argv).toEqual(['evaluate', 'accuracy', '--number-of-samples', '10', '--scorecard', 'Card', '--score', 'Score Name', '--fresh', '--task-id', payload.variables.input.id]);
-    expect(commandPayload.task_id).toBe(payload.variables.input.id);
-    expect(payload.variables.input.idempotencyDigest).toMatch(/^[a-f0-9]{64}$/);
+    const put = putInput();
+    expect(put.TableName).toBe('Task');
+    expect(put.ConditionExpression).toBe('attribute_not_exists(id)');
+    expect(put.Item.accountId).toEqual({ S: 'account-1' });
+    const commandPayload = JSON.parse(put.Item.commandPayload.S);
+    expect(commandPayload.argv).toEqual(['evaluate', 'accuracy', '--number-of-samples', '10', '--scorecard', 'Card', '--score', 'Score Name', '--fresh', '--task-id', put.Item.id.S]);
+    expect(commandPayload.task_id).toBe(put.Item.id.S);
+    expect(put.Item.idempotencyDigest.S).toMatch(/^[a-f0-9]{64}$/);
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('verifies the persisted identity and digest on conditional replay', async () => {
     mockSend.mockResolvedValueOnce({ Item: { id: { S: 'account-1' } } });
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ errors: [{ message: 'Conditional request failed' }] }) }).mockResolvedValueOnce({ ok: true, json: async () => ({ data: { getTask: { accountId: 'account-1', target: 'evaluation', idempotencyDigest: 'd' } } }) });
+    mockSend.mockRejectedValueOnce(Object.assign(new Error('conditional request failed'), { name: 'ConditionalCheckFailedException' }));
+    mockSend.mockResolvedValueOnce({ Item: { accountId: { S: 'account-1' }, target: { S: 'evaluation' }, idempotencyDigest: { S: 'd' } } });
     // A collision must compare the persisted digest, not merely return an existing Task.
     await expect(handler(event())).rejects.toThrow('idempotency key conflicts');
+  });
+
+  it('returns the prior Task only when a conditional replay has the same identity and command digest', async () => {
+    let idempotencyDigest = '';
+    mockSend.mockImplementation((request) => {
+      const input = request.input;
+      if (input.TableName === 'Account') return { Item: { id: { S: 'account-1' } } };
+      if (input.ConditionExpression) {
+        idempotencyDigest = input.Item.idempotencyDigest.S;
+        return Promise.reject(Object.assign(new Error('conditional request failed'), { name: 'ConditionalCheckFailedException' }));
+      }
+      return { Item: { id: input.Key.id, accountId: { S: 'account-1' }, target: { S: 'evaluation' }, idempotencyDigest: { S: idempotencyDigest }, status: { S: 'PENDING' } } };
+    });
+
+    await expect(handler(event())).resolves.toMatchObject({ accountId: 'account-1', target: 'evaluation', status: 'PENDING' });
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('rejects unregistered actions and unknown selected accounts', async () => {
@@ -79,17 +98,16 @@ describe('submitCommand', () => {
     ['feedback.report', { report: 'timeline', scorecardId: 'card-1', days: 14, bucketType: 'calendar_week', timezone: 'UTC', weekStart: 'monday' }, ['feedback', 'report', 'timeline', '--scorecard', 'card-1', '--days', '14', '--bucket-type', 'calendar_week', '--timezone', 'UTC', '--week-start', 'monday']],
   ])('constructs %s argv only from its registered structured fields', async (action, arguments_, argv) => {
     mockSend.mockResolvedValueOnce({ Item: { id: { S: 'account-1' } } });
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: { createTask: { id: 'task' } } }) });
+    mockSend.mockResolvedValueOnce({});
     await handler(event({ action, arguments: arguments_ }));
-    const payload = JSON.parse((mockFetch.mock.calls[0][0] as any).body);
-    const taskId = payload.variables.input.id;
+    const put = putInput();
+    const taskId = put.Item.id.S;
     const expectedArgv = action === 'procedure.run' || action === 'feedback.report'
       ? argv
       : action === 'report.run'
         ? [...argv.slice(0, 4), '--task-id', taskId, ...argv.slice(4)]
         : [...argv, '--task-id', taskId];
-    expect(typeof payload.variables.input.commandPayload).toBe('string');
-    expect(JSON.parse(payload.variables.input.commandPayload)).toEqual({ argv: expectedArgv, task_id: taskId });
+    expect(JSON.parse(put.Item.commandPayload.S)).toEqual({ argv: expectedArgv, task_id: taskId });
   });
 
   it.each([
@@ -103,15 +121,14 @@ describe('submitCommand', () => {
     ['overview', ['feedback', 'report', 'overview', '--scorecard', 'card-1', '--score', 'score-1', '--days', '14', '--bucket-type', 'calendar_week', '--timezone', 'UTC', '--week-start', 'monday']],
   ])('constructs parser-compatible argv for feedback report %s', async (report, argv) => {
     mockSend.mockResolvedValueOnce({ Item: { id: { S: 'account-1' } } });
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: { createTask: { id: 'task' } } }) });
+    mockSend.mockResolvedValueOnce({});
     const arguments_: Record<string, unknown> = { report, scorecardId: 'card-1', days: 14 };
     if (['contradictions', 'acceptance-rate-timeline', 'overview'].includes(report)) arguments_.scoreId = 'score-1';
     if (['timeline', 'volume', 'overview'].includes(report)) Object.assign(arguments_, { bucketType: 'calendar_week', timezone: 'UTC', weekStart: 'monday' });
     if (report === 'acceptance-rate-timeline') arguments_.bucketType = 'trailing_7d';
     await handler(event({ action: 'feedback.report', arguments: arguments_ }));
-    const payload = JSON.parse((mockFetch.mock.calls[0][0] as any).body);
-    expect(typeof payload.variables.input.commandPayload).toBe('string');
-    expect(JSON.parse(payload.variables.input.commandPayload)).toEqual({ argv, task_id: payload.variables.input.id });
+    const put = putInput();
+    expect(JSON.parse(put.Item.commandPayload.S)).toEqual({ argv, task_id: put.Item.id.S });
   });
 
   it.each([

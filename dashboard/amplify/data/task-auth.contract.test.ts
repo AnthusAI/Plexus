@@ -6,7 +6,6 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import {
   denyDashboardIdentityTaskMutations,
   grantCancelCommandTaskAccess,
-  grantSubmitCommandTaskAccess,
 } from './task-iam';
 
 const root = join(process.cwd(), 'amplify');
@@ -20,9 +19,14 @@ describe('Task four-principal authorization contract', () => {
     // The authoritative Task lifecycle fields remain user/API read-only.
     expect(resource).toContain("dispatchStatus: a.string().authorization((allow) => [allow.publicApiKey().to(['read']), allow.authenticated().to(['read']), allow.authenticated('identityPool').to(['read', 'create', 'update'])])");
   });
-  it('grants submit only get/create and cancellation only get/update AppSync fields', () => {
-    expect(backend).toContain('grantSubmitCommandTaskAccess(submitCommandFunction, api.attrArn)');
+  it('grants cancellation only the AppSync fields it requires', () => {
+    expect(backend).not.toContain('grantSubmitCommandTaskAccess');
     expect(backend).toContain('grantCancelCommandTaskAccess(cancelCommandFunction, api.attrArn)');
+  });
+
+  it('gives submit direct Task-table access without AppSync Task permissions', () => {
+    expect(backend).toContain("Environment.Variables.TASK_TABLE_NAME");
+    expect(backend).toContain("actions: ['dynamodb:GetItem', 'dynamodb:PutItem'],\n        resources: [backend.data.resources.tables.Task.tableArn]");
   });
 
   it('synthesizes the dashboard identity-pool Task mutation deny for sandbox roles', () => {
@@ -52,28 +56,14 @@ describe('Task four-principal authorization contract', () => {
     });
   });
 
-  it('synthesizes only the service Task fields required by submit and cancel', () => {
+  it('synthesizes only the AppSync Task fields required by cancellation', () => {
     const app = new App();
     const stack = new Stack(app, 'ServiceRoles');
-    const submit = new iam.Role(stack, 'SubmitCommandRole', { assumedBy: new iam.AccountRootPrincipal() });
     const cancel = new iam.Role(stack, 'CancelCommandRole', { assumedBy: new iam.AccountRootPrincipal() });
     const apiArn = 'arn:aws:appsync:us-east-1:123456789012:apis/example';
-    grantSubmitCommandTaskAccess(submit, apiArn);
     grantCancelCommandTaskAccess(cancel, apiArn);
 
     const template = Template.fromStack(stack);
-    template.hasResourceProperties('AWS::IAM::Policy', {
-      PolicyDocument: {
-        Statement: [{
-          Effect: 'Allow',
-          Action: 'appsync:GraphQL',
-          Resource: [
-            `${apiArn}/types/Mutation/fields/createTask`,
-            `${apiArn}/types/Query/fields/getTask`,
-          ],
-        }],
-      },
-    });
     template.hasResourceProperties('AWS::IAM::Policy', {
       PolicyDocument: {
         Statement: [{

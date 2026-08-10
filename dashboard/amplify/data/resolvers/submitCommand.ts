@@ -1,10 +1,6 @@
-import { GetItemCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { Sha256 } from '@aws-crypto/sha256-js';
-import { defaultProvider } from '@aws-sdk/credential-provider-node';
-import { SignatureV4 } from '@aws-sdk/signature-v4';
-import { HttpRequest } from '@aws-sdk/protocol-http';
+import { GetItemCommand, PutItemCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { createHash, randomUUID } from 'crypto';
-import fetch, { Request } from 'node-fetch';
 
 const dynamo = new DynamoDBClient({});
 const NAMESPACE = 'command.submit:v1';
@@ -143,14 +139,9 @@ function bindTaskIdentity(action: string, argv: string[], taskId: string): strin
   return [...argv, '--task-id', taskId];
 }
 
-async function graphql(query: string, variables: Record<string, unknown>) {
-  const endpointValue = required(process.env.PLEXUS_API_URL, 'PLEXUS_API_URL');
-  const endpoint = new URL(endpointValue);
-  const signed = await new SignatureV4({ credentials: defaultProvider(), region: required(process.env.AWS_REGION, 'AWS_REGION'), service: 'appsync', sha256: Sha256 }).sign(new HttpRequest({ method: 'POST', hostname: endpoint.host, path: endpoint.pathname, headers: { 'content-type': 'application/json', host: endpoint.host }, body: JSON.stringify({ query, variables }) }));
-  const response = await fetch(new Request(endpointValue, signed));
-  const payload = await response.json() as { data?: Record<string, unknown>; errors?: { message?: string }[] };
-  if (!response.ok || payload.errors?.length) throw new Error(payload.errors?.[0]?.message || 'AppSync Task mutation failed');
-  return payload.data || {};
+function isConditionalFailure(error: unknown): boolean {
+  return (error as { name?: unknown })?.name === 'ConditionalCheckFailedException'
+    || String(error).toLowerCase().includes('conditional');
 }
 
 export const handler = async (event: Event) => {
@@ -168,20 +159,29 @@ export const handler = async (event: Event) => {
   const digest = createHash('sha256').update(canonical({ payload, target }), 'utf8').digest('hex');
   const now = new Date().toISOString();
   const accountTableName = required(process.env.ACCOUNT_TABLE_NAME, 'ACCOUNT_TABLE_NAME');
+  const taskTableName = required(process.env.TASK_TABLE_NAME, 'TASK_TABLE_NAME');
   const account = await dynamo.send(new GetItemCommand({ TableName: accountTableName, Key: { id: { S: accountId } }, ConsistentRead: true }));
   if (!account.Item) throw new Error('selected account was not found');
   const input = { id, accountId, type, status: 'PENDING', target, command: argv.join(' '), dispatchStatus: 'READY', submittedBy, idempotencyNamespace: NAMESPACE, idempotencyKey, idempotencyDigest: digest, digestAlgorithm: 'sha256', digestCanonicalizationVersion: 1, commandPayload: JSON.stringify(payload), lifecycleStatus: 'ANNOUNCED', fencingToken: 0, createdAt: now, updatedAt: now };
   let persistedTask: Record<string, unknown> = input;
   try {
-    const created = await graphql('mutation CreateTask($input: CreateTaskInput!, $condition: ModelTaskConditionInput) { createTask(input: $input, condition: $condition) { id accountId type status target command dispatchStatus lifecycleStatus commandPayload createdAt updatedAt } }', { input, condition: { id: { ne: id } } });
-    if (created.createTask && typeof created.createTask === 'object') persistedTask = { ...input, ...created.createTask as Record<string, unknown>, id };
+    await dynamo.send(new PutItemCommand({
+      TableName: taskTableName,
+      Item: marshall(input),
+      ConditionExpression: 'attribute_not_exists(id)',
+    }));
   } catch (error: unknown) {
-    if (!String(error).toLowerCase().includes('conditional')) throw error;
-    const existing = await graphql('query GetTask($id: ID!) { getTask(id: $id) { id accountId type status target command dispatchStatus lifecycleStatus commandPayload createdAt updatedAt idempotencyDigest } }', { id }) as { getTask?: Record<string, unknown> };
-    if (!existing.getTask || existing.getTask.accountId !== accountId || existing.getTask.target !== target || existing.getTask.idempotencyDigest !== digest) {
+    if (!isConditionalFailure(error)) throw error;
+    const existing = await dynamo.send(new GetItemCommand({
+      TableName: taskTableName,
+      Key: { id: { S: id } },
+      ConsistentRead: true,
+    }));
+    const existingTask = existing.Item ? unmarshall(existing.Item) : undefined;
+    if (!existingTask || existingTask.accountId !== accountId || existingTask.target !== target || existingTask.idempotencyDigest !== digest) {
       throw new Error('idempotency key conflicts with a different command');
     }
-    persistedTask = { ...input, ...existing.getTask, id };
+    persistedTask = { ...input, ...existingTask, id };
   }
   return { taskId: id, ...persistedTask };
 };
