@@ -13,6 +13,8 @@ import * as sqs from 'aws-cdk-lib/aws-sqs';
 interface TaskDispatcherStackProps extends StackProps {
   readonly taskTable: ITable;
   readonly taskTableStreamArn: string;
+  /** Defaults to 12 hours, matching the long-lived worker's lease ceiling. */
+  readonly commandQueueVisibilityTimeout?: Duration;
 }
 
 /**
@@ -44,7 +46,7 @@ export class TaskStreamDispatcher extends Construct {
     });
     this.commandQueue = new sqs.Queue(this, 'CommandQueue', {
       encryption: sqs.QueueEncryption.SQS_MANAGED,
-      visibilityTimeout: Duration.hours(12),
+      visibilityTimeout: props.commandQueueVisibilityTimeout ?? Duration.hours(12),
       receiveMessageWaitTime: Duration.seconds(20),
       deadLetterQueue: { queue: this.commandDeadLetterQueue, maxReceiveCount: 5 },
     });

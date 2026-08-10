@@ -3,16 +3,23 @@
   "title": "Enable sandbox async command-service iteration",
   "description": "Provide a supported personal-sandbox workflow for fast end-to-end command-service iteration without relying on staging deployments. The workflow must keep sandbox resources isolated, allow the local dashboard to exercise the server submission boundary, and enable an isolated dispatcher queue to be consumed by a locally run command worker. Document setup, guardrails, and the verification path. Staging remains the final ECS, IAM, network, and deployment acceptance environment.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
-  "assignee": null,
+  "assignee": "derek.norrbom",
   "creator": null,
   "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "09939e8e-bb9a-4b88-9a32-17f032c99b15",
+      "author": "derek.norrbom",
+      "text": "## Design decision\n\nBlocker was a deliberate guard, not a technical limit: `resolveCommandServiceEnvironment()` in dashboard/amplify/command-service/resource.ts restricts the real ECS command worker to production/staging only, because that stack imports a VPC/ECR/image-digest from a foundation stack only staging/production ever deployed.\n\nSince sandbox/staging/production share one AWS account and sandbox teardown cost is a non-issue, the plan is to give sandbox the same ECS worker rather than build a separate local-process/local-IAM path:\n\n- Extract the Fargate cluster/task/service/IAM logic out of CommandServiceStack into a shared construct (CommandWorkerFargateService), parameterized over image/vpc/lease-timeouts.\n- Add SandboxCommandWorkerStack: borrows staging's VPC+ECR via the existing SSM contract (same account), builds the worker image inline as a CDK Docker asset (same pattern ConsoleRunWorker already uses) so sandbox runs current local code instead of a pinned staging digest.\n- New backend.ts flag AMPLIFY_ENABLE_SANDBOX_COMMAND_WORKER, mirroring the existing enableSandboxConsoleWorker/enableSandboxTaskDispatcher pattern; mutually exclusive with the narrower sandbox TaskDispatcher-only flag.\n- Launcher script mirroring start-sandbox-with-console-worker.sh.\n- No new submission API — reuses existing submitCommand/cancelCommand mutations per the epic's single-command-path decision.\n\nThis avoids the alternative (locally-run worker process signing AppSync requests with laptop IAM credentials), which would have needed new credential-scoping work with no existing precedent in the repo.\n\nStaging remains the final ECS/IAM/network acceptance environment; this only gives sandbox the same worker for fast dev iteration before that gate.",
+      "created_at": "2026-08-10T18:45:09.068988Z"
+    }
+  ],
   "created_at": "2026-08-08T00:29:50.235573Z",
-  "updated_at": "2026-08-08T00:29:50.235573Z",
+  "updated_at": "2026-08-10T18:45:09.068988Z",
   "closed_at": null,
   "custom": {}
 }

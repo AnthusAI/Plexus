@@ -70,6 +70,14 @@ describe('CommandServiceStack', () => {
     expect(backend).not.toContain('if (!isSandbox || enableSandboxTaskDispatcher)');
   });
 
+  it('wires the sandbox command worker behind its own flag, mutually exclusive with the dispatcher-only flag', () => {
+    const backend = readFileSync(path.join(process.cwd(), 'amplify/backend.ts'), 'utf8');
+    expect(backend).toContain("enableSandboxCommandWorker = process.env.AMPLIFY_ENABLE_SANDBOX_COMMAND_WORKER === 'true'");
+    expect(backend).toContain('if (isSandbox && enableSandboxTaskDispatcher && enableSandboxCommandWorker)');
+    expect(backend).toContain('if (isSandbox && enableSandboxCommandWorker)');
+    expect(backend).toContain('new SandboxCommandWorkerStack(');
+  });
+
   it('composes separate command and dispatcher recovery queues with an ECS worker', () => {
     const template = Template.fromStack(createStack());
     expect(Object.keys(template.findResources('AWS::SQS::Queue'))).toHaveLength(3);

@@ -3,6 +3,7 @@ import { cancelCommandHandler, createArtifactTransferTicketsHandler, data, dispa
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments, rubricMemory } from './storage/resource.js';
 import { CommandServiceStack, isLongLivedCommandServiceEnvironment } from './command-service/resource.js';
+import { SandboxCommandWorkerStack } from './command-service/sandbox-resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
 import { denyDashboardIdentityTaskMutations, grantCancelCommandTaskAccess, grantSubmitCommandTaskAccess } from './data/task-iam.js';
 import { ConsoleChatResponderStack } from './functions/consoleRunWorker/resource.js';
@@ -167,14 +168,24 @@ const isSandbox = process.env.AWS_BRANCH === undefined &&
                   process.env.AMPLIFY_ENV === undefined;
 const enableSandboxConsoleWorker = process.env.AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER === 'true';
 const enableSandboxTaskDispatcher = process.env.AMPLIFY_ENABLE_SANDBOX_TASK_DISPATCHER === 'true';
+const enableSandboxCommandWorker = process.env.AMPLIFY_ENABLE_SANDBOX_COMMAND_WORKER === 'true';
+
+if (isSandbox && enableSandboxTaskDispatcher && enableSandboxCommandWorker) {
+    throw new Error(
+        'AMPLIFY_ENABLE_SANDBOX_TASK_DISPATCHER and AMPLIFY_ENABLE_SANDBOX_COMMAND_WORKER are mutually exclusive: ' +
+        'the sandbox command worker already includes its own TaskStreamDispatcher.'
+    );
+}
 
 if (isSandbox) {
-    if (enableSandboxConsoleWorker) {
+    if (enableSandboxCommandWorker) {
+        console.log('🏖️  Sandbox mode detected - command worker (queue, dispatcher, and Fargate service) explicitly enabled for this deployment');
+    } else if (enableSandboxConsoleWorker) {
         console.log('🏖️  Sandbox mode detected - ConsoleRunWorker explicitly enabled for this deployment');
     } else if (enableSandboxTaskDispatcher) {
         console.log('🏖️  Sandbox mode detected - TaskDispatcher explicitly enabled with its isolated command queue');
     } else {
-        console.log('🏖️  Sandbox mode detected - skipping TaskDispatcher and ConsoleWorker stacks');
+        console.log('🏖️  Sandbox mode detected - skipping TaskDispatcher, ConsoleWorker, and CommandWorker stacks');
     }
 }
 
@@ -334,6 +345,40 @@ if (isSandbox && enableSandboxTaskDispatcher) {
         backend.createStack('SandboxTaskDispatcherStack'),
         'SandboxTaskDispatcher',
         { taskTable, taskTableStreamArn: taskTable.tableStreamArn },
+    );
+}
+
+// The sandbox command worker gives a personal sandbox the same ECS worker as
+// staging/production, for fast iteration without a staging deploy. It borrows
+// the staging foundation's VPC (same AWS account) and builds its own worker
+// image asset from the current checkout, so it never touches the long-lived
+// CommandServiceStack's environment restriction or activity-gate machinery.
+if (isSandbox && enableSandboxCommandWorker) {
+    const dataCfnResources = backend.data.resources.cfnResources as unknown as {
+        cfnGraphqlApi?: { attrGraphQlUrl?: string; attrArn?: string };
+    };
+    const sandboxApiUrl = dataCfnResources.cfnGraphqlApi?.attrGraphQlUrl || '';
+    const sandboxApiGraphqlArn = dataCfnResources.cfnGraphqlApi?.attrArn || '';
+    if (!sandboxApiUrl || !sandboxApiGraphqlArn) {
+        throw new Error('Unable to resolve sandbox GraphQL URL/ARN for SandboxCommandWorkerStack deployment');
+    }
+    const sandboxConfigSecretName = (process.env.PLEXUS_CONFIG_SECRET_NAME || 'plexus/staging/config').trim();
+    const sandboxBedrockModelResources = (process.env.PLEXUS_COMMAND_WORKER_BEDROCK_MODEL_ARNS || 'arn:aws:bedrock:*::foundation-model/*')
+        .split(',').map((value) => value.trim()).filter(Boolean);
+    new SandboxCommandWorkerStack(
+        backend.createStack('SandboxCommandWorkerStack'),
+        'SandboxCommandWorker',
+        {
+            taskTable,
+            taskTableStreamArn: taskTable.tableStreamArn,
+            apiUrl: sandboxApiUrl,
+            apiGraphqlArn: sandboxApiGraphqlArn,
+            bedrockModelResources: sandboxBedrockModelResources,
+            configSecretName: sandboxConfigSecretName,
+            dataSourcesBucket: backend.dataSources.resources.bucket,
+            reportBlockDetailsBucket: backend.reportBlockDetails.resources.bucket,
+            scoreResultAttachmentsBucket: backend.scoreResultAttachments.resources.bucket,
+        },
     );
 }
 
