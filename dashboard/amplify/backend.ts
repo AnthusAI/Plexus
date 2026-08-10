@@ -2,7 +2,7 @@ import { defineBackend } from '@aws-amplify/backend';
 import { cancelCommandHandler, createArtifactTransferTicketsHandler, data, dispatchConsoleChatHandler, submitCommandHandler } from './data/resource.js';
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments, rubricMemory } from './storage/resource.js';
-import { CommandServiceStack, isLongLivedCommandServiceEnvironment } from './command-service/resource.js';
+import { CommandService, isLongLivedCommandServiceEnvironment } from './command-service/resource.js';
 import { SandboxCommandWorkerStack } from './command-service/sandbox-resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
 import { denyDashboardIdentityTaskMutations, grantCancelCommandTaskAccess } from './data/task-iam.js';
@@ -87,6 +87,7 @@ const authIamResources = backend.auth.resources as unknown as {
     unauthenticatedUserIamRole?: iam.IRole;
 };
 denyDashboardIdentityTaskMutations(
+    backend.data.stack,
     [
         backend.auth.resources.authenticatedUserIamRole,
         ...(authIamResources.unauthenticatedUserIamRole ? [authIamResources.unauthenticatedUserIamRole] : []),
@@ -204,6 +205,13 @@ taskAmplifyTable.streamSpecification = {
 if (!taskTable.tableStreamArn) {
     throw new Error('TaskDispatcher requires the Task table stream ARN.');
 }
+// Preserve the exports consumed by the legacy long-lived TaskDispatcher stack
+// while CloudFormation removes that stack. Remove these only after every
+// long-lived environment has completed the command-service migration.
+if (!isSandbox) {
+    backend.stack.exportValue(taskTable.tableArn);
+    backend.stack.exportValue(taskTable.tableStreamArn);
+}
 
 const itemTable = backend.data.resources.tables.Item;
 const itemCfnTable = itemTable.node.defaultChild as dynamodb.CfnTable;
@@ -279,7 +287,6 @@ backend.auth.resources.authenticatedUserIamRole.addToPrincipalPolicy(
 
 // The command service is long-lived-environment only. Sandboxes intentionally
 // have no command-service VPC, dispatcher, or ECS worker.
-let commandServiceStack: CommandServiceStack | undefined;
 let sandboxTaskDispatcherStack: TaskDispatcherStack | undefined;
 let consoleRunWorkerStack: ConsoleChatResponderStack | undefined;
 
@@ -310,18 +317,17 @@ if (isLongLivedCommandServiceEnvironment(commandServiceEnvironment)) {
     ).trim();
     const bedrockModelResources = (process.env.PLEXUS_COMMAND_WORKER_BEDROCK_MODEL_ARNS || 'arn:aws:bedrock:*::foundation-model/*')
         .split(',').map((value) => value.trim()).filter(Boolean);
-    const commandServiceCdkStack = backend.createStack('CommandServiceStack');
     const servicePrefix = (process.env.PLEXUS_SERVICE_PREFIX || 'plexus').trim().toLowerCase();
-    new ssm.StringParameter(commandServiceCdkStack, 'CommandServiceTaskTableName', {
+    new ssm.StringParameter(backend.data.stack, 'CommandServiceTaskTableName', {
         parameterName: `/${servicePrefix}/${commandServiceEnvironment}/command-service/task-table-name`,
         stringValue: taskTable.tableName,
     });
-    new ssm.StringParameter(commandServiceCdkStack, 'CommandServiceCurrentWorkerImage', {
+    new ssm.StringParameter(backend.data.stack, 'CommandServiceCurrentWorkerImage', {
         parameterName: `/${servicePrefix}/${commandServiceEnvironment}/command-service/current-worker-image-uri`,
         stringValue: workerImageUri,
     });
-    commandServiceStack = new CommandServiceStack(
-        commandServiceCdkStack,
+    new CommandService(
+        backend.data.stack,
         'CommandService',
         {
             taskTable,

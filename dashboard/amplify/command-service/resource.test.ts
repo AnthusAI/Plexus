@@ -4,21 +4,29 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import { readFileSync } from 'fs';
 import * as path from 'path';
-import { CommandServiceStack, isLongLivedCommandServiceEnvironment, resolveCommandServiceEnvironment } from './resource';
+import { CommandService, isLongLivedCommandServiceEnvironment, resolveCommandServiceEnvironment } from './resource';
 import { TaskDispatcherStack, TaskStreamDispatcher } from '../functions/taskDispatcher/resource';
-import { LIFECYCLE_APPSYNC_ROOTS, WORKER_DOMAIN_APPSYNC_ROOTS, appSyncFieldArn } from './authority-manifest';
+import { LIFECYCLE_APPSYNC_ROOTS, WORKER_APPSYNC_AUTHORITY_GROUPS, WORKER_DOMAIN_APPSYNC_ROOTS, appSyncFieldArn } from './authority-manifest';
 
 const DIGEST = `123456789012.dkr.ecr.us-east-1.amazonaws.com/plexus-staging-command-worker@sha256:${'a'.repeat(64)}`;
 const DEPLOYMENT_ROLE_ARN = 'arn:aws:iam::123456789012:role/amplify-deployment';
 
-function createStack(workerImageUri = DIGEST): CommandServiceStack {
+type CommandServiceFixture = {
+  app: App;
+  data: Stack;
+  storage: Stack;
+  service: CommandService;
+};
+
+function createFixture(workerImageUri = DIGEST): CommandServiceFixture {
   const app = new App();
   const data = new Stack(app, 'Data');
+  const storage = new Stack(app, 'Storage');
   const taskTable = new dynamodb.Table(data, 'Task', { partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING }, stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES });
-  const dataSourcesBucket = new s3.Bucket(data, 'DataSources');
-  const reportBlockDetailsBucket = new s3.Bucket(data, 'ReportBlockDetails');
-  const scoreResultAttachmentsBucket = new s3.Bucket(data, 'ScoreResultAttachments');
-  return new CommandServiceStack(app, 'CommandService', {
+  const dataSourcesBucket = new s3.Bucket(storage, 'DataSources');
+  const reportBlockDetailsBucket = new s3.Bucket(storage, 'ReportBlockDetails');
+  const scoreResultAttachmentsBucket = new s3.Bucket(storage, 'ScoreResultAttachments');
+  const service = new CommandService(data, 'CommandService', {
     taskTable,
     taskTableStreamArn: taskTable.tableStreamArn!,
     apiUrl: 'https://example.appsync-api.us-east-1.amazonaws.com/graphql',
@@ -33,6 +41,11 @@ function createStack(workerImageUri = DIGEST): CommandServiceStack {
     reportBlockDetailsBucket,
     scoreResultAttachmentsBucket,
   });
+  return { app, data, storage, service };
+}
+
+function createStack(workerImageUri = DIGEST): Stack {
+  return createFixture(workerImageUri).data;
 }
 
 function createSandboxDispatcherStack(): TaskDispatcherStack {
@@ -48,7 +61,7 @@ function createSandboxDispatcherStack(): TaskDispatcherStack {
   });
 }
 
-describe('CommandServiceStack', () => {
+describe('CommandService', () => {
   it.each([['main', 'production'], ['production', 'production'], ['staging', 'staging']])('maps %s to %s', (source, expected) => {
     expect(resolveCommandServiceEnvironment(source)).toBe(expected);
   });
@@ -80,6 +93,26 @@ describe('CommandServiceStack', () => {
     expect(backend).not.toContain("backend.createStack('SandboxCommandWorkerStack')");
   });
 
+  it('preserves legacy Task dispatcher exports during the two-deployment migration', () => {
+    const backend = readFileSync(path.join(process.cwd(), 'amplify/backend.ts'), 'utf8');
+    expect(backend).toContain('backend.stack.exportValue(taskTable.tableArn)');
+    expect(backend).toContain('backend.stack.exportValue(taskTable.tableStreamArn)');
+    expect(backend).not.toContain('backend.data.stack.exportValue(taskTable.');
+  });
+
+  it('is a Data-owned construct with only a Data-to-Storage stack dependency', () => {
+    const { app, data, storage, service } = createFixture();
+    const backend = readFileSync(path.join(process.cwd(), 'amplify/backend.ts'), 'utf8');
+    app.synth();
+
+    expect(service).not.toBeInstanceOf(Stack);
+    expect(Stack.of(service)).toBe(data);
+    expect(data.dependencies).toContain(storage);
+    expect(storage.dependencies).not.toContain(data);
+    expect(backend).toMatch(/new CommandService\(\s*backend\.data\.stack/);
+    expect(backend).not.toContain("backend.createStack('CommandServiceStack')");
+  });
+
   it('composes separate command and dispatcher recovery queues with an ECS worker', () => {
     const template = Template.fromStack(createStack());
     expect(Object.keys(template.findResources('AWS::SQS::Queue'))).toHaveLength(3);
@@ -95,16 +128,32 @@ describe('CommandServiceStack', () => {
 
   it('grants the six lifecycle roots plus the audited action-specific roots', () => {
     const template = Template.fromStack(createStack());
-    const statements = Object.values(template.findResources('AWS::IAM::Policy'))
+    const statements = [
+      ...Object.values(template.findResources('AWS::IAM::Policy')),
+      ...Object.values(template.findResources('AWS::IAM::ManagedPolicy')),
+    ]
       .flatMap((policy: any) => policy.Properties.PolicyDocument.Statement)
       .filter((statement: any) => statement.Action === 'appsync:GraphQL');
 
-    expect(statements).toHaveLength(1);
-    expect([...statements[0].Resource].sort()).toEqual([
+    expect(statements).toHaveLength(WORKER_APPSYNC_AUTHORITY_GROUPS.length);
+    expect([...new Set(statements.flatMap((statement: any) => statement.Resource))].sort()).toEqual([
       ...LIFECYCLE_APPSYNC_ROOTS,
       ...WORKER_DOMAIN_APPSYNC_ROOTS,
     ].map((root) => appSyncFieldArn('arn:aws:appsync:us-east-1:123456789012:apis/example', root)).sort());
-    expect(statements[0].Resource.every((resource: string) => !resource.includes('*'))).toBe(true);
+    expect(statements.flatMap((statement: any) => statement.Resource)
+      .every((resource: string) => !resource.includes('*'))).toBe(true);
+  });
+
+  it('keeps task-role managed policies bounded without CDK overflow splitting', () => {
+    const template = Template.fromStack(createStack());
+    const managedPolicies = template.findResources('AWS::IAM::ManagedPolicy');
+
+    expect(Object.keys(managedPolicies)).toHaveLength(WORKER_APPSYNC_AUTHORITY_GROUPS.length);
+    expect(Object.keys(managedPolicies).length).toBeLessThanOrEqual(10);
+    expect(Object.keys(managedPolicies).some((logicalId) => logicalId.includes('OverflowPolicy'))).toBe(false);
+    for (const policy of Object.values(managedPolicies) as any[]) {
+      expect(JSON.stringify(policy.Properties.PolicyDocument).length).toBeLessThanOrEqual(5500);
+    }
   });
 
   it('scopes direct worker storage access to audited object prefixes and exports bucket identities', () => {
