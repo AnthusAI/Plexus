@@ -153,6 +153,10 @@ export const TaskStatus = React.memo(({
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const isInProgress = status === 'RUNNING'
   const isError = status === 'FAILED'
+  const [nowMs, setNowMs] = useState(() => Date.now())
+
+  const useProvidedElapsedSeconds = elapsedSeconds !== null && elapsedSeconds !== undefined
+    && (elapsedSeconds > 0 || !!completedAt || !isInProgress)
   const terminalOutcomeView = (() => {
     switch (String(terminalOutcome || '').toUpperCase()) {
       case 'INCOMPLETE':
@@ -170,7 +174,7 @@ export const TaskStatus = React.memo(({
   // Memoize timing calculations
   const timingValues = useMemo(() => {
     // If we have pre-calculated elapsed seconds, use that instead of calculating from timestamps
-    if (elapsedSeconds !== null && elapsedSeconds !== undefined) {
+    if (useProvidedElapsedSeconds) {
       const formattedElapsedTime = formatDuration(elapsedSeconds);
       
       let formattedEstimatedTime = '';
@@ -193,7 +197,7 @@ export const TaskStatus = React.memo(({
     }
 
     const taskStartTime = new Date(startedAt);
-    const endTime = completedAt ? new Date(completedAt) : new Date();
+    const endTime = completedAt ? new Date(completedAt) : new Date(nowMs);
     const calculatedElapsedSeconds = Math.floor((endTime.getTime() - taskStartTime.getTime()) / 1000);
     const formattedElapsedTime = formatDuration(calculatedElapsedSeconds);
 
@@ -210,26 +214,21 @@ export const TaskStatus = React.memo(({
       elapsedTime: formattedElapsedTime,
       estimatedTimeRemaining: formattedEstimatedTime
     };
-  }, [elapsedSeconds, estimatedRemainingSeconds, startedAt, completedAt, isInProgress, estimatedCompletionAt]);
-
-  // State for timing values
-  const [elapsedTime, setElapsedTime] = useState(timingValues.elapsedTime);
-  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState(timingValues.estimatedTimeRemaining);
+  }, [elapsedSeconds, estimatedRemainingSeconds, startedAt, completedAt, isInProgress, estimatedCompletionAt, nowMs, useProvidedElapsedSeconds]);
 
   // Update timing values every second while not completed
   useEffect(() => {
-    setElapsedTime(timingValues.elapsedTime);
-    setEstimatedTimeRemaining(timingValues.estimatedTimeRemaining);
+    if (completedAt || useProvidedElapsedSeconds || !startedAt) return
 
-    if (!completedAt) {
-      const interval = setInterval(() => {
-        setElapsedTime(timingValues.elapsedTime);
-        setEstimatedTimeRemaining(timingValues.estimatedTimeRemaining);
-      }, 1000);
+    const interval = setInterval(() => {
+      setNowMs(Date.now())
+    }, 1000)
 
-      return () => clearInterval(interval);
-    }
-  }, [timingValues, completedAt]);
+    return () => clearInterval(interval)
+  }, [completedAt, useProvidedElapsedSeconds, startedAt]);
+
+  const elapsedTime = timingValues.elapsedTime
+  const estimatedTimeRemaining = timingValues.estimatedTimeRemaining
 
   // Find first running stage if currentStageName is undefined
   const effectiveCurrentStage = useMemo(() => {
