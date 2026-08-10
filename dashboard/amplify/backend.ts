@@ -366,7 +366,10 @@ if (isSandbox && enableSandboxCommandWorker) {
     const sandboxBedrockModelResources = (process.env.PLEXUS_COMMAND_WORKER_BEDROCK_MODEL_ARNS || 'arn:aws:bedrock:*::foundation-model/*')
         .split(',').map((value) => value.trim()).filter(Boolean);
     new SandboxCommandWorkerStack(
-        backend.createStack('SandboxCommandWorkerStack'),
+        // Keep the worker below the generated data stack that owns the Task
+        // table and AppSync API. A peer custom stack creates cross-stack
+        // exports that participate in Amplify's auth/data/storage cycle.
+        Stack.of(taskTable),
         'SandboxCommandWorker',
         {
             taskTable,

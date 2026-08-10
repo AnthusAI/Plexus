@@ -28,10 +28,16 @@
       "author": "derek.norrbom",
       "text": "Correction after comparing deployed staging: staging CommandWorker resources are nested beneath the Amplify data stack (ECS cluster ARN includes the data nested-stack path). The sandbox implementation creates SandboxCommandWorkerStack as a peer top-level custom stack, so it is not actually using the same CloudFormation placement. The narrow path is to place the sandbox worker nested stack beneath data as well, retaining the shared CommandWorkerFargateService and avoiding a local-worker rewrite or duplicate sandbox resource implementation. Validate resulting nested-stack graph and resource limits before accepting.",
       "created_at": "2026-08-10T19:49:38.173891Z"
+    },
+    {
+      "id": "8692d51e-6333-4fd4-8eef-a00ec6137fae",
+      "author": "derek.norrbom",
+      "text": "Starting the narrow remediation: preserve the shared CommandWorkerFargateService and move only the sandbox wrapper’s CloudFormation placement so it nests under Amplify data, matching staging. Validation will include focused tests and a real sandbox synthesis/deploy attempt before handoff.",
+      "created_at": "2026-08-10T19:50:49.058151Z"
     }
   ],
   "created_at": "2026-08-08T00:29:50.235573Z",
-  "updated_at": "2026-08-10T19:49:38.173891Z",
+  "updated_at": "2026-08-10T19:50:49.058151Z",
   "closed_at": null,
   "custom": {}
 }

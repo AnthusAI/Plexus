@@ -76,6 +76,8 @@ describe('CommandServiceStack', () => {
     expect(backend).toContain('if (isSandbox && enableSandboxTaskDispatcher && enableSandboxCommandWorker)');
     expect(backend).toContain('if (isSandbox && enableSandboxCommandWorker)');
     expect(backend).toContain('new SandboxCommandWorkerStack(');
+    expect(backend).toContain('Stack.of(taskTable),\n        \'SandboxCommandWorker\'');
+    expect(backend).not.toContain("backend.createStack('SandboxCommandWorkerStack')");
   });
 
   it('composes separate command and dispatcher recovery queues with an ECS worker', () => {

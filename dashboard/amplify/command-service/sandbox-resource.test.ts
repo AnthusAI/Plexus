@@ -12,7 +12,7 @@ function createStack(configSecretName?: string): SandboxCommandWorkerStack {
   const dataSourcesBucket = new s3.Bucket(data, 'DataSources');
   const reportBlockDetailsBucket = new s3.Bucket(data, 'ReportBlockDetails');
   const scoreResultAttachmentsBucket = new s3.Bucket(data, 'ScoreResultAttachments');
-  return new SandboxCommandWorkerStack(app, 'SandboxCommandWorker', {
+  return new SandboxCommandWorkerStack(data, 'SandboxCommandWorker', {
     taskTable,
     taskTableStreamArn: taskTable.tableStreamArn!,
     apiUrl: 'https://example.appsync-api.us-east-1.amazonaws.com/graphql',
@@ -26,6 +26,32 @@ function createStack(configSecretName?: string): SandboxCommandWorkerStack {
 }
 
 describe('SandboxCommandWorkerStack', () => {
+  it('is a nested child of the data stack that owns the Task table', () => {
+    const app = new App();
+    const data = new Stack(app, 'Data');
+    const taskTable = new dynamodb.Table(data, 'Task', {
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+    });
+    const dataSourcesBucket = new s3.Bucket(data, 'DataSources');
+    const reportBlockDetailsBucket = new s3.Bucket(data, 'ReportBlockDetails');
+    const scoreResultAttachmentsBucket = new s3.Bucket(data, 'ScoreResultAttachments');
+    const sandbox = new SandboxCommandWorkerStack(data, 'SandboxCommandWorker', {
+      taskTable,
+      taskTableStreamArn: taskTable.tableStreamArn!,
+      apiUrl: 'https://example.appsync-api.us-east-1.amazonaws.com/graphql',
+      apiGraphqlArn: 'arn:aws:appsync:us-east-1:123456789012:apis/example',
+      bedrockModelResources: ['arn:aws:bedrock:us-east-1::foundation-model/*'],
+      dataSourcesBucket,
+      reportBlockDetailsBucket,
+      scoreResultAttachmentsBucket,
+    });
+
+    expect(sandbox.node.scope).toBe(data);
+    expect(Object.values(Template.fromStack(data).findResources('AWS::CloudFormation::Stack')))
+      .toHaveLength(1);
+  });
+
   it('refuses a production config secret', () => {
     expect(() => createStack('plexus/production/config')).toThrow('must not use plexus/production/config');
   });

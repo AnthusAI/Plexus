@@ -1,4 +1,4 @@
-import { Duration, Stack, StackProps } from 'aws-cdk-lib';
+import { Duration, NestedStack, NestedStackProps } from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ecr_assets from 'aws-cdk-lib/aws-ecr-assets';
@@ -14,7 +14,7 @@ import { CommandWorkerFargateService } from './worker-service';
 const STAGING_CONTRACT_PREFIX = '/plexus/staging/command-service';
 const PRODUCTION_CONFIG_SECRET_NAME = 'plexus/production/config';
 
-export interface SandboxCommandWorkerStackProps extends StackProps {
+export interface SandboxCommandWorkerStackProps extends NestedStackProps {
   readonly taskTable: ITable;
   readonly taskTableStreamArn: string;
   readonly apiUrl: string;
@@ -37,7 +37,7 @@ export interface SandboxCommandWorkerStackProps extends StackProps {
  * and no foundation dependency, since an ephemeral sandbox has no deployed
  * task to protect.
  */
-export class SandboxCommandWorkerStack extends Stack {
+export class SandboxCommandWorkerStack extends NestedStack {
   public readonly commandQueue: sqs.Queue;
   public readonly commandDeadLetterQueue: sqs.Queue;
   public readonly dispatcherFailureQueue: sqs.Queue;
