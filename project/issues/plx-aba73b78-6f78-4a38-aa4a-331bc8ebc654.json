@@ -34,10 +34,16 @@
       "author": "derek.norrbom",
       "text": "Starting the narrow remediation: preserve the shared CommandWorkerFargateService and move only the sandbox wrapper’s CloudFormation placement so it nests under Amplify data, matching staging. Validation will include focused tests and a real sandbox synthesis/deploy attempt before handoff.",
       "created_at": "2026-08-10T19:50:49.058151Z"
+    },
+    {
+      "id": "c432e222-d011-4a0c-acdc-66a77c489226",
+      "author": "derek.norrbom",
+      "text": "Implemented placement-only fix in commit 88ddddc: SandboxCommandWorkerStack is now a NestedStack scoped under the data stack that owns Task, rather than a peer custom stack. The shared worker construct and runtime resources are unchanged. Validation passed: npm test -- --runInBand amplify/command-service/sandbox-resource.test.ts amplify/command-service/resource.test.ts; npm run typecheck:backend; git diff --check. Ready to retry the sandbox launcher.",
+      "created_at": "2026-08-10T19:53:48.481122Z"
     }
   ],
   "created_at": "2026-08-08T00:29:50.235573Z",
-  "updated_at": "2026-08-10T19:50:49.058151Z",
+  "updated_at": "2026-08-10T19:53:48.481122Z",
   "closed_at": null,
   "custom": {}
 }
