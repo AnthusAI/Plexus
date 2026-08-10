@@ -139,6 +139,7 @@ class ServiceNetworkFoundationStack(Stack):
                     iam.PolicyStatement(
                         actions=[
                             "ecr:BatchCheckLayerAvailability",
+                            "ecr:BatchGetImage",
                             "ecr:CompleteLayerUpload",
                             "ecr:DescribeImages",
                             "ecr:InitiateLayerUpload",
