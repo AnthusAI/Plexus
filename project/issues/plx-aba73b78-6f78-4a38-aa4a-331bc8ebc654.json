@@ -16,10 +16,16 @@
       "author": "derek.norrbom",
       "text": "## Design decision\n\nBlocker was a deliberate guard, not a technical limit: `resolveCommandServiceEnvironment()` in dashboard/amplify/command-service/resource.ts restricts the real ECS command worker to production/staging only, because that stack imports a VPC/ECR/image-digest from a foundation stack only staging/production ever deployed.\n\nSince sandbox/staging/production share one AWS account and sandbox teardown cost is a non-issue, the plan is to give sandbox the same ECS worker rather than build a separate local-process/local-IAM path:\n\n- Extract the Fargate cluster/task/service/IAM logic out of CommandServiceStack into a shared construct (CommandWorkerFargateService), parameterized over image/vpc/lease-timeouts.\n- Add SandboxCommandWorkerStack: borrows staging's VPC+ECR via the existing SSM contract (same account), builds the worker image inline as a CDK Docker asset (same pattern ConsoleRunWorker already uses) so sandbox runs current local code instead of a pinned staging digest.\n- New backend.ts flag AMPLIFY_ENABLE_SANDBOX_COMMAND_WORKER, mirroring the existing enableSandboxConsoleWorker/enableSandboxTaskDispatcher pattern; mutually exclusive with the narrower sandbox TaskDispatcher-only flag.\n- Launcher script mirroring start-sandbox-with-console-worker.sh.\n- No new submission API — reuses existing submitCommand/cancelCommand mutations per the epic's single-command-path decision.\n\nThis avoids the alternative (locally-run worker process signing AppSync requests with laptop IAM credentials), which would have needed new credential-scoping work with no existing precedent in the repo.\n\nStaging remains the final ECS/IAM/network acceptance environment; this only gives sandbox the same worker for fast dev iteration before that gate.",
       "created_at": "2026-08-10T18:45:09.068988Z"
+    },
+    {
+      "id": "b09e2a9e-a264-420d-bd7b-1f6b3dbac117",
+      "author": "derek.norrbom",
+      "text": "Investigation: the new SandboxCommandWorkerStack imports the sandbox Task table and AppSync API from the data nested stack plus three bucket resources from storage. Those imports cause CloudFormation to regenerate/update cross-stack exports; the existing auth/data/storage graph then forms a circular update dependency. Backend synthesis and type-checking pass, so the current tests do not exercise the nested-stack deployment graph. Do not attempt to resolve this with explicit DependsOn: it cannot make a cyclic graph deploy. Recommended next step is to replace the full ECS sandbox composition with the task-described isolated dispatcher plus locally run worker workflow, which avoids importing data/storage into a new ECS stack. Staging remains the ECS acceptance path.",
+      "created_at": "2026-08-10T19:44:35.686100Z"
     }
   ],
   "created_at": "2026-08-08T00:29:50.235573Z",
-  "updated_at": "2026-08-10T18:45:09.068988Z",
+  "updated_at": "2026-08-10T19:44:35.686100Z",
   "closed_at": null,
   "custom": {}
 }
