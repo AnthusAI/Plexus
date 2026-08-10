@@ -112,10 +112,16 @@
       "author": "derek.norrbom",
       "text": "Implemented the atomic submission correction: submitCommand now performs a DynamoDB PutItem with ConditionExpression attribute_not_exists(id), reads/validates the prior Task on ConditionalCheckFailed, and no longer sends a ModelTaskConditionInput to AppSync. The Lambda has only Account GetItem plus Task GetItem/PutItem. Focused tests: 35 passed; dashboard typecheck passed. The Task DynamoDB stream remains the dispatch trigger.",
       "created_at": "2026-08-10T20:01:18.694769Z"
+    },
+    {
+      "id": "1bb6630a-1306-4edd-8e13-aef7f3aea67e",
+      "author": "derek.norrbom",
+      "text": "Branch-lineage recovery is now executing on feature/command-service-integration, created from clean pre-staging-merge commit 989b7d7e4. The prior feature/command-service-consolidation branch is preserved for audit and will not be used as the integration source. Original fix branches will be merged directly into the clean branch; staging is not a source.",
+      "created_at": "2026-08-10T20:12:41.599349Z"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-08-10T20:01:18.694769Z",
+  "updated_at": "2026-08-10T20:12:41.599349Z",
   "closed_at": null,
   "custom": {}
 }
