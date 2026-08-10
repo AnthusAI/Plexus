@@ -157,3 +157,16 @@ def test_gateway_accepts_awsjson_string_payloads_from_get_task() -> None:
     record = gateway.get_command("tenant-1", "task-1")
     assert record is not None
     assert dict(record.payload) == {"argv": ("evaluate",)}
+
+
+def test_gateway_accepts_double_encoded_awsjson_payloads_from_get_task() -> None:
+    client = RecordingConditionalClient()
+    gateway = GraphQLTaskStoreGateway(client)
+    command = _command()
+
+    gateway.announce_task(command, _fields())
+    client.tasks["task-1"]["commandPayload"] = '"{\\"argv\\":[\\"evaluate\\"]}"'
+
+    record = gateway.get_command("tenant-1", "task-1")
+    assert record is not None
+    assert dict(record.payload) == {"argv": ("evaluate",)}

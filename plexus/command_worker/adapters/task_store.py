@@ -164,10 +164,13 @@ class GraphQLTaskStoreGateway:
     def _record(task: Mapping[str, Any]) -> CommandRecord:
         payload = task.get("commandPayload")
         if isinstance(payload, str):
-            try:
-                payload = json.loads(payload)
-            except json.JSONDecodeError as error:
-                raise ValueError("Task commandPayload JSON is invalid") from error
+            for _ in range(2):
+                try:
+                    payload = json.loads(payload)
+                except json.JSONDecodeError as error:
+                    raise ValueError("Task commandPayload JSON is invalid") from error
+                if not isinstance(payload, str):
+                    break
         if not isinstance(payload, Mapping):
             raise ValueError("Task commandPayload is missing or invalid")
         digest = RequestDigest(
