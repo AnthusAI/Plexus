@@ -130,10 +130,16 @@
       "author": "derek.norrbom",
       "text": "Deployment typecheck diagnosis: staging retained a partial resolution of the task-identity deny-policy change. task-iam.ts requires scope, roles, and apiGraphqlArn, while staging backend.ts passes only roles and apiGraphqlArn. The clean integration branch correctly passes backend.data.stack as the first argument and its backend typecheck passes. Promoting the clean integration branch to staging; this is a source-level correction only, with no new ECS infrastructure behavior.",
       "created_at": "2026-08-10T20:19:22.045843Z"
+    },
+    {
+      "id": "75c41b3f-7cd3-486b-8131-3425211c3a3c",
+      "author": "derek.norrbom",
+      "text": "Staging end-to-end dispatch diagnosis: the ECS command worker is healthy and received the feedback-evaluation command, but rejects it before execution because the portable command envelope payload is not a JSON object. submitCommand correctly stores Task.commandPayload as AWSJSON text; TaskStreamDispatcher forwards that text without decoding it. The dispatcher must parse the AWSJSON field when building the portable command envelope, with regression coverage for the stored-string-to-worker-object boundary.",
+      "created_at": "2026-08-10T20:51:52.363721Z"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-08-10T20:19:22.045843Z",
+  "updated_at": "2026-08-10T20:51:55.582957Z",
   "closed_at": null,
   "custom": {}
 }
