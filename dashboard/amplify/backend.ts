@@ -205,6 +205,13 @@ taskAmplifyTable.streamSpecification = {
 if (!taskTable.tableStreamArn) {
     throw new Error('TaskDispatcher requires the Task table stream ARN.');
 }
+// Preserve the exports consumed by the legacy long-lived TaskDispatcher stack
+// while CloudFormation removes that stack. Remove these only after every
+// long-lived environment has completed the command-service migration.
+if (!isSandbox) {
+    backend.data.stack.exportValue(taskTable.tableArn);
+    backend.data.stack.exportValue(taskTable.tableStreamArn);
+}
 
 const itemTable = backend.data.resources.tables.Item;
 const itemCfnTable = itemTable.node.defaultChild as dynamodb.CfnTable;
