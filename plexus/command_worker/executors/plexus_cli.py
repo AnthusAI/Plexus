@@ -7,6 +7,7 @@ from contextlib import redirect_stderr, redirect_stdout
 import io
 import logging
 import os
+from pathlib import Path
 from threading import RLock
 import sys
 
@@ -19,6 +20,8 @@ _CLI_LOCK = RLock()
 _TASK_ID_KEY = "task_id"
 _ARGV_KEY = "argv"
 _ACCOUNT_ID_ENV = "PLEXUS_ACCOUNT_ID"
+_WORKER_RUNTIME_DIR_ENV = "PLEXUS_WORKER_RUNTIME_DIR"
+_DEFAULT_WORKER_RUNTIME_DIR = "/tmp"
 _MAX_RESULT_OUTPUT_BYTES = 65_536
 _logger = logging.getLogger(__name__)
 
@@ -55,10 +58,14 @@ class PlexusCliExecutor:
             previous_argv = sys.argv
             previous_task_id = os.environ.get("PLEXUS_DISPATCH_TASK_ID")
             previous_account_id = os.environ.get(_ACCOUNT_ID_ENV)
+            previous_cwd = os.getcwd()
+            runtime_cwd = self._runtime_working_directory()
             try:
                 with CommandProgress.bind_update_callback(
                     lambda state: self._report_progress(context, state)
                 ), redirect_stdout(stdout), redirect_stderr(stderr):
+                    if runtime_cwd is not None:
+                        os.chdir(runtime_cwd)
                     sys.argv = ["plexus", *argv]
                     # The envelope is verified against the authoritative Task
                     # before execution. Bind its account ID without treating it
@@ -78,6 +85,7 @@ class PlexusCliExecutor:
                     os.environ.pop(_ACCOUNT_ID_ENV, None)
                 else:
                     os.environ[_ACCOUNT_ID_ENV] = previous_account_id
+                os.chdir(previous_cwd)
 
         return {
             "argv": list(argv),
@@ -124,6 +132,29 @@ class PlexusCliExecutor:
             db_file,
         )
         set_llm_cache(None)
+
+    @staticmethod
+    def _runtime_working_directory() -> Path | None:
+        """Choose a writable working directory for command execution.
+
+        Some command libraries initialize SQLite-backed caches with a default
+        relative path. In immutable container image directories that can become
+        read-only at runtime and trigger retry loops. Running commands from a
+        writable runtime directory keeps relative SQLite paths safe.
+        """
+        configured = os.environ.get(
+            _WORKER_RUNTIME_DIR_ENV, _DEFAULT_WORKER_RUNTIME_DIR
+        )
+        if not configured:
+            return None
+        candidate = Path(configured)
+        if candidate.is_dir() and os.access(candidate, os.W_OK):
+            return candidate
+        _logger.warning(
+            "Command worker runtime directory %s is not writable; using existing cwd",
+            configured,
+        )
+        return None
 
     @staticmethod
     def _parse_payload(
