@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b4dcc2bf-409b-43f2-9b25-1d887dc6409a",
+  "issue_id": "plx-fe04a47d-ab49-4eb9-9769-1ab3230943ea",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-11T19:49:49.476Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implement control-plane guardrails for long-running command evaluations so tasks cannot loop invisibly and cancellation becomes deterministic. Scope: enforce bounded retry budgets at command step and item level with no unbounded nested retries. Scope: add stale-progress watchdog semantics based on heartbeat and progress deltas rather than fixed wall-clock timeout. Scope: enforce cancellation SLA by acknowledging cancel request and forcing terminal cancellation when grace window expires. Scope: surface machine-readable failure and cancellation reasons in Task status updates for UI clarity. Acceptance: local tests prove retries stop at configured budget. Acceptance: local tests prove stale-progress transitions to terminal failure with explicit reason. Acceptance: local tests prove cancel request reaches terminal cancelled state even if worker dies. Acceptance: staging run demonstrates visible terminal state transitions without indefinite Processing.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Add command task runtime guardrails and cancellation finalization"
+  }
+}

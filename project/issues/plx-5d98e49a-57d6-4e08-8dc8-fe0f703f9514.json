@@ -1,7 +1,7 @@
 {
   "id": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
-  "title": "Publish reusable score processor deployment artifacts",
-  "description": "Purpose: make the score processor deployable by external infrastructure owners without embedding downstream account, pipeline, or environment details in Plexus. Definition of Done: Plexus exposes a public-safe artifact and construct contract, supports immutable image publishing, and documents the build/runtime inputs needed by downstream deployment pipelines.",
+  "title": "Publish reusable score processor deployment assets",
+  "description": "Purpose: make the score processor deployable by external infrastructure owners without embedding downstream account, pipeline, or environment details in Plexus. Definition of Done: Plexus packages a public-safe isolated score-processor Dockerfile and handler as a stable package resource, exposes reusable infrastructure constructs, and documents the immutable source-revision inputs needed by downstream release pipelines. Downstream integrations build, validate, scan, publish, and deploy their own image digest; Plexus does not operate a separate mutable artifact pipeline for them.",
   "type": "epic",
   "status": "open",
   "priority": 1,
@@ -10,9 +10,16 @@
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "9f9fae06-9d72-43cf-8152-523f3278d3c5",
+      "author": "derek.norrbom",
+      "text": "The deployment model has changed: Plexus packages the isolated score-processor Dockerfile and handler as a package resource; each downstream integration release builds, smoke-tests, scans, publishes, and deploys its own digest from one immutable Plexus revision. Do not revive an independent Plexus artifact pipeline or mutable image pointer. The epic/story scope should be reconciled to package-resource distribution and pinned downstream builds.",
+      "created_at": "2026-08-11T18:03:11.750094Z"
+    }
+  ],
   "created_at": "2026-07-15T16:30:05.711426Z",
-  "updated_at": "2026-07-15T16:30:05.711426Z",
+  "updated_at": "2026-08-11T18:03:32.428101Z",
   "closed_at": null,
   "custom": {}
 }

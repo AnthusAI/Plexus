@@ -3,16 +3,23 @@
   "title": "Reusable score processor artifact consumers deploy pinned images",
   "description": "As a platform operator, I want reusable score processor artifacts to be published and consumed by immutable reference, so that deployments can promote and roll back score processor versions deterministically.\n\nFeature: Immutable score processor deployment artifacts\n\nScenario: External infrastructure deploys a pinned score processor image\nGiven a score processor image has been built from a known Plexus source revision\nWhen downstream infrastructure requests the image by immutable tag or digest\nThen the deployed score processor version is deterministic and does not depend on mutable latest tags\n\nScenario: Plexus remains independent of downstream deployments\nGiven a downstream infrastructure owner consumes Plexus score processor artifacts\nWhen Plexus publishes or documents the artifact contract\nThen Plexus does not require downstream account IDs, pipeline names, secret paths, or environment-specific deployment configuration",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "492c51dd-d867-4378-bb1e-ec3baaca9f74",
+      "author": "derek.norrbom",
+      "text": "Superseded as written by the release-owned build model. Deterministic downstream deployment is now achieved by building from the immutable Plexus package revision in the integration pipeline, rather than consuming a Plexus-published image. Re-scope or close this story after the package-resource contract is confirmed.",
+      "created_at": "2026-08-11T18:03:11.778990Z"
+    }
+  ],
   "created_at": "2026-07-15T16:30:15.171938Z",
-  "updated_at": "2026-07-15T16:30:15.171938Z",
-  "closed_at": null,
+  "updated_at": "2026-08-11T18:03:32.497055Z",
+  "closed_at": "2026-08-11T18:03:32.497055Z",
   "custom": {}
 }
