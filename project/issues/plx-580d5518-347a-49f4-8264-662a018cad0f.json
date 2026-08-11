@@ -1,0 +1,49 @@
+{
+  "id": "plx-580d5518-347a-49f4-8264-662a018cad0f",
+  "title": "Refresh the packaged async score processor Lambda base image",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d7c9cdbd-c379-484d-a877-1189661b3f05",
+      "author": "derek.norrbom",
+      "text": "Investigation confirmed the packaged runtime pins an older Lambda Python base image. Production image scanning identified high-severity operating-system findings inherited from that base. Remediation will refresh the immutable upstream base digest, retain deterministic pinning, validate the packaged Dockerfile contract, and avoid changes to downstream deployment code.",
+      "created_at": "2026-08-11T21:18:00.435959Z"
+    },
+    {
+      "id": "c9438edf-bdbb-41c9-a90e-9cd483190b3e",
+      "author": "derek.norrbom",
+      "text": "Updated both stages of the packaged async score processor Dockerfile to the current immutable AWS Lambda Python 3.12 base manifest. Added a runtime contract assertion that both stages use that approved digest. Validation passed: python -m pytest tests/runtime/test_async_score_processor_runtime.py infrastructure/score_processor_artifacts/tests/unit/test_score_processor_artifact_pipeline_stack.py -q (10 passed).",
+      "created_at": "2026-08-11T21:18:48.838112Z"
+    },
+    {
+      "id": "2451c209-5d81-4441-8bcb-5e680a304fb8",
+      "author": "derek.norrbom",
+      "text": "The refreshed immutable Lambda Python 3.12 base-image pin and its Dockerfile contract test were merged to develop in PR #583. Targeted runtime and artifact-pipeline tests passed before merge.",
+      "created_at": "2026-08-11T21:22:08.319388Z"
+    },
+    {
+      "id": "8a46b8bf-6646-4e55-9f89-cc53b7af797f",
+      "author": "derek.norrbom",
+      "text": "Correction: PR #583 remains open in GitHub and its commit is not yet contained by develop. The task has been returned to in progress; downstream pinning will begin only after the merge is visible on develop.",
+      "created_at": "2026-08-11T21:22:37.648409Z"
+    },
+    {
+      "id": "70a8aa32-db04-4bc4-8cf5-22129738e6c5",
+      "author": "derek.norrbom",
+      "text": "Plexus PR #583 has now merged to develop at d59b790dcab0aac1eea8b247d7703d2948f4afc7. The downstream integration pin update is tracked separately.",
+      "created_at": "2026-08-11T21:32:53.675139Z"
+    }
+  ],
+  "created_at": "2026-08-11T21:17:48.110841Z",
+  "updated_at": "2026-08-11T21:32:53.700096Z",
+  "closed_at": "2026-08-11T21:32:53.700096Z",
+  "custom": {}
+}

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from importlib import import_module
 import os
+from pathlib import Path
 from socket import gethostname
 import sys
 from uuid import uuid4
@@ -29,11 +30,40 @@ _REQUIRED_ENVIRONMENT = (
     "COMMAND_WORKER_VISIBILITY_TIMEOUT_SECONDS",
 )
 _MAX_SQS_VISIBILITY_SECONDS = 12 * 60 * 60
+_RUNTIME_ENVIRONMENT_DEFAULTS = {
+    "HOME": "/tmp",
+    "XDG_CONFIG_HOME": "/tmp/.config",
+    "XDG_CACHE_HOME": "/tmp/.cache",
+    "MPLCONFIGDIR": "/tmp/matplotlib",
+    "NLTK_DATA": "/usr/local/share/nltk_data:/tmp/nltk_data",
+    "SCORECARD_CACHE_DIR": "/tmp/scorecards",
+}
+_RUNTIME_DIRECTORIES = (
+    "/tmp/.config",
+    "/tmp/.cache",
+    "/tmp/matplotlib",
+    "/tmp/nltk_data",
+    "/tmp/scorecards",
+)
 
 
 class UtcClock:
     def now(self) -> datetime:
         return datetime.now(timezone.utc)
+
+
+def configure_runtime_filesystem() -> None:
+    """Set one writable runtime contract for every command implementation.
+
+    Command workers execute Plexus, LangGraph, Tactus, and third-party score
+    implementations in the same non-root container. Standard runtime locations
+    prevent individual node types from falling back to the read-only application
+    directory for caches, tokenizer resources, or plotting configuration.
+    """
+    for name, value in _RUNTIME_ENVIRONMENT_DEFAULTS.items():
+        os.environ.setdefault(name, value)
+    for directory in _RUNTIME_DIRECTORIES:
+        Path(directory).mkdir(parents=True, exist_ok=True)
 
 
 @dataclass(frozen=True)
@@ -188,6 +218,7 @@ def main() -> None:
         )
         return
 
+    configure_runtime_filesystem()
     config = CommandWorkerRuntimeConfig.from_environment()
     app = build_celery_app(config)
     app.worker_main(
