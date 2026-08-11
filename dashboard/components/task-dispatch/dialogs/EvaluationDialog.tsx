@@ -22,11 +22,7 @@ interface EvaluationOptions {
   scorecardName: string
   scoreName: string
   numberOfSamples: number
-  samplingMethod: 'random' | 'sequential'
   loadFresh: boolean
-  randomSeed?: number
-  visualize: boolean
-  logToLanggraph: boolean
   versionId?: string
 }
 
@@ -35,11 +31,7 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialO
     scorecardName: initialOptions?.scorecardName || 'example-scorecard',
     scoreName: initialOptions?.scoreName || 'Example Score',
     numberOfSamples: initialOptions?.numberOfSamples || 10,
-    samplingMethod: initialOptions?.samplingMethod || 'random',
     loadFresh: initialOptions?.loadFresh || false,
-    randomSeed: initialOptions?.randomSeed,
-    visualize: initialOptions?.visualize || false,
-    logToLanggraph: initialOptions?.logToLanggraph || false,
     versionId: initialOptions?.versionId
   })
 
@@ -53,9 +45,7 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialO
       return
     }
 
-    const command = generator.generate(options)
-    console.log('Generated evaluation command:', command)
-    onDispatch(command, action.target)
+    onDispatch({ ...options }, action.target)
   }
 
   return (

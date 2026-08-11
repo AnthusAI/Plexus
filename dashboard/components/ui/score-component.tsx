@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronRight, Expand, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins, Trash2, Crown, Star, GitCompareArrows, History, Link as LinkIcon } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronRight, Expand, TestTube, FlaskConical, ListCheck, MessageCircleMore, IdCard, Coins, Trash2, Crown, Star, GitCompareArrows, History, Link as LinkIcon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -36,7 +36,7 @@ import { useYamlLinter, useLintMessageHandler } from '@/hooks/use-yaml-linter'
 import YamlLinterPanel from '@/components/ui/yaml-linter-panel'
 import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
 import { EvaluationDialog, FeedbackEvaluationDialog } from '@/components/task-dispatch'
-import { createTask } from '@/utils/data-operations'
+import { submitCommandAndNotify } from '@/lib/submit-command'
 import { formatAmplifyError } from '@/utils/amplify-client'
 import { getCurrentUserAttribution } from '@/utils/user-profile'
 import { resolveCreatedByUserId } from '@/utils/author-attribution'
@@ -1115,25 +1115,15 @@ const DetailContent = React.memo(({
 
   const handleTestScoreWithItem = async (itemId: string) => {
     try {
-      const command = `predict --scorecard "${scorecardName || 'Unknown'}" --score "${score.name}" --item ${itemId}`;
-      const taskInput = {
-        type: 'Score Test',
-        target: 'prediction',
-        command: command,
-        accountId: selectedAccount?.id || 'call-criteria',
-        dispatchStatus: 'PENDING',
-        status: 'PENDING'
-      };
-      
-      const task = await createTask(taskInput);
+      if (!selectedAccount?.id) throw new Error('No account is selected')
+      const task = await submitCommandAndNotify(selectedAccount.id, 'prediction.run', {
+        scorecardName: scorecardName || 'Unknown', scoreName: score.name, itemId,
+      }, onTaskCreated)
       
       if (task) {
         toast.success("Score test dispatched", {
-          description: <span className="font-mono text-sm truncate block">{command}</span>
+          description: <span className="font-mono text-sm truncate block">Prediction task announced</span>
         });
-        
-        // Notify parent component about task creation
-        onTaskCreated?.(task);
       } else {
         console.error("createTask returned null or undefined");
         toast.error("Failed to dispatch score test - no task returned");
@@ -1148,24 +1138,15 @@ const DetailContent = React.memo(({
     setIsTestDialogOpen(false);
   };
 
-  const handleEvaluationDispatch = async (command: string, target?: string) => {
+  const handleEvaluationDispatch = async (arguments_: Record<string, unknown>) => {
     try {
-      const task = await createTask({
-        type: evaluationAction?.name || 'Evaluation',
-        target: target || 'evaluation',
-        command: command,
-        accountId: selectedAccount?.id || 'call-criteria',
-        dispatchStatus: 'PENDING',
-        status: 'PENDING'
-      });
+      if (!selectedAccount?.id || !evaluationAction) throw new Error('No account or evaluation action is selected')
+      const task = await submitCommandAndNotify(selectedAccount.id, 'evaluation.accuracy', { ...arguments_, versionId: evaluationAction.versionId }, onTaskCreated)
       
       if (task) {
         toast.success(`${evaluationAction?.name} dispatched`, {
-          description: <span className="font-mono text-sm truncate block">{command}</span>
+          description: <span className="font-mono text-sm truncate block">Evaluation task announced</span>
         });
-        
-        // Notify parent component about task creation
-        onTaskCreated?.(task);
         
         // Close the dialog
         setIsEvaluationDialogOpen(false);
@@ -1178,24 +1159,15 @@ const DetailContent = React.memo(({
     }
   };
 
-  const handleFeedbackDispatch = async (command: string, target?: string) => {
+  const handleFeedbackDispatch = async (arguments_: Record<string, unknown>) => {
     try {
-      const task = await createTask({
-        type: feedbackAction?.name || 'Feedback Evaluation',
-        target: target || 'evaluation',
-        command: command,
-        accountId: selectedAccount?.id || 'call-criteria',
-        dispatchStatus: 'PENDING',
-        status: 'PENDING'
-      });
+      if (!selectedAccount?.id) throw new Error('No account is selected')
+      const task = await submitCommandAndNotify(selectedAccount.id, 'evaluation.feedback', { ...arguments_, versionId: feedbackAction?.versionId }, onTaskCreated)
       
       if (task) {
         toast.success(`${feedbackAction?.name} dispatched`, {
-          description: <span className="font-mono text-sm truncate block">{command}</span>
+          description: <span className="font-mono text-sm truncate block">Feedback evaluation task announced</span>
         });
-        
-        // Notify parent component about task creation
-        onTaskCreated?.(task);
         
         // Close the dialog
         setIsFeedbackDialogOpen(false);
@@ -1210,16 +1182,6 @@ const DetailContent = React.memo(({
 
   const handleEvaluateAccuracy = () => {
     setEvaluationAction({ name: 'Evaluate Accuracy', type: 'accuracy' });
-    setIsEvaluationDialogOpen(true);
-  };
-
-  const handleEvaluateConsistency = () => {
-    setEvaluationAction({ name: 'Evaluate Consistency', type: 'consistency' });
-    setIsEvaluationDialogOpen(true);
-  };
-
-  const handleEvaluateAlignment = () => {
-    setEvaluationAction({ name: 'Evaluate Alignment', type: 'alignment' });
     setIsEvaluationDialogOpen(true);
   };
 
@@ -1408,14 +1370,6 @@ const DetailContent = React.memo(({
                     <DropdownMenuItem onClick={handleEvaluateAccuracy}>
                       <FlaskConical className="mr-2 h-4 w-4" />
                       Evaluate Accuracy
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleEvaluateConsistency}>
-                      <FlaskRound className="mr-2 h-4 w-4" />
-                      Evaluate Consistency
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleEvaluateAlignment}>
-                      <TestTubes className="mr-2 h-4 w-4" />
-                      Evaluate Alignment
                     </DropdownMenuItem>
                     {onFeedbackAlignment && (
                       <DropdownMenuItem onClick={onFeedbackAlignment}>
@@ -2135,13 +2089,7 @@ const DetailContent = React.memo(({
           }}
           isOpen={isEvaluationDialogOpen}
           onClose={() => setIsEvaluationDialogOpen(false)}
-          onDispatch={async (command, target) => {
-            // Add version parameter to the command if this is for a specific version
-            const finalCommand = evaluationAction.versionId
-              ? `${command} --version ${evaluationAction.versionId}`
-              : command;
-            await handleEvaluationDispatch(finalCommand, target);
-          }}
+          onDispatch={handleEvaluationDispatch}
           initialOptions={{
             scorecardName: scorecardName || '',
             scoreName: score.name || '',
@@ -2162,13 +2110,7 @@ const DetailContent = React.memo(({
           }}
           isOpen={isFeedbackDialogOpen}
           onClose={() => setIsFeedbackDialogOpen(false)}
-          onDispatch={async (command, target) => {
-            // Add version parameter to the command if this is for a specific version
-            const finalCommand = feedbackAction.versionId
-              ? `${command} --version ${feedbackAction.versionId}`
-              : command;
-            await handleFeedbackDispatch(finalCommand, target);
-          }}
+          onDispatch={handleFeedbackDispatch}
           initialOptions={{
             scorecardName: scorecardName || '',
             scoreName: score.name || '',

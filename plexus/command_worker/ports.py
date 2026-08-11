@@ -203,3 +203,17 @@ class HeartbeatScheduler(Protocol):
     def start(
         self, interval: timedelta, callback: Callable[[], None]
     ) -> HeartbeatHandle: ...
+
+
+class TaskScaleInProtection(Protocol):
+    """Protect the current worker task while a claimed command is executing.
+
+    This is deliberately a small runtime port: the portable worker does not
+    need to know whether the deployment is ECS, Kubernetes, or a local test.
+    Implementations must make enablement durable before work begins and clear
+    protection after the command reaches a terminal lifecycle state.
+    """
+
+    def enable(self) -> bool: ...
+
+    def clear(self) -> bool: ...

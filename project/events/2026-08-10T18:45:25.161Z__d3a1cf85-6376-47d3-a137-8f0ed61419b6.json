@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d3a1cf85-6376-47d3-a137-8f0ed61419b6",
+  "issue_id": "plx-56360e49-53c8-4f3e-99aa-ae4adb117b59",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-10T18:45:25.161Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-aba73b78-6f78-4a38-aa4a-331bc8ebc654",
+    "priority": 2,
+    "status": "open",
+    "title": "Document sandbox command-worker workflow in SANDBOX.md"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "e213819c-4663-4db0-98b9-17bcec37c2a4",
+  "issue_id": "plx-ab71e2e1-8607-4640-9c50-0c718fbd0850",
+  "event_type": "field_updated",
+  "occurred_at": "2026-08-06T00:07:29.461Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "As a dashboard user, I want a dispatched evaluation to retain one evaluation identity from submission through completion, so that realtime task state, progress, results, and terminal outcome appear on the evaluation I started.\n\nFeature: Stable evaluation identity for dispatched runs\n\nScenario: A feedback evaluation completes successfully\nGiven the dashboard has created an evaluation and a task targeting that evaluation\nWhen a worker executes the task\nThen the worker updates that same evaluation record\nAnd the task and evaluation both become completed\nAnd the dashboard displays the terminal outcome and execution progress on the requested evaluation\n\nScenario: A feedback evaluation fails\nGiven the dashboard has created an evaluation and a task targeting that evaluation\nWhen the worker cannot execute the evaluation\nThen the worker records the failure on that same evaluation and task\nAnd the dashboard displays the failure rather than an announced pending state\n\nOut of scope: a UI-only status fallback, duplicate evaluation records, or provider-specific dispatch behavior.",
+        "to": "As a dashboard user, I want a dispatched evaluation task to show its real execution state and progress in the local dashboard, so that I can verify the portable command worker experience end to end.\n\nFeature: Local dashboard observes evaluation task execution\n\nScenario: A feedback evaluation completes successfully\nGiven the dashboard has created a feedback-evaluation task\nAnd the local dispatcher claims that task\nWhen the worker executes the evaluation\nThen the task transitions from pending to running to completed\nAnd task stages report execution progress when the command supports progress tracking\nAnd the local dashboard reflects those updates without manual reload\n\nScenario: A feedback evaluation fails\nGiven the dashboard has created a feedback-evaluation task\nWhen the worker cannot execute the evaluation\nThen the task becomes failed with its captured error\nAnd the local dashboard reflects the failure without manual reload\n\nOut of scope: changing the established model in which the evaluation command creates its evaluation record and links it to the dispatched task."
+      },
+      "title": {
+        "from": "Keep dashboard evaluation identity stable through execution",
+        "to": "Show dispatched evaluation task progress in local dashboard proof"
+      }
+    }
+  }
+}

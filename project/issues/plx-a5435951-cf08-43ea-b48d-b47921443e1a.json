@@ -1,0 +1,55 @@
+{
+  "id": "plx-a5435951-cf08-43ea-b48d-b47921443e1a",
+  "title": "Prove portable command service end to end",
+  "description": "Prove the actual portable command-service path from dashboard submission through durable announcement, Celery delivery, worker execution, lifecycle progress, Task and TaskStage projection, and terminal UI state. The existing local dispatcher is useful test support but does not satisfy this task. Require a repeatable local proof before an isolated AWS development deployment.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6e2a9882-669b-4603-92c8-bbf4a28e09b7",
+      "author": "derek.norrbom",
+      "text": "Established a physical local dashboard/control-plane proof. Started the dashboard against the isolated local proxy, created a fresh task, ran the patched local dispatcher, and verified the task read back as COMPLETED/DISPATCHED with captured output. Root-cause fixes: local smoke explicitly selects API-key auth; dispatcher runs all local tasks through sys.executable -m plexus.cli rather than PATH; successful non-procedure commands complete rather than remaining RUNNING. Validation: bash -n scripts/smoke-local-task-dispatch.sh; python -m pytest plexus/cli/shared/command_dispatch_test.py plexus/cli/shared/test_command_dispatch.py -q (22 passed); focused physical proof passed. Fresh CodeQL scan reports nine pre-existing legacy quality notices in CommandDispatch.py and no findings caused by this change.",
+      "created_at": "2026-08-05T22:56:15.433819Z"
+    },
+    {
+      "id": "699096fa-a9e0-4c75-826c-77471b9eea90",
+      "author": "derek.norrbom",
+      "text": "Diagnosis: the dashboard dev dispatcher loads the repository development environment and can silently target a remote endpoint/account instead of the isolated local control plane. A task accepted by the local dashboard therefore remains pending. Implementing a dedicated local dispatcher command that pins local endpoint, API-key auth, account, and dispatch mode; it will not inherit remote control-plane routing.",
+      "created_at": "2026-08-05T23:46:58.065747Z"
+    },
+    {
+      "id": "0cec9404-e279-444b-855c-2a9076815a06",
+      "author": "derek.norrbom",
+      "text": "Implemented dedicated local dispatcher entry point in PR #550. It pins the isolated proxy URL, API-key auth, local account, and dispatch mode after loading only optional provider credentials; it fails fast when the proxy is unavailable. Validation: shell syntax, unavailable-proxy behavior, package-script assertion, diff check, and a physical local feedback-evaluation dispatch. The physical run used the local proxy and completed its evaluation. Its Task row remains RUNNING only because the current checkout lacks the separate pending completion-status fix in PR #549; that behavior is not a failure of local routing.",
+      "created_at": "2026-08-05T23:48:50.870968Z"
+    },
+    {
+      "id": "24d91e19-7894-4598-8820-e20f0e395043",
+      "author": "derek.norrbom",
+      "text": "Physical local proof result: the dispatcher correctly claimed and completed a feedback-evaluation task. The task record is terminal (`COMPLETED`, with worker ID and timestamps), but the dashboard panel remains `Announced`/0 because it is bound to the placeholder evaluation created at submission. The CLI command creates a different evaluation record during execution and does not update the task-target evaluation. This proves dispatch/execution but exposes the remaining end-to-end contract gap: submission must establish one stable evaluation identity and execution must update that same record (or a deliberate projection must reconcile them). Do not treat a browser refresh or UI-only status fallback as a fix.",
+      "created_at": "2026-08-06T00:03:46.727982Z"
+    },
+    {
+      "id": "dfe664e2-39cc-47f8-93b0-f2abf195ac02",
+      "author": "derek.norrbom",
+      "text": "Local proof established the command worker as a dashboard-control-plane service. Follow-on AWS deployment should be a Plexus-owned companion stack, not part of the Amplify data stacks or a client scoring integration pipeline.",
+      "created_at": "2026-08-06T00:38:16.618464Z"
+    },
+    {
+      "id": "8b9f5b2b-180d-46f8-b4dd-5963f91545ac",
+      "author": "derek.norrbom",
+      "text": "## Proof boundary\n\nThe completed local feedback-evaluation run proves the dashboard Task display, local dispatcher, CLI execution, and realtime updates. It is valuable regression coverage, but it is not acceptance evidence for the portable command lifecycle. This task now remains open until the same observable flow uses the portable command service and authoritative projection.",
+      "created_at": "2026-08-06T02:16:25.536715Z"
+    }
+  ],
+  "created_at": "2026-08-05T22:49:02.682710Z",
+  "updated_at": "2026-08-06T02:16:49.930870Z",
+  "closed_at": null,
+  "custom": {}
+}

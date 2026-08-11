@@ -36,6 +36,23 @@ class Task(BaseModel):
     currentStageId: Optional[str] = None
     workerNodeId: Optional[str] = None
     dispatchStatus: Optional[str] = None
+    idempotencyKey: Optional[str] = None
+    idempotencyNamespace: Optional[str] = None
+    submittedBy: Optional[str] = None
+    tenantId: Optional[str] = None
+    idempotencyDigest: Optional[str] = None
+    digestAlgorithm: Optional[str] = None
+    digestCanonicalizationVersion: Optional[int] = None
+    lifecycleStatus: Optional[str] = None
+    leaseOwner: Optional[str] = None
+    leaseExpiresAt: Optional[datetime] = None
+    fencingToken: Optional[int] = None
+    cancellationRequestedAt: Optional[datetime] = None
+    progressFraction: Optional[float] = None
+    progressMessage: Optional[str] = None
+    progressDetails: Optional[Dict] = None
+    commandResult: Optional[Any] = None
+    commandPayload: Optional[Dict] = None
     lock_token: Optional[str] = None
     lock_expires: Optional[datetime] = None
     scorecardId: Optional[str] = None
@@ -66,6 +83,23 @@ class Task(BaseModel):
         currentStageId: Optional[str] = None,
         workerNodeId: Optional[str] = None,
         dispatchStatus: Optional[str] = None,
+        idempotencyKey: Optional[str] = None,
+        idempotencyNamespace: Optional[str] = None,
+        submittedBy: Optional[str] = None,
+        tenantId: Optional[str] = None,
+        idempotencyDigest: Optional[str] = None,
+        digestAlgorithm: Optional[str] = None,
+        digestCanonicalizationVersion: Optional[int] = None,
+        lifecycleStatus: Optional[str] = None,
+        leaseOwner: Optional[str] = None,
+        leaseExpiresAt: Optional[datetime] = None,
+        fencingToken: Optional[int] = None,
+        cancellationRequestedAt: Optional[datetime] = None,
+        progressFraction: Optional[float] = None,
+        progressMessage: Optional[str] = None,
+        progressDetails: Optional[Dict] = None,
+        commandResult: Optional[Any] = None,
+        commandPayload: Optional[Dict] = None,
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
         client: Optional['_BaseAPIClient'] = None
@@ -93,6 +127,23 @@ class Task(BaseModel):
         self.currentStageId = currentStageId
         self.workerNodeId = workerNodeId
         self.dispatchStatus = dispatchStatus
+        self.idempotencyKey = idempotencyKey
+        self.idempotencyNamespace = idempotencyNamespace
+        self.submittedBy = submittedBy
+        self.tenantId = tenantId
+        self.idempotencyDigest = idempotencyDigest
+        self.digestAlgorithm = digestAlgorithm
+        self.digestCanonicalizationVersion = digestCanonicalizationVersion
+        self.lifecycleStatus = lifecycleStatus
+        self.leaseOwner = leaseOwner
+        self.leaseExpiresAt = leaseExpiresAt
+        self.fencingToken = fencingToken
+        self.cancellationRequestedAt = cancellationRequestedAt
+        self.progressFraction = progressFraction
+        self.progressMessage = progressMessage
+        self.progressDetails = progressDetails
+        self.commandResult = commandResult
+        self.commandPayload = commandPayload
         self.scorecardId = scorecardId
         self.scoreId = scoreId
 
@@ -122,6 +173,22 @@ class Task(BaseModel):
             currentStageId
             workerNodeId
             dispatchStatus
+            idempotencyKey
+            idempotencyNamespace
+            submittedBy
+            idempotencyDigest
+            digestAlgorithm
+            digestCanonicalizationVersion
+            lifecycleStatus
+            leaseOwner
+            leaseExpiresAt
+            fencingToken
+            cancellationRequestedAt
+            progressFraction
+            progressMessage
+            progressDetails
+            commandResult
+            commandPayload
             scorecardId
             scoreId
             stages {
@@ -526,7 +593,7 @@ class Task(BaseModel):
     @classmethod
     def from_dict(cls, data: Dict[str, Any], client: '_BaseAPIClient') -> 'Task':
         # Convert datetime fields
-        for date_field in ['createdAt', 'updatedAt', 'startedAt', 'completedAt', 'estimatedCompletionAt']:
+        for date_field in ['createdAt', 'updatedAt', 'startedAt', 'completedAt', 'estimatedCompletionAt', 'leaseExpiresAt', 'cancellationRequestedAt']:
             if date_field in data:
                 data[date_field] = cls._parse_datetime(data[date_field])
 

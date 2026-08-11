@@ -12,7 +12,7 @@ import type { Schema } from '@/amplify/data/resource'
 import { ScoreComponent } from '@/components/ui/score-component'
 import { toast } from "sonner"
 import { EditableHeader } from '@/components/ui/editable-header'
-import { createTask } from '@/utils/data-operations'
+import { submitCommandAndNotify } from '@/lib/submit-command'
 import { 
   AlertDialog,
   AlertDialogAction,
@@ -515,37 +515,17 @@ export const DetailContent = React.memo(function DetailContent({
         return;
       }
 
-      // Create the prediction command using correct CLI parameter names
-      const command = `predict --scorecard "${score.name}" --score "${selectedScore.name}" --item "${testItemDialog.itemId}" --format json`;
-      
-      // Create the task
-      const task = await createTask({
-        type: 'Prediction Test',
-        target: 'prediction',
-        command: command,
-        accountId: selectedAccount?.id || 'call-criteria',
-        dispatchStatus: 'PENDING',
-        status: 'PENDING',
-        scorecardId: score.id,
-        scoreId: scoreId
-      });
-
-      // If task was created successfully, update the command to include the task-id
-      if (task) {
-        const commandWithTaskId = `predict --scorecard "${score.name}" --score "${selectedScore.name}" --item "${testItemDialog.itemId}" --format json --task-id "${task.id}"`;
-        
-        // Update the task with the command that includes task-id for progress tracking
-        // Note: This would require an updateTask call, but for now we'll use the original command
-        // The backend can handle task tracking via the task-id parameter when implemented
-      }
+      if (!selectedAccount?.id) throw new Error('No account is selected')
+      const task = await submitCommandAndNotify(selectedAccount.id, 'prediction.run', {
+        scorecardName: score.name,
+        scoreName: selectedScore.name,
+        itemId: testItemDialog.itemId,
+      }, onTaskCreated)
 
       if (task) {
         toast.success("Prediction test task created", {
-          description: <span className="font-mono text-sm truncate block">{command}</span>
+          description: <span className="font-mono text-sm truncate block">Prediction task announced</span>
         });
-        
-        // Notify parent component about task creation
-        onTaskCreated?.(task);
       } else {
         toast.error("Failed to create prediction test task");
       }

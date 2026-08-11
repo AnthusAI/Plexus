@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "99dd8c16-8203-4dc0-9b00-7adcfc97d1d7",
+  "issue_id": "plx-a5311eb5-c1c1-450f-b88a-7067696caab6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-06T00:07:29.507Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implement the approved local proof behavior from `plx-ab71e2`: local polling subscriptions must observe task/task-stage changes, and feedback evaluation commands must use the dispatcher-provided task context for progress tracking. Preserve the existing evaluation-record creation model. Validate with focused tests and a physical local dashboard run.",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-a5435951-cf08-43ea-b48d-b47921443e1a",
+    "priority": 1,
+    "status": "open",
+    "title": "Wire local evaluation dispatch progress into dashboard proof"
+  }
+}

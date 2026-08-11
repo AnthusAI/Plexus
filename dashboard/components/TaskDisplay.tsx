@@ -6,6 +6,9 @@ import type { TaskStatus } from '@/types/shared'
 import EvaluationTask from '@/components/EvaluationTask'
 import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import ReportTask from '@/components/ReportTask'
+import { Button } from '@/components/ui/button'
+import { graphqlRequest } from '@/utils/amplify-client'
+import { useAccount } from '@/app/contexts/AccountContext'
 
 interface ProcessedTaskStage {
   id: string;
@@ -108,7 +111,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     const s = String(value).toLowerCase();
     if (s === 'done') return 'completed';
     if (s === 'error') return 'failed';
-    if (s === 'pending' || s === 'running' || s === 'completed' || s === 'failed') return s as TaskStatus;
+    if (s === 'pending' || s === 'running' || s === 'completed' || s === 'failed' || s === 'cancelled') return s as TaskStatus;
     return 'pending';
   };
 
@@ -117,7 +120,23 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
 
   const [processedTask, setProcessedTask] = useState<ProcessedTask | null>(null)
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay)
+  const [cancelling, setCancelling] = useState(false)
+  const { selectedAccount } = useAccount()
   const lastStageItemsRef = useRef<any[]>([])
+  const lifecycleStatus = String((task as any)?.lifecycleStatus || '')
+  const isCommandTask = Boolean((task as any)?.commandPayload && (task as any)?.idempotencyKey)
+  const canCancel = isCommandTask && selectedAccount?.id === (task as any)?.accountId && ['ANNOUNCED', 'RUNNING', 'CANCEL_REQUESTED'].includes(lifecycleStatus)
+  const cancelCommand = async () => {
+    if (!task?.id || !selectedAccount?.id || !canCancel) return
+    setCancelling(true)
+    try {
+      await graphqlRequest(`mutation CancelCommand($accountId: ID!, $taskId: ID!) { cancelCommand(accountId: $accountId, taskId: $taskId) { taskId } }`, { accountId: selectedAccount.id, taskId: task.id })
+    } finally {
+      setCancelling(false)
+    }
+  }
+  const commandControls = canCancel ? <Button size="sm" variant="ghost" disabled={cancelling || lifecycleStatus === 'CANCEL_REQUESTED'} onClick={cancelCommand}>{lifecycleStatus === 'CANCEL_REQUESTED' ? 'Cancelling…' : 'Cancel'}</Button> : null
+  const mergedControlButtons = <>{controlButtons}{commandControls}</>
   const getStageItemsFromTask = (t: any): any[] => {
     if (!t) return [];
     const s: any = (t as any).stages;
@@ -231,6 +250,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     : (effectiveStatus === 'running') ? 'RUNNING'
     : (effectiveStatus === 'completed') ? 'COMPLETED'
     : (effectiveStatus === 'failed') ? 'FAILED'
+    : (effectiveStatus === 'cancelled') ? 'CANCELLED'
     : 'PENDING';
 
   const rawStageItemsForDisplay: any[] = stageSourceRaw.length > 0 ? stageSourceRaw : lastStageItemsRef.current;
@@ -463,7 +483,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         try { e?.preventDefault?.() } catch {}
         onClick?.()
       },
-      controlButtons,
+      controlButtons: mergedControlButtons,
       isFullWidth,
       onToggleFullWidth,
       onClose,
@@ -482,8 +502,8 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     // Construct props for ReportTask
     const reportStatusRaw = commonTaskProps.status;
     const reportStatusValue = reportStatusRaw ? reportStatusRaw.toUpperCase() : 'PENDING';
-    const reportStatusFinal = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED'].includes(reportStatusValue)
-      ? reportStatusValue as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+    const reportStatusFinal = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED'].includes(reportStatusValue)
+      ? reportStatusValue as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
       : undefined;
       
     const reportTaskProps = {
@@ -503,7 +523,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
       variant,
       isSelected,
       onClick,
-      controlButtons,
+      controlButtons: mergedControlButtons,
       isFullWidth,
       onToggleFullWidth,
       onClose,
@@ -546,6 +566,11 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   const shouldRerender = !(
     prevProps.variant === nextProps.variant &&
     prevProps.task?.id === nextProps.task?.id &&
+    (prevProps.task as any)?.status === (nextProps.task as any)?.status &&
+    (prevProps.task as any)?.lifecycleStatus === (nextProps.task as any)?.lifecycleStatus &&
+    (prevProps.task as any)?.accountId === (nextProps.task as any)?.accountId &&
+    Boolean((prevProps.task as any)?.commandPayload) === Boolean((nextProps.task as any)?.commandPayload) &&
+    Boolean((prevProps.task as any)?.idempotencyKey) === Boolean((nextProps.task as any)?.idempotencyKey) &&
     prevProps.evaluationData.status === nextProps.evaluationData.status &&
     prevProps.evaluationData.id === nextProps.evaluationData.id &&
     prevProps.evaluationData.processedItems === nextProps.evaluationData.processedItems &&

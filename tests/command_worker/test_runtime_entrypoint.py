@@ -17,8 +17,8 @@ from plexus.command_worker.runtime.entrypoint import (
 def environment(**overrides: str) -> dict[str, str]:
     values = {
         "AWS_REGION": "us-east-1",
-        "COMMAND_LIFECYCLE_TABLE_NAME": "command-state",
         "COMMAND_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123456789012/command-queue",
+        "PLEXUS_API_URL": "https://example.appsync-api.us-east-1.amazonaws.com/graphql",
         "COMMAND_WORKER_EXECUTOR_FACTORY": "test_executor:create_executor",
         "COMMAND_WORKER_LEASE_SECONDS": "300",
         "COMMAND_WORKER_HEARTBEAT_SECONDS": "60",
@@ -46,6 +46,9 @@ def test_runtime_configuration_parses_queue_and_explicit_durations() -> None:
     assert config.heartbeat_interval.total_seconds() == 60
     assert config.visibility_timeout.total_seconds() == 900
     assert config.task_name == "plexus.command_worker.execute"
+    assert (
+        config.api_url == "https://example.appsync-api.us-east-1.amazonaws.com/graphql"
+    )
 
 
 @pytest.mark.parametrize(
@@ -101,9 +104,11 @@ def test_load_executor_rejects_invalid_plugin_references(
 def test_build_celery_app_uses_predefined_queue_and_registers_portable_task(
     monkeypatch,
 ) -> None:
-    table = object()
-    resource = SimpleNamespace(Table=lambda name: table)
-    monkeypatch.setattr("boto3.resource", lambda service, region_name: resource)
+    client = SimpleNamespace(execute=lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(
+        "plexus.command_worker.runtime.entrypoint.PlexusDashboardClient",
+        lambda **_kwargs: client,
+    )
     config = CommandWorkerRuntimeConfig.from_environment(environment())
 
     app = build_celery_app(config, executor=Executor(), clock=Clock())

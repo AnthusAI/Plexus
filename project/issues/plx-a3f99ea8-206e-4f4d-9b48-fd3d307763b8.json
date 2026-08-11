@@ -1,0 +1,18 @@
+{
+  "id": "plx-a3f99ea8-206e-4f4d-9b48-fd3d307763b8",
+  "title": "Establish account-scoped dashboard authorization",
+  "description": "Define and enforce the dashboard's account-membership authorization model across Cognito/AppSync rather than relying on client-selected account state or broad authenticated/API-key access. Inventory existing access paths, choose a durable membership or claims source, enforce account-scoped reads and writes consistently, plan migration/provisioning for existing users, measure Amplify nested-stack resource impact, and validate in a sandbox before production rollout. This is a platform-wide security concern and must not be improvised inside the command-worker implementation.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-08-06T06:45:15.349370Z",
+  "updated_at": "2026-08-06T06:45:15.349370Z",
+  "closed_at": null,
+  "custom": {}
+}

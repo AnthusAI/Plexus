@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "27778089-a2e9-48bf-ab76-e812bf0cd70a",
+  "issue_id": "plx-3e468f08-0dbd-4674-809f-eaa39bf6419b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-06T19:28:59.944Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Harden the production command-worker image after the sandbox functional proof and before production deployment.\n\nScope:\n- Use separate build and runtime stages while preserving lockfile-backed installation.\n- Pin the Python runtime base by digest and document an explicit recurring update policy.\n- Add a Dockerfile-specific .dockerignore and ensure the content address covers the complete copied runtime context.\n- Exclude Poetry, compilers, Git, package-manager caches, VCS sources, and build residue from the final image.\n- Preserve non-root execution with root-owned, non-writable application code.\n- Configure writable runtime paths such as HOME, XDG_CACHE_HOME, and MPLCONFIGDIR beneath /tmp.\n- Make the image compatible with a read-only root filesystem and narrowly scoped writable temporary storage where practical.\n- Validate the declared linux/amd64 target and installed-package command-action smokes inside the final runtime stage.\n- Record final compressed/uncompressed size and vulnerability scan findings before and after, with an explicit severity disposition.\n\nNon-goals:\n- Do not add ARM64 validation without a deployment requirement.\n- Do not combine Lambda score-processor hardening into this task; its runtime constraints require separate work.\n- Do not change command behavior or delay the current sandbox architecture proof.\n\nAcceptance criteria:\n- Final runtime contains no build toolchain or Poetry.\n- The worker runs as its non-root UID with required caches writable and application code non-writable.\n- The linux/amd64 image builds reproducibly and all enabled command-action container smokes pass.\n- Read-only-root compatibility is synthesized or any unavoidable writable path is explicitly documented and scoped.\n- Before/after size and scan evidence is recorded in Kanbus.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 2,
+    "status": "open",
+    "title": "Harden the command-worker container artifact"
+  }
+}

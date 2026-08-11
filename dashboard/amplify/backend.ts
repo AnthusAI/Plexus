@@ -1,15 +1,21 @@
 import { defineBackend } from '@aws-amplify/backend';
-import { createArtifactTransferTicketsHandler, data, dispatchConsoleChatHandler } from './data/resource.js';
+import { cancelCommandHandler, createArtifactTransferTicketsHandler, data, dispatchConsoleChatHandler, submitCommandHandler } from './data/resource.js';
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments, rubricMemory } from './storage/resource.js';
+import { CommandService, isLongLivedCommandServiceEnvironment } from './command-service/resource.js';
+import { SandboxCommandWorkerStack } from './command-service/sandbox-resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
+import { denyDashboardIdentityTaskMutations, grantCancelCommandTaskAccess } from './data/task-iam.js';
 import { ConsoleChatResponderStack } from './functions/consoleRunWorker/resource.js';
 import { McpStack } from './mcp/mcp_stack.js';
 import { TopicMemoryVectorStoreStack } from './semantic-memory/vector_store_stack.js';
 import { ArnFormat, Duration, Stack } from 'aws-cdk-lib';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as backup from 'aws-cdk-lib/aws-backup';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as events from 'aws-cdk-lib/aws-events';
 
 // Create the backend
@@ -23,6 +29,8 @@ const backend = defineBackend({
     rubricMemory,
     dispatchConsoleChatHandler,
     createArtifactTransferTicketsHandler,
+    submitCommandHandler,
+    cancelCommandHandler,
 });
 
 // Enable PITR on all Amplify Data DynamoDB tables (AWS default retention is 35 days).
@@ -36,6 +44,8 @@ for (const table of Object.values(amplifyDynamoDbTables)) {
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
 const dispatchConsoleChatFunction = backend.dispatchConsoleChatHandler.resources.lambda;
 const createArtifactTransferTicketsFunction = backend.createArtifactTransferTicketsHandler.resources.lambda;
+const submitCommandFunction = backend.submitCommandHandler.resources.lambda;
+const cancelCommandFunction = backend.cancelCommandHandler.resources.lambda;
 
 // Add AppSync permissions to the getResourceByShareToken function
 if (getResourceByShareTokenFunction) {
@@ -46,6 +56,44 @@ if (getResourceByShareTokenFunction) {
         })
     );
 }
+
+if (cancelCommandFunction) {
+    const cancelCommandCfn = cancelCommandFunction.node.defaultChild as lambda.CfnFunction;
+    const api = backend.data.resources.cfnResources.cfnGraphqlApi;
+    cancelCommandCfn.addPropertyOverride('Environment.Variables.PLEXUS_API_URL', api.attrGraphQlUrl);
+    grantCancelCommandTaskAccess(cancelCommandFunction, api.attrArn);
+}
+
+if (submitCommandFunction) {
+    const submitCommandCfn = submitCommandFunction.node.defaultChild as lambda.CfnFunction;
+    submitCommandCfn.addPropertyOverride('Environment.Variables.ACCOUNT_TABLE_NAME', backend.data.resources.tables.Account.tableName);
+    submitCommandCfn.addPropertyOverride('Environment.Variables.TASK_TABLE_NAME', backend.data.resources.tables.Task.tableName);
+    submitCommandFunction.addToRolePolicy(new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ['dynamodb:GetItem'],
+        resources: [backend.data.resources.tables.Account.tableArn],
+    }));
+    submitCommandFunction.addToRolePolicy(new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem'],
+        resources: [backend.data.resources.tables.Task.tableArn],
+    }));
+}
+
+// This has to be part of the base backend rather than the long-lived command
+// stack: sandboxes expose the same AppSync API and identity-pool roles.
+const dataApi = backend.data.resources.cfnResources.cfnGraphqlApi;
+const authIamResources = backend.auth.resources as unknown as {
+    unauthenticatedUserIamRole?: iam.IRole;
+};
+denyDashboardIdentityTaskMutations(
+    backend.data.stack,
+    [
+        backend.auth.resources.authenticatedUserIamRole,
+        ...(authIamResources.unauthenticatedUserIamRole ? [authIamResources.unauthenticatedUserIamRole] : []),
+    ],
+    dataApi.attrArn,
+);
 
 if (createArtifactTransferTicketsFunction) {
     const ticketedResources = [
@@ -123,12 +171,26 @@ if (createArtifactTransferTicketsFunction) {
 const isSandbox = process.env.AWS_BRANCH === undefined &&
                   process.env.AMPLIFY_ENV === undefined;
 const enableSandboxConsoleWorker = process.env.AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER === 'true';
+const enableSandboxTaskDispatcher = process.env.AMPLIFY_ENABLE_SANDBOX_TASK_DISPATCHER === 'true';
+const enableSandboxCommandWorker = process.env.AMPLIFY_ENABLE_SANDBOX_COMMAND_WORKER === 'true';
+const sandboxCommandWorkerRegion = (process.env.AWS_REGION || process.env.AWS_REGION_NAME || '').trim();
+
+if (isSandbox && enableSandboxTaskDispatcher && enableSandboxCommandWorker) {
+    throw new Error(
+        'AMPLIFY_ENABLE_SANDBOX_TASK_DISPATCHER and AMPLIFY_ENABLE_SANDBOX_COMMAND_WORKER are mutually exclusive: ' +
+        'the sandbox command worker already includes its own TaskStreamDispatcher.'
+    );
+}
 
 if (isSandbox) {
-    if (enableSandboxConsoleWorker) {
+    if (enableSandboxCommandWorker) {
+        console.log('🏖️  Sandbox mode detected - command worker (queue, dispatcher, and Fargate service) explicitly enabled for this deployment');
+    } else if (enableSandboxConsoleWorker) {
         console.log('🏖️  Sandbox mode detected - ConsoleRunWorker explicitly enabled for this deployment');
+    } else if (enableSandboxTaskDispatcher) {
+        console.log('🏖️  Sandbox mode detected - TaskDispatcher explicitly enabled with its isolated command queue');
     } else {
-        console.log('🏖️  Sandbox mode detected - skipping TaskDispatcher and ConsoleWorker stacks');
+        console.log('🏖️  Sandbox mode detected - skipping TaskDispatcher, ConsoleWorker, and CommandWorker stacks');
     }
 }
 
@@ -143,6 +205,13 @@ taskAmplifyTable.streamSpecification = {
 };
 if (!taskTable.tableStreamArn) {
     throw new Error('TaskDispatcher requires the Task table stream ARN.');
+}
+// Preserve the exports consumed by the legacy long-lived TaskDispatcher stack
+// while CloudFormation removes that stack. Remove these only after every
+// long-lived environment has completed the command-service migration.
+if (!isSandbox) {
+    backend.stack.exportValue(taskTable.tableArn);
+    backend.stack.exportValue(taskTable.tableStreamArn);
 }
 
 const itemTable = backend.data.resources.tables.Item;
@@ -217,32 +286,117 @@ backend.auth.resources.authenticatedUserIamRole.addToPrincipalPolicy(
     })
 );
 
-// Create TaskDispatcher and ConsoleWorker stacks (skip in sandbox mode)
-let taskDispatcherStack: TaskDispatcherStack | undefined;
+// The command service is long-lived-environment only. Sandboxes intentionally
+// have no command-service VPC, dispatcher, or ECS worker.
+let sandboxTaskDispatcherStack: TaskDispatcherStack | undefined;
 let consoleRunWorkerStack: ConsoleChatResponderStack | undefined;
 
-if (!isSandbox) {
-    // Create the TaskDispatcher stack with the table reference
-    taskDispatcherStack = new TaskDispatcherStack(
-        backend.createStack('TaskDispatcherStack'),
-        'TaskDispatcher',
+const commandServiceEnvironment = resolveEnvironmentName();
+if (isLongLivedCommandServiceEnvironment(commandServiceEnvironment)) {
+    const workerImageUri = (process.env.PLEXUS_COMMAND_WORKER_IMAGE_URI || '').trim();
+    const foundationRepositoryUri = (process.env.PLEXUS_COMMAND_WORKER_FOUNDATION_REPOSITORY_URI || '').trim();
+    const amplifyDeploymentRoleArn = (process.env.PLEXUS_AMPLIFY_DEPLOYMENT_ROLE_ARN || '').trim();
+    if (!workerImageUri) {
+        throw new Error('PLEXUS_COMMAND_WORKER_IMAGE_URI must provide repository@sha256 for command-service deployment');
+    }
+    if (!foundationRepositoryUri) {
+        throw new Error('PLEXUS_COMMAND_WORKER_FOUNDATION_REPOSITORY_URI is required from the image handoff');
+    }
+    if (!amplifyDeploymentRoleArn) {
+        throw new Error('PLEXUS_AMPLIFY_DEPLOYMENT_ROLE_ARN is required for the command activity gate');
+    }
+    const dataCfnResources = backend.data.resources.cfnResources as unknown as {
+        cfnGraphqlApi?: { attrGraphQlUrl?: string; attrArn?: string };
+    };
+    const apiUrl = dataCfnResources.cfnGraphqlApi?.attrGraphQlUrl || '';
+    const apiGraphqlArn = dataCfnResources.cfnGraphqlApi?.attrArn || '';
+    if (!apiUrl || !apiGraphqlArn) {
+        throw new Error('Command service requires generated AppSync API URL and ARN');
+    }
+    const configSecretName = (
+        process.env.PLEXUS_CONFIG_SECRET_NAME || `plexus/${commandServiceEnvironment}/config`
+    ).trim();
+    const bedrockModelResources = (process.env.PLEXUS_COMMAND_WORKER_BEDROCK_MODEL_ARNS || 'arn:aws:bedrock:*::foundation-model/*')
+        .split(',').map((value) => value.trim()).filter(Boolean);
+    const servicePrefix = (process.env.PLEXUS_SERVICE_PREFIX || 'plexus').trim().toLowerCase();
+    new ssm.StringParameter(backend.data.stack, 'CommandServiceTaskTableName', {
+        parameterName: `/${servicePrefix}/${commandServiceEnvironment}/command-service/task-table-name`,
+        stringValue: taskTable.tableName,
+    });
+    new ssm.StringParameter(backend.data.stack, 'CommandServiceCurrentWorkerImage', {
+        parameterName: `/${servicePrefix}/${commandServiceEnvironment}/command-service/current-worker-image-uri`,
+        stringValue: workerImageUri,
+    });
+    new CommandService(
+        backend.data.stack,
+        'CommandService',
         {
             taskTable,
             taskTableStreamArn: taskTable.tableStreamArn,
-            celeryAwsAccessKeyId: requireTaskDispatcherEnv('CELERY_AWS_ACCESS_KEY_ID'),
-            celeryAwsSecretAccessKey: requireTaskDispatcherEnv('CELERY_AWS_SECRET_ACCESS_KEY'),
-            celeryAwsRegion: requireTaskDispatcherEnv('CELERY_AWS_REGION_NAME'),
-            celeryQueueName: requireTaskDispatcherEnv('CELERY_QUEUE_NAME'),
-            celeryResultBackendTemplate: requireTaskDispatcherEnv('CELERY_RESULT_BACKEND_TEMPLATE')
-        }
+            apiUrl,
+            apiGraphqlArn,
+            workerImageUri,
+            foundationRepositoryUri,
+            configSecretName,
+            bedrockModelResources,
+            environmentName: commandServiceEnvironment,
+            amplifyDeploymentRoleArn,
+            dataSourcesBucket: backend.dataSources.resources.bucket,
+            reportBlockDetailsBucket: backend.reportBlockDetails.resources.bucket,
+            scoreResultAttachmentsBucket: backend.scoreResultAttachments.resources.bucket,
+        },
     );
+}
 
-    // Add SQS permissions
-    taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
-        new PolicyStatement({
-            actions: ['sqs:SendMessage'],
-            resources: [process.env.CELERY_QUEUE_URL || '*']
-        })
+// The legacy dispatcher exists only as an explicit sandbox proof harness. It
+// never coexists with the long-lived command-service dispatcher and ECS worker.
+if (isSandbox && enableSandboxTaskDispatcher) {
+    sandboxTaskDispatcherStack = new TaskDispatcherStack(
+        backend.createStack('SandboxTaskDispatcherStack'),
+        'SandboxTaskDispatcher',
+        { taskTable, taskTableStreamArn: taskTable.tableStreamArn },
+    );
+}
+
+// The sandbox command worker gives a personal sandbox the same ECS worker as
+// staging/production, for fast iteration without a staging deploy. It borrows
+// the staging foundation's VPC (same AWS account) and builds its own worker
+// image asset from the current checkout, so it never touches the long-lived
+// CommandServiceStack's environment restriction or activity-gate machinery.
+if (isSandbox && enableSandboxCommandWorker) {
+    if (sandboxCommandWorkerRegion && sandboxCommandWorkerRegion !== 'us-east-1') {
+        throw new Error(
+            `SandboxCommandWorkerStack requires AWS_REGION us-east-1 to reuse staging VPC parameters; received ${sandboxCommandWorkerRegion}`,
+        );
+    }
+    const dataCfnResources = backend.data.resources.cfnResources as unknown as {
+        cfnGraphqlApi?: { attrGraphQlUrl?: string; attrArn?: string };
+    };
+    const sandboxApiUrl = dataCfnResources.cfnGraphqlApi?.attrGraphQlUrl || '';
+    const sandboxApiGraphqlArn = dataCfnResources.cfnGraphqlApi?.attrArn || '';
+    if (!sandboxApiUrl || !sandboxApiGraphqlArn) {
+        throw new Error('Unable to resolve sandbox GraphQL URL/ARN for SandboxCommandWorkerStack deployment');
+    }
+    const sandboxConfigSecretName = (process.env.PLEXUS_CONFIG_SECRET_NAME || 'plexus/staging/config').trim();
+    const sandboxBedrockModelResources = (process.env.PLEXUS_COMMAND_WORKER_BEDROCK_MODEL_ARNS || 'arn:aws:bedrock:*::foundation-model/*')
+        .split(',').map((value) => value.trim()).filter(Boolean);
+    new SandboxCommandWorkerStack(
+        // Keep the worker below the generated data stack that owns the Task
+        // table and AppSync API. A peer custom stack creates cross-stack
+        // exports that participate in Amplify's auth/data/storage cycle.
+        Stack.of(taskTable),
+        'SandboxCommandWorker',
+        {
+            taskTable,
+            taskTableStreamArn: taskTable.tableStreamArn,
+            apiUrl: sandboxApiUrl,
+            apiGraphqlArn: sandboxApiGraphqlArn,
+            bedrockModelResources: sandboxBedrockModelResources,
+            configSecretName: sandboxConfigSecretName,
+            dataSourcesBucket: backend.dataSources.resources.bucket,
+            reportBlockDetailsBucket: backend.reportBlockDetails.resources.bucket,
+            scoreResultAttachmentsBucket: backend.scoreResultAttachments.resources.bucket,
+        },
     );
 }
 
@@ -352,25 +506,6 @@ function normalizeForResourceName(value: string): string {
         .replace(/-+/g, '-')
         .replace(/^-|-$/g, '');
     return normalized || 'development';
-}
-
-function requireTaskDispatcherEnv(name: string): string {
-    const placeholder = 'WILL_BE_SET_AFTER_DEPLOYMENT';
-    const value = (process.env[name] || '').trim();
-
-    // Allow dummy values for sandbox environments
-    const isSandbox = process.env.AMPLIFY_SANDBOX === 'true' ||
-                      process.env.AWS_BRANCH === undefined ||
-                      process.env.AWS_BRANCH === 'sandbox';
-
-    if (!value || value === placeholder) {
-        if (isSandbox) {
-            console.warn(`⚠️  TaskDispatcher ${name} not set. Using dummy value for sandbox.`);
-            return 'dummy-sandbox-value';
-        }
-        throw new Error(`TaskDispatcher requires ${name}. Set it in the Amplify branch environment before deployment.`);
-    }
-    return value;
 }
 
 const environmentName = normalizeForResourceName(resolveEnvironmentName());

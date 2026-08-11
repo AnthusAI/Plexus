@@ -5,12 +5,23 @@ import ConsoleDashboard from "../console-dashboard"
 import { CONSOLE_BUILTIN_PROCEDURE_ID } from "@/components/console/constants"
 
 const mockPushState = jest.fn()
+const mockSubmitCommand = jest.fn()
+const mockToastSuccess = jest.fn()
+const mockToastError = jest.fn()
 const mockUseAccount = jest.fn(() => ({
   selectedAccount: { id: "acct-1", name: "Test Account" },
 }))
 
 jest.mock("@/app/contexts/AccountContext", () => ({
   useAccount: () => mockUseAccount(),
+}))
+
+jest.mock("@/lib/submit-command", () => ({
+  submitCommand: (...args: unknown[]) => mockSubmitCommand(...args),
+}))
+
+jest.mock("sonner", () => ({
+  toast: { success: (...args: unknown[]) => mockToastSuccess(...args), error: (...args: unknown[]) => mockToastError(...args) },
 }))
 
 jest.mock("@/components/ScorecardContext", () => ({
@@ -75,7 +86,9 @@ jest.mock("@/components/task-dispatch", () => ({
 
 describe("ConsoleDashboard", () => {
   beforeEach(() => {
+    jest.clearAllMocks()
     mockPushState.mockReset()
+    mockSubmitCommand.mockResolvedValue({ id: "task-console", accountId: "acct-1", type: "Procedure", status: "PENDING" })
     jest.spyOn(window.history, "pushState").mockImplementation(mockPushState)
     mockUseAccount.mockReturnValue({
       selectedAccount: { id: "acct-1", name: "Test Account" },
@@ -127,6 +140,24 @@ describe("ConsoleDashboard", () => {
     fireEvent.click(screen.getByText("Show Activity"))
 
     expect(screen.getByTestId("activity-dashboard")).toHaveTextContent("embedded-no-header")
+  })
+
+  it("submits the console procedure with the selected account and exposes failure", async () => {
+    render(<ConsoleDashboard />)
+
+    fireEvent.click(await screen.findByText("Run Console REPL"))
+    await waitFor(() => {
+      expect(mockSubmitCommand).toHaveBeenCalledWith("acct-1", "procedure.run", {
+        procedureId: CONSOLE_BUILTIN_PROCEDURE_ID,
+      })
+      expect(mockToastSuccess).toHaveBeenCalledWith("Console REPL run queued")
+    })
+
+    mockSubmitCommand.mockRejectedValueOnce(new Error("queue unavailable"))
+    fireEvent.click(screen.getByText("Run Console REPL"))
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith("Error queueing console REPL run")
+    })
   })
 
   it("still renders console chat when account context is missing", async () => {

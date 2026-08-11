@@ -8,6 +8,11 @@ function getProgressWidth() {
 }
 
 describe('TaskStatus', () => {
+  it('renders a cancelled task as a terminal neutral state', () => {
+    render(<TaskStatus status="CANCELLED" />)
+    expect(screen.getByText('Cancelled')).toBeInTheDocument()
+  })
+
   test('uses direct processed/total when provided', () => {
     render(
       <TaskStatus

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1fd3e328-b770-471b-bf4f-cb56d1ffa838",
+  "issue_id": "plx-2b7bcad5-3679-4742-80f4-f218ae5aaa58",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-07T05:15:06.808Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implement story `plx-22c9d5` without changing the default lightweight sandbox behavior.\n\nBounded scope:\n- define an explicit sandbox opt-in and a sanitized, collision-safe sandbox environment namespace;\n- reuse a shared non-production VPC/ECR foundation rather than provisioning one VPC per sandbox;\n- deploy sandbox-owned queue, dispatcher, ECS service, IAM, alarms, and bindings against the sandbox Task table and AppSync API;\n- require an immutable image digest and prohibit production secrets/configuration;\n- preserve the audited action authority manifest, one authoritative Task, real executor-owned TaskStages, conditional claim/fencing, cancellation, and image replacement safety;\n- ensure sandbox deletion removes only sandbox-owned application resources;\n- add executable behavior and focused synthesis/contract coverage before production edits;\n- document opt-in, image build/handoff, teardown, cost, and failure behavior.\n\nOut of scope: production deployment, staging promotion proof, extended-duration procedure proof, per-sandbox VPC/ECR foundations, static credentials, fallback dispatchers, a second lifecycle store, and unrelated scoring/container-hardening work.\n\nReturn for manager review before commit or deployment: red/green evidence, actual diff, resource/authority counts, exact local validation, proposed commit boundary, and a bounded live sandbox proof plan.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement opt-in sandbox command-service deployment"
+  }
+}

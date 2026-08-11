@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "288d3818-4596-4aa2-aaf6-33b9b1314c18",
+  "issue_id": "plx-6691d41c-f37c-41a7-907c-342a649e67f6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-06T18:52:32.589Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Investigate the generic LangGraph/Jinja rendering boundary using repository code, sanitized fixtures, synthetic experiments, Git history, and primary upstream sources.\n\nDeliverable: document required template capabilities, exposed data types and trust boundaries, behavior of the restricted environment, risks of a global unrestricted-environment override, and a recommended supported design with alternatives.\n\nConstraints: no production fix, no production configuration inspection or edits, no client information, and no deployment activity.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-0ca6fcfc-e975-4241-a1b5-d79cf8d84a54",
+    "priority": 2,
+    "status": "open",
+    "title": "Investigate safe dynamic-state access in YAML score templates"
+  }
+}

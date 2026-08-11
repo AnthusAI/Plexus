@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "0f160456-4446-471d-82df-0bb6f6aecbfe",
+  "issue_id": "plx-7e38bfe4-886c-42d0-8be2-0ba9c95e2bae",
+  "event_type": "field_updated",
+  "occurred_at": "2026-08-06T02:16:07.297Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Add the Plexus-owned ECR repository and image pipeline for the portable command-worker artifact. Build the package Dockerfile from the source revision, publish immutable commit-addressed images, expose the resolved digest as deployment input, and validate the synthesized IAM and image build configuration. Do not update Amplify environment variables or deploy consumer-specific resources.",
+        "to": "Produce a genuinely buildable Plexus-owned command-worker container artifact and immutable publication path. The image must install the executor dependencies needed by supported dashboard commands, pass a real container build and startup smoke test, and publish a digest consumed by the companion deployment. Do not modify the mixed infrastructure application, Amplify environment variables, or existing production resources."
+      }
+    }
+  }
+}

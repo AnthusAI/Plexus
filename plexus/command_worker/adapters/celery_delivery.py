@@ -1,9 +1,7 @@
-"""Celery delivery adapter for the portable command worker.
+"""Typed-envelope Celery delivery adapter for the Task-backed command worker.
 
-This module intentionally does not alter the legacy ``plexus.execute_command``
-task. New deployments register a separately named task and provide their own
-broker configuration. Celery remains the delivery mechanism; lifecycle safety
-comes from the provider-neutral ``CommandWorker`` and its durable store.
+Celery is transport only; Task conditional claims and fencing provide lifecycle
+safety and absorb the stream transport's at-least-once delivery semantics.
 """
 
 from __future__ import annotations
@@ -15,7 +13,14 @@ from celery import Celery
 from celery.exceptions import Reject
 
 from ..models import CommandEnvelope
-from ..ports import Clock, Delivery, Executor, HeartbeatScheduler, LifecycleStore
+from ..ports import (
+    Clock,
+    Delivery,
+    Executor,
+    HeartbeatScheduler,
+    LifecycleStore,
+    TaskScaleInProtection,
+)
 from ..worker import CommandWorker
 
 
@@ -63,6 +68,7 @@ def register_portable_command_task(
     lease_duration: timedelta,
     heartbeat_interval: timedelta | None = None,
     heartbeat_scheduler: HeartbeatScheduler | None = None,
+    task_scale_in_protection: TaskScaleInProtection | None = None,
 ) -> Any:
     """Register an isolated, late-acknowledged Celery command task.
 
@@ -81,6 +87,7 @@ def register_portable_command_task(
         lease_duration=lease_duration,
         heartbeat_interval=heartbeat_interval,
         heartbeat_scheduler=heartbeat_scheduler,
+        task_scale_in_protection=task_scale_in_protection,
     )
 
     @app.task(

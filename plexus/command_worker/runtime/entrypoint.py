@@ -8,18 +8,21 @@ from datetime import datetime, timedelta, timezone
 from importlib import import_module
 import os
 from socket import gethostname
+import sys
 from uuid import uuid4
 
 from celery import Celery
 
 from ..adapters.celery_delivery import register_portable_command_task
-from ..adapters.dynamodb_lifecycle import DynamoDBLifecycleStore
+from ..adapters.ecs_task_protection import EcsAgentTaskScaleInProtection
+from ..adapters.task_store import GraphQLTaskStoreGateway, TaskBackedCommandStore
+from plexus.dashboard.api.client import PlexusDashboardClient
 from ..ports import Clock, Executor
 
 _REQUIRED_ENVIRONMENT = (
     "AWS_REGION",
-    "COMMAND_LIFECYCLE_TABLE_NAME",
     "COMMAND_QUEUE_URL",
+    "PLEXUS_API_URL",
     "COMMAND_WORKER_EXECUTOR_FACTORY",
     "COMMAND_WORKER_LEASE_SECONDS",
     "COMMAND_WORKER_HEARTBEAT_SECONDS",
@@ -38,7 +41,7 @@ class CommandWorkerRuntimeConfig:
     """Validated runtime bindings supplied by the deployment environment."""
 
     region: str
-    lifecycle_table_name: str
+    api_url: str
     queue_url: str
     queue_name: str
     executor_factory: str
@@ -85,7 +88,7 @@ class CommandWorkerRuntimeConfig:
 
         return cls(
             region=values["AWS_REGION"].strip(),
-            lifecycle_table_name=values["COMMAND_LIFECYCLE_TABLE_NAME"].strip(),
+            api_url=values["PLEXUS_API_URL"].strip(),
             queue_url=queue_url,
             queue_name=queue_name,
             executor_factory=values["COMMAND_WORKER_EXECUTOR_FACTORY"].strip(),
@@ -141,8 +144,6 @@ def build_celery_app(
 ) -> Celery:
     """Build the Celery app and register the portable command task."""
 
-    import boto3
-
     celery_app = Celery(
         "plexus.command_worker", broker="sqs://", backend="cache+memory://"
     )
@@ -155,24 +156,37 @@ def build_celery_app(
             "visibility_timeout": int(config.visibility_timeout.total_seconds()),
         },
     )
-    table = boto3.resource("dynamodb", region_name=config.region).Table(
-        config.lifecycle_table_name
+    client = PlexusDashboardClient(
+        api_url=config.api_url,
+        auth_mode="iam",
     )
+    lifecycle = TaskBackedCommandStore(GraphQLTaskStoreGateway(client), {})
     register_portable_command_task(
         celery_app,
         task_name=config.task_name,
-        lifecycle=DynamoDBLifecycleStore(table),
+        lifecycle=lifecycle,
         executor=executor or load_executor(config.executor_factory),
         clock=clock or UtcClock(),
         owner_factory=lambda: f"{gethostname()}:{os.getpid()}:{uuid4()}",
         lease_duration=config.lease_duration,
         heartbeat_interval=config.heartbeat_interval,
+        task_scale_in_protection=(
+            EcsAgentTaskScaleInProtection(os.environ["ECS_AGENT_URI"])
+            if os.environ.get("ECS_AGENT_URI", "").strip()
+            else None
+        ),
     )
     return celery_app
 
 
 def main() -> None:
     """Run the named command queue until the container is stopped by ECS."""
+
+    if any(argument in {"-h", "--help"} for argument in sys.argv[1:]):
+        print(
+            "Usage: plexus-command-worker\n\nRun the configured command-worker queue."
+        )
+        return
 
     config = CommandWorkerRuntimeConfig.from_environment()
     app = build_celery_app(config)

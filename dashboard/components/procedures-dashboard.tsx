@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/optimizer-results-utils"
 import { getCurrentUserAttribution } from "@/utils/user-profile"
 import { resolveCreatedByUserId } from "@/utils/author-attribution"
+import { submitCommand } from '@/lib/submit-command'
 
 type Procedure = Schema['Procedure']['type']
 type Task = Schema['Task']['type']
@@ -754,99 +755,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     setShowTemplateSelector(true)
   }
 
-  // Helper function to create Task with stages for a procedure
-  const createTaskWithStagesForProcedure = async (
-    procedureId: string,
-    accountId: string,
-    runParameters?: Record<string, any>,
-  ) => {
-    console.log('[createTaskWithStagesForProcedure] Starting for procedure:', procedureId, 'account:', accountId)
-    
-    // Create Task
-    const metadata: Record<string, any> = {
-      type: 'Procedure',
-      procedure_id: procedureId,
-      task_type: 'Procedure',
-      dispatch_mode: 'local',
-    }
-    if (runParameters && Object.keys(runParameters).length > 0) {
-      metadata.run_parameters = runParameters
-    }
-
-    const taskInput = {
-      accountId: accountId,
-      type: 'Procedure',
-      status: 'PENDING',
-      target: `procedure/run/${procedureId}`,
-      command: `procedure run ${procedureId}`,
-      description: `Procedure workflow for ${procedureId}`,
-      dispatchStatus: 'PENDING',
-      metadata: JSON.stringify(metadata)
-    }
-
-    const taskResult = await getAmplifyClient().graphql({
-      query: `
-        mutation CreateTask($input: CreateTaskInput!) {
-          createTask(input: $input) {
-            id
-            accountId
-            type
-            status
-          }
-        }
-      `,
-      variables: { input: taskInput }
-    })
-
-    const task = (taskResult as any).data?.createTask
-    console.log('[createTaskWithStagesForProcedure] Task created:', task)
-    
-    if (!task) {
-      console.error('[createTaskWithStagesForProcedure] No task returned from mutation')
-      throw new Error('Failed to create Task')
-    }
-
-    // Define stages matching the state machine
-    const stages = [
-      { name: 'Start', order: 1, statusMessage: 'Initializing procedure...' },
-      { name: 'Evaluation', order: 2, statusMessage: 'Running initial evaluation...' },
-      { name: 'Hypothesis', order: 3, statusMessage: 'Analyzing results and generating hypotheses...' },
-      { name: 'Test', order: 4, statusMessage: 'Testing hypothesis with score version...' },
-      { name: 'Insights', order: 5, statusMessage: 'Analyzing test results and generating insights...' }
-    ]
-
-    // Create each stage
-    console.log('[createTaskWithStagesForProcedure] Creating', stages.length, 'stages (Start, Evaluation, Hypothesis, Test, Insights) for task:', task.id)
-    for (const stage of stages) {
-      console.log('[createTaskWithStagesForProcedure] Creating stage:', stage.name, 'order:', stage.order)
-      await getAmplifyClient().graphql({
-        query: `
-          mutation CreateTaskStage($input: CreateTaskStageInput!) {
-            createTaskStage(input: $input) {
-              id
-              taskId
-              name
-              order
-              status
-            }
-          }
-        `,
-        variables: {
-          input: {
-            taskId: task.id,
-            name: stage.name,
-            order: stage.order,
-            status: 'PENDING',
-            statusMessage: stage.statusMessage
-          }
-        }
-      })
-    }
-
-    console.log(`✓ Created Task ${task.id} with ${stages.length} stages (Start, Evaluation, Hypothesis, Test, Insights)`)
-    return task
-  }
-
   const handleCreateProcedureFromTemplate = async (template: Schema['Procedure']['type'], parameters?: Record<string, any>) => {
     if (!selectedAccount?.id) {
       toast.error('No account selected')
@@ -949,17 +857,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       if (newProcedure) {
         console.log('Procedure created successfully:', newProcedure)
         
-        // Create Task with stages for the new procedure
-        let createdTask = null
-        try {
-          console.log('Creating Task with stages for procedure:', newProcedure.id)
-          createdTask = await createTaskWithStagesForProcedure(newProcedure.id, selectedAccount.id, parameters)
-          console.log('✓ Task and stages created:', createdTask)
-        } catch (taskError) {
-          console.error('Failed to create Task for procedure:', taskError)
-          // Don't fail the whole operation - procedure is still created
-          toast.warning('Procedure created but task stages may not be set up')
-        }
+        await submitCommand(selectedAccount.id, 'procedure.run', { procedureId: newProcedure.id, parameters: parameters || {} })
         
         // Small delay to ensure database writes complete
         await new Promise(resolve => setTimeout(resolve, 500))

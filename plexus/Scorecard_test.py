@@ -158,6 +158,61 @@ async def test_get_score_result_accumulates_only_incremental_cost_for_cached_sco
     assert len(scorecard.cost_components) == 2
     assert sum(Decimal(str(component["usd"])) for component in scorecard.cost_components) == Decimal("0.30")
 
+
+@pytest.mark.asyncio
+async def test_get_score_result_uses_metadata_account_key_for_langgraph_without_env(monkeypatch):
+    class MockLangGraphScore:
+        @classmethod
+        async def create(cls, **_kwargs):
+            return cls()
+
+        async def predict(self, *, context, model_input):
+            return Score.Result(
+                parameters=Score.Parameters(name="LangGraphLike", id="score-1"),
+                value="Pass",
+                metadata={"text": model_input.text},
+            )
+
+        def get_accumulated_costs(self):
+            return {
+                "prompt_tokens": 1,
+                "completion_tokens": 1,
+                "cached_tokens": 0,
+                "llm_calls": 1,
+                "input_cost": Decimal("0.00"),
+                "output_cost": Decimal("0.00"),
+                "total_cost": Decimal("0.00"),
+            }
+
+    class Registry:
+        @staticmethod
+        def get(_score_name):
+            return MockLangGraphScore
+
+        @staticmethod
+        def get_properties(score_name):
+            return {"name": score_name, "id": "score-1"}
+
+    monkeypatch.delenv("PLEXUS_ACCOUNT_KEY", raising=False)
+
+    scorecard = Scorecard(scorecard="TestScorecard")
+    scorecard.properties = {"name": "TestScorecard", "id": "scorecard-1"}
+    scorecard.score_registry = Registry()
+
+    with patch("plexus.Scorecard._is_lang_graph_score_instance", return_value=True):
+        results = await scorecard.get_score_result(
+            scorecard="TestScorecard",
+            score="LangGraphLike",
+            text="Sample text",
+            metadata={"account_key": "acct-key"},
+            modality="test",
+            results=[],
+        )
+
+    assert len(results) == 1
+    assert isinstance(results[0], Score.Result)
+    assert results[0].value == "Pass"
+
 # Remove unittest.TestCase since we're using pure pytest style
 class TestScorecard:
 

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0497fd97-0b10-4520-b57c-07a4e4bae897",
+  "issue_id": "plx-925843ac-1cdb-4b8b-b8d2-cdd47d5ec4ee",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-06T21:30:04.113Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": "derek.norrbom",
+    "description": "Concise continuation checkpoint for completing the command service without replaying the full implementation history.\n\nCurrent branch: feature/command-service-consolidation, based on develop.\nAccepted commits: e133d4b5e (runtime dependency closure/container slice) and 8e39fb2 (trusted account binding). Earlier foundation commits remain on the branch and require integrated review rather than historical reconstruction.\n\nAccepted uncommitted design:\n- One Task record is authoritative command state; no second state table or projection bridge.\n- Celery remains the portable delivery adapter.\n- Real executors own TaskStage UI detail; the lifecycle gateway does not synthesize stages.\n- Existing API-key/Cognito TaskStage writers remain supported.\n- ECS receives only the six required Task/TaskStage AppSync roots.\n- Structured registered actions only; server builds argv.\n- Production and staging use separate Plexus-owned command-service foundations and Amplify-owned application stacks. Sandbox remains opt-in and lightweight.\n\nRemaining outcome:\n1. Review and finish the immutable deployed-image state/handoff so deferred ECS replacement retains the active digest and later safely advances it.\n2. Inventory the mixed working tree into one cohesive integration manifest; exclude editor settings and unrelated changes.\n3. Run focused validation, then review the complete diff for architecture, authorization, compatibility, resource counts, and least privilege.\n4. Commit the cohesive integration slice without rewriting branch history.\n5. Only after manager approval, deploy the retained sandbox and prove authenticated submission, stream dispatch, single claim/fencing, Task/TaskStage realtime progress, cancellation, completion/failure, duplicate handling, and existing Task writers.\n6. Keep the long-running procedure proof tracked separately in plx-b94696 and container hardening follow-up in plx-3e468f.\n\nConstraints:\n- No client information. No legacy fallback paths. No second authoritative store. No arbitrary CLI arguments. No static credentials. No production deployment or PR until the sandbox proof and manager review pass. Preserve existing deployed dashboard behavior. Prefer focused tests; do not rerun broad suites without a changed risk boundary.",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-8350176a-8d4f-4581-bfb1-0792612e47a7",
+    "priority": 1,
+    "status": "open",
+    "title": "Complete integrated command service deployment proof"
+  }
+}

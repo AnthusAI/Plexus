@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6aa09f42-823e-414c-af0e-4d0222285778",
+  "issue_id": "plx-8350176a-8d4f-4581-bfb1-0792612e47a7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-06T02:16:12.595Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implement the missing control-plane integration for story plx-287b0f. A dashboard command must create one durable portable command with a typed envelope and stable Task identity; dispatch it through the selected Celery adapter; project authoritative progress, output, failure, cancellation, and terminal state into that same Task and its TaskStages; and tolerate idempotent replay. Preserve the existing Task UI contract. Do not use the legacy local dispatcher as the production bridge, add static cloud credentials, or introduce fallback routing.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Connect dashboard tasks to the portable command lifecycle"
+  }
+}

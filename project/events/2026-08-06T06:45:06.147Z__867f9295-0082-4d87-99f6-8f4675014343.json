@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "867f9295-0082-4d87-99f6-8f4675014343",
+  "issue_id": "plx-8350176a-8d4f-4581-bfb1-0792612e47a7",
+  "event_type": "field_updated",
+  "occurred_at": "2026-08-06T06:45:06.147Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Implement one canonical dashboard command path using the existing Task model as authoritative state. The dashboard server runtime must authenticate the caller, derive accountId and submittedBy, validate the registered command target, compute deterministic Task identity and request digest, and conditionally create or return the Task through the existing GraphQL API. The Task stream dispatcher must publish the structured Celery envelope exactly as an at-least-once transport using workload identity; worker fencing makes duplicate delivery safe. The always-on worker claims and updates the same Task through conditional GraphQL mutations, and subscriptions expose progress and terminal state. Remove dual legacy/portable task names, statuses, branches, and unused Python submission wiring. Do not add another state store, projector, custom GraphQL resolver, static credentials, or fallback path. Prove the dashboard server route, dispatch transition, claim/fencing, cancellation, completion, and realtime update in the sandbox before this task is complete.",
+        "to": "Implement one canonical dashboard command path using the existing Task model as authoritative state. An authenticated submitCommand resolver validates a registered structured action, applies the dashboard's current authenticated account-access semantics, computes deterministic Task identity and request digest, and conditionally creates the Task. Generic Task operations remain available for existing non-command behavior, while command transport/lifecycle/fence fields are read-only to user-pool and API-key callers and writable through IAM only when the caller also has a narrowly scoped principal policy. The Task stream dispatcher publishes one structured Celery envelope using workload identity; worker fencing absorbs duplicate delivery. The always-on worker claims and updates the same Task through conditional IAM-authenticated GraphQL mutations, and subscriptions expose progress and terminal state. Remove dual task paths, the separate command state table, projection bridges, static credentials, and fallbacks. Prove resource counts, authorization denial/allow cases, submission, stream dispatch, claim/fencing, cancellation, completion, and realtime updates in the sandbox before completion."
+      }
+    }
+  }
+}

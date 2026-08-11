@@ -83,8 +83,60 @@ silently use production model credentials.
 - **No TaskDispatcher in sandbox**: TaskDispatcher remains disabled in sandbox mode.
   Do not dispatch reports/evaluations for completion testing in this setup;
   they will create durable `PENDING` tasks but no worker can consume them.
-  Full async acceptance testing requires a separate, isolated Celery queue,
-  result backend, dispatcher, and consumer.
+  Full async acceptance testing requires the command worker below.
+
+## Full Async Command-Service Iteration in Sandboxes
+
+Reports, evaluations, and other Celery-dispatched Task work need a real
+queue, dispatcher, and worker — not just the Data API. Rather than build a
+separate local-process worker, the sandbox command worker deploys the same
+ECS Fargate worker staging/production use, so you get real end-to-end
+iteration (dashboard submission → Task → dispatcher → SQS → ECS worker →
+lifecycle) without opening a PR to staging first.
+
+### 1. Start Sandbox with the Command Worker
+
+```bash
+cd dashboard
+./scripts/start-sandbox-with-command-worker.sh --region us-west-2
+```
+
+This script:
+- Sets `AMPLIFY_ENABLE_SANDBOX_COMMAND_WORKER=true`
+- Runs `npx ampx sandbox`
+- Lets CDK build the worker image from the current checkout as a Docker
+  asset (`plexus/command_worker/Dockerfile`), so the sandbox worker runs
+  your local code — not a pinned staging digest
+- Borrows staging's VPC via the same SSM contract
+  `CommandServiceStack` uses (`/plexus/staging/command-service/...`).
+  Same AWS account, no sandbox-specific network to provision or tear down.
+
+You can pass normal sandbox args after `--`, e.g. `-- --identifier my-sandbox`.
+
+### 2. Infrastructure Requirements
+
+- **Docker available locally**: the worker image is built as a CDK asset
+- **Staging foundation must exist**: the sandbox VPC lookup reads staging's
+  published SSM parameters (`ServiceNetworkFoundationStack` for staging must
+  already be deployed — it normally is)
+- **Secrets Manager**: defaults to `plexus/staging/config`; refuses
+  `plexus/production/config`
+
+### 3. What This Does Not Cover
+
+Staging remains the final ECS/IAM/network acceptance environment. This
+sandbox worker validates command-service *behavior* fast; it does not
+validate the staging/production foundation deployment pipeline, the
+digest-handoff activity gate, or the long-lived `CommandServiceStack`'s
+environment restriction — those still need a real staging deploy before
+release.
+
+### Mutually exclusive with the dispatcher-only proof harness
+
+`AMPLIFY_ENABLE_SANDBOX_TASK_DISPATCHER` (a narrower flag that deploys only
+the queue/dispatcher, no ECS worker) and
+`AMPLIFY_ENABLE_SANDBOX_COMMAND_WORKER` cannot both be set — the command
+worker already includes its own dispatcher.
 
 ## Sandbox Detection Logic
 

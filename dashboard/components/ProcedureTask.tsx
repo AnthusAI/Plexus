@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
+import { branchProcedureRun, continueProcedureRun } from '@/lib/procedure-submission'
 import {
   Accordion,
   AccordionContent,
@@ -821,59 +822,6 @@ export default function ProcedureTask({
     return Array.from(index.values()).sort((a, b) => b.totalReferenced - a.totalReferenced)
   }, [evaluationBreakdownRows, inferenceBreakdownRows])
 
-  // ---- Shared helpers for creating a Task and dispatching a procedure run ----
-  const createTaskWithStages = async (procedureId: string, runParameters?: ParameterValue) => {
-    const accountId = (procedure as any).accountId
-    if (!accountId) throw new Error('No accountId on procedure')
-    const metadata: Record<string, any> = {
-      type: 'Procedure',
-      procedure_id: procedureId,
-      dispatch_mode: 'local',
-    }
-    if (runParameters && Object.keys(runParameters).length > 0) {
-      metadata.run_parameters = runParameters
-    }
-    const taskResult = await getAmplifyClient().graphql({
-      query: `
-        mutation CreateTask($input: CreateTaskInput!) {
-          createTask(input: $input) { id accountId type status }
-        }
-      `,
-      variables: {
-        input: {
-          accountId,
-          type: 'Procedure',
-          status: 'PENDING',
-          target: `procedure/run/${procedureId}`,
-          command: `procedure run ${procedureId}`,
-          description: `Procedure workflow for ${procedureId}`,
-          dispatchStatus: 'PENDING',
-          metadata: JSON.stringify(metadata)
-        }
-      }
-    })
-    const task = (taskResult as any).data?.createTask
-    if (!task) throw new Error('Failed to create Task')
-    const stages = [
-      { name: 'Start', order: 1, statusMessage: 'Initializing...' },
-      { name: 'Evaluation', order: 2, statusMessage: 'Running evaluation...' },
-      { name: 'Hypothesis', order: 3, statusMessage: 'Generating hypotheses...' },
-      { name: 'Test', order: 4, statusMessage: 'Testing...' },
-      { name: 'Insights', order: 5, statusMessage: 'Generating insights...' },
-    ]
-    for (const stage of stages) {
-      await getAmplifyClient().graphql({
-        query: `
-          mutation CreateTaskStage($input: CreateTaskStageInput!) {
-            createTaskStage(input: $input) { id }
-          }
-        `,
-        variables: { input: { taskId: task.id, name: stage.name, order: stage.order, status: 'PENDING', statusMessage: stage.statusMessage } }
-      })
-    }
-    return task
-  }
-
   const updateProcedureYaml = async (procedureId: string, newYaml: string) => {
     await getAmplifyClient().graphql({
       query: `
@@ -889,48 +837,32 @@ export default function ProcedureTask({
 
   // ---- Continue (same procedure, more cycles) ----
   const handleContinue = async () => {
-    if (!loadedYaml) {
-      toast.error('Procedure configuration not loaded yet')
-      return
-    }
+    if (!loadedYaml) return toast.error('Procedure configuration not loaded yet')
     setIsContinuing(true)
     try {
       const parsed = yaml.load(loadedYaml) as any
       const additionalCycles = parseInt(continueAdditionalCycles, 10) || 3
-      const newMaxIterations = completedCycleCount + additionalCycles
-
-      // Update params in YAML
       if (parsed.params && typeof parsed.params === 'object') {
-        if (parsed.params.max_iterations) parsed.params.max_iterations.value = newMaxIterations
-        if (continueHint.trim()) {
-          if (!parsed.params.hint) parsed.params.hint = { type: 'string', required: false }
-          parsed.params.hint.value = continueHint.trim()
-        }
+        if (parsed.params.max_iterations) parsed.params.max_iterations.value = completedCycleCount + additionalCycles
+        if (continueHint.trim()) (parsed.params.hint ||= { type: 'string', required: false }).value = continueHint.trim()
       }
       const updatedYaml = yaml.dump(parsed, { lineWidth: -1 })
-      await updateProcedureYaml(procedure.id, updatedYaml)
-      setLoadedYaml(updatedYaml)
-
-      const runParameters = extractRunParametersFromYaml(updatedYaml)
-      const task = await createTaskWithStages(procedure.id, runParameters)
-      const resp = await fetch('/api/console/procedure-continue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ procedureId: procedure.id, taskId: task.id }),
+      const accountId = (procedure as any).accountId
+      if (!accountId) throw new Error('No accountId on procedure')
+      const parameters = extractRunParametersFromYaml(updatedYaml)
+      await continueProcedureRun({
+        accountId,
+        procedureId: procedure.id,
+        parameters,
+        updateConfiguration: async () => {
+          await updateProcedureYaml(procedure.id, updatedYaml)
+          setLoadedYaml(updatedYaml)
+        },
       })
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}))
-        throw new Error((err as any).error || `HTTP ${resp.status}`)
-      }
-      setShowContinueDialog(false)
-      setContinueHint('')
+      setShowContinueDialog(false); setContinueHint('')
       toast.success(`Continuing optimization for ${additionalCycles} more cycle${additionalCycles !== 1 ? 's' : ''}`)
-    } catch (err) {
-      console.error('Continue failed:', err)
-      toast.error(`Failed to continue: ${err instanceof Error ? err.message : String(err)}`)
-    } finally {
-      setIsContinuing(false)
-    }
+    } catch (err) { toast.error(`Failed to continue: ${err instanceof Error ? err.message : String(err)}`) }
+    finally { setIsContinuing(false) }
   }
 
   // ---- Branch from a specific cycle ----
@@ -939,81 +871,38 @@ export default function ProcedureTask({
     setIsBranching(true)
     try {
       const additionalCycles = parseInt(branchAdditionalCycles, 10) || 3
-
-      // Create a new procedure with the same YAML but reset max_iterations
       const parsed = loadedYaml ? yaml.load(loadedYaml) as any : {}
-      const newMaxIterations = branchFromCycle + additionalCycles
       if (parsed.params && typeof parsed.params === 'object') {
-        if (parsed.params.max_iterations) parsed.params.max_iterations.value = newMaxIterations
-        if (branchHint.trim()) {
-          if (!parsed.params.hint) parsed.params.hint = { type: 'string', required: false }
-          parsed.params.hint.value = branchHint.trim()
-        }
+        if (parsed.params.max_iterations) parsed.params.max_iterations.value = branchFromCycle + additionalCycles
+        if (branchHint.trim()) (parsed.params.hint ||= { type: 'string', required: false }).value = branchHint.trim()
       }
       const branchYaml = yaml.dump(parsed, { lineWidth: -1 })
-
-      // Create new procedure record
       const accountId = (procedure as any).accountId
       if (!accountId) throw new Error('No accountId on procedure')
-      const attribution = await getCurrentUserAttribution()
-      const createResult = await getAmplifyClient().graphql({
-        query: `
-          mutation CreateProcedure($input: CreateProcedureInput!) {
-            createProcedure(input: $input) {
-              ${PROCEDURE_CARD_FIELDS}
-            }
+      await branchProcedureRun({
+        accountId,
+        sourceProcedureId: procedure.id,
+        truncateToCycle: branchFromCycle,
+        parameters: extractRunParametersFromYaml(branchYaml),
+        createBranch: async () => {
+          const attribution = await getCurrentUserAttribution()
+          const createResult = await getAmplifyClient().graphql({ query: `mutation CreateProcedure($input: CreateProcedureInput!) { createProcedure(input: $input) { ${PROCEDURE_CARD_FIELDS} } }`, variables: { input: { accountId, name: (procedure as any).name ? `${(procedure as any).name} (branch from cycle ${branchFromCycle})` : `Branch from cycle ${branchFromCycle}`, code: branchYaml, featured: false, ...attribution } } })
+          const newProcedure = (createResult as any).data?.createProcedure
+          if (!newProcedure?.id) throw new Error('Failed to create branch procedure')
+          return newProcedure.id
+        },
+        cloneState: async (request) => {
+          const cloneResp = await fetch('/api/console/procedure-clone-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) })
+          if (!cloneResp.ok) {
+            const error = await cloneResp.json().catch(() => ({}))
+            throw new Error((error as any).error || `State clone HTTP ${cloneResp.status}`)
           }
-        `,
-        variables: {
-          input: {
-            accountId,
-            name: (procedure as any).name ? `${(procedure as any).name} (branch from cycle ${branchFromCycle})` : `Branch from cycle ${branchFromCycle}`,
-            code: branchYaml,
-            featured: false,
-            ...attribution,
-          }
-        }
+        },
       })
-      const newProcedure = (createResult as any).data?.createProcedure
-      if (!newProcedure) throw new Error('Failed to create branch procedure')
-
-      // Clone state via CLI
-      const cloneResp = await fetch('/api/console/procedure-clone-state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sourceProcedureId: procedure.id,
-          targetProcedureId: newProcedure.id,
-          truncateToCycle: branchFromCycle,
-        }),
-      })
-      if (!cloneResp.ok) {
-        const err = await cloneResp.json().catch(() => ({}))
-        throw new Error((err as any).error || `State clone HTTP ${cloneResp.status}`)
-      }
-
-      // Create task and dispatch
-      const runParameters = extractRunParametersFromYaml(branchYaml)
-      const task = await createTaskWithStages(newProcedure.id, runParameters)
-      const runResp = await fetch('/api/console/procedure-run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ procedureId: newProcedure.id, taskId: task.id }),
-      })
-      if (!runResp.ok) {
-        const err = await runResp.json().catch(() => ({}))
-        throw new Error((err as any).error || `Dispatch HTTP ${runResp.status}`)
-      }
-
-      setShowBranchDialog(false)
-      setBranchHint('')
+      setShowBranchDialog(false); setBranchHint('')
       toast.success(`Branch created from cycle ${branchFromCycle} — running ${additionalCycles} more cycle${additionalCycles !== 1 ? 's' : ''}`)
-    } catch (err) {
-      console.error('Branch failed:', err)
-      toast.error(`Failed to branch: ${err instanceof Error ? err.message : String(err)}`)
-    } finally {
-      setIsBranching(false)
-    }
+    } catch (err) { toast.error(`Failed to branch: ${err instanceof Error ? err.message : String(err)}`) }
+    finally { setIsBranching(false) }
   }
 
   // Convert procedure data to task data format

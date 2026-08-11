@@ -3,9 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import os
+from pathlib import Path
 import sys
+import tempfile
+from types import SimpleNamespace
 
 import pytest
+from langchain_community.cache import SQLiteCache
+from langchain_core.globals import get_llm_cache, set_llm_cache
 
 from plexus.cli.shared.CommandProgress import CommandProgress
 from plexus.command_worker.executors import PlexusCliExecutor
@@ -55,12 +60,15 @@ def test_runtime_plugin_factory_creates_the_cli_executor() -> None:
     assert isinstance(create_executor(), PlexusCliExecutor)
 
 
-def test_executor_invokes_cli_with_typed_argv_and_reports_progress() -> None:
+def test_executor_invokes_cli_with_typed_argv_and_reports_progress(monkeypatch) -> None:
+    monkeypatch.delenv("PLEXUS_ACCOUNT_KEY", raising=False)
     observed = {}
 
     def invoke_cli() -> None:
         observed["argv"] = list(sys.argv)
         observed["task_id"] = os.environ.get("PLEXUS_DISPATCH_TASK_ID")
+        observed["account_id"] = os.environ.get("PLEXUS_ACCOUNT_ID")
+        observed["account_key"] = os.environ.get("PLEXUS_ACCOUNT_KEY")
         print("command output")
         CommandProgress.update(2, 4, "running")
 
@@ -73,6 +81,8 @@ def test_executor_invokes_cli_with_typed_argv_and_reports_progress() -> None:
     assert observed == {
         "argv": ["plexus", "evaluate", "run"],
         "task_id": "dashboard-task-1",
+        "account_id": "tenant-1",
+        "account_key": None,
     }
     assert result == {
         "argv": ["evaluate", "run"],
@@ -86,6 +96,8 @@ def test_executor_invokes_cli_with_typed_argv_and_reports_progress() -> None:
 def test_executor_restores_process_bindings_after_cli_failure(monkeypatch) -> None:
     original_argv = list(sys.argv)
     monkeypatch.setenv("PLEXUS_DISPATCH_TASK_ID", "prior-task")
+    monkeypatch.setenv("PLEXUS_ACCOUNT_ID", "prior-account-id")
+    monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "prior-account-key")
 
     def invoke_cli() -> None:
         assert os.environ["PLEXUS_DISPATCH_TASK_ID"] == "dashboard-task-1"
@@ -99,6 +111,83 @@ def test_executor_restores_process_bindings_after_cli_failure(monkeypatch) -> No
 
     assert sys.argv == original_argv
     assert os.environ["PLEXUS_DISPATCH_TASK_ID"] == "prior-task"
+    assert os.environ["PLEXUS_ACCOUNT_ID"] == "prior-account-id"
+    assert os.environ["PLEXUS_ACCOUNT_KEY"] == "prior-account-key"
+
+
+def test_executor_binds_each_envelope_account_without_sequential_leakage(
+    monkeypatch,
+) -> None:
+    observed: list[str | None] = []
+    monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "ambient-account")
+
+    def invoke_cli() -> None:
+        observed.append(os.environ.get("PLEXUS_ACCOUNT_ID"))
+        assert os.environ.get("PLEXUS_ACCOUNT_KEY") == "ambient-account"
+
+    executor = PlexusCliExecutor(invoke_cli)
+    executor.execute(envelope({"argv": ["procedure"]}), Context())
+    second = CommandEnvelope(
+        schema_version=2,
+        command_id="command-2",
+        tenant_id="tenant-2",
+        target="dashboard.command",
+        idempotency_key="request-2",
+        created_at=datetime(2026, 8, 5, tzinfo=timezone.utc),
+        payload={"argv": ["procedure"]},
+    )
+    executor.execute(second, Context())
+
+    assert observed == ["tenant-1", "tenant-2"]
+    assert os.environ["PLEXUS_ACCOUNT_KEY"] == "ambient-account"
+    assert "PLEXUS_ACCOUNT_ID" not in os.environ
+
+
+def test_registered_report_cli_resolves_envelope_account_id(monkeypatch) -> None:
+    from plexus.cli.report import report_commands
+    from plexus.cli.shared import client_utils
+    from plexus.reports import service
+
+    monkeypatch.setattr(client_utils, "load_config", lambda: None)
+    monkeypatch.setenv("PLEXUS_API_URL", "https://example.test/graphql")
+    monkeypatch.setenv("PLEXUS_GRAPHQL_AUTH_MODE", "api_key")
+    monkeypatch.setenv("PLEXUS_API_KEY", "test-api-key")
+    monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "ambient-account-key")
+
+    observed: dict[str, str | None] = {}
+
+    def resolve_report_config(identifier, account_id, client):
+        observed["identifier"] = identifier
+        observed["account_id"] = account_id
+        observed["client_account_id"] = client.context.account_id
+        observed["account_key"] = client.context.account_key
+        return SimpleNamespace(
+            id="report-config-1",
+            name="Test Report",
+            configuration="",
+        )
+
+    monkeypatch.setattr(report_commands, "resolve_report_config", resolve_report_config)
+    monkeypatch.setattr(
+        service,
+        "generate_report_with_parameters",
+        lambda **_kwargs: ("report-1", None, "task-1"),
+    )
+
+    result = PlexusCliExecutor().execute(
+        envelope({"argv": ["report", "run", "--config", "report-config-1"]}),
+        Context(),
+    )
+
+    assert observed == {
+        "identifier": "report-config-1",
+        "account_id": "tenant-1",
+        "client_account_id": "tenant-1",
+        "account_key": "ambient-account-key",
+    }
+    assert "Report generation completed successfully!" in result["stdout"]
+    assert os.environ["PLEXUS_ACCOUNT_KEY"] == "ambient-account-key"
+    assert "PLEXUS_ACCOUNT_ID" not in os.environ
 
 
 @pytest.mark.parametrize(
@@ -125,3 +214,27 @@ def test_executor_bounds_result_output() -> None:
     )
 
     assert len(result["stdout"].encode("utf-8")) == 65_536
+
+
+def test_executor_disables_non_writable_langchain_sqlite_cache() -> None:
+    temp_dir = tempfile.mkdtemp()
+    db_file = Path(temp_dir) / "readonly_cache.db"
+    set_llm_cache(SQLiteCache(database_path=str(db_file)))
+    db_file.chmod(0o444)
+    try:
+        PlexusCliExecutor._guard_langchain_cache_writability()
+        assert get_llm_cache() is None
+    finally:
+        set_llm_cache(None)
+        db_file.chmod(0o600)
+
+
+def test_executor_keeps_writable_langchain_sqlite_cache() -> None:
+    temp_dir = tempfile.mkdtemp()
+    db_file = Path(temp_dir) / "writable_cache.db"
+    set_llm_cache(SQLiteCache(database_path=str(db_file)))
+    try:
+        PlexusCliExecutor._guard_langchain_cache_writability()
+        assert isinstance(get_llm_cache(), SQLiteCache)
+    finally:
+        set_llm_cache(None)

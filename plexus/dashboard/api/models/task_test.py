@@ -123,6 +123,7 @@ def test_get_task_by_id():
     query = mock_client.execute.call_args[0][0]
     assert 'query GetTask($id: ID!)' in query
     assert 'getTask(id: $id)' in query
+    assert 'tenantId' not in query
 
 
 def test_get_task_by_id_returns_none_for_explicit_graphql_null():

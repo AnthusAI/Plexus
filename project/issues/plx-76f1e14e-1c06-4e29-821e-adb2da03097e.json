@@ -1,0 +1,43 @@
+{
+  "id": "plx-76f1e14e-1c06-4e29-821e-adb2da03097e",
+  "title": "Adapt Celery command execution to portable lifecycle",
+  "description": "Refactor the reusable Celery command adapter so it uses the existing portable command envelope, lifecycle ownership, fencing, progress, cancellation, and settlement contract. Preserve the current dashboard Task and TaskStage projection. Do not add a separate AWS-only command system or modify deployed legacy infrastructure. Define observable behavior and focused specifications before implementation. Evaluate delivery-specific behavior behind the existing transport boundary; document the long-running SQS visibility tradeoff without private broker internals.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "327eb9c1-dd97-4c43-a06c-5f4ba00271c0",
+      "author": "derek.norrbom",
+      "text": "Reconnaissance found two blocking foundation gaps before adapting the legacy Celery task: (1) there is no production LifecycleStore implementation, only an in-memory reference; (2) running-command cancellation is not complete because LifecycleStore and ExecutionContext do not expose cancellation observation or fenced cancellation settlement. The next implementation sequence is therefore: extend the shared lifecycle contract with cooperative cancellation behavior and specifications, implement the DynamoDB LifecycleStore adapter against a documented item layout, then adapt Celery delivery while preserving the existing dashboard projection.",
+      "created_at": "2026-08-05T20:14:24.094658Z"
+    },
+    {
+      "id": "c2ce1d54-628e-4cda-a26b-9b77c61b2552",
+      "author": "derek.norrbom",
+      "text": "Implemented the shared cooperative-cancellation contract before delivery adaptation: lifecycle renewal now carries cancellation state, executors can observe it at safe boundaries, and a fenced finalization transition settles cancellation before broker acknowledgement. Added an executable lifecycle scenario for in-flight cancellation. Local validation passed: python -m pytest tests/command_worker -q; python -m behave tests/command_worker/features; ruff check plexus/command_worker tests/command_worker.",
+      "created_at": "2026-08-05T20:16:15.610664Z"
+    },
+    {
+      "id": "b45c11ef-5c7f-4391-afbd-49395ee0255e",
+      "author": "derek.norrbom",
+      "text": "Added an isolated Celery delivery adapter. It registers a new explicitly named, late-acknowledged task and delegates all lifecycle ownership to CommandWorker; it does not modify the legacy plexus.execute_command task. Active/stale work is broker-requeued, invalid or integrity-mismatched envelopes are rejected without requeue for broker-native dead-letter handling, and broker visibility-timeout limits are explicit deployment configuration rather than hidden behavior. Local validation passed: python -m pytest tests/command_worker -q; python -m behave tests/command_worker/features; ruff check plexus/command_worker tests/command_worker. Note: the repository-wide Black check still identifies pre-existing formatting drift in application.py, models.py, and test_application.py; all changed files are Black clean.",
+      "created_at": "2026-08-05T20:20:41.589943Z"
+    },
+    {
+      "id": "d97bb6e6-c92a-4af7-b34e-31bc706eb5a7",
+      "author": "derek.norrbom",
+      "text": "Implementation foundation landed and remains part of the consolidated design. Celery is retained as the isolated delivery adapter for the portable lifecycle. Remaining production submission, projection, packaging, and deployment proof are tracked separately under the command-service epic.",
+      "created_at": "2026-08-06T02:16:25.782257Z"
+    }
+  ],
+  "created_at": "2026-08-05T20:11:44.556219Z",
+  "updated_at": "2026-08-06T02:16:39.334639Z",
+  "closed_at": "2026-08-06T02:16:39.334639Z",
+  "custom": {}
+}

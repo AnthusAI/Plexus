@@ -1,0 +1,25 @@
+{
+  "id": "plx-a1ac7d43-c5a5-40c7-b6a6-3c39940c85fd",
+  "title": "Package portable command worker container artifact",
+  "description": "Create a Plexus-owned, deployment-neutral container artifact for the portable command worker. Include a dedicated Dockerfile/entrypoint, deterministic dependency installation, a narrow runtime dependency set, and an immutable image interface suitable for the companion Fargate stack. Do not reuse the legacy EC2/SSM command-worker deployment or embed client paths, credentials, account settings, or dashboard stack internals. Add focused build/import tests and document the artifact contract.",
+  "type": "sub-task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-17c20240-5cc4-4b05-8b04-fec92ed2222e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b6b0fc1d-b707-4f00-adc8-6f89683e7708",
+      "author": "derek.norrbom",
+      "text": "Implemented and opened PR #553: dedicated non-root Python 3.12 command-worker image, focused command-worker dependencies, package entrypoint validation, and package inclusion. Focused runtime/artifact tests passed (14).",
+      "created_at": "2026-08-06T00:42:02.053004Z"
+    }
+  ],
+  "created_at": "2026-08-06T00:39:37.547526Z",
+  "updated_at": "2026-08-06T00:42:02.053004Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -62,7 +62,7 @@ function resolveWindowFlagParts({
   return ["--days", "90"];
 }
 
-function resolveTimelineBucketType({
+export function resolveTimelineBucketType({
   days,
   startDate,
   endDate,
@@ -81,7 +81,7 @@ function resolveTimelineBucketType({
   return "calendar_week";
 }
 
-function resolveAcceptanceTimelineBucketType({
+export function resolveAcceptanceTimelineBucketType({
   days,
   startDate,
   endDate,
