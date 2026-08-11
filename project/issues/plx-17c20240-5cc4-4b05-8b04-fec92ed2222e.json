@@ -118,10 +118,16 @@
       "author": "derek.norrbom",
       "text": "PR #566 reports merge conflicts against staging. Investigating the exact conflicting files and a resolution that preserves the feature implementation while respecting the branch-direction rule; no direct staging commit will be made.",
       "created_at": "2026-08-10T20:03:39.116015Z"
+    },
+    {
+      "id": "79e7f5ac-14d1-4b5c-aced-83b37a98f9c9",
+      "author": "derek.norrbom",
+      "text": "Implemented runtime fix for staging error 'Initial evaluation failed: PLEXUS_ACCOUNT_KEY not found in environment'. Changes: (1) Evaluation now injects self.account_key into per-item metadata before scorecard scoring, (2) Scorecard LangGraph metadata path accepts metadata.account_key before env fallback. Added regression test proving LangGraph-like score execution succeeds without PLEXUS_ACCOUNT_KEY env when metadata carries account_key. Validation: targeted Scorecard and evaluation account-resolution tests pass.",
+      "created_at": "2026-08-11T17:35:26.687839Z"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-08-10T20:03:39.116015Z",
+  "updated_at": "2026-08-11T17:35:26.687839Z",
   "closed_at": null,
   "custom": {}
 }
