@@ -52,10 +52,22 @@
       "author": "derek.norrbom",
       "text": "Correction after architecture review: the first NLTK patch was too node-specific. Reworked the PR to remove Extractor-specific runtime behavior and establish a single command-worker filesystem contract for all command implementations, including LangGraphScore nodes, TactusScore, and report/procedure libraries that honor standard locations. Worker now sets HOME, XDG_CONFIG_HOME, XDG_CACHE_HOME, MPLCONFIGDIR, NLTK_DATA, and SCORECARD_CACHE_DIR to supported writable /tmp locations; creates the writable directories before loading any executor; and bundles punkt into the image under /usr/local/share/nltk_data with /tmp fallback for other NLTK resources. Focused tests pass (47), plus Dockerfile syntax/lint check passes.",
       "created_at": "2026-08-11T22:31:47.205215Z"
+    },
+    {
+      "id": "1048591e-8f2b-4917-ba6e-935e412c0f7d",
+      "author": "derek.norrbom",
+      "text": "Staging validation found a completion-path defect: the worker completes evaluation computation and writes intermediate metrics, but the Task update rejects commandResult as an invalid GraphQL JSON value. A safe conditional mutation reproduced the rejection with a minimal object, confirming this is JSON scalar serialization rather than result size. Implementing an explicit Task-store AWSJSON serialization contract with executable coverage.",
+      "created_at": "2026-08-11T23:52:48.547890Z"
+    },
+    {
+      "id": "02d44f08-8ff3-4c6f-915d-db4c46672ce5",
+      "author": "derek.norrbom",
+      "text": "Implemented explicit AWSJSON serialization at the Task-store boundary for command payloads, progress details, and completion results. The regression test failed before the change and now passes. Validation: `python -m pytest -q tests/command_worker/test_runtime_entrypoint.py plexus/scores/nodes/Extractor_test.py tests/command_worker/test_plexus_cli_executor.py tests/command_worker/test_task_gateway_contract.py tests/command_worker/test_task_store.py` (49 passed). A safe staging conditional-mutation probe also confirmed the serialized result passes JSON-value validation without changing data.",
+      "created_at": "2026-08-11T23:53:40.731128Z"
     }
   ],
   "created_at": "2026-08-11T19:49:49.476527Z",
-  "updated_at": "2026-08-11T22:31:47.205215Z",
+  "updated_at": "2026-08-11T23:53:40.731128Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",

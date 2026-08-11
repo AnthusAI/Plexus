@@ -88,6 +88,14 @@ def _timestamp(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _awsjson(value: Any) -> str:
+    """Encode a JSON value for Amplify's AWSJSON GraphQL input scalar."""
+
+    return json.dumps(
+        _thaw_json(value), ensure_ascii=False, allow_nan=False, separators=(",", ":")
+    )
+
+
 def _parse_timestamp(value: Any) -> datetime:
     if isinstance(value, datetime):
         return value
@@ -220,7 +228,7 @@ class GraphQLTaskStoreGateway:
             "idempotencyDigest": command.request_digest.value,
             "digestAlgorithm": command.request_digest.algorithm,
             "digestCanonicalizationVersion": command.request_digest.canonicalization_version,
-            "commandPayload": _thaw_json(command.payload),
+            "commandPayload": _awsjson(command.payload),
             "fencingToken": 0,
             "createdAt": _timestamp(command.created_at),
             "updatedAt": _timestamp(command.updated_at),
@@ -408,7 +416,7 @@ class GraphQLTaskStoreGateway:
                     "progressFraction": progress.fraction,
                     "progressMessage": progress.message,
                     "progressDetails": (
-                        _thaw_json(progress.details) if progress.details else None
+                        _awsjson(progress.details) if progress.details else None
                     ),
                 },
             )
@@ -463,7 +471,7 @@ class GraphQLTaskStoreGateway:
             now,
             "SUCCEEDED",
             "COMPLETED",
-            commandResult=_thaw_json(result),
+            commandResult=_awsjson(result),
         )
 
     def fail_task(self, command_id: str, token: str, error: str, now: datetime) -> bool:
