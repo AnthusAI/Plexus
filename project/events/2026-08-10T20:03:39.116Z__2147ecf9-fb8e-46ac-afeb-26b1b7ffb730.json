@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "event_id": "f56fc229-f741-43fd-a853-9af1ad3af9cb",
+  "event_id": "2147ecf9-fb8e-46ac-afeb-26b1b7ffb730",
   "issue_id": "plx-17c20240-5cc4-4b05-8b04-fec92ed2222e",
   "event_type": "comment_added",
-  "occurred_at": "2026-08-10T22:14:11.533Z",
+  "occurred_at": "2026-08-10T20:03:39.116Z",
   "actor_id": "derek.norrbom",
   "payload": {
     "comment_author": "derek.norrbom",
-    "comment_id": "c91184b4-6564-4815-a7aa-37b65f7ce105"
+    "comment_id": "e7724873-16dc-497a-9f90-07281d64e8d3"
   }
 }
