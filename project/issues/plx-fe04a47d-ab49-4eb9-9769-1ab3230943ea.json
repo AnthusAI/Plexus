@@ -1,0 +1,40 @@
+{
+  "id": "plx-fe04a47d-ab49-4eb9-9769-1ab3230943ea",
+  "title": "Add command task runtime guardrails and cancellation finalization",
+  "description": "Implement control-plane guardrails for long-running command evaluations so tasks cannot loop invisibly and cancellation becomes deterministic. Scope: enforce bounded retry budgets at command step and item level with no unbounded nested retries. Scope: add stale-progress watchdog semantics based on heartbeat and progress deltas rather than fixed wall-clock timeout. Scope: enforce cancellation SLA by acknowledging cancel request and forcing terminal cancellation when grace window expires. Scope: surface machine-readable failure and cancellation reasons in Task status updates for UI clarity. Acceptance: local tests prove retries stop at configured budget. Acceptance: local tests prove stale-progress transitions to terminal failure with explicit reason. Acceptance: local tests prove cancel request reaches terminal cancelled state even if worker dies. Acceptance: staging run demonstrates visible terminal state transitions without indefinite Processing.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "74c512b9-4bad-49b0-8f62-6a9bb81381e8",
+      "author": "derek.norrbom",
+      "text": "Execution plan to get back on rails: (1) normalize branch flow by promoting feature/command-service-integration into develop and making develop the only base for subsequent slices; (2) implement guardrails as three narrow slices with tests first: bounded retries, stale-progress watchdog, cancellation finalization; (3) require local command-service preflight + focused contract tests before each develop PR so staging is confirmation, not discovery.",
+      "created_at": "2026-08-11T20:39:13.127375Z"
+    },
+    {
+      "id": "906b22aa-6b92-41c7-9cf5-272341f54f4f",
+      "author": "derek.norrbom",
+      "text": "Branch flow reset complete. Integration PR #579 has merged to develop. Continuing implementation on branch fix/command-runtime-bounded-retries from develop. Next slice is bounded retry budgets with local tests-first validation before any staging promotion.",
+      "created_at": "2026-08-11T20:43:23.883117Z"
+    },
+    {
+      "id": "174aea0d-738d-4740-8b00-f36214b36533",
+      "author": "derek.norrbom",
+      "text": "Staging verification against task cmd_da8fe507... found repeated worker runtime errors while UI stayed in Generating predictions: sqlite3 OperationalError 'attempt to write a readonly database' from LangChain full_llm_cache inserts. Root cause is cache initialization occurring after our earlier preflight guard, so later SQLite cache creation can still bind to a non-writable relative path. Implemented next slice fix: executor now switches command runtime cwd to a writable directory (default /tmp, configurable via PLEXUS_WORKER_RUNTIME_DIR) for the command invocation window, then restores prior cwd. Added regression test proving a command launched from a read-only cwd can still initialize default SQLiteCache successfully in writable runtime dir, plus existing cache guard tests. Validation: pytest tests/command_worker/test_plexus_cli_executor.py tests/command_worker/test_task_gateway_contract.py.",
+      "created_at": "2026-08-11T20:50:52.935176Z"
+    }
+  ],
+  "created_at": "2026-08-11T19:49:49.476527Z",
+  "updated_at": "2026-08-11T20:50:52.935176Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

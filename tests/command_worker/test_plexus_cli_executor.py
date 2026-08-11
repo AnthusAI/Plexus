@@ -238,3 +238,28 @@ def test_executor_keeps_writable_langchain_sqlite_cache() -> None:
         assert isinstance(get_llm_cache(), SQLiteCache)
     finally:
         set_llm_cache(None)
+
+
+def test_executor_runs_cli_from_writable_runtime_directory(monkeypatch, tmp_path) -> None:
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+    read_only_dir = tmp_path / "readonly"
+    read_only_dir.mkdir()
+    read_only_dir.chmod(0o555)
+    monkeypatch.chdir(read_only_dir)
+    monkeypatch.setenv("PLEXUS_WORKER_RUNTIME_DIR", str(runtime_dir))
+
+    observed: dict[str, str] = {}
+
+    def invoke_cli() -> None:
+        observed["cwd"] = os.getcwd()
+        SQLiteCache()
+
+    try:
+        PlexusCliExecutor(invoke_cli).execute(envelope({"argv": ["evaluate"]}), Context())
+    finally:
+        read_only_dir.chmod(0o755)
+
+    assert observed["cwd"] == str(runtime_dir)
+    assert (runtime_dir / ".langchain.db").exists()
+    assert Path.cwd() == read_only_dir

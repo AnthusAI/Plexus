@@ -142,10 +142,25 @@
       "author": "derek.norrbom",
       "text": "Verified staging bottleneck with evidence: active feedback task cmd_b9c6 stayed in stage 2 (Generating predictions, 0/70) while worker logs emitted repeated sqlite OperationalError: attempt to write a readonly database from LangChain cache writes. This triggers expensive LLM retry loops and stalls prediction throughput. Implemented worker-runtime guard in PlexusCliExecutor to detect non-writable LangChain SQLite cache and disable it before command execution. Added local repro/guardrail tests in test_plexus_cli_executor for non-writable vs writable SQLite cache behavior. Validation: pytest tests/command_worker/test_plexus_cli_executor.py and tests/command_worker/test_task_gateway_contract.py pass.",
       "created_at": "2026-08-11T18:25:17.862180Z"
+    },
+    {
+      "id": "20a4bac9-24d8-4bac-bd71-8727496663b8",
+      "author": "derek.norrbom",
+      "text": "Process update approved: use develop as the integration branch for command-service delivery. Workflow now is feature branches merge into the command-service integration branch, integration PR to develop, then branch from develop for additional slices and PR back to develop. Promotions flow from develop to staging or main as needed. This replaces the prior staging-centric workaround and restores standard git flow while command-worker remains non-production. Tracking follow-up reliability hardening in plx-fe04a4 (bounded retries, stale-progress watchdog, cancellation finalization, explicit terminal reasons).",
+      "created_at": "2026-08-11T19:49:52.149842Z"
+    },
+    {
+      "id": "ffa24bb7-4a05-4cfe-98f3-bb3885473dd4",
+      "author": "derek.norrbom",
+      "text": "Opened integration PR #579 (feature/command-service-integration -> develop) to re-align branch flow. This is the cutover point from staging-centric promotion to standard develop-based integration. Follow-up runtime hardening is tracked in plx-fe04a4 and will be delivered as small develop-based slices after #579 merges.",
+      "created_at": "2026-08-11T20:39:37.388980Z"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-08-11T18:25:17.862180Z",
+  "updated_at": "2026-08-11T20:39:37.388980Z",
   "closed_at": null,
-  "custom": {}
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
 }
