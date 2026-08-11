@@ -176,7 +176,6 @@ class Task(BaseModel):
             idempotencyKey
             idempotencyNamespace
             submittedBy
-            tenantId
             idempotencyDigest
             digestAlgorithm
             digestCanonicalizationVersion
