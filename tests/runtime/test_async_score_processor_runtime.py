@@ -1,6 +1,12 @@
 from pathlib import Path
 
 
+LAMBDA_PYTHON_312_BASE_IMAGE = (
+    "public.ecr.aws/lambda/python:3.12@"
+    "sha256:da65e34b539ef0ac96c700d106565d18b1b650b6ba5290a8a79d5f97945d52b1"
+)
+
+
 def test_packaged_async_score_processor_exposes_an_isolated_handler() -> None:
     from plexus.runtime.async_score_processor import handler
 
@@ -15,6 +21,7 @@ def test_packaged_async_score_processor_exposes_a_self_contained_dockerfile() ->
     contents = dockerfile.read_text()
 
     assert dockerfile.name == "Dockerfile"
+    assert contents.count(f"FROM {LAMBDA_PYTHON_312_BASE_IMAGE}") == 2
     assert "ARG PLEXUS_REF" in contents
     assert "^[0-9a-f]{40}$" in contents
     assert 'git fetch --depth=1 origin "${PLEXUS_REF}"' in contents
