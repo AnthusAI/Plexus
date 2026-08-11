@@ -1,4 +1,5 @@
 import {
+  REGISTERED_COMMAND_ACTIONS,
   commandArgumentKeys,
   isRegisteredCommandAction,
   parseCommandArguments,
@@ -9,14 +10,7 @@ import {
 
 describe('command contract', () => {
   it('defines allowlists for every registered dispatch action', () => {
-    const actions: RegisteredCommandAction[] = [
-      'evaluation.accuracy',
-      'evaluation.feedback',
-      'prediction.run',
-      'report.run',
-      'procedure.run',
-      'feedback.report',
-    ]
+    const actions: RegisteredCommandAction[] = [...REGISTERED_COMMAND_ACTIONS]
 
     for (const action of actions) {
       expect(commandArgumentKeys(action).length).toBeGreaterThan(0)
@@ -41,5 +35,15 @@ describe('command contract', () => {
       loadFresh: true,
     })
   })
-})
 
+  it('keeps frontend sanitization and backend allowlists in parity for all registered actions', () => {
+    for (const action of REGISTERED_COMMAND_ACTIONS) {
+      const allowed = commandArgumentKeys(action)
+      const args = Object.fromEntries(allowed.map((key) => [key, `${key}-value`]))
+      const withUnexpected = { ...args, __unexpected: true }
+
+      expect(sanitizeCommandArguments(action, withUnexpected)).toEqual(args)
+      expect(() => rejectUnsupportedArguments(action, withUnexpected)).toThrow('unsupported arguments: __unexpected')
+    }
+  })
+})

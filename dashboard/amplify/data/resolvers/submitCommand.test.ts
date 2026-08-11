@@ -10,6 +10,7 @@ jest.mock('@aws-sdk/signature-v4', () => ({ SignatureV4: jest.fn(() => ({ sign: 
 import { handler } from './submitCommand';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import fetch from 'node-fetch';
+import { REGISTERED_COMMAND_ACTIONS, type RegisteredCommandAction } from '../../../lib/command-contract';
 
 const mockSend = (DynamoDBClient as unknown as jest.Mock).mock.results[0].value.send as jest.Mock;
 const mockFetch = fetch as unknown as jest.Mock;
@@ -19,6 +20,15 @@ const event = (overrides: Record<string, unknown> = {}) => ({
   arguments: { accountId: 'account-1', action: 'evaluation.accuracy', arguments: { scorecardName: 'Card', scoreName: 'Score Name', numberOfSamples: 10, loadFresh: true }, idempotencyKey: 'stable-key', ...overrides },
   identity: { claims: { sub: 'user-1' } },
 });
+
+const validArgumentsByAction: Record<RegisteredCommandAction, Record<string, unknown>> = {
+  'evaluation.accuracy': { scorecardName: 'Card', scoreName: 'Score', numberOfSamples: 10, loadFresh: true },
+  'evaluation.feedback': { scorecardName: 'Card', scoreName: 'Score', days: 7 },
+  'prediction.run': { scorecardName: 'Card', scoreName: 'Score', itemId: 'item-1' },
+  'report.run': { configurationId: 'report-1', parameters: { days: 7 } },
+  'procedure.run': { procedureId: 'procedure-1', parameters: { max_iterations: 3 } },
+  'feedback.report': { report: 'recent', scorecardId: 'card-1', days: 14 },
+};
 
 describe('submitCommand', () => {
   beforeEach(() => {
@@ -84,6 +94,11 @@ describe('submitCommand', () => {
     ['feedback.report', { report: 'recent', scorecardId: 'card-1', days: 7, argv: ['shell'] }],
   ])('%s rejects caller-supplied command material', async (action, arguments_) => {
     await expect(handler(event({ action, arguments: arguments_ }))).rejects.toThrow('unsupported arguments');
+  });
+
+  it.each(REGISTERED_COMMAND_ACTIONS)('%s rejects extra non-contract fields', async (action) => {
+    const arguments_ = { ...validArgumentsByAction[action], __unexpected: true };
+    await expect(handler(event({ action, arguments: arguments_ }))).rejects.toThrow('unsupported arguments: __unexpected');
   });
 
   it('rejects missing AppSync identity and conflicting replay', async () => {
