@@ -124,10 +124,28 @@
       "author": "derek.norrbom",
       "text": "Implemented runtime fix for staging error 'Initial evaluation failed: PLEXUS_ACCOUNT_KEY not found in environment'. Changes: (1) Evaluation now injects self.account_key into per-item metadata before scorecard scoring, (2) Scorecard LangGraph metadata path accepts metadata.account_key before env fallback. Added regression test proving LangGraph-like score execution succeeds without PLEXUS_ACCOUNT_KEY env when metadata carries account_key. Validation: targeted Scorecard and evaluation account-resolution tests pass.",
       "created_at": "2026-08-11T17:35:26.687839Z"
+    },
+    {
+      "id": "06b1dfe7-1b09-40fb-81b1-95c9c6d48210",
+      "author": "derek.norrbom",
+      "text": "Investigating new staging runtime regression: feedback evaluation remains in Processing/Generating predictions for >3 minutes on ~80 results. Plan: pull live worker + task logs for verifiable bottleneck, reproduce locally, implement fix, and validate before next staging deploy.",
+      "created_at": "2026-08-11T18:21:10.508051Z"
+    },
+    {
+      "id": "d5d8a258-b7a2-484f-85bc-4d1ddfb1b6f3",
+      "author": "derek.norrbom",
+      "text": "Verified staging bottleneck with evidence: active feedback task cmd_b9c6... stayed in stage 2 (Generating predictions, 0/70) while worker logs emitted repeated  from LangChain cache writes. This triggers expensive LLM retry loops and stalls prediction throughput. Implemented worker-runtime guard in PlexusCliExecutor to detect non-writable LangChain SQLite cache and disable it before command execution. Added local repro/guardrail tests in test_plexus_cli_executor for non-writable vs writable SQLite cache behavior. Validation: pytest tests/command_worker/test_plexus_cli_executor.py and tests/command_worker/test_task_gateway_contract.py pass.",
+      "created_at": "2026-08-11T18:25:15.397504Z"
+    },
+    {
+      "id": "28333c39-a4c5-4cd2-8961-00713c8f144d",
+      "author": "derek.norrbom",
+      "text": "Verified staging bottleneck with evidence: active feedback task cmd_b9c6 stayed in stage 2 (Generating predictions, 0/70) while worker logs emitted repeated sqlite OperationalError: attempt to write a readonly database from LangChain cache writes. This triggers expensive LLM retry loops and stalls prediction throughput. Implemented worker-runtime guard in PlexusCliExecutor to detect non-writable LangChain SQLite cache and disable it before command execution. Added local repro/guardrail tests in test_plexus_cli_executor for non-writable vs writable SQLite cache behavior. Validation: pytest tests/command_worker/test_plexus_cli_executor.py and tests/command_worker/test_task_gateway_contract.py pass.",
+      "created_at": "2026-08-11T18:25:17.862180Z"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-08-11T17:35:26.687839Z",
+  "updated_at": "2026-08-11T18:25:17.862180Z",
   "closed_at": null,
   "custom": {}
 }
