@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -94,7 +95,17 @@ def test_gateway_uses_conditional_create_and_fenced_lifecycle_mutations() -> Non
 
     create_document, create_variables = client.calls[0]
     assert "ModelTaskConditionInput" in create_document
-    assert create_variables["input"]["commandPayload"] == {"argv": ["evaluate"]}
+    assert create_variables["input"]["commandPayload"] == json.dumps(
+        {"argv": ["evaluate"]}, separators=(",", ":")
+    )
+    completion_variables = next(
+        variables
+        for document, variables in reversed(client.calls)
+        if "UpdateTask" in document and "commandResult" in variables["input"]
+    )
+    assert completion_variables["input"]["commandResult"] == json.dumps(
+        {"ok": True}, separators=(",", ":")
+    )
     update_documents = [
         document for document, _ in client.calls if "UpdateTask" in document
     ]
