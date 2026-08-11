@@ -28,10 +28,16 @@
       "author": "derek.norrbom",
       "text": "Staging verification against task cmd_da8fe507... found repeated worker runtime errors while UI stayed in Generating predictions: sqlite3 OperationalError 'attempt to write a readonly database' from LangChain full_llm_cache inserts. Root cause is cache initialization occurring after our earlier preflight guard, so later SQLite cache creation can still bind to a non-writable relative path. Implemented next slice fix: executor now switches command runtime cwd to a writable directory (default /tmp, configurable via PLEXUS_WORKER_RUNTIME_DIR) for the command invocation window, then restores prior cwd. Added regression test proving a command launched from a read-only cwd can still initialize default SQLiteCache successfully in writable runtime dir, plus existing cache guard tests. Validation: pytest tests/command_worker/test_plexus_cli_executor.py tests/command_worker/test_task_gateway_contract.py.",
       "created_at": "2026-08-11T20:50:52.935176Z"
+    },
+    {
+      "id": "3c71159e-5807-49cd-acc5-5ea6ba38cfce",
+      "author": "derek.norrbom",
+      "text": "Implemented and pushed readonly-cache stall fix on branch fix/command-runtime-bounded-retries. PR #580 targets develop. It executes commands from writable runtime cwd (/tmp by default) during worker invocation, restoring the original cwd afterwards. This prevents relative SQLite cache paths from binding to non-writable image paths when cache initialization occurs after executor preflight. Validation completed: pytest tests/command_worker/test_plexus_cli_executor.py tests/command_worker/test_task_gateway_contract.py and bash dashboard/scripts/preflight-command-worker.sh.",
+      "created_at": "2026-08-11T20:52:26.910390Z"
     }
   ],
   "created_at": "2026-08-11T19:49:49.476527Z",
-  "updated_at": "2026-08-11T20:50:52.935176Z",
+  "updated_at": "2026-08-11T20:52:26.910390Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
