@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
+from pathlib import Path
 import sys
 from types import ModuleType, SimpleNamespace
 
@@ -9,6 +11,7 @@ import pytest
 from plexus.command_worker.runtime.entrypoint import (
     CommandWorkerRuntimeConfig,
     build_celery_app,
+    configure_runtime_filesystem,
     load_executor,
     main,
 )
@@ -48,6 +51,34 @@ def test_runtime_configuration_parses_queue_and_explicit_durations() -> None:
     assert config.task_name == "plexus.command_worker.execute"
     assert (
         config.api_url == "https://example.appsync-api.us-east-1.amazonaws.com/graphql"
+    )
+
+
+def test_runtime_filesystem_uses_standard_writable_locations(monkeypatch) -> None:
+    for name in (
+        "HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "MPLCONFIGDIR",
+        "NLTK_DATA",
+        "SCORECARD_CACHE_DIR",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    configure_runtime_filesystem()
+
+    assert os.environ["HOME"] == "/tmp"
+    assert os.environ["NLTK_DATA"] == "/usr/local/share/nltk_data:/tmp/nltk_data"
+    assert os.environ["MPLCONFIGDIR"] == "/tmp/matplotlib"
+    assert all(
+        Path(directory).is_dir()
+        for directory in (
+            "/tmp/.config",
+            "/tmp/.cache",
+            "/tmp/matplotlib",
+            "/tmp/nltk_data",
+            "/tmp/scorecards",
+        )
     )
 
 

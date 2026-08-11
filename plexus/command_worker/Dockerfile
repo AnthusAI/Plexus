@@ -9,6 +9,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DEFAULT_TIMEOUT=120 \
     PIP_RETRIES=5 \
     POETRY_VIRTUALENVS_CREATE=false \
+    HOME=/tmp \
+    XDG_CONFIG_HOME=/tmp/.config \
+    XDG_CACHE_HOME=/tmp/.cache \
+    NLTK_DATA=/usr/local/share/nltk_data:/tmp/nltk_data \
+    SCORECARD_CACHE_DIR=/tmp/scorecards \
+    MPLCONFIGDIR=/tmp/matplotlib \
     PATH="/usr/local/bin:${PATH}"
 
 WORKDIR /app
@@ -31,6 +37,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     # transient PyPI read timeout cannot strand an enabled feedback action.
     python -m pip install --upgrade "cython<4" "numpy<3" && \
     poetry install --only main --extras command-service-runtime --no-interaction --no-ansi && \
+    python -m nltk.downloader --quiet -d /usr/local/share/nltk_data punkt && \
     python -c 'from plexus.command_worker.executors.plexus_cli import create_executor; assert create_executor()' && \
     python -m plexus.command_worker.smoke && \
     python -m pip uninstall --yes cython && \
