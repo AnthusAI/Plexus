@@ -1,5 +1,7 @@
 from typing import Dict, Any, Optional
 import nltk
+import os
+from pathlib import Path
 from types import FunctionType
 import pydantic
 from pydantic import Field
@@ -80,12 +82,21 @@ class Extractor(BaseNode, LangChainUser):
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
+            nltk_runtime_dir = os.environ.get("PLEXUS_NLTK_DATA_DIR", "/tmp/nltk_data")
+            try:
+                Path(nltk_runtime_dir).mkdir(parents=True, exist_ok=True)
+                if nltk_runtime_dir not in nltk.data.path:
+                    nltk.data.path.insert(0, nltk_runtime_dir)
+            except Exception as exc:
+                logging.warning(
+                    f"Could not prepare NLTK runtime directory {nltk_runtime_dir}: {exc}"
+                )
             try:
                 nltk.data.find('tokenizers/punkt/english.pickle')
                 logging.info("Found punkt tokenizer data")
             except LookupError as e:
                 logging.error(f"Could not find punkt tokenizer data: {e}")
-                nltk.download('punkt', quiet=False)
+                nltk.download('punkt', download_dir=nltk_runtime_dir, quiet=True)
             self._initialize_tokenizer()
 
         def _initialize_tokenizer(self) -> None:

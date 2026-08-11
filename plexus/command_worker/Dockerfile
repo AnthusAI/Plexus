@@ -9,6 +9,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DEFAULT_TIMEOUT=120 \
     PIP_RETRIES=5 \
     POETRY_VIRTUALENVS_CREATE=false \
+    PLEXUS_NLTK_DATA_DIR=/tmp/nltk_data \
+    MPLCONFIGDIR=/tmp/matplotlib \
     PATH="/usr/local/bin:${PATH}"
 
 WORKDIR /app

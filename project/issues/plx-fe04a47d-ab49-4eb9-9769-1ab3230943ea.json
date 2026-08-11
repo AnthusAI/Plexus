@@ -34,10 +34,22 @@
       "author": "derek.norrbom",
       "text": "Implemented and pushed readonly-cache stall fix on branch fix/command-runtime-bounded-retries. PR #580 targets develop. It executes commands from writable runtime cwd (/tmp by default) during worker invocation, restoring the original cwd afterwards. This prevents relative SQLite cache paths from binding to non-writable image paths when cache initialization occurs after executor preflight. Validation completed: pytest tests/command_worker/test_plexus_cli_executor.py tests/command_worker/test_task_gateway_contract.py and bash dashboard/scripts/preflight-command-worker.sh.",
       "created_at": "2026-08-11T20:52:26.910390Z"
+    },
+    {
+      "id": "ca9ed6cc-f3e9-4d6e-a217-f5d14027b843",
+      "author": "derek.norrbom",
+      "text": "Operational unblock: force-terminalized two stale staging command tasks stuck in CANCEL_REQUESTED with no active worker lease holder (service intentionally scaled to 0 during spend protection). Updated tasks cmd_b9c6... and cmd_da8f... to lifecycleStatus/status CANCELLED with valid completedAt/updatedAt timestamps so worker image promotion gating can proceed on next staging deploy.",
+      "created_at": "2026-08-11T21:54:25.249998Z"
+    },
+    {
+      "id": "65ab745d-58b3-4d55-85e6-3ba5d77f8bf4",
+      "author": "derek.norrbom",
+      "text": "Staging run cmd_4d099... no longer stuck; it failed quickly with RuntimeError score returned ERROR. Log evidence shows Extractor could not find NLTK punkt and attempted runtime download/write under /app/nltk_data, causing PermissionError in the read-only image path. Implemented runtime-safe fix: Extractor now prepares a writable NLTK directory (/tmp/nltk_data via PLEXUS_NLTK_DATA_DIR), prepends it to nltk.data.path, and downloads punkt there if missing. Also set command-worker container env defaults PLEXUS_NLTK_DATA_DIR=/tmp/nltk_data and MPLCONFIGDIR=/tmp/matplotlib to avoid read-only config writes. Validation: pytest plexus/scores/nodes/Extractor_test.py tests/command_worker/test_plexus_cli_executor.py tests/command_worker/test_task_gateway_contract.py.",
+      "created_at": "2026-08-11T22:26:54.418494Z"
     }
   ],
   "created_at": "2026-08-11T19:49:49.476527Z",
-  "updated_at": "2026-08-11T20:52:26.910390Z",
+  "updated_at": "2026-08-11T22:26:54.418494Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
