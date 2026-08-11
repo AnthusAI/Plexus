@@ -1,6 +1,7 @@
 import { GetItemCommand, PutItemCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { createHash, randomUUID } from 'crypto';
+import { isRegisteredCommandAction, parseCommandArguments, rejectUnsupportedArguments } from '../../../lib/command-contract';
 
 const dynamo = new DynamoDBClient({});
 const NAMESPACE = 'command.submit:v1';
@@ -33,16 +34,11 @@ function authenticatedPrincipal(identity: Identity | undefined) {
 }
 
 function command(action: string, raw: unknown): { type: string; target: string; argv: string[] } {
-  if (typeof raw === 'string') {
-    try { raw = JSON.parse(raw); } catch { throw new Error('arguments must be valid JSON'); }
-  }
-  const args = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  if (!isRegisteredCommandAction(action)) throw new Error('unsupported command action');
+  const args = parseCommandArguments(raw);
+  rejectUnsupportedArguments(action, args);
   const string = (name: string) => required(args[name], name);
   const optionalString = (name: string) => args[name] === undefined ? undefined : string(name);
-  const rejectUnknown = (allowed: string[]) => {
-    const unknown = Object.keys(args).filter((key) => !allowed.includes(key));
-    if (unknown.length) throw new Error(`unsupported arguments: ${unknown.sort().join(', ')}`);
-  };
   const integer = (name: string, minimum: number, maximum: number) => {
     const value = args[name];
     if (!Number.isInteger(value) || (value as number) < minimum || (value as number) > maximum) {
@@ -50,13 +46,11 @@ function command(action: string, raw: unknown): { type: string; target: string; 
     }
     return value as number;
   };
-  const samples = args.numberOfSamples;
   const actionMap: Record<string, string> = {
     'evaluation.accuracy': 'accuracy',
   };
   const kind = actionMap[action];
   if (kind) {
-    rejectUnknown(['scorecardName', 'scoreName', 'numberOfSamples', 'loadFresh', 'versionId']);
     const sampleCount = integer('numberOfSamples', 1, 10000);
     const argv = ['evaluate', kind, '--number-of-samples', String(sampleCount), '--scorecard', string('scorecardName'), '--score', string('scoreName')];
     if (args.loadFresh === true) argv.push('--fresh');
@@ -64,20 +58,17 @@ function command(action: string, raw: unknown): { type: string; target: string; 
     return { type: 'Evaluation', target: 'evaluation', argv };
   }
   if (action === 'evaluation.feedback') {
-    rejectUnknown(['scorecardName', 'scoreName', 'days', 'versionId']);
     const argv = ['evaluate', 'feedback', '--scorecard', string('scorecardName'), '--score', string('scoreName')];
     if (args.days !== undefined) argv.push('--days', String(integer('days', 1, 3650)));
     if (optionalString('versionId')) argv.push('--version', optionalString('versionId')!);
     return { type: 'Feedback Evaluation', target: 'evaluation', argv };
   }
   if (action === 'prediction.run') {
-    rejectUnknown(['scorecardName', 'scoreName', 'itemId', 'versionId']);
     const argv = ['predict', '--scorecard', string('scorecardName'), '--score', string('scoreName'), '--item', string('itemId'), '--format', 'json'];
     if (optionalString('versionId')) argv.push('--version', optionalString('versionId')!);
     return { type: 'Prediction Test', target: 'prediction', argv };
   }
   if (action === 'report.run') {
-    rejectUnknown(['configurationId', 'parameters']);
     const argv = ['report', 'run', '--config', string('configurationId')];
     const parameters = args.parameters;
     if (parameters !== undefined) {
@@ -90,7 +81,6 @@ function command(action: string, raw: unknown): { type: string; target: string; 
     return { type: 'Report', target: 'report', argv };
   }
   if (action === 'procedure.run') {
-    rejectUnknown(['procedureId', 'parameters']);
     const procedureId = string('procedureId');
     const argv = ['procedure', 'run', procedureId, '--output', 'json'];
     const parameters = args.parameters;
@@ -106,7 +96,6 @@ function command(action: string, raw: unknown): { type: string; target: string; 
     return { type: 'Procedure', target: `procedure/run/${procedureId}`, argv };
   }
   if (action === 'feedback.report') {
-    rejectUnknown(['report', 'scorecardId', 'scoreId', 'days', 'startDate', 'endDate', 'bucketType', 'timezone', 'weekStart']);
     const report = string('report');
     if (!['recent', 'alignment', 'timeline', 'volume', 'acceptance-rate', 'contradictions', 'acceptance-rate-timeline', 'overview'].includes(report)) throw new Error('unsupported feedback report');
     const argv = ['feedback', 'report', report, '--scorecard', string('scorecardId')];
@@ -130,7 +119,7 @@ function command(action: string, raw: unknown): { type: string; target: string; 
     } else if (report === 'acceptance-rate') argv.push('--max-items', '200');
     return { type: 'Feedback Report', target: 'report', argv };
   }
-  throw new Error('unsupported command action');
+  throw new Error(`unsupported command action: ${action}`);
 }
 
 function bindTaskIdentity(action: string, argv: string[], taskId: string): string[] {

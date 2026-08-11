@@ -4,11 +4,7 @@ interface EvaluationOptions {
   scorecardName: string
   scoreName: string
   numberOfSamples: number
-  samplingMethod: 'random' | 'sequential'
   loadFresh: boolean
-  randomSeed?: number
-  visualize: boolean
-  logToLanggraph: boolean
 }
 
 interface DemoOptions {

@@ -6,6 +6,10 @@ jest.mock('@/utils/amplify-client', () => ({ graphqlRequest: jest.fn() }))
 const mockGraphqlRequest = graphqlRequest as jest.MockedFunction<typeof graphqlRequest>
 
 describe('submitCommand', () => {
+  beforeEach(() => {
+    mockGraphqlRequest.mockReset()
+  })
+
   it('resolves and returns the persisted authoritative Task after submission', async () => {
     const task = {
       id: 'task-1',
@@ -25,6 +29,29 @@ describe('submitCommand', () => {
     await expect(submitCommand('account-1', 'prediction.run', { itemId: 'item-1' })).resolves.toEqual(task)
     expect(mockGraphqlRequest).toHaveBeenCalledTimes(1)
     expect(mockGraphqlRequest).toHaveBeenCalledWith(expect.stringContaining('commandPayload createdAt updatedAt'), expect.any(Object))
+  })
+
+  it('submits only contract-allowed fields for each action payload', async () => {
+    const task = { id: 'task-3', accountId: 'account-1', type: 'Evaluation', status: 'PENDING' }
+    mockGraphqlRequest.mockResolvedValueOnce({ data: { submitCommand: { taskId: 'task-3', ...task } } } as any)
+
+    await submitCommand('account-1', 'evaluation.accuracy', {
+      scorecardName: 'Card',
+      scoreName: 'Score',
+      numberOfSamples: 10,
+      loadFresh: true,
+      logToLanggraph: true,
+      visualize: true,
+    } as Record<string, unknown>)
+
+    expect(mockGraphqlRequest).toHaveBeenCalledTimes(1)
+    const [, variables] = mockGraphqlRequest.mock.calls[0]
+    expect(JSON.parse((variables as { arguments: string }).arguments)).toEqual({
+      scorecardName: 'Card',
+      scoreName: 'Score',
+      numberOfSamples: 10,
+      loadFresh: true,
+    })
   })
 
   it('fails visibly instead of returning incomplete callback data', async () => {
