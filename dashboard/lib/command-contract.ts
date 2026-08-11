@@ -1,10 +1,13 @@
-export type RegisteredCommandAction =
-  | 'evaluation.accuracy'
-  | 'evaluation.feedback'
-  | 'prediction.run'
-  | 'report.run'
-  | 'procedure.run'
-  | 'feedback.report'
+export const REGISTERED_COMMAND_ACTIONS = [
+  'evaluation.accuracy',
+  'evaluation.feedback',
+  'prediction.run',
+  'report.run',
+  'procedure.run',
+  'feedback.report',
+] as const
+
+export type RegisteredCommandAction = (typeof REGISTERED_COMMAND_ACTIONS)[number]
 
 const COMMAND_ARGUMENT_KEYS: Record<RegisteredCommandAction, readonly string[]> = {
   'evaluation.accuracy': ['scorecardName', 'scoreName', 'numberOfSamples', 'loadFresh', 'versionId'],
@@ -15,7 +18,7 @@ const COMMAND_ARGUMENT_KEYS: Record<RegisteredCommandAction, readonly string[]> 
   'feedback.report': ['report', 'scorecardId', 'scoreId', 'days', 'startDate', 'endDate', 'bucketType', 'timezone', 'weekStart'],
 }
 
-const REGISTERED_ACTIONS = new Set<RegisteredCommandAction>(Object.keys(COMMAND_ARGUMENT_KEYS) as RegisteredCommandAction[])
+const REGISTERED_ACTIONS = new Set<RegisteredCommandAction>(REGISTERED_COMMAND_ACTIONS)
 
 export function isRegisteredCommandAction(action: string): action is RegisteredCommandAction {
   return REGISTERED_ACTIONS.has(action as RegisteredCommandAction)
@@ -55,4 +58,3 @@ export function sanitizeCommandArguments(action: RegisteredCommandAction, raw: u
 
   return sanitized
 }
-
