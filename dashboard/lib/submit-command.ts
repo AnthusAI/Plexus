@@ -1,12 +1,5 @@
 import { graphqlRequest } from '@/utils/amplify-client'
-
-export type RegisteredCommandAction =
-  | 'evaluation.accuracy'
-  | 'evaluation.feedback'
-  | 'prediction.run'
-  | 'report.run'
-  | 'procedure.run'
-  | 'feedback.report'
+import { sanitizeCommandArguments, type RegisteredCommandAction } from '@/lib/command-contract'
 
 export interface SubmittedCommandTask {
   id: string
@@ -27,6 +20,8 @@ export async function submitCommand(
   action: RegisteredCommandAction,
   arguments_: Record<string, unknown>,
 ): Promise<SubmittedCommandTask> {
+  const sanitizedArguments = sanitizeCommandArguments(action, arguments_)
+
   const result = await graphqlRequest<{ submitCommand: SubmittedCommandTask & { taskId: string } }>(
     `mutation SubmitCommand($accountId: ID!, $action: String!, $arguments: AWSJSON!, $idempotencyKey: String) {
       submitCommand(accountId: $accountId, action: $action, arguments: $arguments, idempotencyKey: $idempotencyKey) {
@@ -34,7 +29,7 @@ export async function submitCommand(
         commandPayload createdAt updatedAt
       }
     }`,
-    { accountId, action, arguments: JSON.stringify(arguments_), idempotencyKey: crypto.randomUUID() },
+    { accountId, action, arguments: JSON.stringify(sanitizedArguments), idempotencyKey: crypto.randomUUID() },
   )
   const submitted = result.data?.submitCommand
   if (!submitted?.taskId) throw new Error('Command was not accepted')
