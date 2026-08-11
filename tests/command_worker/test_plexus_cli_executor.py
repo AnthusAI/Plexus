@@ -3,10 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import os
+from pathlib import Path
 import sys
+import tempfile
 from types import SimpleNamespace
 
 import pytest
+from langchain_community.cache import SQLiteCache
+from langchain_core.globals import get_llm_cache, set_llm_cache
 
 from plexus.cli.shared.CommandProgress import CommandProgress
 from plexus.command_worker.executors import PlexusCliExecutor
@@ -210,3 +214,27 @@ def test_executor_bounds_result_output() -> None:
     )
 
     assert len(result["stdout"].encode("utf-8")) == 65_536
+
+
+def test_executor_disables_non_writable_langchain_sqlite_cache() -> None:
+    temp_dir = tempfile.mkdtemp()
+    db_file = Path(temp_dir) / "readonly_cache.db"
+    set_llm_cache(SQLiteCache(database_path=str(db_file)))
+    db_file.chmod(0o444)
+    try:
+        PlexusCliExecutor._guard_langchain_cache_writability()
+        assert get_llm_cache() is None
+    finally:
+        set_llm_cache(None)
+        db_file.chmod(0o600)
+
+
+def test_executor_keeps_writable_langchain_sqlite_cache() -> None:
+    temp_dir = tempfile.mkdtemp()
+    db_file = Path(temp_dir) / "writable_cache.db"
+    set_llm_cache(SQLiteCache(database_path=str(db_file)))
+    try:
+        PlexusCliExecutor._guard_langchain_cache_writability()
+        assert isinstance(get_llm_cache(), SQLiteCache)
+    finally:
+        set_llm_cache(None)
