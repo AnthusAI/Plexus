@@ -2559,8 +2559,9 @@ Total cost:       ${expenses['total_cost']:.6f}
                 # not necessarily in process-wide env vars. Ensure scorecard
                 # scoring metadata carries the authoritative account key so
                 # LangGraphScore can execute without relying on ambient env.
-                if self.account_key and isinstance(metadata, dict):
-                    metadata.setdefault("account_key", self.account_key)
+                account_key = getattr(self, "account_key", None)
+                if account_key and isinstance(metadata, dict):
+                    metadata.setdefault("account_key", account_key)
 
                 # Processing text
 

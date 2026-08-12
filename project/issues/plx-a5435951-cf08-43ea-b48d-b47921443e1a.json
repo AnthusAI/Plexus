@@ -162,14 +162,20 @@
       "created_at": "2026-08-12T20:38:32.912440Z"
     },
     {
-      "id": "3fbf345a-290d-4e0a-8ee8-3689373507fd",
+      "id": "913761f8-3526-46bd-9ca6-0acd6421b541",
       "author": "derek.norrbom",
-      "text": "Rebased the pending dashboard accuracy fix on current develop to avoid a Kanbus artifact merge conflict. The change retains the resolved canonical scorecard identifier during execution and restores the dialog's stacked layout. Validation is in progress.",
-      "created_at": "2026-08-12T20:49:22.113704Z"
+      "text": "Merged the production command-service runbook to develop: https://github.com/AnthusAI/Plexus/pull/607. The open develop-to-main promotion PR automatically includes it. Production foundation remains a prerequisite; production Amplify branch also needs PLEXUS_AMPLIFY_DEPLOYMENT_ROLE_ARN configured before its first command-service deployment.",
+      "created_at": "2026-08-12T20:39:44.918446Z"
+    },
+    {
+      "id": "b4937833-e934-44b1-a253-2a1477303ec2",
+      "author": "derek.norrbom",
+      "text": "Reproduced the production-promotion CI failure locally under Python 3.12 against the checkout. AccuracyEvaluation.score_text directly reads account_key, but focused lookup tests construct the evaluator without __init__. Fix is to use optional attribute lookup so real initialized evaluations still propagate account context while lightweight callers remain valid.",
+      "created_at": "2026-08-12T20:51:59.983635Z"
     }
   ],
   "created_at": "2026-08-05T22:49:02.682710Z",
-  "updated_at": "2026-08-12T20:49:22.113704Z",
+  "updated_at": "2026-08-12T20:51:59.983635Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
