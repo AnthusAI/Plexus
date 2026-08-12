@@ -49,7 +49,7 @@ describe('submitCommand', () => {
     expect(put.ConditionExpression).toBe('attribute_not_exists(id)');
     expect(put.Item.accountId).toEqual({ S: 'account-1' });
     const commandPayload = JSON.parse(put.Item.commandPayload.S);
-    expect(commandPayload.argv).toEqual(['evaluate', 'accuracy', '--number-of-samples', '10', '--scorecard', 'Card', '--score', 'Score Name', '--fresh', '--task-id', put.Item.id.S]);
+    expect(commandPayload.argv).toEqual(['evaluate', 'accuracy', '--number-of-samples', '10', '--scorecard', 'Card', '--score', 'Score Name', '--use-score-associated-dataset', '--fresh', '--task-id', put.Item.id.S]);
     expect(commandPayload.task_id).toBe(put.Item.id.S);
     expect(put.Item.idempotencyDigest.S).toMatch(/^[a-f0-9]{64}$/);
     expect(mockFetch).not.toHaveBeenCalled();

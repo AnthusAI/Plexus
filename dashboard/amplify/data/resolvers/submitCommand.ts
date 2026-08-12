@@ -52,7 +52,9 @@ function command(action: string, raw: unknown): { type: string; target: string; 
   const kind = actionMap[action];
   if (kind) {
     const sampleCount = integer('numberOfSamples', 1, 10000);
-    const argv = ['evaluate', kind, '--number-of-samples', String(sampleCount), '--scorecard', string('scorecardName'), '--score', string('scoreName')];
+    // Dashboard-dispatched accuracy runs use the score's Plexus-managed
+    // dataset.  They must not fall back to a data class declared in score YAML.
+    const argv = ['evaluate', kind, '--number-of-samples', String(sampleCount), '--scorecard', string('scorecardName'), '--score', string('scoreName'), '--use-score-associated-dataset'];
     if (args.loadFresh === true) argv.push('--fresh');
     if (optionalString('versionId')) argv.push('--version', optionalString('versionId')!);
     return { type: 'Evaluation', target: 'evaluation', argv };

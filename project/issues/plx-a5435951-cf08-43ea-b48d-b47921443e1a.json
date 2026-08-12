@@ -106,10 +106,22 @@
       "author": "derek.norrbom",
       "text": "Staging deployment exposed an AWS inline IAM policy-size limit for generated command-worker AppSync field policies. Investigating a least-privilege policy representation that stays below the documented limit; will synthesize and measure locally before retrying deployment.",
       "created_at": "2026-08-12T18:08:05.955356Z"
+    },
+    {
+      "id": "7b5bfaf1-663d-4ae6-94d9-48a58d755857",
+      "author": "derek.norrbom",
+      "text": "New staging behavior defect: dispatched accuracy evaluations correctly avoid YAML-declared dataset loading, but then fail instead of selecting Plexus-managed samples for the target score. Fix scope is the dispatched evaluation sample-selection path and an executable regression test; YAML dataset classes remain unsupported in dashboard-dispatched execution.",
+      "created_at": "2026-08-12T18:46:19.097810Z"
+    },
+    {
+      "id": "1f3f01d5-4810-4b41-bf3a-e27577beff06",
+      "author": "derek.norrbom",
+      "text": "Verified the affected score has a Plexus-managed score-associated dataset. The dashboard resolver omitted the existing CLI selector, causing the intended data source to be skipped and YAML data loading to be attempted. The resolver now always includes the score-associated-dataset selector for dispatched accuracy evaluations. Resolver regression tests, dashboard TypeScript validation, and the reference-dataset evaluation suite pass.",
+      "created_at": "2026-08-12T18:48:56.711905Z"
     }
   ],
   "created_at": "2026-08-05T22:49:02.682710Z",
-  "updated_at": "2026-08-12T18:08:05.955356Z",
+  "updated_at": "2026-08-12T18:48:56.711905Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
