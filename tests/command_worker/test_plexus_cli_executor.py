@@ -9,6 +9,7 @@ import tempfile
 from types import SimpleNamespace
 
 import pytest
+import click
 from langchain_community.cache import SQLiteCache
 from langchain_core.globals import get_llm_cache, set_llm_cache
 
@@ -115,6 +116,18 @@ def test_executor_restores_process_bindings_after_cli_failure(monkeypatch) -> No
     assert os.environ["PLEXUS_DISPATCH_TASK_ID"] == "prior-task"
     assert os.environ["PLEXUS_ACCOUNT_ID"] == "prior-account-id"
     assert os.environ["PLEXUS_ACCOUNT_KEY"] == "prior-account-key"
+
+
+def test_executor_preserves_captured_output_when_click_aborts() -> None:
+    def invoke_cli() -> None:
+        print("Report configuration could not be resolved")
+        raise click.Abort()
+
+    with pytest.raises(
+        RuntimeError,
+        match="CLI command aborted: Report configuration could not be resolved",
+    ):
+        PlexusCliExecutor(invoke_cli).execute(envelope({"argv": ["report"]}), Context())
 
 
 def test_executor_binds_each_envelope_account_without_sequential_leakage(

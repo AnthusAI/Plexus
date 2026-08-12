@@ -46,10 +46,40 @@
       "author": "derek.norrbom",
       "text": "## Proof boundary\n\nThe completed local feedback-evaluation run proves the dashboard Task display, local dispatcher, CLI execution, and realtime updates. It is valuable regression coverage, but it is not acceptance evidence for the portable command lifecycle. This task now remains open until the same observable flow uses the portable command service and authoritative projection.",
       "created_at": "2026-08-06T02:16:25.536715Z"
+    },
+    {
+      "id": "54fd9081-e3a6-4def-b870-43fc06ec0a40",
+      "author": "derek.norrbom",
+      "text": "Investigating a staging report command that was accepted and delivered to ECS but terminally failed before creating an observable report. The durable Task recorded a generic Click abort, while captured worker CLI output was not retained on exception. Reproducing the task-aware report path and correcting both the failure and the missing diagnostic evidence before another deployment.",
+      "created_at": "2026-08-12T01:13:19.164825Z"
+    },
+    {
+      "id": "1b574211-56e1-4b65-aefb-ad216b9348d6",
+      "author": "derek.norrbom",
+      "text": "Root cause confirmed: the running ECS task definition references an older worker image (it lacks the already-merged runtime-profile changes). The image-build handoff deferred replacement because one prior command is inconsistent: UI status is COMPLETED but authoritative lifecycleStatus remains RUNNING. The handoff treats lifecycleStatus as active, so every later deployment retained the old digest. Repairing that known terminal record with a conditional state transition, then re-running the staging deployment so ECS adopts the current immutable image.",
+      "created_at": "2026-08-12T01:14:27.362824Z"
+    },
+    {
+      "id": "aef1d34a-85fe-4638-ba1e-c1c866612767",
+      "author": "derek.norrbom",
+      "text": "Repaired the single confirmed stale terminal record with a conditional DynamoDB transition (only if lifecycleStatus was RUNNING and status was COMPLETED). Verified there are now zero active lifecycle records. Started staging deployment job 39, which will rebuild/select the current immutable worker image instead of deferring it. Do not treat the earlier staging deployment as evidence of current worker code: its ECS image was confirmed to lack the merged runtime-profile change.",
+      "created_at": "2026-08-12T01:14:46.579785Z"
+    },
+    {
+      "id": "da10e697-527c-4971-aaf8-698d377d2537",
+      "author": "derek.norrbom",
+      "text": "Correction during investigation: a local reproduction inadvertently created a report record while using the submitted task identity; it was not evidence that the dashboard worker succeeded. The real dashboard task still terminally fails with only  because the executor redirects CLI stdout/stderr and discards those buffers whenever the CLI raises. Implementing bounded captured CLI diagnostics on failure so durable Task evidence contains the actual prerequisite error; no further live report runs will be used for reproduction.",
+      "created_at": "2026-08-12T16:03:54.858789Z"
+    },
+    {
+      "id": "143a7785-ad90-46fc-8067-edcd43d2d305",
+      "author": "derek.norrbom",
+      "text": "Implemented bounded Click-abort diagnostics in the command-worker executor and added a regression test. A CLI Abort now preserves its captured stdout/stderr in the durable terminal error; ordinary exceptions and cancellation semantics remain unchanged. Validation: python -m pytest -q tests/command_worker/test_plexus_cli_executor.py tests/scores/test_dashboard_runtime_data_policy.py (17 passed).",
+      "created_at": "2026-08-12T16:05:44.602263Z"
     }
   ],
   "created_at": "2026-08-05T22:49:02.682710Z",
-  "updated_at": "2026-08-06T02:16:49.930870Z",
+  "updated_at": "2026-08-12T16:05:44.602263Z",
   "closed_at": null,
   "custom": {}
 }
