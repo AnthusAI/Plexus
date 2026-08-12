@@ -10,7 +10,7 @@ export const REGISTERED_COMMAND_ACTIONS = [
 export type RegisteredCommandAction = (typeof REGISTERED_COMMAND_ACTIONS)[number]
 
 const COMMAND_ARGUMENT_KEYS: Record<RegisteredCommandAction, readonly string[]> = {
-  'evaluation.accuracy': ['scorecardName', 'scoreName', 'numberOfSamples', 'loadFresh', 'versionId'],
+  'evaluation.accuracy': ['scorecardName', 'scoreName', 'numberOfSamples', 'versionId'],
   'evaluation.feedback': ['scorecardName', 'scoreName', 'days', 'versionId'],
   'prediction.run': ['scorecardName', 'scoreName', 'itemId', 'versionId'],
   'report.run': ['configurationId', 'parameters'],

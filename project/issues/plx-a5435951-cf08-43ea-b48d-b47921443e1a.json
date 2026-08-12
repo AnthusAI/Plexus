@@ -106,10 +106,16 @@
       "author": "derek.norrbom",
       "text": "Staging deployment exposed an AWS inline IAM policy-size limit for generated command-worker AppSync field policies. Investigating a least-privilege policy representation that stays below the documented limit; will synthesize and measure locally before retrying deployment.",
       "created_at": "2026-08-12T18:08:05.955356Z"
+    },
+    {
+      "id": "f45ad42e-7711-4c5b-8462-b38c511d463b",
+      "author": "derek.norrbom",
+      "text": "Implemented the approved dataset-backed accuracy slice: dashboard dispatch now selects the latest managed dataset associated with the chosen score, and the obsolete fresh-data argument/control is removed from the dashboard command contract. This does not alter CLI behavior or implement the separate record-backed source. Resolver, command-contract, client submission tests, and TypeScript validation pass.",
+      "created_at": "2026-08-12T19:05:10.189033Z"
     }
   ],
   "created_at": "2026-08-05T22:49:02.682710Z",
-  "updated_at": "2026-08-12T18:08:05.955356Z",
+  "updated_at": "2026-08-12T19:05:10.189033Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",

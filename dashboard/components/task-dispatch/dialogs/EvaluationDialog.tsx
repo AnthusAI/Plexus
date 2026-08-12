@@ -9,7 +9,6 @@ import {
   DialogFooter,
   Label,
   Button,
-  Switch,
   Input
 } from "../types"
 import { TaskDialogProps } from "../types"
@@ -22,7 +21,6 @@ interface EvaluationOptions {
   scorecardName: string
   scoreName: string
   numberOfSamples: number
-  loadFresh: boolean
   versionId?: string
 }
 
@@ -31,7 +29,6 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialO
     scorecardName: initialOptions?.scorecardName || 'example-scorecard',
     scoreName: initialOptions?.scoreName || 'Example Score',
     numberOfSamples: initialOptions?.numberOfSamples || 10,
-    loadFresh: initialOptions?.loadFresh || false,
     versionId: initialOptions?.versionId
   })
 
@@ -119,19 +116,10 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialO
             </div>
           </div>
 
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="loadFresh" className="text-right">
-              Load Fresh Data
-            </Label>
-            <div className="col-span-3 flex items-center">
-              <Switch
-                id="loadFresh"
-                checked={options.loadFresh}
-                onCheckedChange={(checked) => setOptions({ ...options, loadFresh: checked })}
-                tabIndex={-1}
-              />
-            </div>
-          </div>
+          <p className="col-span-4 text-sm text-muted-foreground">
+            Uses the latest managed dataset linked to this score.
+          </p>
+
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} className="bg-border border-0" tabIndex={-1}>

@@ -52,8 +52,7 @@ function command(action: string, raw: unknown): { type: string; target: string; 
   const kind = actionMap[action];
   if (kind) {
     const sampleCount = integer('numberOfSamples', 1, 10000);
-    const argv = ['evaluate', kind, '--number-of-samples', String(sampleCount), '--scorecard', string('scorecardName'), '--score', string('scoreName')];
-    if (args.loadFresh === true) argv.push('--fresh');
+    const argv = ['evaluate', kind, '--number-of-samples', String(sampleCount), '--scorecard', string('scorecardName'), '--score', string('scoreName'), '--use-score-associated-dataset'];
     if (optionalString('versionId')) argv.push('--version', optionalString('versionId')!);
     return { type: 'Evaluation', target: 'evaluation', argv };
   }

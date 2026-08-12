@@ -17,12 +17,12 @@ const mockFetch = fetch as unknown as jest.Mock;
 const putInput = () => mockSend.mock.calls[1][0].input;
 
 const event = (overrides: Record<string, unknown> = {}) => ({
-  arguments: { accountId: 'account-1', action: 'evaluation.accuracy', arguments: { scorecardName: 'Card', scoreName: 'Score Name', numberOfSamples: 10, loadFresh: true }, idempotencyKey: 'stable-key', ...overrides },
+  arguments: { accountId: 'account-1', action: 'evaluation.accuracy', arguments: { scorecardName: 'Card', scoreName: 'Score Name', numberOfSamples: 10 }, idempotencyKey: 'stable-key', ...overrides },
   identity: { claims: { sub: 'user-1' } },
 });
 
 const validArgumentsByAction: Record<RegisteredCommandAction, Record<string, unknown>> = {
-  'evaluation.accuracy': { scorecardName: 'Card', scoreName: 'Score', numberOfSamples: 10, loadFresh: true },
+  'evaluation.accuracy': { scorecardName: 'Card', scoreName: 'Score', numberOfSamples: 10 },
   'evaluation.feedback': { scorecardName: 'Card', scoreName: 'Score', days: 7 },
   'prediction.run': { scorecardName: 'Card', scoreName: 'Score', itemId: 'item-1' },
   'report.run': { configurationId: 'report-1', parameters: { days: 7 } },
@@ -49,7 +49,7 @@ describe('submitCommand', () => {
     expect(put.ConditionExpression).toBe('attribute_not_exists(id)');
     expect(put.Item.accountId).toEqual({ S: 'account-1' });
     const commandPayload = JSON.parse(put.Item.commandPayload.S);
-    expect(commandPayload.argv).toEqual(['evaluate', 'accuracy', '--number-of-samples', '10', '--scorecard', 'Card', '--score', 'Score Name', '--fresh', '--task-id', put.Item.id.S]);
+    expect(commandPayload.argv).toEqual(['evaluate', 'accuracy', '--number-of-samples', '10', '--scorecard', 'Card', '--score', 'Score Name', '--use-score-associated-dataset', '--task-id', put.Item.id.S]);
     expect(commandPayload.task_id).toBe(put.Item.id.S);
     expect(put.Item.idempotencyDigest.S).toMatch(/^[a-f0-9]{64}$/);
     expect(mockFetch).not.toHaveBeenCalled();
