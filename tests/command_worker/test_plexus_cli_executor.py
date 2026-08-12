@@ -278,3 +278,33 @@ def test_executor_runs_cli_from_writable_runtime_directory(monkeypatch, tmp_path
     assert observed["cwd"] == str(runtime_dir)
     assert (runtime_dir / ".langchain.db").exists()
     assert Path.cwd() == read_only_dir
+
+
+def test_executor_runtime_resolves_repository_procedure_yaml() -> None:
+    """Repository-owned procedure assets remain available after the worker enters /tmp."""
+    from plexus.cli.procedure.procedures import _resolve_procedure_yaml_path
+
+    observed: dict[str, Path] = {}
+
+    def invoke_cli() -> None:
+        observed["cwd"] = Path.cwd()
+        observed["yaml"] = _resolve_procedure_yaml_path(
+            "plexus/procedures/feedback_alignment_optimizer.yaml"
+        )
+
+    PlexusCliExecutor(invoke_cli).execute(
+        envelope(
+            {
+                "argv": [
+                    "procedure",
+                    "run",
+                    "--yaml",
+                    "plexus/procedures/feedback_alignment_optimizer.yaml",
+                ]
+            }
+        ),
+        Context(),
+    )
+
+    assert observed["cwd"].samefile("/tmp")
+    assert observed["yaml"].is_file()

@@ -118,10 +118,34 @@
       "author": "derek.norrbom",
       "text": "Release blocker addressed in a new branch from develop: command dispatch now routes through canonical Task-envelope submission instead of Celery send_task, while preserving the same CLI command surface. command status now reads Task lifecycle/progress from AppSync Task records, and command cancel now sets lifecycleStatus to CANCEL_REQUESTED on the Task record. Added focused tests for non-Celery dispatch/status/cancel. Validation: pytest plexus/cli/shared/command_dispatch_test.py -q (22 passed).",
       "created_at": "2026-08-12T19:42:21.291288Z"
+    },
+    {
+      "id": "3bea3290-0a89-4f1c-81bb-0382dd9c6adf",
+      "author": "derek.norrbom",
+      "text": "Found and fixed cancellation mismatch in CLI-dispatched procedure runs. Root cause: command cancel only set lifecycleStatus=CANCEL_REQUESTED, while procedure cancellation checks read Task status for cancelled states. Changes: command cancel now also sets status=CANCELLED; procedure cancellation check now queries only Task.status via minimal GraphQL (schema-compatible) and treats CANCELLED/CANCELED/CANCEL_REQUESTED as cancelled. Added focused tests. Validation: pytest plexus/cli/shared/command_dispatch_test.py plexus/cli/procedure/test_procedure_executor_cancellation.py -q (26 passed).",
+      "created_at": "2026-08-12T20:10:30.800010Z"
+    },
+    {
+      "id": "1b7a8147-92db-4b0b-8f97-4cc240bd6acc",
+      "author": "derek.norrbom",
+      "text": "Investigation update for immediate COMPLETED procedure tasks: procedure run can return status=error while exiting with code 0, which causes dispatchers and workers to mark task success and completed even when the run failed fast. Patched procedure CLI to raise ClickException when result status is error so failures surface as FAILED task outcomes instead of false COMPLETED. Validation: pytest plexus/cli/procedure/test_procedure_run_params.py -q (4 passed).",
+      "created_at": "2026-08-12T20:12:43.869144Z"
+    },
+    {
+      "id": "3c2ecb05-dec2-402c-85ee-dc9cc530f9e1",
+      "author": "derek.norrbom",
+      "text": "Root cause confirmed for immediate procedure completion with no Procedure record: the ECS CLI executor uses /tmp as its working directory, while CLI dispatch forwarded a relative YAML path. procedure run could not open the YAML, printed an error, then returned exit code 0, so the command task became COMPLETED. Implementing local path resolution for repository-owned procedure YAML plus fail-fast errors and a regression test before any further PR activity.",
+      "created_at": "2026-08-12T20:14:21.744089Z"
+    },
+    {
+      "id": "ca0394f1-0a6a-487e-baf0-256bedd58544",
+      "author": "derek.norrbom",
+      "text": "Local reproduction confirmed: command worker intentionally changes into its writable runtime directory, so a repository-relative procedure YAML could not be found and the CLI returned success after printing an error. Local-only fix resolves repository-owned YAML from the installed package path and raises Click errors for invalid procedure setup. Validation: focused pytest suite (48 passed) plus worker-image runtime check from /tmp resolved the bundled procedure YAML at /app/plexus/procedures/feedback_alignment_optimizer.yaml. No push or PR.",
+      "created_at": "2026-08-12T20:18:04.043710Z"
     }
   ],
   "created_at": "2026-08-05T22:49:02.682710Z",
-  "updated_at": "2026-08-12T19:42:24.232869Z",
+  "updated_at": "2026-08-12T20:18:04.043710Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
