@@ -31,11 +31,13 @@ isolated network and repository.
    bootstrapped.
 
    ```bash
-   cd infrastructure
-   npx cdk bootstrap aws://ACCOUNT_ID/REGION
+   # Run from the repository root so the Python app can import Plexus.
+   PYTHONPATH="$PWD" conda run -n py311 npx cdk bootstrap aws://ACCOUNT_ID/REGION
    PLEXUS_COMMAND_SERVICE_ENVIRONMENT=production \
    PLEXUS_AMPLIFY_DEPLOYMENT_ROLE_ARN=ROLE_ARN \
-   npx cdk --app "python3 command_service_foundation_app.py" deploy CommandServiceFoundationProduction
+   PYTHONPATH="$PWD" conda run -n py311 npx cdk \
+     --app "python infrastructure/command_service_foundation_app.py" \
+     deploy CommandServiceFoundationProduction
    ```
 
    This creates two NAT gateways and therefore has ongoing AWS cost. Review the
