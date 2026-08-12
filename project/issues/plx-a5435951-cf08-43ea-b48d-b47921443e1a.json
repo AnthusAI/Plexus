@@ -124,10 +124,16 @@
       "author": "derek.norrbom",
       "text": "Found and fixed cancellation mismatch in CLI-dispatched procedure runs. Root cause: command cancel only set lifecycleStatus=CANCEL_REQUESTED, while procedure cancellation checks read Task status for cancelled states. Changes: command cancel now also sets status=CANCELLED; procedure cancellation check now queries only Task.status via minimal GraphQL (schema-compatible) and treats CANCELLED/CANCELED/CANCEL_REQUESTED as cancelled. Added focused tests. Validation: pytest plexus/cli/shared/command_dispatch_test.py plexus/cli/procedure/test_procedure_executor_cancellation.py -q (26 passed).",
       "created_at": "2026-08-12T20:10:30.800010Z"
+    },
+    {
+      "id": "1b7a8147-92db-4b0b-8f97-4cc240bd6acc",
+      "author": "derek.norrbom",
+      "text": "Investigation update for immediate COMPLETED procedure tasks: procedure run can return status=error while exiting with code 0, which causes dispatchers and workers to mark task success and completed even when the run failed fast. Patched procedure CLI to raise ClickException when result status is error so failures surface as FAILED task outcomes instead of false COMPLETED. Validation: pytest plexus/cli/procedure/test_procedure_run_params.py -q (4 passed).",
+      "created_at": "2026-08-12T20:12:43.869144Z"
     }
   ],
   "created_at": "2026-08-05T22:49:02.682710Z",
-  "updated_at": "2026-08-12T20:10:30.800010Z",
+  "updated_at": "2026-08-12T20:12:43.869144Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",

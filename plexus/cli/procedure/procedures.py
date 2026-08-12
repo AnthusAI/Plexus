@@ -984,8 +984,9 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
     ))
     
     if result.get('status') == 'error':
-        console.print(f"[red]Error: {result.get('error')}[/red]")
-        return
+        error_message = str(result.get('error') or 'Procedure execution failed')
+        console.print(f"[red]Error: {error_message}[/red]")
+        raise click.ClickException(error_message)
     
     if output == 'json':
         console.print(JSON.from_data(_json_safe(result)))
