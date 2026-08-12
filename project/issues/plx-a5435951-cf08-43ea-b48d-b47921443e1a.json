@@ -190,10 +190,16 @@
       "author": "derek.norrbom",
       "text": "Production foundation deployment completed successfully in us-east-1. Verified CREATE_COMPLETE, all five production SSM contract parameters, and the required production Amplify deployment-role environment variable. The first runbook command required PYTHONPATH at repository root; correcting that documentation detail now.",
       "created_at": "2026-08-12T20:58:17.172041Z"
+    },
+    {
+      "id": "89b111f1-e872-49cb-b156-d2129d790f09",
+      "author": "derek.norrbom",
+      "text": "Investigating the full dashboard CI failure set from the production promotion. The 21 dashboard test failures resolve into a public task-display context regression and a stale sandbox managed-policy assertion; validating the complete dashboard unit suite before opening any PR.",
+      "created_at": "2026-08-12T21:38:08.397648Z"
     }
   ],
   "created_at": "2026-08-05T22:49:02.682710Z",
-  "updated_at": "2026-08-12T20:58:17.172041Z",
+  "updated_at": "2026-08-12T21:38:08.397648Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",

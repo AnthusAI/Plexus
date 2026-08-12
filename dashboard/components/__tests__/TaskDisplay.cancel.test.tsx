@@ -2,7 +2,9 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 jest.mock('@/utils/amplify-client', () => ({ graphqlRequest: jest.fn(() => Promise.resolve({ data: { cancelCommand: { taskId: 'command-1' } } })) }));
-jest.mock('@/app/contexts/AccountContext', () => ({ useAccount: () => ({ selectedAccount: { id: 'account-1' } }) }));
+jest.mock('@/app/contexts/AccountContext', () => ({
+  useOptionalAccount: () => ({ selectedAccount: { id: 'account-1' } }),
+}));
 jest.mock('@/components/EvaluationTask', () => ({ __esModule: true, default: ({ controlButtons }: any) => <div>{controlButtons}</div> }));
 jest.mock('@/components/ReportTask', () => ({ __esModule: true, default: ({ task, controlButtons }: any) => <div><span>{task.status}</span>{controlButtons}</div> }));
 

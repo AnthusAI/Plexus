@@ -221,4 +221,13 @@ export function useAccount() {
     throw new Error('useAccount must be used within an AccountProvider')
   }
   return context
-} 
+}
+
+/**
+ * Read account context where it is optional, such as publicly shared views.
+ * Interactive dashboard components should continue to use ``useAccount`` so
+ * a missing provider remains a programming error.
+ */
+export function useOptionalAccount() {
+  return useContext(AccountContext)
+}
