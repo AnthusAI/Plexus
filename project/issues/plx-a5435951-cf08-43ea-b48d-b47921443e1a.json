@@ -142,10 +142,28 @@
       "author": "derek.norrbom",
       "text": "Local reproduction confirmed: command worker intentionally changes into its writable runtime directory, so a repository-relative procedure YAML could not be found and the CLI returned success after printing an error. Local-only fix resolves repository-owned YAML from the installed package path and raises Click errors for invalid procedure setup. Validation: focused pytest suite (48 passed) plus worker-image runtime check from /tmp resolved the bundled procedure YAML at /app/plexus/procedures/feedback_alignment_optimizer.yaml. No push or PR.",
       "created_at": "2026-08-12T20:18:04.043710Z"
+    },
+    {
+      "id": "b15cebbd-15d3-43b9-a03f-5531d9d374a4",
+      "author": "derek.norrbom",
+      "text": "Validated procedure-dispatch runtime path fix merged to develop and then staging through the normal one-way flow. Staging PR: https://github.com/AnthusAI/Plexus/pull/604. The deployment will publish the updated command-worker image; no staging history was merged into a feature branch.",
+      "created_at": "2026-08-12T20:24:53.966085Z"
+    },
+    {
+      "id": "e6240fa3-8ee1-4c6f-9d2e-05ca71cff8b9",
+      "author": "derek.norrbom",
+      "text": "Opened the develop-to-main promotion PR for the integrated command-worker migration: https://github.com/AnthusAI/Plexus/pull/605. It promotes already-integrated develop history; no staging history is involved.",
+      "created_at": "2026-08-12T20:27:58.247990Z"
+    },
+    {
+      "id": "401a3ab8-f75a-4efa-b72f-6f9b34f19343",
+      "author": "derek.norrbom",
+      "text": "Production readiness check found that the production command-service foundation stack and its SSM contract are absent in the configured account regions. A production foundation deployment is required before the main Amplify deployment can create the ECS command service. Adding an operator runbook to the existing foundation documentation.",
+      "created_at": "2026-08-12T20:38:32.912440Z"
     }
   ],
   "created_at": "2026-08-05T22:49:02.682710Z",
-  "updated_at": "2026-08-12T20:18:04.043710Z",
+  "updated_at": "2026-08-12T20:38:32.912440Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
