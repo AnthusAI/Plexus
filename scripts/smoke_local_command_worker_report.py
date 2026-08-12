@@ -136,7 +136,10 @@ except Exception as exc:
     print(json.dumps({\"status\": \"error\", \"error_type\": type(exc).__name__, \"error\": str(exc)}))
     raise SystemExit(1)
     """
-    docker_command = ["docker", "run", "--rm", "--platform", "linux/amd64"]
+    # Docker only forwards the JSON envelope from communicate() when stdin is
+    # explicitly attached.  Without -i, the program sees EOF and fails before
+    # the command-worker executor starts.
+    docker_command = ["docker", "run", "--rm", "-i", "--platform", "linux/amd64"]
     # Forward names only.  Passing values in argv would expose temporary AWS
     # credentials through process inspection while the smoke is running.
     for name in environment:
