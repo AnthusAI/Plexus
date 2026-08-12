@@ -10,6 +10,61 @@ foundation's VPC and run its own ECS worker built from a local Docker
 asset — see `dashboard/amplify/SANDBOX.md` ("Full Async Command-Service
 Iteration in Sandboxes").
 
+## Production first deployment runbook
+
+The production foundation is a prerequisite for the first `main` deployment
+that includes the command service. It owns the production VPC, private
+subnets, ECR repository, and the SSM parameters that the Amplify backend
+imports. Do not rely on the staging foundation: each environment has an
+isolated network and repository.
+
+1. Identify the IAM role used by the production Amplify backend deployment.
+   Set its ARN as `PLEXUS_AMPLIFY_DEPLOYMENT_ROLE_ARN` in the Amplify `main`
+   branch environment. The same ARN is passed to the foundation deployment so
+   that it can grant only the ECR and SSM access required by the build.
+   The production branch must have this variable before the Amplify deployment;
+   it is required by the backend definition.
+
+2. From a checkout containing the intended `main` commit, deploy the
+   production foundation in the same account and region as the production
+   Amplify app. Bootstrap CDK first if that account/region has not been
+   bootstrapped.
+
+   ```bash
+   cd infrastructure
+   npx cdk bootstrap aws://ACCOUNT_ID/REGION
+   PLEXUS_COMMAND_SERVICE_ENVIRONMENT=production \
+   PLEXUS_AMPLIFY_DEPLOYMENT_ROLE_ARN=ROLE_ARN \
+   npx cdk --app "python3 command_service_foundation_app.py" deploy CommandServiceFoundationProduction
+   ```
+
+   This creates two NAT gateways and therefore has ongoing AWS cost. Review the
+   CloudFormation change set before confirming it.
+
+3. Verify the foundation and its contract before merging or deploying the
+   application:
+
+   ```bash
+   aws cloudformation describe-stacks \
+     --stack-name plexus-command-service-foundation-production
+   aws ssm get-parameters \
+     --names \
+       /plexus/production/command-service/vpc-id \
+       /plexus/production/command-service/availability-zones \
+       /plexus/production/command-service/private-subnet-ids \
+       /plexus/production/command-service/worker-image-repository-uri \
+       /plexus/production/command-service/worker-image-repository-arn
+   ```
+
+4. Merge the application to `main`. The Amplify build publishes the immutable
+   command-worker image to that production repository and deploys the
+   application-owned ECS service. Do not manually create an ECS service or
+   substitute a mutable image tag.
+
+The current account has the staging foundation but not the production
+foundation, so this runbook must be completed before the first production
+command-service deployment.
+
 The Amplify build obtains the foundation's environment-scoped ECR repository
 URI from SSM, builds `plexus/command_worker/Dockerfile` from the repository
 root, resolves a digest, and passes only `repository@sha256` to the backend
