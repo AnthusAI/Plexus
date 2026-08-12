@@ -91,7 +91,8 @@ def test_build_local_run_args_uses_python_module_for_programmatic_report_blocks(
     ]
 
 
-def test_build_local_run_args_uses_plexus_entrypoint_for_other_task_types():
+def test_build_local_run_args_uses_current_python_module_for_all_task_types():
     task = SimpleNamespace(type="Procedure", command="procedure run --id proc-1")
     run_args = _build_local_run_args(task)
-    assert run_args == ["plexus", "procedure", "run", "--id", "proc-1"]
+    assert run_args[:3] == [run_args[0], "-m", "plexus.cli"]
+    assert run_args[3:] == ["procedure", "run", "--id", "proc-1"]

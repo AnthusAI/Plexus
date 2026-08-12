@@ -3,16 +3,23 @@
   "title": "Clients submit and control commands through a portable service API",
   "description": "As an authenticated platform client, I want to submit, inspect, and cancel structured commands through a deployment-neutral service contract, so that command execution does not depend on a particular dashboard, cloud, broker, or worker implementation.\n\nFeature: Portable command service API\n  Scenario: Submit a new structured command\n    Given an authenticated principal belongs to a tenant\n    When the principal submits a valid command with an idempotency key\n    Then the command is durably announced for dispatch\n    And its initial status can be retrieved within that tenant\n\n  Scenario: Repeat an identical submission\n    Given a command was submitted with an idempotency key\n    When the same tenant repeats the identical submission\n    Then the original command is returned without creating another dispatch\n\n  Scenario: Reuse an idempotency key for different input\n    Given a command was submitted with an idempotency key\n    When the same tenant submits different command input with that key\n    Then the request is rejected as an idempotency conflict\n\n  Scenario: Access another tenant command\n    Given a command belongs to another tenant\n    When a principal attempts to inspect or cancel it\n    Then the service reveals no command information\n\n  Scenario: Request cancellation\n    Given a nonterminal command belongs to the principal tenant\n    When cancellation is requested\n    Then the durable command state records that request idempotently",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "83e686ca-46e4-4dc8-b7fe-063f714da38a",
+      "author": "derek.norrbom",
+      "text": "Acceptance contract landed in develop via PR #538: authenticated submit/get/cancel service, scoped idempotency, tenant non-disclosure, cancellation semantics, audit evidence, and late-delivery integrity protections.",
+      "created_at": "2026-08-04T22:51:53.738901Z"
+    }
+  ],
   "created_at": "2026-08-04T21:49:15.422055Z",
-  "updated_at": "2026-08-04T21:49:15.422055Z",
-  "closed_at": null,
+  "updated_at": "2026-08-04T22:51:53.764272Z",
+  "closed_at": "2026-08-04T22:51:53.764272Z",
   "custom": {}
 }

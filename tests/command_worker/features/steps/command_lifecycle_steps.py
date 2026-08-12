@@ -10,6 +10,7 @@ from plexus.command_worker import (
     CommandEnvelope,
     CommandWorker,
     ProgressUpdate,
+    CancellationRequestedError,
     LeaseLostError,
 )
 
@@ -34,6 +35,8 @@ class MemoryLifecycleStore:
         self._token_number = 0
         self.reject_renewal = False
         self.rotate_renewal = False
+        self.cancellation_requested = False
+        self.cancel_on_renewal = False
         self.mutation_tokens: list[tuple[str, str]] = []
 
     def claim(self, envelope, owner, now, lease_duration):
@@ -46,6 +49,7 @@ class MemoryLifecycleStore:
             token=f"lease-{self._token_number}",
             owner=owner,
             expires_at=now + lease_duration,
+            cancellation_requested=self.cancellation_requested,
         )
         self.state = "running"
         return self.lease
@@ -60,13 +64,20 @@ class MemoryLifecycleStore:
 
     def renew(self, command_id, token, now, lease_duration):
         self.events.append("lifecycle-renewed")
+        if self.cancel_on_renewal:
+            self.cancellation_requested = True
         if self.reject_renewal:
             return None
         if not self._accepts(token, now):
             return None
         assert self.lease is not None
         renewed_token = "rotated-lease" if self.rotate_renewal else token
-        self.lease = Claim(renewed_token, self.lease.owner, now + lease_duration)
+        self.lease = Claim(
+            renewed_token,
+            self.lease.owner,
+            now + lease_duration,
+            self.cancellation_requested,
+        )
         return self.lease
 
     def complete(self, command_id, token, result, now):
@@ -83,6 +94,14 @@ class MemoryLifecycleStore:
             return False
         self.state = "failed"
         self.events.append("failed")
+        return True
+
+    def finalize_cancel(self, command_id, token, now):
+        self.mutation_tokens.append(("cancel", token))
+        if not self.cancellation_requested or not self._accepts(token, now):
+            return False
+        self.state = "cancelled"
+        self.events.append("cancelled")
         return True
 
     def _accepts(self, token: str, now: datetime) -> bool:
@@ -144,6 +163,8 @@ class RecordingExecutor:
         self.progress = progress
         self.fire_heartbeat = False
         self.observe_loss = False
+        self.observe_cancellation = False
+        self.observed_cancellation = False
         self.observed_loss = False
         self.scheduler = None
 
@@ -156,6 +177,12 @@ class RecordingExecutor:
                 context.raise_if_lease_lost()
             except LeaseLostError:
                 self.observed_loss = True
+        if self.observe_cancellation:
+            try:
+                context.raise_if_cancellation_requested()
+            except CancellationRequestedError:
+                self.observed_cancellation = True
+                raise
         if self.progress is not None:
             context.report_progress(self.progress)
         return {"outcome": "ok"}
@@ -224,6 +251,11 @@ def failed_delivery_renewal(context):
     context.delivery.renewal_succeeds = False
 
 
+@given("cancellation is requested while the command is running")
+def cancellation_requested_while_running(context):
+    context.store.cancel_on_renewal = True
+
+
 @given("an executor that fires a heartbeat, reports progress, and succeeds")
 def heartbeat_progress_executor(context):
     context.executor.fire_heartbeat = True
@@ -239,6 +271,12 @@ def heartbeat_loss_executor(context):
 @given("an executor that fires a heartbeat and succeeds")
 def heartbeat_executor(context):
     context.executor.fire_heartbeat = True
+
+
+@given("an executor that fires a heartbeat and observes cancellation")
+def cancellation_executor(context):
+    context.executor.fire_heartbeat = True
+    context.executor.observe_cancellation = True
 
 
 @given("an executor that reports 50 percent progress and succeeds")
@@ -418,6 +456,18 @@ def heartbeat_cannot_run(context):
     renewal_count = context.events.count("lifecycle-renewed")
     context.scheduler.fire()
     assert context.events.count("lifecycle-renewed") == renewal_count
+
+
+@then("cancellation is stored before the delivery is acknowledged")
+def cancellation_before_ack(context):
+    assert context.executor.observed_cancellation
+    assert context.events.index("cancelled") < context.events.index("acknowledged")
+
+
+@then("no completion or failure is stored")
+def no_completion_or_failure(context):
+    assert "completed" not in context.events
+    assert "failed" not in context.events
 
 
 @then("both legacy modules are importable")

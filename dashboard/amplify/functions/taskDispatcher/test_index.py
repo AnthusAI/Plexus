@@ -1,81 +1,155 @@
 import importlib.util
-import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 
-def _load_module(monkeypatch):
-    monkeypatch.setenv("CELERY_AWS_ACCESS_KEY_ID", "test")
-    monkeypatch.setenv("CELERY_AWS_SECRET_ACCESS_KEY", "test")
-    monkeypatch.setenv("CELERY_AWS_REGION_NAME", "us-east-1")
-    monkeypatch.setenv("CELERY_QUEUE_NAME", "plexus-celery-test")
-    monkeypatch.setenv("CELERY_RESULT_BACKEND_TEMPLATE", "dynamodb://@")
 
-    module_path = Path(__file__).with_name("index.py")
-    spec = importlib.util.spec_from_file_location("task_dispatcher_index_test", module_path)
+def _load(monkeypatch):
+    monkeypatch.setenv(
+        "COMMAND_QUEUE_URL", "https://sqs.us-east-1.amazonaws.com/123/commands"
+    )
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    path = Path(__file__).with_name("index.py")
+    spec = importlib.util.spec_from_file_location("task_dispatcher_test", path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
 
-def _task_image(task_id, dispatch_status="PENDING", metadata=None):
+def _image(status="READY", command_payload=None):
     return {
-        "id": {"S": task_id},
-        "dispatchStatus": {"S": dispatch_status},
-        "command": {"S": "procedure run proc-1"},
-        "target": {"S": "procedure/run/proc-1"},
-        "metadata": {"S": json.dumps(metadata or {})},
+        "id": {"S": "task-1"},
+        "accountId": {"S": "account-1"},
+        "dispatchStatus": {"S": status},
+        "target": {"S": "evaluate"},
+        "idempotencyKey": {"S": "key"},
+        "createdAt": {"S": "2026-08-06T00:00:00Z"},
+        "commandPayload": command_payload
+        if command_payload is not None
+        else {
+            "M": {
+                "argv": {"L": [{"S": "evaluate"}]},
+                "task_id": {"S": "task-1"},
+            }
+        },
     }
 
 
-def test_handler_skips_local_insert(monkeypatch):
-    module = _load_module(monkeypatch)
-    sent_tasks = []
-    monkeypatch.setattr(module.celery_app, "send_task", lambda *args, **kwargs: sent_tasks.append((args, kwargs)))
+def _record(event_name="INSERT", old_status=None, command_payload=None):
+    data = {"NewImage": _image(command_payload=command_payload)}
+    if old_status:
+        data["OldImage"] = _image(old_status)
+    return {
+        "eventName": event_name,
+        "dynamodb": data,
+        "eventSourceARN": "arn:aws:dynamodb:us-east-1:1:table/Task/stream/x",
+        "awsRegion": "us-east-1",
+    }
 
-    result = module.handler(
-        {
-            "Records": [
+
+def test_dispatches_only_initial_ready_eligibility(monkeypatch):
+    module = _load(monkeypatch)
+    sent, marked = [], []
+    monkeypatch.setattr(
+        module,
+        "_celery",
+        lambda: SimpleNamespace(
+            send_task=lambda name, *, args: sent.append((name, args))
+        ),
+    )
+    monkeypatch.setattr(
+        module, "mark_dispatched", lambda _record, task_id: marked.append(task_id)
+    )
+    assert module.handler(
+        {"Records": [_record(), _record("MODIFY", "READY")]}, None
+    ) == {"processed": 1, "skipped": 1}
+    assert sent == [
+        (
+            "plexus.command_worker.execute",
+            [
                 {
-                    "eventID": "1",
-                    "eventName": "INSERT",
-                    "dynamodb": {
-                        "NewImage": _task_image("task-local", metadata={"dispatch_mode": "local"}),
-                    },
+                    "schema_version": 2,
+                    "command_id": "task-1",
+                    "tenant_id": "account-1",
+                    "target": "evaluate",
+                    "idempotency_key": "key",
+                    "created_at": "2026-08-06T00:00:00Z",
+                    "payload": {"argv": ["evaluate"], "task_id": "task-1"},
                 }
-            ]
-        },
-        SimpleNamespace(aws_request_id="request-1"),
+            ],
+        )
+    ]
+    assert marked == ["task-1"]
+
+
+def test_dispatches_awsjson_command_payload_as_object(monkeypatch):
+    module = _load(monkeypatch)
+    sent, marked = [], []
+    monkeypatch.setattr(
+        module,
+        "_celery",
+        lambda: SimpleNamespace(
+            send_task=lambda name, *, args: sent.append((name, args))
+        ),
+    )
+    monkeypatch.setattr(
+        module, "mark_dispatched", lambda _record, task_id: marked.append(task_id)
     )
 
-    assert result["processed"] == 0
-    assert result["skipped"] == 1
-    assert sent_tasks == []
-
-
-def test_handler_skips_local_modify_to_pending(monkeypatch):
-    module = _load_module(monkeypatch)
-    sent_tasks = []
-    monkeypatch.setattr(module.celery_app, "send_task", lambda *args, **kwargs: sent_tasks.append((args, kwargs)))
-
-    result = module.handler(
+    assert module.handler(
         {
             "Records": [
-                {
-                    "eventID": "1",
-                    "eventName": "MODIFY",
-                    "dynamodb": {
-                        "OldImage": _task_image("task-local", dispatch_status="LOCAL", metadata={"dispatch_mode": "local"}),
-                        "NewImage": _task_image("task-local", dispatch_status="PENDING", metadata={"dispatch_mode": "local"}),
-                    },
-                }
+                _record(command_payload={"S": '{"argv":["evaluate"],"task_id":"task-1"}'})
             ]
         },
-        SimpleNamespace(aws_request_id="request-1"),
+        None,
+    ) == {"processed": 1, "skipped": 0}
+    assert sent[0][1][0]["payload"] == {"argv": ["evaluate"], "task_id": "task-1"}
+    assert marked == ["task-1"]
+
+
+@pytest.mark.parametrize(
+    "command_payload, message",
+    [
+        ({"S": "not json"}, "not valid JSON"),
+        ({"S": "[]"}, "must be a JSON object"),
+    ],
+)
+def test_rejects_invalid_or_non_object_command_payload_before_dispatch(
+    monkeypatch, command_payload, message
+):
+    module = _load(monkeypatch)
+    sent, marked = [], []
+    monkeypatch.setattr(
+        module,
+        "_celery",
+        lambda: SimpleNamespace(
+            send_task=lambda name, *, args: sent.append((name, args))
+        ),
+    )
+    monkeypatch.setattr(
+        module, "mark_dispatched", lambda _record, task_id: marked.append(task_id)
     )
 
-    assert result["processed"] == 0
-    assert result["skipped"] == 1
-    assert sent_tasks == []
+    with pytest.raises(ValueError, match=message):
+        module.handler({"Records": [_record(command_payload=command_payload)]}, None)
+    assert sent == []
+    assert marked == []
+
+
+def test_broker_or_post_publish_marker_failure_escapes_for_stream_retry(monkeypatch):
+    module = _load(monkeypatch)
+    monkeypatch.setattr(
+        module,
+        "_celery",
+        lambda: SimpleNamespace(
+            send_task=lambda *_a, **_k: (_ for _ in ()).throw(
+                RuntimeError("broker down")
+            )
+        ),
+    )
+    with pytest.raises(RuntimeError, match="broker down"):
+        module.handler({"Records": [_record()]}, None)

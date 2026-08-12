@@ -171,20 +171,10 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
 
     const flattenedParameters = parameters ? flattenReportParameters(parameters) : undefined
     
-    // Build the command for running this report
-    let command = `report run --config ${selectedConfigId}`
-    
-    // Add parameter options if provided
-    if (flattenedParameters) {
-      Object.entries(flattenedParameters).forEach(([key, value]) => {
-        command += ` --param-${key}=${value}`
-      })
-    }
-    
     // Dispatch the task once and close only after dispatch attempt completes.
     setIsDispatching(true)
     try {
-      await onDispatch(command, 'report')
+      await onDispatch({ configurationId: selectedConfigId, parameters: flattenedParameters || {} }, 'report')
       onClose()
     } finally {
       setIsDispatching(false)

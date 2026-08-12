@@ -523,7 +523,7 @@ function computeIsBalanced(distribution: { label: string, count: number }[] | nu
   )
 }
 
-const mapTaskStatus = (status: string | undefined | null): 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' => {
+const mapTaskStatus = (status: string | undefined | null): 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' => {
   if (!status) return 'PENDING';
   const upperStatus = status.toUpperCase();
   switch (upperStatus) {
@@ -531,6 +531,7 @@ const mapTaskStatus = (status: string | undefined | null): 'PENDING' | 'RUNNING'
     case 'RUNNING':
     case 'COMPLETED':
     case 'FAILED':
+    case 'CANCELLED':
       return upperStatus;
     case 'DONE':
       return 'COMPLETED';

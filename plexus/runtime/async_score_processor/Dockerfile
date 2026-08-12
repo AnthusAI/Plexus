@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM public.ecr.aws/lambda/python:3.12@sha256:dd3aa76c1cc435545f2c9031a86d85d60c9cda25df37cd75b6ee2609f100044b AS build
+FROM public.ecr.aws/lambda/python:3.12@sha256:da65e34b539ef0ac96c700d106565d18b1b650b6ba5290a8a79d5f97945d52b1 AS build
 
 ARG PLEXUS_REF
 
@@ -37,7 +37,7 @@ RUN --mount=type=secret,id=github_token \
 
 RUN python -c "import nltk; nltk.download('punkt', download_dir='/opt/nltk_data'); nltk.download('punkt_tab', download_dir='/opt/nltk_data')"
 
-FROM public.ecr.aws/lambda/python:3.12@sha256:dd3aa76c1cc435545f2c9031a86d85d60c9cda25df37cd75b6ee2609f100044b
+FROM public.ecr.aws/lambda/python:3.12@sha256:da65e34b539ef0ac96c700d106565d18b1b650b6ba5290a8a79d5f97945d52b1
 
 ARG PLEXUS_REF
 

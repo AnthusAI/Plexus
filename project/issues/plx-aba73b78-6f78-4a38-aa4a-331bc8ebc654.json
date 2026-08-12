@@ -1,0 +1,49 @@
+{
+  "id": "plx-aba73b78-6f78-4a38-aa4a-331bc8ebc654",
+  "title": "Enable sandbox async command-service iteration",
+  "description": "Provide a supported personal-sandbox workflow for fast end-to-end command-service iteration without relying on staging deployments. The workflow must keep sandbox resources isolated, allow the local dashboard to exercise the server submission boundary, and enable an isolated dispatcher queue to be consumed by a locally run command worker. Document setup, guardrails, and the verification path. Staging remains the final ECS, IAM, network, and deployment acceptance environment.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "derek.norrbom",
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "09939e8e-bb9a-4b88-9a32-17f032c99b15",
+      "author": "derek.norrbom",
+      "text": "## Design decision\n\nBlocker was a deliberate guard, not a technical limit: `resolveCommandServiceEnvironment()` in dashboard/amplify/command-service/resource.ts restricts the real ECS command worker to production/staging only, because that stack imports a VPC/ECR/image-digest from a foundation stack only staging/production ever deployed.\n\nSince sandbox/staging/production share one AWS account and sandbox teardown cost is a non-issue, the plan is to give sandbox the same ECS worker rather than build a separate local-process/local-IAM path:\n\n- Extract the Fargate cluster/task/service/IAM logic out of CommandServiceStack into a shared construct (CommandWorkerFargateService), parameterized over image/vpc/lease-timeouts.\n- Add SandboxCommandWorkerStack: borrows staging's VPC+ECR via the existing SSM contract (same account), builds the worker image inline as a CDK Docker asset (same pattern ConsoleRunWorker already uses) so sandbox runs current local code instead of a pinned staging digest.\n- New backend.ts flag AMPLIFY_ENABLE_SANDBOX_COMMAND_WORKER, mirroring the existing enableSandboxConsoleWorker/enableSandboxTaskDispatcher pattern; mutually exclusive with the narrower sandbox TaskDispatcher-only flag.\n- Launcher script mirroring start-sandbox-with-console-worker.sh.\n- No new submission API — reuses existing submitCommand/cancelCommand mutations per the epic's single-command-path decision.\n\nThis avoids the alternative (locally-run worker process signing AppSync requests with laptop IAM credentials), which would have needed new credential-scoping work with no existing precedent in the repo.\n\nStaging remains the final ECS/IAM/network acceptance environment; this only gives sandbox the same worker for fast dev iteration before that gate.",
+      "created_at": "2026-08-10T18:45:09.068988Z"
+    },
+    {
+      "id": "b09e2a9e-a264-420d-bd7b-1f6b3dbac117",
+      "author": "derek.norrbom",
+      "text": "Investigation: the new SandboxCommandWorkerStack imports the sandbox Task table and AppSync API from the data nested stack plus three bucket resources from storage. Those imports cause CloudFormation to regenerate/update cross-stack exports; the existing auth/data/storage graph then forms a circular update dependency. Backend synthesis and type-checking pass, so the current tests do not exercise the nested-stack deployment graph. Do not attempt to resolve this with explicit DependsOn: it cannot make a cyclic graph deploy. Recommended next step is to replace the full ECS sandbox composition with the task-described isolated dispatcher plus locally run worker workflow, which avoids importing data/storage into a new ECS stack. Staging remains the ECS acceptance path.",
+      "created_at": "2026-08-10T19:44:35.686100Z"
+    },
+    {
+      "id": "348e29dc-5d54-426e-abc5-f17be3dc00be",
+      "author": "derek.norrbom",
+      "text": "Correction after comparing deployed staging: staging CommandWorker resources are nested beneath the Amplify data stack (ECS cluster ARN includes the data nested-stack path). The sandbox implementation creates SandboxCommandWorkerStack as a peer top-level custom stack, so it is not actually using the same CloudFormation placement. The narrow path is to place the sandbox worker nested stack beneath data as well, retaining the shared CommandWorkerFargateService and avoiding a local-worker rewrite or duplicate sandbox resource implementation. Validate resulting nested-stack graph and resource limits before accepting.",
+      "created_at": "2026-08-10T19:49:38.173891Z"
+    },
+    {
+      "id": "8692d51e-6333-4fd4-8eef-a00ec6137fae",
+      "author": "derek.norrbom",
+      "text": "Starting the narrow remediation: preserve the shared CommandWorkerFargateService and move only the sandbox wrapper’s CloudFormation placement so it nests under Amplify data, matching staging. Validation will include focused tests and a real sandbox synthesis/deploy attempt before handoff.",
+      "created_at": "2026-08-10T19:50:49.058151Z"
+    },
+    {
+      "id": "c432e222-d011-4a0c-acdc-66a77c489226",
+      "author": "derek.norrbom",
+      "text": "Implemented placement-only fix in commit 88ddddc: SandboxCommandWorkerStack is now a NestedStack scoped under the data stack that owns Task, rather than a peer custom stack. The shared worker construct and runtime resources are unchanged. Validation passed: npm test -- --runInBand amplify/command-service/sandbox-resource.test.ts amplify/command-service/resource.test.ts; npm run typecheck:backend; git diff --check. Ready to retry the sandbox launcher.",
+      "created_at": "2026-08-10T19:53:48.481122Z"
+    }
+  ],
+  "created_at": "2026-08-08T00:29:50.235573Z",
+  "updated_at": "2026-08-10T19:53:48.481122Z",
+  "closed_at": null,
+  "custom": {}
+}

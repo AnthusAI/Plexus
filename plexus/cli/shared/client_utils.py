@@ -65,6 +65,7 @@ def create_client() -> PlexusDashboardClient:
     
     # Read account key from environment (now populated by load_config)
     account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
+    account_id = os.getenv('PLEXUS_ACCOUNT_ID')
     if not account_key:
         # Optionally raise an error or log a warning if key is expected
         logger.warning("PLEXUS_ACCOUNT_KEY environment variable not set.")
@@ -80,6 +81,7 @@ def create_client() -> PlexusDashboardClient:
     actor = resolve_actor_context(explicit_source="cli")
     context = ClientContext(
         account_key=account_key,
+        account_id=account_id,
         actor_user_id=actor.user_id,
         actor_type=actor.actor_type,
         actor_key=actor.actor_key,

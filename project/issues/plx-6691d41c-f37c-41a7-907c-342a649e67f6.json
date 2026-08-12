@@ -1,0 +1,31 @@
+{
+  "id": "plx-6691d41c-f37c-41a7-907c-342a649e67f6",
+  "title": "Investigate safe dynamic-state access in YAML score templates",
+  "description": "Investigate the generic LangGraph/Jinja rendering boundary using repository code, sanitized fixtures, synthetic experiments, Git history, and primary upstream sources.\n\nDeliverable: document required template capabilities, exposed data types and trust boundaries, behavior of the restricted environment, risks of a global unrestricted-environment override, and a recommended supported design with alternatives.\n\nConstraints: no production fix, no production configuration inspection or edits, no client information, and no deployment activity.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-0ca6fcfc-e975-4241-a1b5-d79cf8d84a54",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d802e51f-8b85-48b3-a47f-182f7ecd2eb4",
+      "author": "derek.norrbom",
+      "text": "Investigation started. Scope is restricted to generic repository code, sanitized fixtures, synthetic data, history, and primary upstream sources. An isolated worktree will be created from origin/develop; no production configuration inspection or production change is authorized.",
+      "created_at": "2026-08-06T18:52:35.037586Z"
+    },
+    {
+      "id": "b8be4d13-e49b-436f-8dc4-bdd142c84cde",
+      "author": "derek.norrbom",
+      "text": "## Final investigation findings\n\n### Observations\n- Repository prompt nodes create LangChain Jinja chat prompts from configured system/user message fields and render them with a dumped graph state. The normal state is mostly dictionaries, lists, and scalars; the schema permits extra values, so a rendering boundary must not assume every value is JSON-like.\n- The current import-time workaround globally replaces LangChain Core 0.3.81’s restricted sandbox with plain Jinja `Environment` plus `ChainableUndefined`. This restores dotted mapping traversal and permits arbitrary Python-object attribute access and callable execution.\n- LangChain Core 0.3.81 blocks every attribute access and callable to prevent template injection through object methods. It still permits dictionary bracket lookup.\n- Sanitized repository tests demonstrate dotted mapping access. Code comments document a nested mapping plus bracket lookup requirement. No inspected sanitized test demonstrated loops, filters, or conditionals.\n\n### Synthetic probe (Python 3.11; LangChain Core 0.3.81; Jinja 3.1.6)\n- Restricted environment: bracket lookup passed; dotted mapping access and a dotted conditional failed with `SecurityError`.\n- Plain environment: dotted access, conditionals, loops, and filters passed, but synthetic object dunder access and a synthetic method call also passed.\n- Mapping-only sandbox prototype: dotted access, bracket lookup, conditional, loop, and `upper` filter passed; synthetic dunder access rendered empty and synthetic method call was blocked.\n\n### Recommended direction\nDo not keep the global private-symbol monkeypatch. Create a Plexus-owned rendering boundary that first recursively normalizes graph state to JSON-like mappings/lists/scalars, then renders through a narrowly customized `SandboxedEnvironment`. Its dot access should mean mapping-key lookup only; deny underscore-prefixed keys/attributes, every callable, and all non-JSON-like object access. Preserve `ChainableUndefined` only if missing-value behavior is a compatibility requirement. Inject only explicitly reviewed filters/globals.\n\n### Alternatives and tradeoffs\n1. Custom mapping-only sandbox: no ordinary template changes; moderate compatibility risk for templates that rely on object attributes; strongest practical compatibility/security balance; add synthetic capability and negative-security tests.\n2. Recursive JSON-like conversion plus the custom sandbox: no template changes for mapping/list/scalar access; may expose latent non-serializable state dependencies; substantially reduces object surface; validate state shape before rendering.\n3. Explicit lookup filters/functions: requires template migration; smallest implicit surface; higher migration burden; use for new templates or a long-term stricter DSL.\n4. Supported upstream extension point: best maintenance outcome if LangChain/Tactus supplies one; requires upstream API/design and version migration; do not depend on a private monkeypatch.\n\n### Migration/testing\nCharacterize all repository-owned templates with a sanitized AST/capability inventory, add fixtures for nested mapping, indexing, missing values, conditionals, loops, filters, dunder/method denial, and non-JSON state rejection; ship behind an opt-in renderer, compare rendered output on sanitized fixtures, then remove the global override.\n\n### Primary sources\n- https://github.com/langchain-ai/langchain/blob/langchain-core%3D%3D0.3.81/libs/core/langchain_core/prompts/string.py\n- https://github.com/langchain-ai/langchain/commit/fa7789d6c21222b85211755d822ef698d3b34e00\n- https://jinja.palletsprojects.com/en/3.1.x/sandbox/\n\n### Remaining questions\n- Are repository template sources strictly reviewed/versioned, or can an untrusted actor influence them?\n- Which non-JSON values may reach `extra` graph state in real workflows?\n- Is silent chainable-undefined behavior required, or should absent paths become visible validation errors?",
+      "created_at": "2026-08-06T18:54:20.466223Z"
+    }
+  ],
+  "created_at": "2026-08-06T18:52:32.589685Z",
+  "updated_at": "2026-08-06T18:54:25.439276Z",
+  "closed_at": "2026-08-06T18:54:25.439276Z",
+  "custom": {}
+}

@@ -440,6 +440,15 @@ def create_client() -> PlexusDashboardClient:
     logging.debug(f"Using API URL: {client.api_url}")
     return client
 
+
+def _resolve_accuracy_account(client: PlexusDashboardClient) -> Account:
+    """Resolve the authoritative account and its legacy key for accuracy runs."""
+    account_id = client._resolve_account_id()
+    account = Account.get_by_id(account_id, client)
+    if not account or not account.key:
+        raise Exception(f"Could not find account with ID: {account_id}")
+    return account
+
 def resolve_score_external_id_to_uuid(client: PlexusDashboardClient, external_id: str, scorecard_id: str = None) -> str:
     """
     Resolve a score external ID to its DynamoDB UUID using GraphQL API.
@@ -2123,6 +2132,13 @@ def _build_evaluation_task_metadata(
         metadata["procedure_id"] = procedure_id
     return metadata
 
+def _resolve_feedback_task_id(task_id: Optional[str]) -> Optional[str]:
+    """Prefer an explicit task ID, then inherit the dispatcher task context."""
+    if task_id:
+        return task_id
+    return (os.getenv("PLEXUS_DISPATCH_TASK_ID") or "").strip() or None
+
+
 @evaluate.command()
 @click.option('--scorecard', 'scorecard', default=None, help='Scorecard identifier (ID, name, key, or external ID)')
 @click.option('--yaml', is_flag=True, help='Load scorecard from individual YAML files (from fetch_score_configurations) instead of the API')
@@ -2472,14 +2488,11 @@ def accuracy(
             client = create_client()  # Create client at the top level
             account = None  # Initialize account at the top level
             
-            # Get the account ID from PLEXUS_ACCOUNT_KEY environment variable
-            account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
-            if not account_key:
-                raise Exception("PLEXUS_ACCOUNT_KEY environment variable must be set")
-            logging.info(f"Looking up account with key: {account_key}...")
-            account = Account.list_by_key(key=account_key, client=client)
-            if not account:
-                raise Exception(f"Could not find account with key: {account_key}")
+            # Dashboard-dispatched work binds the authoritative Account ID on
+            # the client. Fetch the record so legacy evaluation APIs receive
+            # the account's real key rather than mistaking its ID for a key.
+            account = _resolve_accuracy_account(client)
+            account_key = account.key
             logging.info(f"Found account: {account.name} ({account.id})")
             
             if task_id:
@@ -3183,6 +3196,7 @@ def accuracy(
                 task_id=task_id,
                 evaluation_id=eval_id_for_eval,
                 account_id=acc_id_for_eval,
+                account_key=account_key,
                 scorecard_id=sc_id_for_eval,
                 score_id=score_id_for_eval,
                 score_version_id=score_version_id_for_eval,
@@ -4399,6 +4413,8 @@ def feedback(
         plexus evaluate feedback --scorecard "SampleScorecard" --score "SampleScore" --days 30 --version abc123
     
     """
+    task_id = _resolve_feedback_task_id(task_id)
+
     from plexus.cli.shared.client_utils import create_client
     from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
     from plexus.cli.report.utils import resolve_account_id_for_command

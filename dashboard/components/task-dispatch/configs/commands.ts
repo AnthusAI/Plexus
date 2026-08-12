@@ -4,11 +4,6 @@ interface EvaluationOptions {
   scorecardName: string
   scoreName: string
   numberOfSamples: number
-  samplingMethod: 'random' | 'sequential'
-  loadFresh: boolean
-  randomSeed?: number
-  visualize: boolean
-  logToLanggraph: boolean
 }
 
 interface DemoOptions {
@@ -52,7 +47,7 @@ const createEvaluationCommand = (type: string) => {
       `--number-of-samples ${options.numberOfSamples}`,
       `--scorecard "${options.scorecardName}"`,
       `--score "${options.scoreName}"`,
-      options.loadFresh ? '--fresh' : ''
+      '--use-score-associated-dataset'
     ].filter(Boolean).join(' ')
     
     const command = `evaluate ${type} ${args}`
@@ -66,9 +61,7 @@ export const commands = {
   demo: createSimpleCommand(() => 'command demo'),
 
   evaluation: {
-    accuracy: createEvaluationCommand('accuracy'),
-    consistency: createEvaluationCommand('consistency'),
-    alignment: createEvaluationCommand('alignment')
+    accuracy: createEvaluationCommand('accuracy')
   },
 
   optimization: createSimpleCommand(() => 'optimize')
@@ -76,4 +69,4 @@ export const commands = {
 
 // Type helpers
 export type CommandType = keyof typeof commands
-export type EvaluationType = keyof typeof commands.evaluation 
+export type EvaluationType = keyof typeof commands.evaluation

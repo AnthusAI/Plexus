@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9cfb7f8d-6d99-449d-963e-fc192fb83876",
+  "issue_id": "plx-21816d8c-52b4-438c-b14f-b5f0ecb9e87e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-04T22:55:54.397Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "As a platform operator, I want the portable command service state and transport resources provisioned through reusable infrastructure, so that deployments are deterministic and workers never create cloud resources at runtime.\n\nFeature: Managed command state and transport primitives\n  Scenario: A consumer composes the AWS command service foundation\n    Given a consumer-supplied resource prefix and environment\n    When the reusable stack is synthesized\n    Then it contains one retained encrypted DynamoDB table\n    And it contains one encrypted command queue with a dead-letter queue\n    And it contains an alarm for visible dead-letter messages\n    And it contains no command runtime, API, dashboard, Celery, or client-specific behavior",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "AWS command state and transport resources are explicitly provisioned"
+  }
+}

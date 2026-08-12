@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ChevronDown } from "lucide-react"
-import { createTask } from "@/utils/data-operations"
+import { submitCommand } from "@/lib/submit-command"
 import { toast } from "sonner"
 import { TaskAction, TaskCommandAction, TaskDispatchConfig } from "./types"
 import { useAccount } from "@/app/contexts/AccountContext"
@@ -36,35 +36,25 @@ export function TaskDispatchButton({ config }: { config: TaskDispatchConfig }) {
     setIsDropdownOpen(false)
   }
 
-  const handleDispatch = async (commandStr?: string, target?: string) => {
-    if (!selectedAction?.name) {
+  const handleDispatch = async (arguments_: Record<string, unknown>, target?: string) => {
+    if (!selectedAction?.action || !selectedAccount?.id) {
       toast.error("Invalid action configuration");
       return;
     }
-
-    // Use the dynamically generated command if provided, otherwise fall back to the static command
-    const actualCommand = commandStr || (typeof selectedAction.command === 'function' 
-      ? selectedAction.command({}) 
-      : selectedAction.command);
-    
     // Use the provided target or fall back to the action's target
     const actualTarget = target || selectedAction.target || '';
 
-    console.log('Dispatching task with command:', actualCommand, 'target:', actualTarget);
+    if (actualTarget !== 'evaluation' && actualTarget !== 'report') {
+      toast.error("Unsupported command target");
+      return;
+    }
 
     try {
       setIsLoading(true);
-      const task = await createTask({
-        type: selectedAction.name === 'Accuracy' ? 'Accuracy Evaluation' : selectedAction.name.toLowerCase(),
-        target: actualTarget,
-        command: actualCommand,
-        accountId: selectedAccount?.id || 'call-criteria',
-        dispatchStatus: 'PENDING',
-        status: 'PENDING'
-      });
+      const task = await submitCommand(selectedAccount.id, selectedAction.action, arguments_)
       if (task) {
         toast.success("Task announced", {
-          description: <span className="font-mono text-sm truncate block">{actualCommand}</span>
+          description: <span className="font-mono text-sm truncate block">{selectedAction.name}</span>
         });
       } else {
         toast.error("Failed to dispatch task");

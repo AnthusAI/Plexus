@@ -77,6 +77,11 @@ class ScoreData:
         return self.dataframe
 
     def _load_data_cache(self):
+        if os.getenv("PLEXUS_RUNTIME_PROFILE") == "dashboard":
+            raise RuntimeError(
+                "Dashboard commands cannot load a data class declared in score YAML. "
+                "Provide a Plexus-managed dataset explicitly."
+            )
         data_cache_class_path = self.parameters.data['class']
         
         # Check if the provided class path includes a module or is just the class name

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "223580b4-5aab-4d51-a50c-3a4018bb1147",
+  "issue_id": "plx-a8c01749-7a27-4079-b80b-ba3ad3374fcc",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-05T18:12:22.481Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Build a disposable, non-production spike that determines whether Celery can remain the portable command execution adapter without duplicating orchestration. The local layer must run the same synthetic lifecycle through plain and Celery emitters against the no-AWS dashboard control plane and compare observed Task/TaskStage state. The broker layer must use two workers, late acknowledgement, durable claims, renewable leases, fencing, cancellation, progress, recovery, and terminal duplicate handling. The AWS layer must be manually deployable and destroyable without existing pipelines, use task-role credentials, predefined SQS, two Fargate workers, accelerated visibility timeout, worker-kill recovery, and ECS task protection. The spike passes only through documented Celery APIs and must not modify legacy production dispatch or deployed pipelines.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Prove Celery command adapter behavior across local and AWS runtimes"
+  }
+}

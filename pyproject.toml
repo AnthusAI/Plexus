@@ -18,6 +18,7 @@ include = [
     "plexus/optimization/semantic_pricing/*.json",
     "plexus/rubric_memory/procedures/*.tac",
     "plexus/runtime/async_score_processor/Dockerfile",
+    "plexus/command_worker/Dockerfile",
 ]
 
 [tool.poetry.dependencies]
@@ -67,6 +68,7 @@ pyarrow = { version = "21.0.0", optional = true }
 nltk = { version = "3.9.4", optional = true }
 transformers = { version = "*", optional = true }
 seaborn = { version = "*", optional = true }
+matplotlib = { version = "*", optional = true }
 pydot = { version = "2.0.0", optional = true }
 pydotplus = { version = "2.0.2", optional = true }
 graphviz = { version = "0.20.3", optional = true }
@@ -121,6 +123,22 @@ worker = ["graphviz", "pandas", "pyarrow", "contractions", "seaborn", "openpyxl"
 # Direct dependencies used by the interactive Console worker in addition to
 # the scoring runtime. Keep broad service infrastructure out of this image.
 console = ["celery", "fastmcp", "requests-aws4auth"]
+# Explicit runtime closure for the command service's enabled actions. Keep this
+# list driven by supported command behavior rather than image-size targets.
+command-service-runtime = [
+    # The root Click group imports the legacy analyze module during command registration.
+    "boto3", "celery", "pycurl", "requests-aws4auth", "pyairtable",
+    # Report processors import these at command registration time.
+    "pandas", "pyarrow", "seaborn", "matplotlib", "scikit-learn", "openpyxl", "contractions", "graphviz",
+    "nltk", "langchain", "langchain-core", "langchain-community", "langgraph",
+    "langchain-aws", "langchain-openai", "langchain-anthropic", "tactus",
+    # Feedback evaluation's RCA path imports the reinforcement-memory stack at
+    # execution time. It is part of an enabled command contract, so keep it in
+    # the deployable worker rather than allowing a runtime-only import failure.
+    "sentence-transformers", "biblicus",
+]
+# Kept for integrations that use the portable worker outside the ECS service.
+command-worker = ["boto3", "celery"]
 google-vertexai = [
     "langchain-google-vertexai",
 ]
@@ -173,6 +191,7 @@ constructs = ">=10.0.0"
 [tool.poetry.scripts]
 plexus = "plexus.cli.entrypoint:main"
 plexus-dashboard = "plexus.dashboard.cli:cli"
+plexus-command-worker = "plexus.command_worker.runtime:main"
 
 [tool.pytest.ini_options]
 filterwarnings = [

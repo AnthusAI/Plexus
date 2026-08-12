@@ -1,0 +1,18 @@
+{
+  "id": "plx-b94696df-fd0b-4c1c-87b7-cf07f6a337c2",
+  "title": "Prove the long-running procedure worker contract",
+  "description": "Prove that the generic command worker can execute registered procedure commands that run for up to approximately twelve hours without introducing a separate procedure worker or dashboard-specific execution path.\n\nIntent:\n- Preserve one structured command service and one portable executor boundary.\n- Support long-running optimization procedures as ordinary registered procedure.run workloads.\n- Keep dashboard launch/management controls out of scope.\n\nRequired proof:\n- A verified Task account context reaches procedure execution.\n- Queue visibility and durable lease renewal remain valid for the full supported duration.\n- ECS task protection covers active execution and is cleared after settlement.\n- Cancellation and ownership loss have explicit behavior; an abandoned worker cannot silently produce an authoritative terminal result.\n- Worker concurrency cannot clear task-level protection while another command in the same ECS task is active. Prefer one command per ECS task unless a simpler proven protection reference-count exists.\n- Long work does not indefinitely block short queued commands; define horizontal scaling from observable queue/workload signals rather than an unexplained fixed concurrency assumption.\n- Tests use accelerated clocks/fakes plus a bounded real command smoke; no twelve-hour CI test is required.\n- Provider-specific ECS protection stays behind the existing portable runtime port so a Kubernetes deployment can use its own adapter.\n\nNon-goals:\n- No dashboard controls or workflow redesign.\n- No second command protocol, state store, dispatcher, or Celery replacement.\n- No production deployment in this sub-task.\n\nAcceptance criteria:\n- The generic worker executes a representative structured procedure.run through the real executor boundary.\n- Accelerated coverage proves lease, visibility, protection, cancellation, and terminal-state behavior across the twelve-hour support window.\n- Concurrency and scaling behavior are explicit, tested, and justified by the long-running/interactive workload mix.\n- The result is documented as a reusable worker capability, not a dashboard-specific special case.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8350176a-8d4f-4581-bfb1-0792612e47a7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-08-06T21:10:30.543506Z",
+  "updated_at": "2026-08-06T21:10:30.543506Z",
+  "closed_at": null,
+  "custom": {}
+}

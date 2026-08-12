@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "102f902e-c0f3-494a-bcca-f612dac4376e",
+  "issue_id": "plx-8350176a-8d4f-4581-bfb1-0792612e47a7",
+  "event_type": "field_updated",
+  "occurred_at": "2026-08-06T05:27:45.328Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Implement the portable command lifecycle directly against the existing dashboard Task model, which is the single authoritative state visible to workers and the UI. Use Task.id as command identity; add or consume scalar lifecycle fields for idempotency digest, lease owner/expiry, fencing, and cancellation. Celery remains the delivery adapter in AWS and Kubernetes. Conditional mutations must reject stale workers and continue triggering Task subscriptions. Do not create a separate command-state table, projection consumer, compatibility fallback, or static cloud credentials. Prove idempotent submission, claim, renewal, progress, cancellation, terminal settlement, stale-worker rejection, and realtime UI updates against the local or sandbox Task store.",
+        "to": "Implement one canonical dashboard command path using the existing Task model as authoritative state. The dashboard server runtime must authenticate the caller, derive accountId and submittedBy, validate the registered command target, compute deterministic Task identity and request digest, and conditionally create or return the Task through the existing GraphQL API. The Task stream dispatcher must publish the structured Celery envelope exactly as an at-least-once transport using workload identity; worker fencing makes duplicate delivery safe. The always-on worker claims and updates the same Task through conditional GraphQL mutations, and subscriptions expose progress and terminal state. Remove dual legacy/portable task names, statuses, branches, and unused Python submission wiring. Do not add another state store, projector, custom GraphQL resolver, static credentials, or fallback path. Prove the dashboard server route, dispatch transition, claim/fencing, cancellation, completion, and realtime update in the sandbox before this task is complete."
+      }
+    }
+  }
+}

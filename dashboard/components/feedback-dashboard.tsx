@@ -27,10 +27,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { createTask } from "@/utils/data-operations";
+import { submitCommand } from "@/lib/submit-command";
 import {
-  buildFeedbackReportCommand,
   getFeedbackReportActions,
+  resolveAcceptanceTimelineBucketType,
+  resolveTimelineBucketType,
   type FeedbackReportActionDefinition,
 } from "@/utils/feedback-report-actions";
 import {
@@ -426,58 +427,25 @@ function FeedbackReportActionsMenu({
 }) {
   const router = useRouter();
   const { selectedAccount } = useAccount();
-  const [isDispatching, setIsDispatching] = useState(false);
   const actions = getFeedbackReportActions(Boolean(scoreId));
+  const [isDispatching, setIsDispatching] = useState(false);
 
   const dispatchReport = async (action: FeedbackReportActionDefinition) => {
-    if (!selectedAccount?.id) {
-      toast.error("No account is selected.");
-      return;
-    }
-
+    if (!selectedAccount?.id) return toast.error('No account is selected.');
     try {
       setIsDispatching(true);
-      const command = buildFeedbackReportCommand({
-        actionId: action.id,
-        scorecardId,
-        scoreId,
-        days,
-        startDate,
-        endDate,
-        timezone,
-        weekStart,
+      const isTimeline = ['timeline', 'volume', 'overview'].includes(action.id);
+      const window = { days, startDate, endDate };
+      const task = await submitCommand(selectedAccount.id, 'feedback.report', {
+        report: action.id, scorecardId, ...(scoreId ? { scoreId } : {}),
+        ...(days !== undefined ? { days } : startDate && endDate ? { startDate, endDate } : {}),
+        ...(isTimeline ? { bucketType: resolveTimelineBucketType(window), timezone, weekStart } : {}),
+        ...(action.id === 'acceptance-rate-timeline' ? { bucketType: resolveAcceptanceTimelineBucketType(window) } : {}),
       });
-
-      const task = await createTask({
-        type: "feedback report",
-        target: "report",
-        command,
-        accountId: selectedAccount.id,
-        dispatchStatus: "PENDING",
-        status: "PENDING",
-      });
-
-      if (!task?.id) {
-        toast.error("Failed to queue report generation.");
-        return;
-      }
-
-      toast.success(`${action.label} queued`, {
-        description: (
-          <span className="block max-w-[28rem] truncate font-mono text-xs">
-            {command}
-          </span>
-        ),
-        action: {
-          label: "View task",
-          onClick: () => router.push(`/lab/tasks/${task.id}`),
-        },
-      });
+      toast.success(`${action.label} queued`, { action: { label: 'View task', onClick: () => router.push(`/lab/tasks/${task.id}`) } });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to queue report generation.");
-    } finally {
-      setIsDispatching(false);
-    }
+      toast.error(error instanceof Error ? error.message : 'Failed to queue report generation.');
+    } finally { setIsDispatching(false); }
   };
 
   return (
@@ -489,7 +457,7 @@ function FeedbackReportActionsMenu({
           disabled={isDispatching}
           className="bg-card text-foreground shadow-none hover:bg-card-selected"
         >
-          {isDispatching ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus2 className="h-4 w-4" />}
+          <FilePlus2 className="h-4 w-4" />
           {buttonLabel}
         </Button>
       </DropdownMenuTrigger>
@@ -497,9 +465,8 @@ function FeedbackReportActionsMenu({
         {actions.map((action) => (
           <DropdownMenuItem
             key={action.id}
-            onSelect={() => {
-              void dispatchReport(action);
-            }}
+            disabled={isDispatching}
+            onSelect={() => { void dispatchReport(action); }}
           >
             {action.label}
           </DropdownMenuItem>

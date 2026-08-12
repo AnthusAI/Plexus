@@ -15,6 +15,7 @@ from .ports import (
     Executor,
     HeartbeatScheduler,
     LifecycleStore,
+    TaskScaleInProtection,
 )
 from .scheduler import ThreadHeartbeatScheduler
 
@@ -23,12 +24,17 @@ class LeaseLostError(RuntimeError):
     """Raised when the lifecycle store rejects a fenced mutation."""
 
 
+class CancellationRequestedError(RuntimeError):
+    """Raised at a cooperative boundary after durable cancellation is requested."""
+
+
 class ProcessOutcome(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     ACTIVE_DUPLICATE = "active_duplicate"
     TERMINAL_DUPLICATE = "terminal_duplicate"
     LEASE_LOST = "lease_lost"
+    CANCELLED = "cancelled"
     INTEGRITY_MISMATCH = "integrity_mismatch"
 
 
@@ -41,6 +47,7 @@ class _ExecutionContext:
     lease_duration: timedelta
     _lock: RLock
     _ownership_lost: Event
+    _cancellation_requested: Event
     _ownership_loss_reason: str | None = None
 
     @property
@@ -52,6 +59,14 @@ class _ExecutionContext:
             raise LeaseLostError(
                 self._ownership_loss_reason or "execution ownership was lost"
             )
+
+    @property
+    def cancellation_requested(self) -> bool:
+        return self._cancellation_requested.is_set()
+
+    def raise_if_cancellation_requested(self) -> None:
+        if self._cancellation_requested.is_set():
+            raise CancellationRequestedError("execution cancellation was requested")
 
     def _lose_ownership(self, reason: str) -> None:
         with self._lock:
@@ -73,6 +88,7 @@ class _ExecutionContext:
         update = ProgressUpdate(fraction, message, details)
         with self._lock:
             self.raise_if_lease_lost()
+            self.raise_if_cancellation_requested()
             accepted = self.lifecycle.report_progress(
                 self.command_id, self.lease.token, update, self.clock.now()
             )
@@ -94,6 +110,8 @@ class _ExecutionContext:
                 self.raise_if_lease_lost()
             self.raise_if_lease_lost()
             self.lease = renewed
+            if renewed.cancellation_requested:
+                self._cancellation_requested.set()
             return renewed
 
     def heartbeat(self, delivery: Delivery, delivery_lease_duration: timedelta) -> None:
@@ -103,7 +121,8 @@ class _ExecutionContext:
                 if not delivery.extend_lease(delivery_lease_duration):
                     self._lose_ownership("delivery lease renewal failed")
         except LeaseLostError:
-            pass
+            # Another worker owns the command now; preserve the fenced state.
+            return
         except Exception as exc:
             self._lose_ownership(f"heartbeat raised {type(exc).__name__}: {exc}")
 
@@ -118,6 +137,7 @@ class CommandWorker:
         heartbeat_interval: timedelta | None = None,
         delivery_lease_duration: timedelta | None = None,
         heartbeat_scheduler: HeartbeatScheduler | None = None,
+        task_scale_in_protection: TaskScaleInProtection | None = None,
     ) -> None:
         if lease_duration <= timedelta(0):
             raise ValueError("lease_duration must be positive")
@@ -138,6 +158,21 @@ class CommandWorker:
         self._heartbeat_interval = heartbeat_interval
         self._delivery_lease_duration = delivery_lease_duration
         self._heartbeat_scheduler = heartbeat_scheduler or ThreadHeartbeatScheduler()
+        self._task_scale_in_protection = task_scale_in_protection
+
+    def _clear_task_scale_in_protection(self) -> None:
+        """Best-effort cleanup after a durable terminal state.
+
+        The protection has a finite ECS expiry, so a transient agent failure
+        here cannot permanently pin a task.  It must not undo a completed Task
+        lifecycle mutation by turning a successful command into a retry.
+        """
+
+        if self._task_scale_in_protection is not None:
+            try:
+                self._task_scale_in_protection.clear()
+            except Exception:
+                pass
 
     def process(self, delivery: Delivery, owner: str) -> ProcessOutcome:
         if not owner:
@@ -159,6 +194,9 @@ class CommandWorker:
             )
             return ProcessOutcome.INTEGRITY_MISMATCH
 
+        cancellation_requested = Event()
+        if claim.cancellation_requested:
+            cancellation_requested.set()
         context = _ExecutionContext(
             lifecycle=self._lifecycle,
             clock=self._clock,
@@ -167,7 +205,17 @@ class CommandWorker:
             lease_duration=self._lease_duration,
             _lock=RLock(),
             _ownership_lost=Event(),
+            _cancellation_requested=cancellation_requested,
         )
+        if (
+            self._task_scale_in_protection is not None
+            and not self._task_scale_in_protection.enable()
+        ):
+            # Do not begin a long-running effect if ECS cannot acknowledge the
+            # scale-in fence.  Releasing retains the at-least-once delivery.
+            self._clear_task_scale_in_protection()
+            delivery.release()
+            return ProcessOutcome.LEASE_LOST
         try:
             heartbeat = self._heartbeat_scheduler.start(
                 self._heartbeat_interval,
@@ -177,12 +225,14 @@ class CommandWorker:
             context._lose_ownership(
                 f"heartbeat scheduling raised {type(exc).__name__}: {exc}"
             )
+            self._clear_task_scale_in_protection()
             delivery.release()
             return ProcessOutcome.LEASE_LOST
 
         execution_error: Exception | None = None
         result: JSONValue = None
         try:
+            context.raise_if_cancellation_requested()
             result = self._executor.execute(envelope, context)
         except Exception as exc:
             execution_error = exc
@@ -202,6 +252,22 @@ class CommandWorker:
         try:
             context.raise_if_lease_lost()
         except LeaseLostError:
+            self._clear_task_scale_in_protection()
+            delivery.release()
+            return ProcessOutcome.LEASE_LOST
+
+        cancellation_requested = context.cancellation_requested or isinstance(
+            execution_error, CancellationRequestedError
+        )
+        if cancellation_requested:
+            accepted = self._lifecycle.finalize_cancel(
+                envelope.command_id, context._token(), self._clock.now()
+            )
+            if accepted:
+                self._clear_task_scale_in_protection()
+                delivery.acknowledge()
+                return ProcessOutcome.CANCELLED
+            self._clear_task_scale_in_protection()
             delivery.release()
             return ProcessOutcome.LEASE_LOST
 
@@ -213,8 +279,10 @@ class CommandWorker:
                 self._clock.now(),
             )
             if accepted:
+                self._clear_task_scale_in_protection()
                 delivery.acknowledge()
                 return ProcessOutcome.FAILED
+            self._clear_task_scale_in_protection()
             delivery.release()
             return ProcessOutcome.LEASE_LOST
 
@@ -228,8 +296,10 @@ class CommandWorker:
                 self._clock.now(),
             )
             if accepted:
+                self._clear_task_scale_in_protection()
                 delivery.acknowledge()
                 return ProcessOutcome.FAILED
+            self._clear_task_scale_in_protection()
             delivery.release()
             return ProcessOutcome.LEASE_LOST
 
@@ -240,7 +310,15 @@ class CommandWorker:
             self._clock.now(),
         )
         if not accepted:
+            if self._lifecycle.finalize_cancel(
+                envelope.command_id, context._token(), self._clock.now()
+            ):
+                self._clear_task_scale_in_protection()
+                delivery.acknowledge()
+                return ProcessOutcome.CANCELLED
+            self._clear_task_scale_in_protection()
             delivery.release()
             return ProcessOutcome.LEASE_LOST
         delivery.acknowledge()
+        self._clear_task_scale_in_protection()
         return ProcessOutcome.COMPLETED

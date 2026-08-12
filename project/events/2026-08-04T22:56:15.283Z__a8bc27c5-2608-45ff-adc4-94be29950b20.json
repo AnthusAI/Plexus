@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a8bc27c5-2608-45ff-adc4-94be29950b20",
+  "issue_id": "plx-cb678851-ce59-423b-92c6-dd0b0fe90e16",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-04T22:56:15.283Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implements story plx-21816d. Add a client-neutral CommandServiceStateStack under plexus/infrastructure/command_service. Provision a pk/sk DynamoDB table using on-demand billing, AWS-managed encryption, point-in-time recovery, deletion protection, and RETAIN; a standard SQS command queue with explicitly managed DLQ, encryption, retention, visibility, and redrive configuration; and a DLQ visibility alarm with optional operations-topic action. Expose stable resource attributes and outputs. Add CDK assertion tests, property validation, and a client-specific-value boundary scan. Do not add runtime adapters, Lambda, Fargate, API, dashboard, Celery, or legacy integration.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement the reusable AWS command state stack"
+  }
+}

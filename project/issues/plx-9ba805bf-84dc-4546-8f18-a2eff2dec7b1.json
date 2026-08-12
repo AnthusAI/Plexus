@@ -1,0 +1,49 @@
+{
+  "id": "plx-9ba805bf-84dc-4546-8f18-a2eff2dec7b1",
+  "title": "Implement portable command worker runtime entrypoint",
+  "description": "Provide the portable runtime process used by a command-worker container. Configure delivery and durable lifecycle adapters from explicit environment bindings, load a consumer-supplied executor through a stable plugin boundary, and keep dashboard and consumer execution behavior out of the runtime. Add focused configuration and process-startup validation.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6e969501-3579-48e5-8bbc-ac9b19628e6d",
+      "author": "derek.norrbom",
+      "text": "Implemented the portable worker runtime entrypoint: validated environment bindings, explicit integration-owned executor plugin loading, SQS Celery configuration using a supplied queue URL, DynamoDB lifecycle binding, and a package CLI. Local validation passed: python -m pytest tests/command_worker -q (103 passed); python -m behave -q tests/command_worker/features (30 scenarios passed); ruff check plexus/command_worker tests/command_worker; black --check plexus/command_worker/runtime plexus/command_worker/adapters tests/command_worker/test_runtime_entrypoint.py tests/command_worker/test_celery_delivery.py tests/command_worker/test_dynamodb_lifecycle.py.",
+      "created_at": "2026-08-05T21:22:44.656342Z"
+    },
+    {
+      "id": "b30bc7a2-d831-49c2-bb19-55c7ff8ee074",
+      "author": "derek.norrbom",
+      "text": "Added the dedicated command-worker extra (boto3 and celery) and regenerated poetry.lock, so the new entrypoint never relies on incidental dependencies from another Plexus extra. Updated the open develop PR with this change. Revalidated with poetry lock; python -m pytest tests/command_worker -q (103 passed); ruff check plexus/command_worker tests/command_worker; black --check plexus/command_worker/runtime tests/command_worker/test_runtime_entrypoint.py; git diff --check.",
+      "created_at": "2026-08-05T21:24:29.790442Z"
+    },
+    {
+      "id": "78000650-4912-4673-9ddc-37b75e64f0ad",
+      "author": "derek.norrbom",
+      "text": "Follow-up queued: replace the intentional empty LeaseLostError handler in command_worker/worker.py with an explicit return and explanatory comment. Keep Protocol ellipsis findings unchanged because they are typed interface declarations, not runtime no-ops. Validate with the affected command-worker tests and a fresh narrow Python CodeQL scan.",
+      "created_at": "2026-08-05T21:46:06.029390Z"
+    },
+    {
+      "id": "9e308ada-fa8d-45f2-8f38-73bc29995cf3",
+      "author": "derek.norrbom",
+      "text": "Completed the lease-loss clarity follow-up in a separate branch. The worker now explicitly returns after expected LeaseLostError during a heartbeat, preserving the existing fenced-state behavior. Fresh narrow CodeQL scan now reports only the 31 expected Protocol ellipsis notices in ports.py; no empty-except remains. Validation: python -m pytest tests/command_worker -q (103 passed); ruff check plexus/command_worker/worker.py; black --check plexus/command_worker/worker.py; rcql -q --lang=python --scan-files ./plexus/command_worker/* --no-fail.",
+      "created_at": "2026-08-05T21:47:18.024601Z"
+    },
+    {
+      "id": "71862b14-79b0-43d7-9fc9-2a6c7dd731f5",
+      "author": "derek.norrbom",
+      "text": "The portable runtime entrypoint and its lease-loss CodeQL cleanup have both landed in develop through their reviewed pull requests. Marking this task complete.",
+      "created_at": "2026-08-05T21:55:33.711078Z"
+    }
+  ],
+  "created_at": "2026-08-05T21:20:47.730798Z",
+  "updated_at": "2026-08-05T21:55:42.656784Z",
+  "closed_at": "2026-08-05T21:55:42.656784Z",
+  "custom": {}
+}

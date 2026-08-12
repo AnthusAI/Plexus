@@ -1,0 +1,25 @@
+{
+  "id": "plx-b6ba602b-4a52-43ee-8392-f21bcb551db7",
+  "title": "Extract CommandWorkerFargateService construct from CommandServiceStack",
+  "description": "",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-aba73b78-6f78-4a38-aa4a-331bc8ebc654",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1d42116a-ade8-4df1-90b2-223b08a1f27f",
+      "author": "derek.norrbom",
+      "text": "Extracted CommandWorkerFargateService construct (dashboard/amplify/command-service/worker-service.ts) from CommandServiceStack's inline Fargate/ECS/IAM logic. CommandServiceStack now composes it; existing resource.test.ts (20 tests) still green unchanged. Also threaded configurable visibilityTimeout into TaskStreamDispatcher (was hardcoded 12h) so callers with shorter lease/heartbeat needs get a matching SQS visibility timeout.",
+      "created_at": "2026-08-10T19:15:30.403843Z"
+    }
+  ],
+  "created_at": "2026-08-10T18:45:25.057767Z",
+  "updated_at": "2026-08-10T19:15:30.417520Z",
+  "closed_at": "2026-08-10T19:15:30.417520Z",
+  "custom": {}
+}

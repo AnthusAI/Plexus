@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d172b8b4-5140-4512-bc92-bea0e84a701b",
+  "issue_id": "plx-f7e6da1e-def6-4ea4-8024-f45728d9a0cd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-06T00:28:35.694Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Improve task-output presentation so completed tasks can show captured stderr as runtime diagnostics without red error styling. Reserve error styling for failed tasks or a terminal task error message. Preserve separate stdout and stderr streams for troubleshooting.\n\nOut of scope: changing process stream routing or suppressing runtime logs.",
+    "issue_type": "chore",
+    "labels": [],
+    "parent": "plx-a5435951-cf08-43ea-b48d-b47921443e1a",
+    "priority": 3,
+    "status": "open",
+    "title": "Present successful task stderr without error styling"
+  }
+}

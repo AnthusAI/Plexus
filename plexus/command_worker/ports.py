@@ -102,6 +102,16 @@ class LifecycleStore(Protocol):
         now: datetime,
     ) -> bool: ...
 
+    def finalize_cancel(
+        self,
+        command_id: str,
+        token: str,
+        now: datetime,
+    ) -> bool:
+        """Atomically settle a cancellation request held by this lease."""
+
+        ...
+
 
 class ExecutionContext(Protocol):
     def report_progress(
@@ -117,6 +127,11 @@ class ExecutionContext(Protocol):
     def ownership_lost(self) -> bool: ...
 
     def raise_if_lease_lost(self) -> None: ...
+
+    @property
+    def cancellation_requested(self) -> bool: ...
+
+    def raise_if_cancellation_requested(self) -> None: ...
 
 
 class Executor(Protocol):
@@ -188,3 +203,17 @@ class HeartbeatScheduler(Protocol):
     def start(
         self, interval: timedelta, callback: Callable[[], None]
     ) -> HeartbeatHandle: ...
+
+
+class TaskScaleInProtection(Protocol):
+    """Protect the current worker task while a claimed command is executing.
+
+    This is deliberately a small runtime port: the portable worker does not
+    need to know whether the deployment is ECS, Kubernetes, or a local test.
+    Implementations must make enablement durable before work begins and clear
+    protection after the command reaches a terminal lifecycle state.
+    """
+
+    def enable(self) -> bool: ...
+
+    def clear(self) -> bool: ...

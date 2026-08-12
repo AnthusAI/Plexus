@@ -202,16 +202,13 @@ async def predict_impl(
         # Initialize task progress tracking if task_id is provided
         if task_id:
             try:
-                client = PlexusDashboardClient()
-                
-                # Get the account ID
-                account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
-                if not account_key:
-                    raise Exception("PLEXUS_ACCOUNT_KEY environment variable must be set")
-                logging.info(f"Looking up account with key: {account_key}...")
-                account = Account.list_by_key(key=account_key, client=client)
+                from plexus.cli.shared.client_utils import create_client
+
+                client = create_client()
+                account_id = client._resolve_account_id()
+                account = Account.get_by_id(account_id, client)
                 if not account:
-                    raise Exception(f"Could not find account with key: {account_key}")
+                    raise Exception(f"Could not find account with ID: {account_id}")
                 logging.info(f"Found account: {account.name} ({account.id})")
                 
                 # Get existing task if task_id provided
@@ -1144,6 +1141,10 @@ def select_sample(scorecard_identifier, score_name, item_identifier, fresh, comp
     # Create API client
     client = create_client()
     account_id = resolve_account_id_for_command(client, None)
+    account = Account.get_by_id(account_id, client)
+    if not account or not account.key:
+        raise ValueError(f"Could not find account with ID: {account_id}")
+    account_key = account.key
     
     if item_identifier:
         # Use the flexible item identifier resolution
@@ -1259,7 +1260,7 @@ def select_sample(scorecard_identifier, score_name, item_identifier, fresh, comp
             # Prepare metadata by combining Item metadata with required CLI metadata
             base_metadata = {
                 "item_id": item.id,
-                "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', ''),
+                "account_key": account_key,
                 "scorecard_identifier": scorecard_identifier,  # Use identifier instead of scorecard_key
                 "score_name": score_name
             }
@@ -1339,7 +1340,7 @@ def select_sample(scorecard_identifier, score_name, item_identifier, fresh, comp
             'item_id': item.id,
             'metadata': json.dumps({
                 "item_id": item.id,
-                "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', ''),
+                "account_key": account_key,
                 "scorecard_identifier": scorecard_identifier,  # Use identifier instead of scorecard_key
                 "score_name": score_name
             }),

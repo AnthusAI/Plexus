@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "dae415ae-3588-4a34-8995-fca6ef64baeb",
+  "issue_id": "plx-8e63cd4c-947d-403f-81db-d036f6eaacc5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-05T22:33:53.563Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Compare authoritative lifecycle ownership and dashboard synchronization options before implementing a projection. Evaluate correctness, user experience, operational cost, and portability across deployment targets. Record a defensible recommendation, rejection criteria, and validation plan without client-specific information.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Evaluate command lifecycle and dashboard state ownership"
+  }
+}

@@ -9,6 +9,10 @@ type GraphqlRequest = {
   authMode?: string
 }
 
+type SubscriptionAction = "create" | "update" | "delete"
+type SubscriptionObserver = { next?: (value: any) => void; error?: (error: unknown) => void }
+type SubscriptionDefinition = { action: SubscriptionAction; modelName: ModelName; root: string }
+
 const endpoint = () => (
   process.env.NEXT_PUBLIC_PLEXUS_API_URL?.trim() || "http://localhost:18080/graphql"
 )
@@ -40,7 +44,7 @@ export function generateClient() {
 
 function graphql<T = any>({ query, variables }: GraphqlRequest): Promise<T> | T {
   if (/^\s*subscription\b/i.test(query)) {
-    return noOpSubscription() as T
+    return createPollingSubscription(parseSubscription(query), variables || {}) as T
   }
 
   return executeGraphqlFetch<T>(query, variables)
@@ -76,9 +80,9 @@ function createModelClient(modelName: ModelName) {
     update: (input: Record<string, any>) => modelMutation(modelName, "update", input),
     delete: (input: Record<string, any>) => modelMutation(modelName, "delete", input),
     observeQuery: (args?: Record<string, any>) => observeQuery(modelName, args || {}),
-    onCreate: () => noOpSubscription(),
-    onUpdate: () => noOpSubscription(),
-    onDelete: () => noOpSubscription(),
+    onCreate: (args?: Record<string, any>) => createPollingSubscription(modelSubscription(modelName, "create"), args || {}, true),
+    onUpdate: (args?: Record<string, any>) => createPollingSubscription(modelSubscription(modelName, "update"), args || {}, true),
+    onDelete: (args?: Record<string, any>) => createPollingSubscription(modelSubscription(modelName, "delete"), args || {}, true),
   }, {
     get(target, property) {
       if (typeof property !== "string") return undefined
@@ -171,14 +175,86 @@ function observeQuery(modelName: ModelName, args: Record<string, any>) {
   }
 }
 
-function noOpSubscription() {
+function createPollingSubscription(definition: SubscriptionDefinition, args: Record<string, any>, modelShape = false) {
   return {
-    subscribe(_observer?: any) {
+    subscribe(observer?: SubscriptionObserver) {
+      let stopped = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+      let previous: Map<string, string> | undefined
+      const interval = pollingIntervalMilliseconds()
+
+      const poll = async () => {
+        try {
+          const result = await modelList(definition.modelName, subscriptionListArgs(args))
+          if (stopped) return
+          const items = result.data as Record<string, any>[]
+          const current = new Map(items.map((item) => [stableItemId(item), snapshot(item)]))
+          if (previous) {
+            for (const item of changes(definition.action, previous, current, items)) {
+              observer?.next?.(modelShape ? { data: item } : { data: { [definition.root]: item } })
+            }
+          }
+          previous = current
+          timer = setTimeout(poll, interval)
+        } catch (error) {
+          if (!stopped) { stopped = true; observer?.error?.(error) }
+        }
+      }
+      void poll()
       return {
-        unsubscribe() {},
+        unsubscribe() { stopped = true; if (timer) clearTimeout(timer) },
       }
     },
   }
+}
+
+function parseSubscription(query: string): SubscriptionDefinition {
+  const match = query.match(/\b(on(Create|Update|Delete)([A-Za-z][A-Za-z0-9_]*))\s*(?:\([^)]*\))?\s*\{/)
+  if (!match) throw new Error("Local GraphQL subscriptions require one supported onCreate/onUpdate/onDelete root field")
+  const [, root, actionName, modelName] = match
+  if (!(modelName in manifest.models)) throw new Error(`Local GraphQL subscription ${root} targets unknown model ${modelName}`)
+  const definition = modelSubscription(modelName as ModelName, actionName.toLowerCase() as SubscriptionAction)
+  if (definition.root !== root) throw new Error(`Local GraphQL subscription ${root} is not declared in the schema manifest`)
+  return definition
+}
+
+function modelSubscription(modelName: ModelName, action: SubscriptionAction): SubscriptionDefinition {
+  const root = `on${pascal(action)}${modelName}`
+  const supported = manifest.models[modelName].operations.subscriptions as readonly string[]
+  if (!supported.includes(root)) throw new Error(`Local GraphQL subscription ${root} is not declared in the schema manifest`)
+  return { action, modelName, root }
+}
+
+function pollingIntervalMilliseconds(): number {
+  const configured = process.env.NEXT_PUBLIC_PLEXUS_LOCAL_SUBSCRIPTION_POLL_MS?.trim()
+  if (!configured) return 1000
+  const interval = Number(configured)
+  if (!Number.isFinite(interval) || interval <= 0) throw new Error("NEXT_PUBLIC_PLEXUS_LOCAL_SUBSCRIPTION_POLL_MS must be a positive number")
+  return interval
+}
+
+function subscriptionListArgs(args: Record<string, any>): Record<string, any> {
+  return args.filter === undefined ? {} : { filter: args.filter }
+}
+
+function stableItemId(item: Record<string, any>): string {
+  if (typeof item.id !== "string" || !item.id) throw new Error("Local subscription polling requires model items with a stable id")
+  return item.id
+}
+
+function changes(action: SubscriptionAction, previous: Map<string, string>, current: Map<string, string>, currentItems: Record<string, any>[]): Record<string, any>[] {
+  if (action === "delete") return Array.from(previous.entries()).filter(([id]) => !current.has(id)).map(([id, itemSnapshot]) => ({ ...JSON.parse(itemSnapshot), id }))
+  return currentItems.filter((item) => {
+    const id = stableItemId(item)
+    return action === "create" ? !previous.has(id) : previous.has(id) && previous.get(id) !== current.get(id)
+  })
+}
+
+function snapshot(value: any): string { return JSON.stringify(sortJson(value)) }
+function sortJson(value: any): any {
+  if (Array.isArray(value)) return value.map(sortJson)
+  if (!value || typeof value !== "object") return value
+  return Object.keys(value).sort().reduce((result, key) => { result[key] = sortJson(value[key]); return result }, {} as Record<string, any>)
 }
 
 function selectionSet(modelName: ModelName): string {

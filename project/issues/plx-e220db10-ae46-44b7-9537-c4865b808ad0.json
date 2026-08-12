@@ -34,10 +34,40 @@
       "author": "derek.norrbom",
       "text": "## Clean-platform boundary\n\nThe portable command platform will not reuse or multiplex the legacy Task stream, Celery dispatcher, Celery result backend, queue naming, dispatch statuses, or fallback behavior. Those resources may not exist in a target deployment.\n\nThe new platform requires an explicit command-service contract with structured submission, durable lifecycle state, cancellation, status/result access, and provider adapters. The AWS implementation will provision its own command state, queue/DLQ, publisher/API boundary, and warm worker service. A Kubernetes implementation can provide different storage and transport adapters while using the same command envelope and worker core. Legacy integration, if ever needed, must be an optional edge adapter rather than a core assumption.",
       "created_at": "2026-08-04T21:46:14.079898Z"
+    },
+    {
+      "id": "efc4172b-0116-4906-8265-a46c46519714",
+      "author": "derek.norrbom",
+      "text": "Decision gate: PR #539 is paused as draft while plx-a8c017 runs a disposable Celery adapter spike. The result—not framework preference—will determine whether the AWS execution adapter remains Celery or uses the direct SQS worker. Existing production dispatch and pipelines remain untouched.",
+      "created_at": "2026-08-05T18:12:27.456652Z"
+    },
+    {
+      "id": "6a6ca8bc-17aa-4b52-ad24-62080309d111",
+      "author": "derek.norrbom",
+      "text": "## Delivery consolidation\n\nProduction inventory and clean-snapshot review establish the corrected delivery boundary:\n\n- The portable lifecycle, fencing, cancellation, DynamoDB adapter, Celery adapter, CLI executor, and Fargate constructs are retained as foundations.\n- No portable command service is currently deployed.\n- No active EC2, ECS, or SQS-backed legacy command worker was found in the inventoried environment. Celery remains the selected delivery adapter because it fits the portable contract, not as a compatibility fallback.\n- The local dashboard proof validated Task UI behavior and the local dispatcher, but not the portable lifecycle path.\n- The complete acceptance boundary is dashboard submission → durable command announcement → Celery delivery → worker execution → authoritative lifecycle → Task/TaskStage projection → terminal dashboard state.\n- Work continues on one consolidation branch. No pull request to develop is ready until the complete local acceptance path passes; no main or production deployment occurs before isolated development validation.\n\nImplementation is organized around plx-835017, plx-7e38bf, plx-17c202, and plx-a54359.",
+      "created_at": "2026-08-06T02:16:25.112790Z"
+    },
+    {
+      "id": "3d3dbc2d-3787-4392-8273-f2e0c178f75e",
+      "author": "derek.norrbom",
+      "text": "## Consolidated implementation order\n\nUse one feature branch from current develop. Commit checkpoints are encouraged; do not open intermediate pull requests.\n\n1. plx-835017 — connect dashboard submission and projection to the portable lifecycle.\n2. plx-7e38bf — correct and validate the container against the executor selected by that integration.\n3. plx-17c202 — compose the dedicated Plexus companion deployment and immutable image release.\n4. plx-a54359 — run the complete local proof, then an isolated AWS development proof.\n\nEach step must return its diff and local test evidence for architecture review before the next dependent step. The combined branch reaches develop only after step 4 passes.",
+      "created_at": "2026-08-06T02:17:10.770983Z"
+    },
+    {
+      "id": "f9399e56-cc2e-4aef-bcd3-6da4e321fc44",
+      "author": "derek.norrbom",
+      "text": "## Authoritative state decision — Amplify sandbox evidence\n\nAdopt the existing dashboard Task model as the single authoritative command lifecycle record.\n\nSandbox results:\n- ConnectionStack remained 469 resources; delta 0.\n- No resources or Task keys/GSIs changed or were replaced.\n- Conditional claim, fencing, cancellation, and stale-worker rejection passed live.\n- onUpdateTask delivered lifecycle-field updates to subscribers.\n- Backend typecheck passed and the sandbox was removed.\n\nThe separate command-state table and projection bridge are no longer justified for this dashboard command service. Preserve the provider-neutral lifecycle interfaces and Celery delivery adapter, but implement them against the Task store. AWS and Kubernetes may use different Task-store adapters while sharing the same lifecycle behavior. Idempotency must use a deterministic Task identity plus request-digest conflict detection or another proven uniqueness mechanism; do not add an index without evidence.",
+      "created_at": "2026-08-06T04:45:08.802682Z"
+    },
+    {
+      "id": "9168b8c9-eac5-4a11-a875-2be0064cdfd8",
+      "author": "derek.norrbom",
+      "text": "## Single command path correction\n\nThere is no active production command worker to preserve or multiplex. Remove the legacy-versus-portable framing from active design and implementation.\n\nUse one canonical path:\n1. The dashboard server runtime authenticates the user, derives accountId and principal identity, validates an allowed command target, computes deterministic idempotency identity and digest, and conditionally creates the authoritative Task through the existing GraphQL API.\n2. The Task stream dispatcher publishes one structured Celery envelope using workload identity and an explicitly managed queue.\n3. The always-on worker conditionally claims and updates that same Task.\n4. Task subscriptions provide realtime UI updates.\n\nDo not add a custom GraphQL mutation/resolver or companion submission API unless the existing dashboard server runtime is proven unable to provide this boundary. Do not retain dual task names, dual dispatch statuses, fallback routing, static credentials, or compatibility branches for an undeployed worker. The standalone companion deployment owns queue and worker infrastructure; the dashboard deployment owns its server submission route and Task-stream dispatcher.",
+      "created_at": "2026-08-06T05:27:45.192654Z"
     }
   ],
   "created_at": "2026-08-04T19:22:48.113028Z",
-  "updated_at": "2026-08-04T21:46:14.079898Z",
+  "updated_at": "2026-08-06T05:27:45.192654Z",
   "closed_at": null,
   "custom": {}
 }

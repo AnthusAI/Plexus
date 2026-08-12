@@ -31,16 +31,7 @@ export function FeedbackEvaluationDialog({ action, isOpen, onClose, onDispatch, 
   })
 
   const handleDispatch = () => {
-    // Build the feedback evaluation command
-    const args = [
-      `--scorecard "${options.scorecardName}"`,
-      `--score "${options.scoreName}"`,
-      `--days ${options.days}`
-    ].filter(Boolean).join(' ')
-    
-    const command = `evaluate feedback ${args}`
-    console.log('Generated feedback evaluation command:', command)
-    onDispatch(command, action.target)
+    onDispatch({ ...options }, action.target)
   }
 
   return (

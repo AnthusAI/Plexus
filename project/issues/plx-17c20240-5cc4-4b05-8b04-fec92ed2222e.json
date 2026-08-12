@@ -1,0 +1,166 @@
+{
+  "id": "plx-17c20240-5cc4-4b05-8b04-fec92ed2222e",
+  "title": "Compose portable command worker deployment",
+  "description": "Compose and validate the Plexus-owned command-service companion deployment from the existing portable lifecycle, Celery delivery adapter, durable state, container artifact, and always-on worker constructs. Keep it outside the Amplify stacks and the legacy mixed infrastructure application. Require a complete dashboard submission, execution, projection, and deployment proof before it is eligible for main.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "52be740a-a434-45ab-85b8-fe35962cb2ce",
+      "author": "derek.norrbom",
+      "text": "Implemented the reusable always-on Fargate deployment stack in plexus.infrastructure.command_service.worker_stack. It composes the durable state stack with a consumer-owned immutable image, private networking, explicit egress, narrow DynamoDB/SQS permissions, Secrets Manager injection, deployment rollback, logs, and a running-task alarm. It contains no consumer or legacy command-runtime behavior. Local validation passed: python -m pytest infrastructure/tests/unit/test_command_service_state_stack.py infrastructure/tests/unit/test_command_service_worker_stack.py -q; ruff check plexus/infrastructure/command_service infrastructure/tests/unit/test_command_service_state_stack.py infrastructure/tests/unit/test_command_service_worker_stack.py; black --check plexus/infrastructure/command_service infrastructure/tests/unit/test_command_service_state_stack.py infrastructure/tests/unit/test_command_service_worker_stack.py.",
+      "created_at": "2026-08-05T21:14:14.174904Z"
+    },
+    {
+      "id": "b3c73198-33d6-4d88-b6bc-aa6322c41195",
+      "author": "derek.norrbom",
+      "text": "Deployment-boundary decision: the command worker is a Plexus dashboard/control-plane service. Deploy it as a Plexus-owned companion CDK stack, independently from the Amplify backend stacks, while binding it to the same authoritative dashboard task API and environment. Do not place its Fargate service, lifecycle resources, queues, or monitoring inside Amplify stacks: the dashboard data stack is close to the CloudFormation resource limit, and the worker has an independent lifecycle and rollout cadence. Client integration repositories deploy their client-specific scoring/API workloads, not this dashboard command worker. Kubernetes will bind the same portable runtime/contract to its own control-plane environment.",
+      "created_at": "2026-08-06T00:38:16.587235Z"
+    },
+    {
+      "id": "69aea0ce-e367-4bd9-b30d-65b298564a17",
+      "author": "derek.norrbom",
+      "text": "Beginning companion-stack composition. First slice will inventory the existing reusable worker/state stacks and infrastructure entry points, then define explicit dashboard-control-plane bindings and synth coverage before any environment deployment wiring.",
+      "created_at": "2026-08-06T00:39:20.740720Z"
+    },
+    {
+      "id": "3d3b2d14-fce6-4f15-881f-9cef36a750f8",
+      "author": "derek.norrbom",
+      "text": "Inventory result: reusable CommandServiceStateStack and CommandServiceWorkerStack are implemented, but no portable command-worker Dockerfile/image artifact or companion image pipeline exists. The only legacy CommandWorkerStack is EC2/SSM with consumer-specific filesystem defaults and must remain untouched. Next implementation slice is plx-<new child>: package the portable worker container artifact, then compose a Plexus-owned companion stack with explicit dashboard control-plane bindings.",
+      "created_at": "2026-08-06T00:39:37.578331Z"
+    },
+    {
+      "id": "e378a219-717c-448c-998a-4b6fc9edd5c6",
+      "author": "derek.norrbom",
+      "text": "Paused further implementation after identifying that deployment ownership must be grounded in an inventory of deployed production resources, not repository structure. Performing read-only AWS inventory before deciding whether any existing infrastructure entrypoint or stack is appropriate. PR #554 must not be merged/deployed until this review is complete.",
+      "created_at": "2026-08-06T01:29:14.592674Z"
+    },
+    {
+      "id": "c1e65476-7baa-4523-a5a2-45259dbef0cb",
+      "author": "derek.norrbom",
+      "text": "## Current acceptance gate\n\nThe reusable state and worker constructs remain valid. Composition is incomplete until the dashboard bridge, buildable image, dedicated companion deployment entrypoint, and end-to-end proof all pass together. The companion deployment must use a focused entrypoint and must not be added to the existing mixed infrastructure/app.py.",
+      "created_at": "2026-08-06T02:16:25.287795Z"
+    },
+    {
+      "id": "6dd2520a-0ab1-415a-bc1b-95522c760366",
+      "author": "derek.norrbom",
+      "text": "Staging deployment blocker: the ECS command worker repeatedly exits during Celery prefork startup with OSError 28 while creating /tmp/pymp-*; the task definition is using Fargate default ephemeral storage. Implementing a narrow explicit ephemeral-storage allocation with synthesized-template coverage, then will validate and open the existing feature branch PR to staging.",
+      "created_at": "2026-08-07T19:37:33.438434Z"
+    },
+    {
+      "id": "7364aafe-6b90-4f38-9d8b-4bc58e0dd710",
+      "author": "derek.norrbom",
+      "text": "Validated the staging unblocker: the command-worker Fargate task now explicitly requests 50 GiB ephemeral storage, and the synthesized ECS task-definition assertion passes (`npm test -- --runInBand amplify/command-service/resource.test.ts`: 20 passed). The worker-image dependency-size remediation remains separate follow-up work.",
+      "created_at": "2026-08-07T19:39:25.540783Z"
+    },
+    {
+      "id": "a3b00a3e-9703-4892-8b65-cb8122b59add",
+      "author": "derek.norrbom",
+      "text": "Opened staging PR #562 for the command-service deployment and explicit worker ephemeral-storage fix. Focused CDK resource test passed (20 tests). The ECS circuit-breaker startup blocker is addressed in the PR; dependency/image-size reduction remains a separate follow-up.",
+      "created_at": "2026-08-07T19:39:54.776655Z"
+    },
+    {
+      "id": "ba2082ed-3aee-4175-815f-557d58c463f0",
+      "author": "derek.norrbom",
+      "text": "Follow-up staging evidence after the 50 GiB fix: ECS revision 3 reaches Celery ready state, then exits in Kombu SQS async polling because pycurl is absent (`ImportError: The curl client requires the pycurl library.`). Implementing a narrow command-worker runtime dependency and regression check.",
+      "created_at": "2026-08-07T21:18:05.080260Z"
+    },
+    {
+      "id": "97a91f91-d38e-40ac-8e85-6771aa5bd0e5",
+      "author": "derek.norrbom",
+      "text": "Implemented and pushed the Kombu SQS runtime correction in PR #562: command-service-runtime now includes pycurl. Added a clean temporary-environment audit that installs only the runtime extra and constructs Kombu CurlClient, plus a supported-Python guard. Validation passed: focused dependency tests (4 passed), clean runtime audit, and Poetry lock consistency check.",
+      "created_at": "2026-08-07T21:25:19.623087Z"
+    },
+    {
+      "id": "c77e57e0-e014-45ae-b61b-50be1f8c8ed5",
+      "author": "derek.norrbom",
+      "text": "Staging feedback-evaluation submission failed before queue dispatch: submitCommand sends commandPayload as an object to an AppSync AWSJSON Task field. Implementing the narrow serialization correction with resolver-level regression coverage; it will be delivered through a new feature-branch PR to staging.",
+      "created_at": "2026-08-07T23:30:29.290878Z"
+    },
+    {
+      "id": "bee37e56-4051-4a12-a3a5-e361de12cfd5",
+      "author": "derek.norrbom",
+      "text": "Opened staging PR #564 for the AppSync AWSJSON submission fix. The resolver now serializes commandPayload at the CreateTask boundary; focused submitCommand validation passed (29 tests). Awaiting staging deployment and an end-to-end feedback-evaluation submission proof.",
+      "created_at": "2026-08-07T23:31:22.802275Z"
+    },
+    {
+      "id": "d930e77b-1855-429f-96a3-89e3f90a09a8",
+      "author": "derek.norrbom",
+      "text": "Staging submission reached the next AppSync contract error: submitCommand sends DynamoDB-only `attributeExists` inside ModelTaskConditionInput. The deployed GraphQL input accepts comparison operators (as used by cancelCommand), so the idempotency create condition will be corrected to an allowed non-equality check and covered by the resolver request-shape test.",
+      "created_at": "2026-08-08T00:03:00.141971Z"
+    },
+    {
+      "id": "7ee5a817-50ae-4ccd-a913-86ab65519936",
+      "author": "derek.norrbom",
+      "text": "Opened staging PR #565 for the valid AppSync Task condition fix. It replaces the invalid attributeExists operator with id ne and the focused submitCommand resolver test passes (29 tests). Awaiting merge/deployment before retrying the staging feedback evaluation.",
+      "created_at": "2026-08-08T00:04:08.116661Z"
+    },
+    {
+      "id": "f16638ff-6b73-4448-9573-310f13c916b7",
+      "author": "derek.norrbom",
+      "text": "Live staging diagnosis: PR #565 deployed successfully and the submitCommand Lambda artifact contains condition { id: { ne: taskId } }. AppSync introspection confirms ModelTaskConditionInput has no id field, so the deployed error is the corrected condition still violating the generated schema. The prior resolver test only mocked the GraphQL boundary and did not validate the live generated input type. Implementing an idempotent create path that does not rely on unsupported ModelTaskConditionInput id conditions.",
+      "created_at": "2026-08-10T19:58:54.192846Z"
+    },
+    {
+      "id": "845a2b3e-5cb0-4d61-81e1-75d715342dfe",
+      "author": "derek.norrbom",
+      "text": "Implemented the atomic submission correction: submitCommand now performs a DynamoDB PutItem with ConditionExpression attribute_not_exists(id), reads/validates the prior Task on ConditionalCheckFailed, and no longer sends a ModelTaskConditionInput to AppSync. The Lambda has only Account GetItem plus Task GetItem/PutItem. Focused tests: 35 passed; dashboard typecheck passed. The Task DynamoDB stream remains the dispatch trigger.",
+      "created_at": "2026-08-10T20:01:18.694769Z"
+    },
+    {
+      "id": "e7724873-16dc-497a-9f90-07281d64e8d3",
+      "author": "derek.norrbom",
+      "text": "PR #566 reports merge conflicts against staging. Investigating the exact conflicting files and a resolution that preserves the feature implementation while respecting the branch-direction rule; no direct staging commit will be made.",
+      "created_at": "2026-08-10T20:03:39.116015Z"
+    },
+    {
+      "id": "79e7f5ac-14d1-4b5c-aced-83b37a98f9c9",
+      "author": "derek.norrbom",
+      "text": "Implemented runtime fix for staging error 'Initial evaluation failed: PLEXUS_ACCOUNT_KEY not found in environment'. Changes: (1) Evaluation now injects self.account_key into per-item metadata before scorecard scoring, (2) Scorecard LangGraph metadata path accepts metadata.account_key before env fallback. Added regression test proving LangGraph-like score execution succeeds without PLEXUS_ACCOUNT_KEY env when metadata carries account_key. Validation: targeted Scorecard and evaluation account-resolution tests pass.",
+      "created_at": "2026-08-11T17:35:26.687839Z"
+    },
+    {
+      "id": "06b1dfe7-1b09-40fb-81b1-95c9c6d48210",
+      "author": "derek.norrbom",
+      "text": "Investigating new staging runtime regression: feedback evaluation remains in Processing/Generating predictions for >3 minutes on ~80 results. Plan: pull live worker + task logs for verifiable bottleneck, reproduce locally, implement fix, and validate before next staging deploy.",
+      "created_at": "2026-08-11T18:21:10.508051Z"
+    },
+    {
+      "id": "d5d8a258-b7a2-484f-85bc-4d1ddfb1b6f3",
+      "author": "derek.norrbom",
+      "text": "Verified staging bottleneck with evidence: active feedback task cmd_b9c6... stayed in stage 2 (Generating predictions, 0/70) while worker logs emitted repeated  from LangChain cache writes. This triggers expensive LLM retry loops and stalls prediction throughput. Implemented worker-runtime guard in PlexusCliExecutor to detect non-writable LangChain SQLite cache and disable it before command execution. Added local repro/guardrail tests in test_plexus_cli_executor for non-writable vs writable SQLite cache behavior. Validation: pytest tests/command_worker/test_plexus_cli_executor.py and tests/command_worker/test_task_gateway_contract.py pass.",
+      "created_at": "2026-08-11T18:25:15.397504Z"
+    },
+    {
+      "id": "28333c39-a4c5-4cd2-8961-00713c8f144d",
+      "author": "derek.norrbom",
+      "text": "Verified staging bottleneck with evidence: active feedback task cmd_b9c6 stayed in stage 2 (Generating predictions, 0/70) while worker logs emitted repeated sqlite OperationalError: attempt to write a readonly database from LangChain cache writes. This triggers expensive LLM retry loops and stalls prediction throughput. Implemented worker-runtime guard in PlexusCliExecutor to detect non-writable LangChain SQLite cache and disable it before command execution. Added local repro/guardrail tests in test_plexus_cli_executor for non-writable vs writable SQLite cache behavior. Validation: pytest tests/command_worker/test_plexus_cli_executor.py and tests/command_worker/test_task_gateway_contract.py pass.",
+      "created_at": "2026-08-11T18:25:17.862180Z"
+    },
+    {
+      "id": "20a4bac9-24d8-4bac-bd71-8727496663b8",
+      "author": "derek.norrbom",
+      "text": "Process update approved: use develop as the integration branch for command-service delivery. Workflow now is feature branches merge into the command-service integration branch, integration PR to develop, then branch from develop for additional slices and PR back to develop. Promotions flow from develop to staging or main as needed. This replaces the prior staging-centric workaround and restores standard git flow while command-worker remains non-production. Tracking follow-up reliability hardening in plx-fe04a4 (bounded retries, stale-progress watchdog, cancellation finalization, explicit terminal reasons).",
+      "created_at": "2026-08-11T19:49:52.149842Z"
+    },
+    {
+      "id": "ffa24bb7-4a05-4cfe-98f3-bb3885473dd4",
+      "author": "derek.norrbom",
+      "text": "Opened integration PR #579 (feature/command-service-integration -> develop) to re-align branch flow. This is the cutover point from staging-centric promotion to standard develop-based integration. Follow-up runtime hardening is tracked in plx-fe04a4 and will be delivered as small develop-based slices after #579 merges.",
+      "created_at": "2026-08-11T20:39:37.388980Z"
+    }
+  ],
+  "created_at": "2026-08-05T20:55:46.003952Z",
+  "updated_at": "2026-08-11T20:39:37.388980Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

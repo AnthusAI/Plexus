@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "eb491c71-cae9-48ae-8166-fa62d6e6e923",
+  "issue_id": "plx-447702c5-9f14-4650-ae41-96c13b9b4874",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-06T04:21:51.339Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Determine whether the existing Amplify dashboard Task model can be the single authoritative command lifecycle record. Experiment only: add scalar lease, digest, fencing, idempotency, and cancellation fields to dashboard/amplify/data/resource.ts without adding a Command model, relationship, or index. Prove CloudFormation resource-count/replacement behavior, conditional claim and fencing semantics, and dashboard Task subscription updates. Restore experimental files after validation; do not modify command-worker production code.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 2,
+    "status": "open",
+    "title": "Experiment: use dashboard Task as authoritative command lifecycle"
+  }
+}

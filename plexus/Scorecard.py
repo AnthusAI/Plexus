@@ -739,7 +739,11 @@ class Scorecard:
 
             # Add required metadata for LangGraphScore
             if _is_lang_graph_score_instance(score_instance):
-                account_key = os.getenv("PLEXUS_ACCOUNT_KEY")
+                account_key = None
+                if isinstance(metadata, dict):
+                    account_key = metadata.get("account_key")
+                if not account_key:
+                    account_key = os.getenv("PLEXUS_ACCOUNT_KEY")
                 if not account_key:
                     raise ValueError("PLEXUS_ACCOUNT_KEY not found in environment")
                 metadata = metadata or {}

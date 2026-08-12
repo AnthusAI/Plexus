@@ -1,0 +1,25 @@
+{
+  "id": "plx-ab71e2e1-8607-4640-9c50-0c718fbd0850",
+  "title": "Show dispatched evaluation task progress in local dashboard proof",
+  "description": "As a dashboard user, I want a dispatched evaluation task to show its real execution state and progress in the local dashboard, so that I can verify the portable command worker experience end to end.\n\nFeature: Local dashboard observes evaluation task execution\n\nScenario: A feedback evaluation completes successfully\nGiven the dashboard has created a feedback-evaluation task\nAnd the local dispatcher claims that task\nWhen the worker executes the evaluation\nThen the task transitions from pending to running to completed\nAnd task stages report execution progress when the command supports progress tracking\nAnd the local dashboard reflects those updates without manual reload\n\nScenario: A feedback evaluation fails\nGiven the dashboard has created a feedback-evaluation task\nWhen the worker cannot execute the evaluation\nThen the task becomes failed with its captured error\nAnd the local dashboard reflects the failure without manual reload\n\nOut of scope: changing the established model in which the evaluation command creates its evaluation record and links it to the dispatched task.",
+  "type": "story",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a5435951-cf08-43ea-b48d-b47921443e1a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2dfaf4dd-3282-41ea-b3f1-93cd8f160db3",
+      "author": "derek.norrbom",
+      "text": "Acceptance proof completed through the local dashboard and dispatcher. The local transport observed task and stage updates, and the feedback evaluation completed successfully.",
+      "created_at": "2026-08-06T00:28:52.545856Z"
+    }
+  ],
+  "created_at": "2026-08-06T00:06:25.699173Z",
+  "updated_at": "2026-08-06T00:28:52.577832Z",
+  "closed_at": "2026-08-06T00:28:52.577832Z",
+  "custom": {}
+}

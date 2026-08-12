@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Play } from "lucide-react"
-import { createTask } from "@/utils/data-operations"
+import { submitCommand } from "@/lib/submit-command"
 import { toast } from "sonner"
 import { ReportConfigurationDialog } from "./dialogs/ReportConfigurationDialog"
 import { useAccount } from "@/app/contexts/AccountContext"
@@ -21,27 +21,19 @@ export function RunReportButton() {
     setIsModalOpen(false)
   }
 
-  const handleDispatch = async (commandStr: string, target?: string) => {
+  const handleDispatch = async (arguments_: Record<string, unknown>) => {
     if (isLoading) {
       return;
     }
 
-    console.log('Dispatching report task with command:', commandStr, 'target:', target);
-
     try {
       setIsLoading(true);
-      const task = await createTask({
-        type: 'report run',
-        target: target || 'report',
-        command: commandStr,
-        accountId: selectedAccount?.id || 'call-criteria',
-        dispatchStatus: 'PENDING',
-        status: 'PENDING'
-      });
+      if (!selectedAccount?.id) throw new Error('No account is selected')
+      const task = await submitCommand(selectedAccount.id, 'report.run', arguments_)
       
       if (task) {
         toast.success("Report generation started", {
-          description: <span className="font-mono text-sm truncate block">{commandStr}</span>
+          description: <span className="font-mono text-sm truncate block">Report task announced</span>
         });
       } else {
         toast.error("Failed to start report generation");

@@ -9,7 +9,6 @@ import {
   DialogFooter,
   Label,
   Button,
-  Switch,
   Input
 } from "../types"
 import { TaskDialogProps } from "../types"
@@ -22,11 +21,6 @@ interface EvaluationOptions {
   scorecardName: string
   scoreName: string
   numberOfSamples: number
-  samplingMethod: 'random' | 'sequential'
-  loadFresh: boolean
-  randomSeed?: number
-  visualize: boolean
-  logToLanggraph: boolean
   versionId?: string
 }
 
@@ -35,11 +29,6 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialO
     scorecardName: initialOptions?.scorecardName || 'example-scorecard',
     scoreName: initialOptions?.scoreName || 'Example Score',
     numberOfSamples: initialOptions?.numberOfSamples || 10,
-    samplingMethod: initialOptions?.samplingMethod || 'random',
-    loadFresh: initialOptions?.loadFresh || false,
-    randomSeed: initialOptions?.randomSeed,
-    visualize: initialOptions?.visualize || false,
-    logToLanggraph: initialOptions?.logToLanggraph || false,
     versionId: initialOptions?.versionId
   })
 
@@ -53,14 +42,12 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialO
       return
     }
 
-    const command = generator.generate(options)
-    console.log('Generated evaluation command:', command)
-    onDispatch(command, action.target)
+    onDispatch({ ...options }, action.target)
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-card border-0" hideCloseButton>
+      <DialogContent className="bg-card border-0 sm:max-w-2xl" hideCloseButton>
         <DialogHeader className="pb-4">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-semibold">{action.name}</DialogTitle>
@@ -71,42 +58,42 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialO
             />
           </div>
         </DialogHeader>
-        <div className="grid gap-6 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="scorecardName" className="text-right">
+        <div className="flex flex-col gap-6 py-4">
+          <div className="grid grid-cols-[9rem_minmax(0,1fr)] items-center gap-4">
+            <Label htmlFor="scorecardName" className="text-right leading-tight">
               Scorecard Name
             </Label>
             <Input
               id="scorecardName"
               value={options.scorecardName}
               onChange={(e) => setOptions({ ...options, scorecardName: e.target.value })}
-              className="col-span-3 font-mono bg-background border-0"
+              className="min-w-0 font-mono bg-background border-0"
               tabIndex={-1}
             />
           </div>
 
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="scoreName" className="text-right">
+          <div className="grid grid-cols-[9rem_minmax(0,1fr)] items-center gap-4">
+            <Label htmlFor="scoreName" className="text-right leading-tight">
               Score Name
             </Label>
             <Input
               id="scoreName"
               value={options.scoreName}
               onChange={(e) => setOptions({ ...options, scoreName: e.target.value })}
-              className="col-span-3 font-mono bg-background border-0"
+              className="min-w-0 font-mono bg-background border-0"
               tabIndex={-1}
             />
           </div>
 
           {options.versionId && (
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="versionId" className="text-right">
+            <div className="grid grid-cols-[9rem_minmax(0,1fr)] items-center gap-4">
+              <Label htmlFor="versionId" className="text-right leading-tight">
                 Version ID
               </Label>
               <Input
                 id="versionId"
                 value={options.versionId}
-                className="col-span-3 font-mono bg-background border-0"
+                className="min-w-0 font-mono bg-background border-0"
                 readOnly
                 disabled
                 tabIndex={-1}
@@ -114,11 +101,11 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialO
             </div>
           )}
 
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="numberOfSamples" className="text-right">
+          <div className="grid grid-cols-[9rem_minmax(0,1fr)] items-center gap-4">
+            <Label htmlFor="numberOfSamples" className="text-right leading-tight">
               Number of Samples
             </Label>
-            <div className="col-span-3">
+            <div className="min-w-0">
               <SampleSizeInput
                 value={options.numberOfSamples}
                 onChange={(value) => setOptions({ ...options, numberOfSamples: value })}
@@ -129,19 +116,10 @@ export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialO
             </div>
           </div>
 
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="loadFresh" className="text-right">
-              Load Fresh Data
-            </Label>
-            <div className="col-span-3 flex items-center">
-              <Switch
-                id="loadFresh"
-                checked={options.loadFresh}
-                onCheckedChange={(checked) => setOptions({ ...options, loadFresh: checked })}
-                tabIndex={-1}
-              />
-            </div>
-          </div>
+          <p className="pl-[calc(9rem+1rem)] text-sm text-muted-foreground">
+            Uses the latest managed dataset linked to this score.
+          </p>
+
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} className="bg-border border-0" tabIndex={-1}>

@@ -1,0 +1,152 @@
+{
+  "lifecycleAppSyncRoots": [
+    "Query/getTask",
+    "Query/getTaskStage",
+    "Query/listTaskStageByTaskId",
+    "Mutation/updateTask",
+    "Mutation/createTaskStage",
+    "Mutation/updateTaskStage"
+  ],
+  "actions": {
+    "prediction.run": {
+      "appsync": [
+        "Query/getAccount",
+        "Query/getScorecard",
+        "Query/listScorecards",
+        "Query/listScorecardByAccountIdAndExternalId",
+        "Query/getScore",
+        "Query/getScoreVersion",
+        "Query/getSection",
+        "Query/listScoreByExternalId",
+        "Query/listScoreByKey",
+        "Query/listScoreByName",
+        "Query/listScoreByScorecardIdAndExternalId",
+        "Query/listScoreBySectionId",
+        "Query/getItem",
+        "Query/getScoringJob",
+        "Query/listScoringJobByItemId",
+        "Query/listScoringJobByItemIdAndScoreId",
+        "Mutation/createScoreResult",
+        "Mutation/updateScoreResult",
+        "Mutation/createScoringJob",
+        "Mutation/updateScoringJob"
+      ],
+      "storage": ["scoreResultAttachments:readWrite"],
+      "evidence": [
+        "plexus/cli/prediction/predictions.py",
+        "plexus/dashboard/api/models/scorecard.py",
+        "plexus/dashboard/api/models/score.py",
+        "plexus/dashboard/api/models/item.py",
+        "plexus/dashboard/api/models/score_result.py",
+        "plexus/dashboard/api/models/scoring_job.py"
+      ]
+    },
+    "evaluation.accuracy": {
+      "inherits": ["prediction.run"],
+      "appsync": [
+        "Query/getDataSet",
+        "Query/listDataSets",
+        "Query/getDataSource",
+        "Query/listDataSources",
+        "Query/listDataSourcesByKey",
+        "Query/listDataSourcesByName",
+        "Query/listDataSourceByAccountIdAndKey",
+        "Query/listDataSourceByAccountIdAndName",
+        "Query/getEvaluation",
+        "Query/listEvaluations",
+        "Query/listScoreResultByEvaluationId",
+        "Query/listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt",
+        "Query/listScoreVersionByScoreIdAndCreatedAt",
+        "Mutation/createEvaluation",
+        "Mutation/updateEvaluation"
+      ],
+      "storage": ["dataSources:read", "scoreResultAttachments:readWrite"],
+      "evidence": [
+        "plexus/cli/evaluation/evaluations.py",
+        "plexus/dashboard/api/models/evaluation.py",
+        "plexus/dashboard/api/models/data_source.py",
+        "plexus/utils/score_result_s3_utils.py"
+      ]
+    },
+    "evaluation.feedback": {
+      "inherits": ["evaluation.accuracy"],
+      "appsync": [
+        "Query/getFeedbackItem",
+        "Query/listFeedbackItems",
+        "Query/listFeedbackItemByCacheKey",
+        "Query/listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt"
+      ],
+      "storage": [],
+      "evidence": [
+        "plexus/cli/evaluation/evaluations.py",
+        "plexus/dashboard/api/models/feedback_item.py"
+      ]
+    },
+    "feedback.report": {
+      "inherits": ["evaluation.feedback"],
+      "appsync": [
+        "Query/listReportConfigurationByAccountIdAndName",
+        "Query/listReportConfigurationByAccountIdAndUpdatedAt",
+        "Query/listReportByAccountIdAndUpdatedAt",
+        "Query/getReportBlock",
+        "Query/listReportBlockByReportIdAndPosition",
+        "Mutation/createReport",
+        "Mutation/updateReport",
+        "Mutation/createReportBlock",
+        "Mutation/updateReportBlock",
+        "Mutation/createArtifactTransferTickets"
+      ],
+      "storage": ["reportBlockDetails:readWrite"],
+      "evidence": [
+        "plexus/cli/feedback/feedback_report.py",
+        "plexus/cli/feedback/report_runner.py",
+        "plexus/reports/service.py",
+        "plexus/dashboard/api/models/report.py",
+        "plexus/dashboard/api/models/report_block.py"
+      ]
+    },
+    "report.run": {
+      "inherits": ["feedback.report"],
+      "appsync": [
+        "Query/getReportConfiguration"
+      ],
+      "storage": [],
+      "evidence": [
+        "plexus/cli/report/report_commands.py",
+        "plexus/dashboard/api/models/report_configuration.py",
+        "plexus/reports/s3_utils.py"
+      ]
+    },
+    "procedure.run": {
+      "inherits": ["prediction.run", "evaluation.accuracy", "evaluation.feedback", "report.run", "feedback.report"],
+      "appsync": [
+        "Query/getProcedure",
+        "Query/listProcedureByAccountIdAndUpdatedAt",
+        "Query/listProcedureByScorecardIdAndUpdatedAt",
+        "Query/listProcedures",
+        "Query/getChatMessage",
+        "Query/getChatSession",
+        "Query/listChatMessageByProcedureIdAndCreatedAt",
+        "Query/listChatMessageBySessionIdAndCreatedAt",
+        "Query/listChatMessageByParentMessageId",
+        "Query/listChatSessions",
+        "Mutation/createProcedure",
+        "Mutation/updateProcedure",
+        "Mutation/createChatMessage",
+        "Mutation/updateChatMessage",
+        "Mutation/createChatSession",
+        "Mutation/updateChatSession",
+        "Mutation/createScoreVersion",
+        "Mutation/createArtifactTransferTickets"
+      ],
+      "storage": ["dataSources:read", "scoreResultAttachments:readWrite", "reportBlockDetails:readWrite"],
+      "evidence": [
+        "plexus/cli/shared/experiment_runner.py",
+        "plexus/cli/procedure/tactus_adapters/storage.py",
+        "plexus/cli/procedure/chat_recorder.py",
+        "plexus/cli/procedure/continuation_service.py",
+        "plexus/storage/graphql_artifact_store.py"
+      ]
+    }
+  }
+}

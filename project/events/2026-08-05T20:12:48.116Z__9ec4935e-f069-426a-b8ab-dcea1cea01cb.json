@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9ec4935e-f069-426a-b8ab-dcea1cea01cb",
+  "issue_id": "plx-36892abd-cc41-4a2c-ba59-ff3e51f88585",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-05T20:12:48.116Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implement the AWS persistence adapter required by the portable command lifecycle. It must provide atomic command claim, renewable lease, fencing, progress, cancellation, and terminal settlement for the existing command envelope. Keep it distinct from the Celery delivery adapter and dashboard projection so the command model remains shared across deployment targets. Reuse or revise the draft reusable AWS state stack as appropriate; do not introduce a separate command workflow.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement durable AWS lifecycle store for commands"
+  }
+}

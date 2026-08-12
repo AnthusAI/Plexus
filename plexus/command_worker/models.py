@@ -472,6 +472,7 @@ class Claim:
     token: str
     owner: str
     expires_at: datetime
+    cancellation_requested: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.token, str) or not self.token:
@@ -479,6 +480,8 @@ class Claim:
         if not isinstance(self.owner, str) or not self.owner:
             raise ValueError("owner must be non-empty")
         _require_aware(self.expires_at, "expires_at")
+        if not isinstance(self.cancellation_requested, bool):
+            raise TypeError("cancellation_requested must be a boolean")
 
 
 @dataclass(frozen=True, slots=True)

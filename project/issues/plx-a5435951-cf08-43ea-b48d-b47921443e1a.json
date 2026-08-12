@@ -1,0 +1,208 @@
+{
+  "id": "plx-a5435951-cf08-43ea-b48d-b47921443e1a",
+  "title": "Prove portable command service end to end",
+  "description": "Prove the actual portable command-service path from dashboard submission through durable announcement, Celery delivery, worker execution, lifecycle progress, Task and TaskStage projection, and terminal UI state. The existing local dispatcher is useful test support but does not satisfy this task. Require a repeatable local proof before an isolated AWS development deployment.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6e2a9882-669b-4603-92c8-bbf4a28e09b7",
+      "author": "derek.norrbom",
+      "text": "Established a physical local dashboard/control-plane proof. Started the dashboard against the isolated local proxy, created a fresh task, ran the patched local dispatcher, and verified the task read back as COMPLETED/DISPATCHED with captured output. Root-cause fixes: local smoke explicitly selects API-key auth; dispatcher runs all local tasks through sys.executable -m plexus.cli rather than PATH; successful non-procedure commands complete rather than remaining RUNNING. Validation: bash -n scripts/smoke-local-task-dispatch.sh; python -m pytest plexus/cli/shared/command_dispatch_test.py plexus/cli/shared/test_command_dispatch.py -q (22 passed); focused physical proof passed. Fresh CodeQL scan reports nine pre-existing legacy quality notices in CommandDispatch.py and no findings caused by this change.",
+      "created_at": "2026-08-05T22:56:15.433819Z"
+    },
+    {
+      "id": "699096fa-a9e0-4c75-826c-77471b9eea90",
+      "author": "derek.norrbom",
+      "text": "Diagnosis: the dashboard dev dispatcher loads the repository development environment and can silently target a remote endpoint/account instead of the isolated local control plane. A task accepted by the local dashboard therefore remains pending. Implementing a dedicated local dispatcher command that pins local endpoint, API-key auth, account, and dispatch mode; it will not inherit remote control-plane routing.",
+      "created_at": "2026-08-05T23:46:58.065747Z"
+    },
+    {
+      "id": "0cec9404-e279-444b-855c-2a9076815a06",
+      "author": "derek.norrbom",
+      "text": "Implemented dedicated local dispatcher entry point in PR #550. It pins the isolated proxy URL, API-key auth, local account, and dispatch mode after loading only optional provider credentials; it fails fast when the proxy is unavailable. Validation: shell syntax, unavailable-proxy behavior, package-script assertion, diff check, and a physical local feedback-evaluation dispatch. The physical run used the local proxy and completed its evaluation. Its Task row remains RUNNING only because the current checkout lacks the separate pending completion-status fix in PR #549; that behavior is not a failure of local routing.",
+      "created_at": "2026-08-05T23:48:50.870968Z"
+    },
+    {
+      "id": "24d91e19-7894-4598-8820-e20f0e395043",
+      "author": "derek.norrbom",
+      "text": "Physical local proof result: the dispatcher correctly claimed and completed a feedback-evaluation task. The task record is terminal (`COMPLETED`, with worker ID and timestamps), but the dashboard panel remains `Announced`/0 because it is bound to the placeholder evaluation created at submission. The CLI command creates a different evaluation record during execution and does not update the task-target evaluation. This proves dispatch/execution but exposes the remaining end-to-end contract gap: submission must establish one stable evaluation identity and execution must update that same record (or a deliberate projection must reconcile them). Do not treat a browser refresh or UI-only status fallback as a fix.",
+      "created_at": "2026-08-06T00:03:46.727982Z"
+    },
+    {
+      "id": "dfe664e2-39cc-47f8-93b0-f2abf195ac02",
+      "author": "derek.norrbom",
+      "text": "Local proof established the command worker as a dashboard-control-plane service. Follow-on AWS deployment should be a Plexus-owned companion stack, not part of the Amplify data stacks or a client scoring integration pipeline.",
+      "created_at": "2026-08-06T00:38:16.618464Z"
+    },
+    {
+      "id": "8b9f5b2b-180d-46f8-b4dd-5963f91545ac",
+      "author": "derek.norrbom",
+      "text": "## Proof boundary\n\nThe completed local feedback-evaluation run proves the dashboard Task display, local dispatcher, CLI execution, and realtime updates. It is valuable regression coverage, but it is not acceptance evidence for the portable command lifecycle. This task now remains open until the same observable flow uses the portable command service and authoritative projection.",
+      "created_at": "2026-08-06T02:16:25.536715Z"
+    },
+    {
+      "id": "54fd9081-e3a6-4def-b870-43fc06ec0a40",
+      "author": "derek.norrbom",
+      "text": "Investigating a staging report command that was accepted and delivered to ECS but terminally failed before creating an observable report. The durable Task recorded a generic Click abort, while captured worker CLI output was not retained on exception. Reproducing the task-aware report path and correcting both the failure and the missing diagnostic evidence before another deployment.",
+      "created_at": "2026-08-12T01:13:19.164825Z"
+    },
+    {
+      "id": "1b574211-56e1-4b65-aefb-ad216b9348d6",
+      "author": "derek.norrbom",
+      "text": "Root cause confirmed: the running ECS task definition references an older worker image (it lacks the already-merged runtime-profile changes). The image-build handoff deferred replacement because one prior command is inconsistent: UI status is COMPLETED but authoritative lifecycleStatus remains RUNNING. The handoff treats lifecycleStatus as active, so every later deployment retained the old digest. Repairing that known terminal record with a conditional state transition, then re-running the staging deployment so ECS adopts the current immutable image.",
+      "created_at": "2026-08-12T01:14:27.362824Z"
+    },
+    {
+      "id": "aef1d34a-85fe-4638-ba1e-c1c866612767",
+      "author": "derek.norrbom",
+      "text": "Repaired the single confirmed stale terminal record with a conditional DynamoDB transition (only if lifecycleStatus was RUNNING and status was COMPLETED). Verified there are now zero active lifecycle records. Started staging deployment job 39, which will rebuild/select the current immutable worker image instead of deferring it. Do not treat the earlier staging deployment as evidence of current worker code: its ECS image was confirmed to lack the merged runtime-profile change.",
+      "created_at": "2026-08-12T01:14:46.579785Z"
+    },
+    {
+      "id": "da10e697-527c-4971-aaf8-698d377d2537",
+      "author": "derek.norrbom",
+      "text": "Correction during investigation: a local reproduction inadvertently created a report record while using the submitted task identity; it was not evidence that the dashboard worker succeeded. The real dashboard task still terminally fails with only  because the executor redirects CLI stdout/stderr and discards those buffers whenever the CLI raises. Implementing bounded captured CLI diagnostics on failure so durable Task evidence contains the actual prerequisite error; no further live report runs will be used for reproduction.",
+      "created_at": "2026-08-12T16:03:54.858789Z"
+    },
+    {
+      "id": "143a7785-ad90-46fc-8067-edcd43d2d305",
+      "author": "derek.norrbom",
+      "text": "Implemented bounded Click-abort diagnostics in the command-worker executor and added a regression test. A CLI Abort now preserves its captured stdout/stderr in the durable terminal error; ordinary exceptions and cancellation semantics remain unchanged. Validation: python -m pytest -q tests/command_worker/test_plexus_cli_executor.py tests/scores/test_dashboard_runtime_data_policy.py (17 passed).",
+      "created_at": "2026-08-12T16:05:44.602263Z"
+    },
+    {
+      "id": "72097423-36ca-44f7-8309-31a5cc0dcba1",
+      "author": "derek.norrbom",
+      "text": "Approved fast-iteration improvement: extend the existing report-dispatch canary rather than create a new framework. It will execute the current worker image locally against a disposable staging control-plane task/configuration and assert terminal Task plus Report projection, with cleanup. This validates command argument handling, worker CLI execution, and report lifecycle before Amplify; ECS-specific networking and task-role wiring remain deployment concerns.",
+      "created_at": "2026-08-12T16:34:32.828989Z"
+    },
+    {
+      "id": "61a9dd1c-72fe-45e3-94ed-d90eae6c5ca3",
+      "author": "derek.norrbom",
+      "text": "Implemented a local Docker worker report smoke script. It builds the current command-worker image (or accepts a prebuilt image), exports the active AWS CLI session without placing credentials in process arguments, forwards the staging runtime inputs, and invokes the real PlexusCliExecutor with a report-run configuration argument. It requires a caller-supplied configuration ID and retains generated artifacts for supported inspection/cleanup rather than deleting potentially active report resources. Validation: Python compile and --help completed successfully.",
+      "created_at": "2026-08-12T16:37:00.351820Z"
+    },
+    {
+      "id": "2f9262a1-fbe0-4c2e-93f5-bbdb0b7078e8",
+      "author": "derek.norrbom",
+      "text": "Corrected local report smoke observability: it now announces image build/reuse and worker-command start immediately, and relays final container output. Run it with conda run --no-capture-output so Conda does not buffer those stage messages. Validation repeated: Python compile and --help.",
+      "created_at": "2026-08-12T17:27:18.893291Z"
+    },
+    {
+      "id": "7ce8aa92-268f-46cb-a221-a23bf74790e2",
+      "author": "derek.norrbom",
+      "text": "Regression check now passes: the local smoke Docker command attaches stdin, so the serialized command envelope reaches the same executor entry point as the worker. The prior error was before command execution, not a staging/report failure. Preparing the focused fix for normal develop flow.",
+      "created_at": "2026-08-12T17:47:23.580484Z"
+    },
+    {
+      "id": "fd61facc-71c6-40a6-b0ae-74018d84dd0e",
+      "author": "derek.norrbom",
+      "text": "Staging deployment exposed an AWS inline IAM policy-size limit for generated command-worker AppSync field policies. Investigating a least-privilege policy representation that stays below the documented limit; will synthesize and measure locally before retrying deployment.",
+      "created_at": "2026-08-12T18:08:05.955356Z"
+    },
+    {
+      "id": "f45ad42e-7711-4c5b-8462-b38c511d463b",
+      "author": "derek.norrbom",
+      "text": "Implemented the approved dataset-backed accuracy slice: dashboard dispatch now selects the latest managed dataset associated with the chosen score, and the obsolete fresh-data argument/control is removed from the dashboard command contract. This does not alter CLI behavior or implement the separate record-backed source. Resolver, command-contract, client submission tests, and TypeScript validation pass.",
+      "created_at": "2026-08-12T19:05:10.189033Z"
+    },
+    {
+      "id": "e67cdd9e-70c1-46e2-86ed-11814eca893c",
+      "author": "derek.norrbom",
+      "text": "Release blocker addressed in a new branch from develop: command dispatch now routes through canonical Task-envelope submission instead of Celery send_task, while preserving the same CLI command surface. command status now reads Task lifecycle/progress from AppSync Task records, and command cancel now sets lifecycleStatus to CANCEL_REQUESTED on the Task record. Added focused tests for non-Celery dispatch/status/cancel. Validation: pytest plexus/cli/shared/command_dispatch_test.py -q (22 passed).",
+      "created_at": "2026-08-12T19:42:21.291288Z"
+    },
+    {
+      "id": "3bea3290-0a89-4f1c-81bb-0382dd9c6adf",
+      "author": "derek.norrbom",
+      "text": "Found and fixed cancellation mismatch in CLI-dispatched procedure runs. Root cause: command cancel only set lifecycleStatus=CANCEL_REQUESTED, while procedure cancellation checks read Task status for cancelled states. Changes: command cancel now also sets status=CANCELLED; procedure cancellation check now queries only Task.status via minimal GraphQL (schema-compatible) and treats CANCELLED/CANCELED/CANCEL_REQUESTED as cancelled. Added focused tests. Validation: pytest plexus/cli/shared/command_dispatch_test.py plexus/cli/procedure/test_procedure_executor_cancellation.py -q (26 passed).",
+      "created_at": "2026-08-12T20:10:30.800010Z"
+    },
+    {
+      "id": "1b7a8147-92db-4b0b-8f97-4cc240bd6acc",
+      "author": "derek.norrbom",
+      "text": "Investigation update for immediate COMPLETED procedure tasks: procedure run can return status=error while exiting with code 0, which causes dispatchers and workers to mark task success and completed even when the run failed fast. Patched procedure CLI to raise ClickException when result status is error so failures surface as FAILED task outcomes instead of false COMPLETED. Validation: pytest plexus/cli/procedure/test_procedure_run_params.py -q (4 passed).",
+      "created_at": "2026-08-12T20:12:43.869144Z"
+    },
+    {
+      "id": "3c2ecb05-dec2-402c-85ee-dc9cc530f9e1",
+      "author": "derek.norrbom",
+      "text": "Root cause confirmed for immediate procedure completion with no Procedure record: the ECS CLI executor uses /tmp as its working directory, while CLI dispatch forwarded a relative YAML path. procedure run could not open the YAML, printed an error, then returned exit code 0, so the command task became COMPLETED. Implementing local path resolution for repository-owned procedure YAML plus fail-fast errors and a regression test before any further PR activity.",
+      "created_at": "2026-08-12T20:14:21.744089Z"
+    },
+    {
+      "id": "ca0394f1-0a6a-487e-baf0-256bedd58544",
+      "author": "derek.norrbom",
+      "text": "Local reproduction confirmed: command worker intentionally changes into its writable runtime directory, so a repository-relative procedure YAML could not be found and the CLI returned success after printing an error. Local-only fix resolves repository-owned YAML from the installed package path and raises Click errors for invalid procedure setup. Validation: focused pytest suite (48 passed) plus worker-image runtime check from /tmp resolved the bundled procedure YAML at /app/plexus/procedures/feedback_alignment_optimizer.yaml. No push or PR.",
+      "created_at": "2026-08-12T20:18:04.043710Z"
+    },
+    {
+      "id": "b15cebbd-15d3-43b9-a03f-5531d9d374a4",
+      "author": "derek.norrbom",
+      "text": "Validated procedure-dispatch runtime path fix merged to develop and then staging through the normal one-way flow. Staging PR: https://github.com/AnthusAI/Plexus/pull/604. The deployment will publish the updated command-worker image; no staging history was merged into a feature branch.",
+      "created_at": "2026-08-12T20:24:53.966085Z"
+    },
+    {
+      "id": "e6240fa3-8ee1-4c6f-9d2e-05ca71cff8b9",
+      "author": "derek.norrbom",
+      "text": "Opened the develop-to-main promotion PR for the integrated command-worker migration: https://github.com/AnthusAI/Plexus/pull/605. It promotes already-integrated develop history; no staging history is involved.",
+      "created_at": "2026-08-12T20:27:58.247990Z"
+    },
+    {
+      "id": "401a3ab8-f75a-4efa-b72f-6f9b34f19343",
+      "author": "derek.norrbom",
+      "text": "Production readiness check found that the production command-service foundation stack and its SSM contract are absent in the configured account regions. A production foundation deployment is required before the main Amplify deployment can create the ECS command service. Adding an operator runbook to the existing foundation documentation.",
+      "created_at": "2026-08-12T20:38:32.912440Z"
+    },
+    {
+      "id": "913761f8-3526-46bd-9ca6-0acd6421b541",
+      "author": "derek.norrbom",
+      "text": "Merged the production command-service runbook to develop: https://github.com/AnthusAI/Plexus/pull/607. The open develop-to-main promotion PR automatically includes it. Production foundation remains a prerequisite; production Amplify branch also needs PLEXUS_AMPLIFY_DEPLOYMENT_ROLE_ARN configured before its first command-service deployment.",
+      "created_at": "2026-08-12T20:39:44.918446Z"
+    },
+    {
+      "id": "b4937833-e934-44b1-a253-2a1477303ec2",
+      "author": "derek.norrbom",
+      "text": "Reproduced the production-promotion CI failure locally under Python 3.12 against the checkout. AccuracyEvaluation.score_text directly reads account_key, but focused lookup tests construct the evaluator without __init__. Fix is to use optional attribute lookup so real initialized evaluations still propagate account context while lightweight callers remain valid.",
+      "created_at": "2026-08-12T20:51:59.983635Z"
+    },
+    {
+      "id": "b9e2869d-456d-4f88-bd4a-f43977866b5a",
+      "author": "derek.norrbom",
+      "text": "Fixed the Python 3.12 evaluation item lookup CI regression and merged it to develop: https://github.com/AnthusAI/Plexus/pull/608. The exact failing file now passes locally under both Python 3.12 and py311. The open develop-to-main promotion PR includes this fix.",
+      "created_at": "2026-08-12T20:52:32.261035Z"
+    },
+    {
+      "id": "0c36beef-aa8d-46ae-ad69-187ec1d04092",
+      "author": "derek.norrbom",
+      "text": "The evaluation CI regression fix is now merged to develop after rebasing on current develop: https://github.com/AnthusAI/Plexus/pull/608. Exact lookup tests pass under Python 3.12 locally. The develop-to-main promotion PR includes it and GitHub has started its updated checks.",
+      "created_at": "2026-08-12T20:53:20.698393Z"
+    },
+    {
+      "id": "07591afa-5480-4d0f-9e1b-3f868b727d7c",
+      "author": "derek.norrbom",
+      "text": "Production foundation deployment completed successfully in us-east-1. Verified CREATE_COMPLETE, all five production SSM contract parameters, and the required production Amplify deployment-role environment variable. The first runbook command required PYTHONPATH at repository root; correcting that documentation detail now.",
+      "created_at": "2026-08-12T20:58:17.172041Z"
+    },
+    {
+      "id": "89b111f1-e872-49cb-b156-d2129d790f09",
+      "author": "derek.norrbom",
+      "text": "Investigating the full dashboard CI failure set from the production promotion. The 21 dashboard test failures resolve into a public task-display context regression and a stale sandbox managed-policy assertion; validating the complete dashboard unit suite before opening any PR.",
+      "created_at": "2026-08-12T21:38:08.397648Z"
+    }
+  ],
+  "created_at": "2026-08-05T22:49:02.682710Z",
+  "updated_at": "2026-08-12T21:38:08.397648Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

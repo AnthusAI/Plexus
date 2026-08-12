@@ -1,0 +1,100 @@
+{
+  "id": "plx-fe04a47d-ab49-4eb9-9769-1ab3230943ea",
+  "title": "Add command task runtime guardrails and cancellation finalization",
+  "description": "Implement control-plane guardrails for long-running command evaluations so tasks cannot loop invisibly and cancellation becomes deterministic. Scope: enforce bounded retry budgets at command step and item level with no unbounded nested retries. Scope: add stale-progress watchdog semantics based on heartbeat and progress deltas rather than fixed wall-clock timeout. Scope: enforce cancellation SLA by acknowledging cancel request and forcing terminal cancellation when grace window expires. Scope: surface machine-readable failure and cancellation reasons in Task status updates for UI clarity. Acceptance: local tests prove retries stop at configured budget. Acceptance: local tests prove stale-progress transitions to terminal failure with explicit reason. Acceptance: local tests prove cancel request reaches terminal cancelled state even if worker dies. Acceptance: staging run demonstrates visible terminal state transitions without indefinite Processing.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "74c512b9-4bad-49b0-8f62-6a9bb81381e8",
+      "author": "derek.norrbom",
+      "text": "Execution plan to get back on rails: (1) normalize branch flow by promoting feature/command-service-integration into develop and making develop the only base for subsequent slices; (2) implement guardrails as three narrow slices with tests first: bounded retries, stale-progress watchdog, cancellation finalization; (3) require local command-service preflight + focused contract tests before each develop PR so staging is confirmation, not discovery.",
+      "created_at": "2026-08-11T20:39:13.127375Z"
+    },
+    {
+      "id": "906b22aa-6b92-41c7-9cf5-272341f54f4f",
+      "author": "derek.norrbom",
+      "text": "Branch flow reset complete. Integration PR #579 has merged to develop. Continuing implementation on branch fix/command-runtime-bounded-retries from develop. Next slice is bounded retry budgets with local tests-first validation before any staging promotion.",
+      "created_at": "2026-08-11T20:43:23.883117Z"
+    },
+    {
+      "id": "174aea0d-738d-4740-8b00-f36214b36533",
+      "author": "derek.norrbom",
+      "text": "Staging verification against task cmd_da8fe507... found repeated worker runtime errors while UI stayed in Generating predictions: sqlite3 OperationalError 'attempt to write a readonly database' from LangChain full_llm_cache inserts. Root cause is cache initialization occurring after our earlier preflight guard, so later SQLite cache creation can still bind to a non-writable relative path. Implemented next slice fix: executor now switches command runtime cwd to a writable directory (default /tmp, configurable via PLEXUS_WORKER_RUNTIME_DIR) for the command invocation window, then restores prior cwd. Added regression test proving a command launched from a read-only cwd can still initialize default SQLiteCache successfully in writable runtime dir, plus existing cache guard tests. Validation: pytest tests/command_worker/test_plexus_cli_executor.py tests/command_worker/test_task_gateway_contract.py.",
+      "created_at": "2026-08-11T20:50:52.935176Z"
+    },
+    {
+      "id": "3c71159e-5807-49cd-acc5-5ea6ba38cfce",
+      "author": "derek.norrbom",
+      "text": "Implemented and pushed readonly-cache stall fix on branch fix/command-runtime-bounded-retries. PR #580 targets develop. It executes commands from writable runtime cwd (/tmp by default) during worker invocation, restoring the original cwd afterwards. This prevents relative SQLite cache paths from binding to non-writable image paths when cache initialization occurs after executor preflight. Validation completed: pytest tests/command_worker/test_plexus_cli_executor.py tests/command_worker/test_task_gateway_contract.py and bash dashboard/scripts/preflight-command-worker.sh.",
+      "created_at": "2026-08-11T20:52:26.910390Z"
+    },
+    {
+      "id": "ca9ed6cc-f3e9-4d6e-a217-f5d14027b843",
+      "author": "derek.norrbom",
+      "text": "Operational unblock: force-terminalized two stale staging command tasks stuck in CANCEL_REQUESTED with no active worker lease holder (service intentionally scaled to 0 during spend protection). Updated tasks cmd_b9c6... and cmd_da8f... to lifecycleStatus/status CANCELLED with valid completedAt/updatedAt timestamps so worker image promotion gating can proceed on next staging deploy.",
+      "created_at": "2026-08-11T21:54:25.249998Z"
+    },
+    {
+      "id": "65ab745d-58b3-4d55-85e6-3ba5d77f8bf4",
+      "author": "derek.norrbom",
+      "text": "Staging run cmd_4d099... no longer stuck; it failed quickly with RuntimeError score returned ERROR. Log evidence shows Extractor could not find NLTK punkt and attempted runtime download/write under /app/nltk_data, causing PermissionError in the read-only image path. Implemented runtime-safe fix: Extractor now prepares a writable NLTK directory (/tmp/nltk_data via PLEXUS_NLTK_DATA_DIR), prepends it to nltk.data.path, and downloads punkt there if missing. Also set command-worker container env defaults PLEXUS_NLTK_DATA_DIR=/tmp/nltk_data and MPLCONFIGDIR=/tmp/matplotlib to avoid read-only config writes. Validation: pytest plexus/scores/nodes/Extractor_test.py tests/command_worker/test_plexus_cli_executor.py tests/command_worker/test_task_gateway_contract.py.",
+      "created_at": "2026-08-11T22:26:54.418494Z"
+    },
+    {
+      "id": "f3cb486f-6000-43de-99f8-c5f315057c38",
+      "author": "derek.norrbom",
+      "text": "Correction after architecture review: the first NLTK patch was too node-specific. Reworked the PR to remove Extractor-specific runtime behavior and establish a single command-worker filesystem contract for all command implementations, including LangGraphScore nodes, TactusScore, and report/procedure libraries that honor standard locations. Worker now sets HOME, XDG_CONFIG_HOME, XDG_CACHE_HOME, MPLCONFIGDIR, NLTK_DATA, and SCORECARD_CACHE_DIR to supported writable /tmp locations; creates the writable directories before loading any executor; and bundles punkt into the image under /usr/local/share/nltk_data with /tmp fallback for other NLTK resources. Focused tests pass (47), plus Dockerfile syntax/lint check passes.",
+      "created_at": "2026-08-11T22:31:47.205215Z"
+    },
+    {
+      "id": "1048591e-8f2b-4917-ba6e-935e412c0f7d",
+      "author": "derek.norrbom",
+      "text": "Staging validation found a completion-path defect: the worker completes evaluation computation and writes intermediate metrics, but the Task update rejects commandResult as an invalid GraphQL JSON value. A safe conditional mutation reproduced the rejection with a minimal object, confirming this is JSON scalar serialization rather than result size. Implementing an explicit Task-store AWSJSON serialization contract with executable coverage.",
+      "created_at": "2026-08-11T23:52:48.547890Z"
+    },
+    {
+      "id": "02d44f08-8ff3-4c6f-915d-db4c46672ce5",
+      "author": "derek.norrbom",
+      "text": "Implemented explicit AWSJSON serialization at the Task-store boundary for command payloads, progress details, and completion results. The regression test failed before the change and now passes. Validation: `python -m pytest -q tests/command_worker/test_runtime_entrypoint.py plexus/scores/nodes/Extractor_test.py tests/command_worker/test_plexus_cli_executor.py tests/command_worker/test_task_gateway_contract.py tests/command_worker/test_task_store.py` (49 passed). A safe staging conditional-mutation probe also confirmed the serialized result passes JSON-value validation without changing data.",
+      "created_at": "2026-08-11T23:53:40.731128Z"
+    },
+    {
+      "id": "a6089bae-e49b-4dde-a5de-89a08a64ccde",
+      "author": "derek.norrbom",
+      "text": "Staging report-dispatch investigation: the worker receives report commands and returns a failed lifecycle outcome, so the dispatch boundary is functioning. The current deployed image is still the pre-promotion revision while the new Amplify job runs. Separately, a runtime reproduction found that score configurations using the legacy CallCriteriaDBCache source fail because that class is not packaged in the command-worker image; this is a missing runtime capability and requires a deliberate supported-data-source decision, not a dispatch workaround. Continuing to isolate the report command error payload before proposing implementation.",
+      "created_at": "2026-08-12T00:09:58.151853Z"
+    },
+    {
+      "id": "785554e0-ee02-4e47-940d-b7718e2e11b0",
+      "author": "derek.norrbom",
+      "text": "Approved implementation direction: add a single dashboard-worker execution policy that prevents YAML-declared dataset classes from being imported. Local CLI retains its current behavior. Dashboard feedback commands must use their explicitly constructed feedback dataset; any dashboard command that has not supplied a Plexus-owned source fails early with a clear configuration error. No preservation layer or broad source allowlist will be added.",
+      "created_at": "2026-08-12T00:23:15.918048Z"
+    },
+    {
+      "id": "f6c0701c-103f-432d-93ec-1bbc75c95b0b",
+      "author": "derek.norrbom",
+      "text": "Implemented the single dashboard execution-policy boundary. The command executor binds PLEXUS_RUNTIME_PROFILE=dashboard only for dispatched commands and restores it afterward. ScoreData now rejects generic YAML data-class loading under that profile before any import attempt; local CLI retains existing behavior. A one-item executor-path feedback smoke completed successfully using the explicit feedback dataset. Focused validation is green: 51 passed.",
+      "created_at": "2026-08-12T00:25:16.207043Z"
+    },
+    {
+      "id": "20febb1f-f44e-4b42-8406-f6821a8c82d8",
+      "author": "derek.norrbom",
+      "text": "Implemented and validated the dashboard data-source boundary. The command-worker executor now sets a scoped dashboard runtime profile; the generic score-data loader fails before dynamically importing any YAML-declared data class in that profile. Local CLI behavior remains unchanged. Validation: focused Python suite passed (51 tests), and a one-item feedback evaluation was run through the current mounted worker source with the dashboard profile enabled; it completed successfully using its explicit feedback dataset.",
+      "created_at": "2026-08-12T00:27:09.006933Z"
+    }
+  ],
+  "created_at": "2026-08-11T19:49:49.476527Z",
+  "updated_at": "2026-08-12T00:27:09.006933Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

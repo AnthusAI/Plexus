@@ -6,6 +6,9 @@ import ProceduresDashboard from '@/components/procedures-dashboard'
 import { ProceduresDashboardSkeleton } from '@/components/loading-skeleton'
 
 const mockGraphql = jest.fn()
+const mockSubmitCommand = jest.fn()
+const mockToastSuccess = jest.fn()
+const mockToastError = jest.fn()
 const mockAccountState = {
   selectedAccount: { id: 'account-1' },
   accounts: [{ id: 'account-1' }],
@@ -42,6 +45,17 @@ jest.mock('aws-amplify/data', () => ({
 
 jest.mock('@/utils/user-profile', () => ({
   getCurrentUserAttribution: jest.fn().mockResolvedValue({ createdByUserId: 'user-1' }),
+}))
+
+jest.mock('@/lib/submit-command', () => ({
+  submitCommand: (...args: unknown[]) => mockSubmitCommand(...args),
+}))
+
+jest.mock('sonner', () => ({
+  toast: {
+    success: (...args: unknown[]) => mockToastSuccess(...args),
+    error: (...args: unknown[]) => mockToastError(...args),
+  },
 }))
 
 jest.mock('next/navigation', () => ({
@@ -107,7 +121,12 @@ jest.mock('@/components/ScorecardContext', () => ({
 
 jest.mock('@/components/template-selector', () => ({
   __esModule: true,
-  default: () => null,
+  default: ({ open, onTemplateSelect }: any) => open ? (
+    <button type="button" onClick={() => onTemplateSelect(
+      { id: 'template-1', name: 'Template One', code: 'params:\n  max_iterations:\n    value: 3' },
+      { max_iterations: 6, hint: 'focus' },
+    )}>Launch template</button>
+  ) : null,
 }))
 
 jest.mock('@/components/ProceduresGauges', () => ({
@@ -121,6 +140,7 @@ describe('Procedures dashboard loading UX', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    mockSubmitCommand.mockResolvedValue({ id: 'task-procedure', accountId: 'account-1', type: 'Procedure', status: 'PENDING' })
     mockAccountState.selectedAccount = { id: 'account-1' }
     mockAccountState.accounts = [{ id: 'account-1' }]
     mockAccountState.isLoadingAccounts = false
@@ -330,6 +350,34 @@ describe('Procedures dashboard loading UX', () => {
       expect(screen.getByText('No procedures found')).toBeInTheDocument()
     })
     expect(screen.queryByTestId('procedures-dashboard-skeleton')).not.toBeInTheDocument()
+  })
+
+  it('creates and submits a standard procedure launch with account-bound parameters', async () => {
+    mockGraphql.mockImplementation(({ query }: { query: string }) => {
+      const text = String(query)
+      if (text.includes('onCreateProcedure') || text.includes('onUpdateProcedure')) return createSubscriptionResult()
+      if (text.includes('mutation CreateProcedure')) {
+        return Promise.resolve({ data: { createProcedure: { id: 'procedure-new', name: 'Procedure New' } } })
+      }
+      if (text.includes('listProcedureByAccountIdAndCreatedAt')) {
+        return Promise.resolve({ data: { listProcedureByAccountIdAndCreatedAt: { items: [], nextToken: null } } })
+      }
+      if (text.includes('listTaskByAccountIdAndUpdatedAt')) {
+        return Promise.resolve({ data: { listTaskByAccountIdAndUpdatedAt: { items: [] } } })
+      }
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<ProceduresDashboard />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Create' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Launch template' }))
+
+    await waitFor(() => {
+      expect(mockSubmitCommand).toHaveBeenCalledWith('account-1', 'procedure.run', {
+        procedureId: 'procedure-new',
+        parameters: { max_iterations: 6, hint: 'focus' },
+      })
+    })
   })
 
   it('adds newly-created procedures from realtime subscription payloads', async () => {

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6786fdb0-7edb-4b32-b1ee-4a9ba34966d8",
+  "issue_id": "plx-fd6310a9-4734-4315-97fe-4c37ec3d44b4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-10T18:45:25.089Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-aba73b78-6f78-4a38-aa4a-331bc8ebc654",
+    "priority": 2,
+    "status": "open",
+    "title": "Add SandboxCommandWorkerStack reusing staging VPC/ECR with CDK-asset worker image"
+  }
+}

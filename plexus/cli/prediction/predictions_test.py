@@ -59,6 +59,14 @@ def mock_item():
 
 
 @pytest.fixture
+def mock_account():
+    """Mock authoritative account lookup for prediction metadata."""
+    with patch('plexus.cli.prediction.predictions.Account.get_by_id') as get_by_id:
+        get_by_id.return_value = Mock(id='account-123', key='account-key')
+        yield get_by_id
+
+
+@pytest.fixture
 def mock_env_vars():
     """Mock environment variables"""
     with patch.dict(os.environ, {
@@ -616,7 +624,7 @@ class TestOutputExcel:
 class TestSelectSample:
     """Test the select_sample function"""
     
-    def test_select_sample_with_item_id_direct_lookup(self, mock_client, mock_item, sample_item_data, mock_env_vars):
+    def test_select_sample_with_item_id_direct_lookup(self, mock_client, mock_item, mock_account, sample_item_data, mock_env_vars):
         """Test select_sample with specific item ID - direct lookup"""
         from plexus.scores.Score import Score
 
@@ -646,9 +654,11 @@ class TestSelectSample:
 
             assert used_item_id == 'item-123'
             assert isinstance(sample_row, pd.DataFrame)
+            assert json.loads(sample_row.iloc[0]['metadata'])['account_key'] == 'account-key'
+            mock_account.assert_called_once_with('account-123', mock_client)
             mock_item.get_by_id.assert_called_with('item-123', mock_client)
     
-    def test_select_sample_with_item_id_identifier_search(self, mock_client, mock_item, sample_item_data, mock_env_vars):
+    def test_select_sample_with_item_id_identifier_search(self, mock_client, mock_item, mock_account, sample_item_data, mock_env_vars):
         """Test select_sample with identifier search fallback"""
         from plexus.scores.Score import Score
 
@@ -683,7 +693,7 @@ class TestSelectSample:
             assert isinstance(sample_row, pd.DataFrame)
             mock_resolve_identifier.assert_called_once_with(mock_client, 'search-term', 'account-123')
     
-    def test_select_sample_item_not_found(self, mock_client, mock_item, mock_env_vars):
+    def test_select_sample_item_not_found(self, mock_client, mock_item, mock_account, mock_env_vars):
         """Test select_sample when item is not found"""
         sample_scorecard_class = Mock()
         sample_scorecard_class.properties = {'key': 'test-scorecard'}
@@ -699,7 +709,7 @@ class TestSelectSample:
             with pytest.raises(ValueError, match="No item found matching identifier: nonexistent"):
                 select_sample(sample_scorecard_class, 'test-score', 'nonexistent', fresh=False)
     
-    def test_select_sample_without_item_id(self, mock_client, mock_item, sample_item_data, mock_env_vars):
+    def test_select_sample_without_item_id(self, mock_client, mock_item, mock_account, sample_item_data, mock_env_vars):
         """Test select_sample without specific item ID - gets most recent"""
         # Mock Item.list to return a proper item instance
         mock_item_instance = Mock()
@@ -719,7 +729,7 @@ class TestSelectSample:
             assert isinstance(sample_row, pd.DataFrame)
             mock_item.list.assert_called_once()
     
-    def test_select_sample_no_items_in_account(self, mock_client, mock_item, mock_env_vars):
+    def test_select_sample_no_items_in_account(self, mock_client, mock_item, mock_account, mock_env_vars):
         """Test select_sample when no items exist in account"""
         sample_scorecard_class = Mock()
         sample_scorecard_class.properties = {'key': 'test-scorecard'}

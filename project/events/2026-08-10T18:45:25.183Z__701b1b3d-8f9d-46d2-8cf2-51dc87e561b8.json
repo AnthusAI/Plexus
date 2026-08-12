@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "701b1b3d-8f9d-46d2-8cf2-51dc87e561b8",
+  "issue_id": "plx-1569ab40-237d-42ee-83b7-ed9cc6a5c400",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-10T18:45:25.183Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-aba73b78-6f78-4a38-aa4a-331bc8ebc654",
+    "priority": 2,
+    "status": "open",
+    "title": "Run manual end-to-end sandbox command-worker verification"
+  }
+}

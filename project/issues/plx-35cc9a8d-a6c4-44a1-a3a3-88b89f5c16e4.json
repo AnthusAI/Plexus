@@ -3,7 +3,7 @@
   "title": "Workers drain active commands safely during deployment",
   "description": "As an operator, I want worker revisions to drain active commands before termination, so that routine deployments do not destroy long-running work.\n\nFeature: Drain workers safely\n  Scenario: A new worker revision is deployed while a command is running\n    Given an old worker revision holds an active command lease\n    When the deployment marks that revision as draining\n    Then the old worker accepts no new commands\n    And the active command may finish or transfer through the recovery protocol\n    And the new revision accepts newly announced commands\n    And deployment does not silently terminate the active command",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,16 @@
       "author": "derek.norrbom",
       "text": "Additional behavior for the service-loop slice:\n\nFeature: Drain an always-on worker service\n  Scenario: Drain begins while the worker is idle\n    Given a worker service is waiting for commands\n    When draining is requested\n    Then it stops receiving new work and exits cleanly\n\n  Scenario: Drain begins during command execution\n    Given a worker service is executing a claimed command\n    When draining is requested\n    Then the active execution is allowed to settle\n    And no additional command is received\n    And the service exits after the active execution returns\n\n  Scenario: Drain races with delivery receipt\n    Given a delivery was received but execution has not started\n    When draining is observed\n    Then that delivery is released without execution\n    And the service exits",
       "created_at": "2026-08-04T20:46:55.106627Z"
+    },
+    {
+      "id": "4d05e82a-819c-4a44-a997-157c01a21047",
+      "author": "derek.norrbom",
+      "text": "Landed in develop through PR #537. The warm service loop stops intake on drain, settles active execution, releases deliveries caught by the drain race, and exits cleanly.",
+      "created_at": "2026-08-04T22:52:26.196423Z"
     }
   ],
   "created_at": "2026-08-04T19:45:23.159556Z",
-  "updated_at": "2026-08-04T20:46:55.106627Z",
-  "closed_at": null,
+  "updated_at": "2026-08-04T22:52:26.223049Z",
+  "closed_at": "2026-08-04T22:52:26.223049Z",
   "custom": {}
 }

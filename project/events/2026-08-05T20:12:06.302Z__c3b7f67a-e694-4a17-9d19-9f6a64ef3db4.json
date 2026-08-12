@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c3b7f67a-e694-4a17-9d19-9f6a64ef3db4",
+  "issue_id": "plx-3e8cb91c-f32b-40ce-95ee-f9219d2f1874",
+  "event_type": "issue_created",
+  "occurred_at": "2026-08-05T20:12:06.302Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "As a platform operator, I want Celery-delivered commands to use the portable lifecycle contract, so that command ownership, progress, cancellation, and terminal settlement remain consistent across deployment targets.\n\nFeature: Celery command delivery uses the portable lifecycle\n\nScenario: A Celery delivery owns and completes a command\nGiven an announced command envelope and an available lifecycle lease\nWhen the Celery adapter receives the delivery\nThen it claims the command through the portable lifecycle\nAnd it executes through the portable executor context\nAnd it acknowledges only after durable terminal settlement\n\nScenario: A duplicate delivery does not execute concurrently\nGiven a command with an active portable lifecycle lease\nWhen another Celery delivery receives the same envelope\nThen it does not execute the command\nAnd it uses the configured transport behavior without changing dashboard lifecycle semantics\n\nScenario: Cancellation is observed through the portable context\nGiven a running Celery-delivered command whose lifecycle is cancellation-requested\nWhen the executor checks its context\nThen it terminates as cancelled\nAnd no successful terminal result is written.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-76f1e14e-1c06-4e29-821e-adb2da03097e",
+    "priority": 1,
+    "status": "open",
+    "title": "Celery delivery preserves portable command lifecycle"
+  }
+}

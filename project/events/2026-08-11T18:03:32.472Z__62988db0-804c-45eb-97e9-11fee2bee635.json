@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "62988db0-804c-45eb-97e9-11fee2bee635",
+  "issue_id": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+  "event_type": "field_updated",
+  "occurred_at": "2026-08-11T18:03:32.472Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Purpose: make the score processor deployable by external infrastructure owners without embedding downstream account, pipeline, or environment details in Plexus. Definition of Done: Plexus exposes a public-safe artifact and construct contract, supports immutable image publishing, and documents the build/runtime inputs needed by downstream deployment pipelines.",
+        "to": "Purpose: make the score processor deployable by external infrastructure owners without embedding downstream account, pipeline, or environment details in Plexus. Definition of Done: Plexus packages a public-safe isolated score-processor Dockerfile and handler as a stable package resource, exposes reusable infrastructure constructs, and documents the immutable source-revision inputs needed by downstream release pipelines. Downstream integrations build, validate, scan, publish, and deploy their own image digest; Plexus does not operate a separate mutable artifact pipeline for them."
+      },
+      "title": {
+        "from": "Publish reusable score processor deployment artifacts",
+        "to": "Publish reusable score processor deployment assets"
+      }
+    }
+  }
+}
