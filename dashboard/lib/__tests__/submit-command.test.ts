@@ -39,7 +39,6 @@ describe('submitCommand', () => {
       scorecardName: 'Card',
       scoreName: 'Score',
       numberOfSamples: 10,
-      loadFresh: true,
       logToLanggraph: true,
       visualize: true,
     } as Record<string, unknown>)
@@ -50,7 +49,6 @@ describe('submitCommand', () => {
       scorecardName: 'Card',
       scoreName: 'Score',
       numberOfSamples: 10,
-      loadFresh: true,
     })
   })
 

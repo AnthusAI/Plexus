@@ -4,7 +4,6 @@ interface EvaluationOptions {
   scorecardName: string
   scoreName: string
   numberOfSamples: number
-  loadFresh: boolean
 }
 
 interface DemoOptions {
@@ -48,7 +47,7 @@ const createEvaluationCommand = (type: string) => {
       `--number-of-samples ${options.numberOfSamples}`,
       `--scorecard "${options.scorecardName}"`,
       `--score "${options.scoreName}"`,
-      options.loadFresh ? '--fresh' : ''
+      '--use-score-associated-dataset'
     ].filter(Boolean).join(' ')
     
     const command = `evaluate ${type} ${args}`
