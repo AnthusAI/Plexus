@@ -94,10 +94,25 @@
       "author": "derek.norrbom",
       "text": "Corrected local report smoke observability: it now announces image build/reuse and worker-command start immediately, and relays final container output. Run it with conda run --no-capture-output so Conda does not buffer those stage messages. Validation repeated: Python compile and --help.",
       "created_at": "2026-08-12T17:27:18.893291Z"
+    },
+    {
+      "id": "7ce8aa92-268f-46cb-a221-a23bf74790e2",
+      "author": "derek.norrbom",
+      "text": "Regression check now passes: the local smoke Docker command attaches stdin, so the serialized command envelope reaches the same executor entry point as the worker. The prior error was before command execution, not a staging/report failure. Preparing the focused fix for normal develop flow.",
+      "created_at": "2026-08-12T17:47:23.580484Z"
+    },
+    {
+      "id": "fd61facc-71c6-40a6-b0ae-74018d84dd0e",
+      "author": "derek.norrbom",
+      "text": "Staging deployment exposed an AWS inline IAM policy-size limit for generated command-worker AppSync field policies. Investigating a least-privilege policy representation that stays below the documented limit; will synthesize and measure locally before retrying deployment.",
+      "created_at": "2026-08-12T18:08:05.955356Z"
     }
   ],
   "created_at": "2026-08-05T22:49:02.682710Z",
-  "updated_at": "2026-08-12T17:27:18.893291Z",
+  "updated_at": "2026-08-12T18:08:05.955356Z",
   "closed_at": null,
-  "custom": {}
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
 }
