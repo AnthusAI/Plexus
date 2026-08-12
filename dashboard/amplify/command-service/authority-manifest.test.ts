@@ -30,7 +30,7 @@ describe('command worker action authority manifest', () => {
     expect(WORKER_DOMAIN_APPSYNC_ROOTS).not.toEqual(expect.arrayContaining(LIFECYCLE_APPSYNC_ROOTS))
   })
 
-  it('packages resolved authority groups with stable unique ids', () => {
+  it('packages declared authority groups with stable unique ids', () => {
     expect(WORKER_APPSYNC_AUTHORITY_GROUPS.map((group) => group.source)).toEqual([
       'lifecycle',
       'evaluation.accuracy',
@@ -50,6 +50,17 @@ describe('command worker action authority manifest', () => {
     expect(ACTION_AUTHORITY['report.run'].appsync).toContain('Query/getReportConfiguration')
     expect(WORKER_APPSYNC_AUTHORITY_GROUPS.find((group) => group.source === 'report.run')?.roots)
       .toContain('Query/getReportConfiguration')
+  })
+
+  it('keeps each managed-policy document to authority declared by that action', () => {
+    const procedureGroup = WORKER_APPSYNC_AUTHORITY_GROUPS.find((group) => group.source === 'procedure.run')
+
+    // The task role is shared by every command, so action groups are policy
+    // documents, not runtime permission boundaries.  Inherited roots already
+    // exist in their declaring documents; duplicating them can exceed IAM's
+    // 6,144-byte managed-policy limit.
+    expect(procedureGroup?.roots).not.toContain('Query/getScorecard')
+    expect(procedureGroup?.roots).toContain('Query/getProcedure')
   })
 
   it('limits direct AWS storage authority to the three workload buckets', () => {
