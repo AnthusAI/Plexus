@@ -30,7 +30,7 @@ describe('command worker action authority manifest', () => {
     expect(WORKER_DOMAIN_APPSYNC_ROOTS).not.toEqual(expect.arrayContaining(LIFECYCLE_APPSYNC_ROOTS))
   })
 
-  it('packages only non-empty direct authority groups with stable unique ids', () => {
+  it('packages resolved authority groups with stable unique ids', () => {
     expect(WORKER_APPSYNC_AUTHORITY_GROUPS.map((group) => group.source)).toEqual([
       'lifecycle',
       'evaluation.accuracy',
@@ -38,11 +38,18 @@ describe('command worker action authority manifest', () => {
       'feedback.report',
       'prediction.run',
       'procedure.run',
+      'report.run',
     ])
     expect(new Set(WORKER_APPSYNC_AUTHORITY_GROUPS.map((group) => group.id)).size)
       .toBe(WORKER_APPSYNC_AUTHORITY_GROUPS.length)
     expect([...new Set(WORKER_APPSYNC_AUTHORITY_GROUPS.flatMap((group) => group.roots))].sort())
       .toEqual([...LIFECYCLE_APPSYNC_ROOTS, ...WORKER_DOMAIN_APPSYNC_ROOTS].sort())
+  })
+
+  it('grants report commands the exact configuration lookup they execute', () => {
+    expect(ACTION_AUTHORITY['report.run'].appsync).toContain('Query/getReportConfiguration')
+    expect(WORKER_APPSYNC_AUTHORITY_GROUPS.find((group) => group.source === 'report.run')?.roots)
+      .toContain('Query/getReportConfiguration')
   })
 
   it('limits direct AWS storage authority to the three workload buckets', () => {
