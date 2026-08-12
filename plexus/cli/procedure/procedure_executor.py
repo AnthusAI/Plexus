@@ -46,13 +46,19 @@ def _is_dashboard_task_cancelled(client: Any, task_id: Optional[str]) -> bool:
     if not task_id:
         return False
     try:
-        from plexus.dashboard.api.models.task import Task
-
-        task = Task.get_by_id(task_id, client)
-        return str(getattr(task, "status", "") or "").upper() in {
-            "CANCELLED",
-            "CANCELED",
-        }
+        response = client.execute(
+            """
+            query GetTaskCancellationState($id: ID!) {
+              getTask(id: $id) {
+                status
+              }
+            }
+            """,
+            {"id": task_id},
+        )
+        task = response.get("getTask") if isinstance(response, dict) else None
+        status = str((task or {}).get("status") or "").upper()
+        return status in {"CANCELLED", "CANCELED", "CANCEL_REQUESTED"}
     except Exception as exc:  # noqa: BLE001
         logger.debug("Could not check cancellation status for task %s: %s", task_id, exc)
         return False

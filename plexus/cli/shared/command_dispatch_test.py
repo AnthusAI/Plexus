@@ -425,8 +425,33 @@ class TestCommandDispatchSubmission(unittest.TestCase):
         self.assertEqual(submitted["lifecycleStatus"], "ANNOUNCED")
         self.assertEqual(submitted["dispatchStatus"], "READY")
         payload = json.loads(submitted["commandPayload"])
-        self.assertEqual(payload["argv"], ["report", "run", "--config", "cfg-1"])
+        self.assertEqual(payload["argv"][:4], ["report", "run", "--config", "cfg-1"])
+        self.assertEqual(payload["argv"][4], "--task-id")
+        self.assertEqual(payload["argv"][5], payload["task_id"])
         self.assertTrue(payload["task_id"].startswith("cmd_"))
+
+    def test_dispatch_procedure_run_does_not_append_task_id(self):
+        fake_client = Mock()
+
+        with (
+            patch("plexus.cli.shared.CommandDispatch._resolve_dispatch_mode", return_value="local"),
+            patch("plexus.cli.shared.CommandDispatch.create_client", return_value=fake_client),
+            patch("plexus.cli.shared.CommandDispatch._resolve_required_dispatch_account_id", return_value="account-1"),
+            patch("plexus.cli.shared.CommandDispatch._submit_envelope_task") as submit_task,
+            patch("plexus.cli.shared.CommandDispatch._wait_for_envelope_task_completion", return_value=SimpleNamespace(lifecycleStatus="SUCCEEDED", status="COMPLETED", commandResult={}, errorMessage=None)),
+            patch("plexus.cli.shared.CommandDispatch._print_task_terminal_summary"),
+            patch("plexus.cli.shared.TaskTargeting.TaskTargetMatcher.validate_target", return_value=True),
+            patch.dict("os.environ", {"USER": "tester"}, clear=True),
+        ):
+            result = CliRunner().invoke(
+                command,
+                ["dispatch", "procedure run proc-1 --output json", "--target", "procedure/run"],
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        _, submitted = submit_task.call_args.args
+        payload = json.loads(submitted["commandPayload"])
+        self.assertEqual(payload["argv"], ["procedure", "run", "proc-1", "--output", "json"])
 
     def test_dispatch_local_sync_waits_for_terminal_task(self):
         fake_client = Mock()
@@ -489,6 +514,7 @@ class TestCommandDispatchSubmission(unittest.TestCase):
         mutation, variables = fake_client.execute.call_args.args
         self.assertIn("UpdateTask", mutation)
         self.assertEqual(variables["input"]["id"], "cmd_456")
+        self.assertEqual(variables["input"]["status"], "CANCELLED")
         self.assertEqual(variables["input"]["lifecycleStatus"], "CANCEL_REQUESTED")
 
 

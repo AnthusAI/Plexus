@@ -150,6 +150,9 @@ def _build_envelope_task_record(
         raise click.ClickException("COMMAND_STRING must include at least one argument")
 
     command_id = f"cmd_{uuid.uuid4().hex}"
+    if _should_append_task_id_arg(argv) and "--task-id" not in argv:
+        argv = [*argv, "--task-id", command_id]
+
     payload = {"argv": argv, "task_id": command_id}
     digest = request_digest(target, payload)
     now = datetime.datetime.now(timezone.utc).isoformat()
@@ -173,6 +176,15 @@ def _build_envelope_task_record(
         "createdAt": now,
         "updatedAt": now,
     }
+
+
+def _should_append_task_id_arg(args: list[str]) -> bool:
+    """Return whether a CLI command should receive the generic --task-id option."""
+    if not args:
+        return False
+    if len(args) >= 2 and args[0] == "procedure" and args[1] == "run":
+        return False
+    return args[0] in {"evaluate", "predict", "report"}
 
 
 def _submit_envelope_task(client: PlexusDashboardClient, task_input: dict[str, typing.Any]) -> None:
@@ -1084,6 +1096,7 @@ def cancel(task_id: str) -> None:
         {
             "input": {
                 "id": task_id,
+                "status": "CANCELLED",
                 "lifecycleStatus": "CANCEL_REQUESTED",
                 "cancellationRequestedAt": now,
                 "updatedAt": now,
