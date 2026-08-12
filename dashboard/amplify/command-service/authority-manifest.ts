@@ -35,7 +35,11 @@ export const WORKER_APPSYNC_AUTHORITY_GROUPS = [
     id: action.split(/[^A-Za-z0-9]+/).filter(Boolean)
       .map((part) => `${part[0].toUpperCase()}${part.slice(1)}`).join(''),
     source: action,
-    roots: [...ACTION_AUTHORITY[action].appsync],
+    // The task role is shared by every command.  These groups therefore
+    // package each action's declared roots into independently sized IAM
+    // managed policies; inheritance remains an audit-time concept in
+    // ACTION_AUTHORITY, not repeated policy content.
+    roots: [...entries[action].appsync].sort(),
   })),
 ].filter((group) => group.roots.length > 0)
 
