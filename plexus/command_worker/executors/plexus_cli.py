@@ -20,6 +20,8 @@ _CLI_LOCK = RLock()
 _TASK_ID_KEY = "task_id"
 _ARGV_KEY = "argv"
 _ACCOUNT_ID_ENV = "PLEXUS_ACCOUNT_ID"
+_RUNTIME_PROFILE_ENV = "PLEXUS_RUNTIME_PROFILE"
+_DASHBOARD_RUNTIME_PROFILE = "dashboard"
 _WORKER_RUNTIME_DIR_ENV = "PLEXUS_WORKER_RUNTIME_DIR"
 _DEFAULT_WORKER_RUNTIME_DIR = "/tmp"
 _MAX_RESULT_OUTPUT_BYTES = 65_536
@@ -58,6 +60,7 @@ class PlexusCliExecutor:
             previous_argv = sys.argv
             previous_task_id = os.environ.get("PLEXUS_DISPATCH_TASK_ID")
             previous_account_id = os.environ.get(_ACCOUNT_ID_ENV)
+            previous_runtime_profile = os.environ.get(_RUNTIME_PROFILE_ENV)
             previous_cwd = os.getcwd()
             runtime_cwd = self._runtime_working_directory()
             try:
@@ -71,6 +74,7 @@ class PlexusCliExecutor:
                     # before execution. Bind its account ID without treating it
                     # as the distinct legacy account-key configuration.
                     os.environ[_ACCOUNT_ID_ENV] = envelope.tenant_id
+                    os.environ[_RUNTIME_PROFILE_ENV] = _DASHBOARD_RUNTIME_PROFILE
                     if task_id is not None:
                         os.environ["PLEXUS_DISPATCH_TASK_ID"] = task_id
                     self._invoke_cli()
@@ -85,6 +89,10 @@ class PlexusCliExecutor:
                     os.environ.pop(_ACCOUNT_ID_ENV, None)
                 else:
                     os.environ[_ACCOUNT_ID_ENV] = previous_account_id
+                if previous_runtime_profile is None:
+                    os.environ.pop(_RUNTIME_PROFILE_ENV, None)
+                else:
+                    os.environ[_RUNTIME_PROFILE_ENV] = previous_runtime_profile
                 os.chdir(previous_cwd)
 
         return {

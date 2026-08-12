@@ -64,10 +64,34 @@
       "author": "derek.norrbom",
       "text": "Implemented explicit AWSJSON serialization at the Task-store boundary for command payloads, progress details, and completion results. The regression test failed before the change and now passes. Validation: `python -m pytest -q tests/command_worker/test_runtime_entrypoint.py plexus/scores/nodes/Extractor_test.py tests/command_worker/test_plexus_cli_executor.py tests/command_worker/test_task_gateway_contract.py tests/command_worker/test_task_store.py` (49 passed). A safe staging conditional-mutation probe also confirmed the serialized result passes JSON-value validation without changing data.",
       "created_at": "2026-08-11T23:53:40.731128Z"
+    },
+    {
+      "id": "a6089bae-e49b-4dde-a5de-89a08a64ccde",
+      "author": "derek.norrbom",
+      "text": "Staging report-dispatch investigation: the worker receives report commands and returns a failed lifecycle outcome, so the dispatch boundary is functioning. The current deployed image is still the pre-promotion revision while the new Amplify job runs. Separately, a runtime reproduction found that score configurations using the legacy CallCriteriaDBCache source fail because that class is not packaged in the command-worker image; this is a missing runtime capability and requires a deliberate supported-data-source decision, not a dispatch workaround. Continuing to isolate the report command error payload before proposing implementation.",
+      "created_at": "2026-08-12T00:09:58.151853Z"
+    },
+    {
+      "id": "785554e0-ee02-4e47-940d-b7718e2e11b0",
+      "author": "derek.norrbom",
+      "text": "Approved implementation direction: add a single dashboard-worker execution policy that prevents YAML-declared dataset classes from being imported. Local CLI retains its current behavior. Dashboard feedback commands must use their explicitly constructed feedback dataset; any dashboard command that has not supplied a Plexus-owned source fails early with a clear configuration error. No preservation layer or broad source allowlist will be added.",
+      "created_at": "2026-08-12T00:23:15.918048Z"
+    },
+    {
+      "id": "f6c0701c-103f-432d-93ec-1bbc75c95b0b",
+      "author": "derek.norrbom",
+      "text": "Implemented the single dashboard execution-policy boundary. The command executor binds PLEXUS_RUNTIME_PROFILE=dashboard only for dispatched commands and restores it afterward. ScoreData now rejects generic YAML data-class loading under that profile before any import attempt; local CLI retains existing behavior. A one-item executor-path feedback smoke completed successfully using the explicit feedback dataset. Focused validation is green: 51 passed.",
+      "created_at": "2026-08-12T00:25:16.207043Z"
+    },
+    {
+      "id": "20febb1f-f44e-4b42-8406-f6821a8c82d8",
+      "author": "derek.norrbom",
+      "text": "Implemented and validated the dashboard data-source boundary. The command-worker executor now sets a scoped dashboard runtime profile; the generic score-data loader fails before dynamically importing any YAML-declared data class in that profile. Local CLI behavior remains unchanged. Validation: focused Python suite passed (51 tests), and a one-item feedback evaluation was run through the current mounted worker source with the dashboard profile enabled; it completed successfully using its explicit feedback dataset.",
+      "created_at": "2026-08-12T00:27:09.006933Z"
     }
   ],
   "created_at": "2026-08-11T19:49:49.476527Z",
-  "updated_at": "2026-08-11T23:53:40.731128Z",
+  "updated_at": "2026-08-12T00:27:09.006933Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",

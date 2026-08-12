@@ -69,6 +69,7 @@ def test_executor_invokes_cli_with_typed_argv_and_reports_progress(monkeypatch) 
         observed["task_id"] = os.environ.get("PLEXUS_DISPATCH_TASK_ID")
         observed["account_id"] = os.environ.get("PLEXUS_ACCOUNT_ID")
         observed["account_key"] = os.environ.get("PLEXUS_ACCOUNT_KEY")
+        observed["runtime_profile"] = os.environ.get("PLEXUS_RUNTIME_PROFILE")
         print("command output")
         CommandProgress.update(2, 4, "running")
 
@@ -83,6 +84,7 @@ def test_executor_invokes_cli_with_typed_argv_and_reports_progress(monkeypatch) 
         "task_id": "dashboard-task-1",
         "account_id": "tenant-1",
         "account_key": None,
+        "runtime_profile": "dashboard",
     }
     assert result == {
         "argv": ["evaluate", "run"],
