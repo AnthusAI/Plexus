@@ -19,6 +19,7 @@ import json
 import os
 import yaml
 import time
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping, Optional
 from rich.console import Console
 from rich.table import Table
@@ -48,6 +49,18 @@ def _parse_set_parameter_value(raw_value: str) -> Any:
             return float(value)
         except ValueError:
             return value
+
+
+def _resolve_procedure_yaml_path(yaml_file: str) -> Path:
+    """Resolve a procedure YAML path in local and command-worker runtimes."""
+    requested = Path(yaml_file)
+    candidates = [requested]
+    if not requested.is_absolute():
+        candidates.append(Path(__file__).resolve().parents[3] / requested)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise click.ClickException(f"Procedure YAML file was not found: {yaml_file}")
 
 
 def _json_safe(obj: Any) -> Any:
@@ -798,35 +811,28 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
     """
     # Validate arguments
     if not procedure_id and not yaml_file:
-        console.print("[red]Error: Either provide a procedure ID or use --yaml flag[/red]")
-        console.print("Examples:")
-        console.print("  plexus procedure run --yaml procedure.yaml")
-        console.print("  plexus procedure run <procedure-id>")
-        return
+        raise click.ClickException("Either provide a procedure ID or use --yaml")
 
     if procedure_id and yaml_file:
-        console.print("[red]Error: Cannot specify both procedure ID and --yaml flag[/red]")
-        console.print("Use one or the other:")
-        console.print("  plexus procedure run --yaml procedure.yaml")
-        console.print("  plexus procedure run <procedure-id>")
-        return
+        raise click.ClickException("Cannot specify both a procedure ID and --yaml")
 
     client = create_client()
     if not client:
-        console.print("[red]Error: Could not create API client[/red]")
-        return
+        raise click.ClickException("Could not create API client")
 
     # If running from YAML, create the procedure first
     if yaml_file:
-        console.print(f"[cyan]Running procedure from YAML: {yaml_file}[/cyan]")
+        yaml_path = _resolve_procedure_yaml_path(yaml_file)
+        console.print(f"[cyan]Running procedure from YAML: {yaml_path}[/cyan]")
 
         # Load YAML file
         try:
-            with open(yaml_file, 'r') as f:
+            with yaml_path.open('r', encoding='utf-8') as f:
                 yaml_config = f.read()
         except Exception as e:
-            console.print(f"[red]Error reading YAML file {yaml_file}: {str(e)}[/red]")
-            return
+            raise click.ClickException(
+                f"Could not read procedure YAML file {yaml_path}: {e}"
+            ) from e
 
         # Create the procedure
         service = ProcedureService(client)
@@ -834,8 +840,7 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
         # Use default account
         account = os.environ.get('PLEXUS_ACCOUNT_KEY')
         if not account:
-            console.print("[red]Error: PLEXUS_ACCOUNT_KEY environment variable must be set[/red]")
-            return
+            raise click.ClickException("PLEXUS_ACCOUNT_KEY environment variable must be set")
 
         # Check if this is a Tactus procedure
         import yaml as yaml_lib
@@ -921,8 +926,7 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
             )
 
         if not result.success:
-            console.print(f"[red]Error creating procedure: {result.message}[/red]")
-            return
+            raise click.ClickException(f"Error creating procedure: {result.message}")
 
         procedure_id = result.procedure.id
         console.print(f"[green]✓ Created procedure {procedure_id}[/green]")
