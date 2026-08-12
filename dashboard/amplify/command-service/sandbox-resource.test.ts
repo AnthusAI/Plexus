@@ -3,7 +3,7 @@ import { Template } from 'aws-cdk-lib/assertions';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import { SandboxCommandWorkerStack } from './sandbox-resource';
-import { LIFECYCLE_APPSYNC_ROOTS, WORKER_DOMAIN_APPSYNC_ROOTS, appSyncFieldArn } from './authority-manifest';
+import { LIFECYCLE_APPSYNC_ROOTS, WORKER_APPSYNC_AUTHORITY_GROUPS, WORKER_DOMAIN_APPSYNC_ROOTS, appSyncFieldArn } from './authority-manifest';
 
 function createStack(configSecretName?: string): SandboxCommandWorkerStack {
   const app = new App();
@@ -93,12 +93,15 @@ describe('SandboxCommandWorkerStack', () => {
 
   it('grants the six lifecycle roots plus the audited action-specific roots, same as the long-lived service', () => {
     const template = Template.fromStack(createStack());
-    const statements = Object.values(template.findResources('AWS::IAM::Policy'))
+    const statements = [
+      ...Object.values(template.findResources('AWS::IAM::Policy')),
+      ...Object.values(template.findResources('AWS::IAM::ManagedPolicy')),
+    ]
       .flatMap((policy: any) => policy.Properties.PolicyDocument.Statement)
       .filter((statement: any) => statement.Action === 'appsync:GraphQL');
 
-    expect(statements).toHaveLength(1);
-    expect([...statements[0].Resource].sort()).toEqual([
+    expect(statements).toHaveLength(WORKER_APPSYNC_AUTHORITY_GROUPS.length);
+    expect([...new Set(statements.flatMap((statement: any) => statement.Resource))].sort()).toEqual([
       ...LIFECYCLE_APPSYNC_ROOTS,
       ...WORKER_DOMAIN_APPSYNC_ROOTS,
     ].map((root) => appSyncFieldArn('arn:aws:appsync:us-east-1:123456789012:apis/example', root)).sort());

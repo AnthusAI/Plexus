@@ -8,7 +8,7 @@ import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import ReportTask from '@/components/ReportTask'
 import { Button } from '@/components/ui/button'
 import { graphqlRequest } from '@/utils/amplify-client'
-import { useAccount } from '@/app/contexts/AccountContext'
+import { useOptionalAccount } from '@/app/contexts/AccountContext'
 
 interface ProcessedTaskStage {
   id: string;
@@ -121,7 +121,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   const [processedTask, setProcessedTask] = useState<ProcessedTask | null>(null)
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay)
   const [cancelling, setCancelling] = useState(false)
-  const { selectedAccount } = useAccount()
+  const selectedAccount = useOptionalAccount()?.selectedAccount
   const lastStageItemsRef = useRef<any[]>([])
   const lifecycleStatus = String((task as any)?.lifecycleStatus || '')
   const isCommandTask = Boolean((task as any)?.commandPayload && (task as any)?.idempotencyKey)
