@@ -160,10 +160,16 @@
       "author": "derek.norrbom",
       "text": "Production readiness check found that the production command-service foundation stack and its SSM contract are absent in the configured account regions. A production foundation deployment is required before the main Amplify deployment can create the ECS command service. Adding an operator runbook to the existing foundation documentation.",
       "created_at": "2026-08-12T20:38:32.912440Z"
+    },
+    {
+      "id": "3fbf345a-290d-4e0a-8ee8-3689373507fd",
+      "author": "derek.norrbom",
+      "text": "Rebased the pending dashboard accuracy fix on current develop to avoid a Kanbus artifact merge conflict. The change retains the resolved canonical scorecard identifier during execution and restores the dialog's stacked layout. Validation is in progress.",
+      "created_at": "2026-08-12T20:49:22.113704Z"
     }
   ],
   "created_at": "2026-08-05T22:49:02.682710Z",
-  "updated_at": "2026-08-12T20:38:32.912440Z",
+  "updated_at": "2026-08-12T20:49:22.113704Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
