@@ -83,6 +83,7 @@ def aws_credentials() -> dict[str, str]:
 
 
 def build_image(image: str) -> None:
+    print(f"[smoke] Building current command-worker image: {image}", flush=True)
     subprocess.run(
         [
             "docker",
@@ -143,22 +144,29 @@ except Exception as exc:
     docker_command.extend(["--entrypoint", "python", image, "-c", program])
     runner_environment = os.environ.copy()
     runner_environment.update(environment)
-    completed = subprocess.run(
+    print("[smoke] Starting local worker report command", flush=True)
+    process = subprocess.Popen(
         docker_command,
-        input=json.dumps(payload),
         text=True,
-        capture_output=True,
-        check=False,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         env=runner_environment,
     )
-    lines = [line for line in completed.stdout.splitlines() if line.strip()]
+    assert process.stdin is not None
+    assert process.stdout is not None
+    output, _ = process.communicate(json.dumps(payload))
+    lines = [line for line in output.splitlines() if line.strip()]
+    for line in lines:
+        print(line, flush=True)
+    return_code = process.returncode
     if not lines:
-        raise RuntimeError(f"Worker produced no structured result: {completed.stderr[-4000:]}")
+        raise RuntimeError("Worker produced no structured result")
     try:
         result = json.loads(lines[-1])
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"Worker produced invalid result: {lines[-1][-4000:]}") from exc
-    if completed.returncode or result.get("status") != "ok":
+    if return_code or result.get("status") != "ok":
         raise RuntimeError(json.dumps(result, default=str))
     return {"command_id": command_id, **result["result"]}
 
@@ -168,6 +176,8 @@ def main() -> int:
     environment = {**require_environment(), **aws_credentials()}
     if not args.skip_build:
         build_image(args.image)
+    else:
+        print(f"[smoke] Reusing local command-worker image: {args.image}", flush=True)
     result = run_worker(args.image, args.config_id, environment)
     print(json.dumps({"status": "ok", "image": args.image, **result}, indent=2))
     return 0
