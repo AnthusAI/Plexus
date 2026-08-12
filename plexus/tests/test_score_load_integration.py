@@ -29,6 +29,7 @@ class TestEvaluationGetScoreInstance(unittest.TestCase):
         # Create a mock evaluation instance
         self.evaluation = MagicMock()
         self.evaluation.scorecard_name = "test_scorecard"
+        self.evaluation.scorecard_id = None
         self.evaluation.logging = MagicMock()
         
         # Import the actual method we want to test
@@ -54,7 +55,22 @@ class TestEvaluationGetScoreInstance(unittest.TestCase):
             yaml_only=False
         )
         self.assertEqual(result, mock_score_instance)
-    
+
+    @patch('plexus.scores.Score.Score.load')
+    def test_uses_resolved_scorecard_id_when_available(self, mock_score_load):
+        """API-backed evaluations must reuse the resolved scorecard ID."""
+        self.evaluation.scorecard_name = "normalized_scorecard_name"
+        self.evaluation.scorecard_id = "scorecard-uuid"
+
+        self.get_score_instance(self.evaluation, "test_score")
+
+        mock_score_load.assert_called_once_with(
+            scorecard_identifier="scorecard-uuid",
+            score_name="test_score",
+            use_cache=True,
+            yaml_only=False,
+        )
+
     @patch('plexus.scores.Score.Score.load')
     def test_api_load_fails_fallback_to_yaml(self, mock_score_load):
         """Test that API errors are propagated directly without fallback."""

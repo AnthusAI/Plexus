@@ -6332,8 +6332,17 @@ class AccuracyEvaluation(Evaluation):
         # Use the standardized Score.load() method
         # This handles both API-loaded and YAML-loaded scorecards automatically
         # Use cache for evaluations to support --yaml mode
+        # The constructor has already resolved this canonical ID against the
+        # dashboard API. Reusing a normalized display name here can fail even
+        # though setup succeeded.
+        resolved_scorecard_id = getattr(self, "scorecard_id", None)
+        scorecard_identifier = (
+            resolved_scorecard_id
+            if isinstance(resolved_scorecard_id, str) and resolved_scorecard_id
+            else self.scorecard_name
+        )
         return Score.load(
-            scorecard_identifier=self.scorecard_name,
+            scorecard_identifier=scorecard_identifier,
             score_name=score_name,
             use_cache=True,  # Use cached YAML files when available (supports --yaml mode)
             yaml_only=False  # Allow API calls if needed
