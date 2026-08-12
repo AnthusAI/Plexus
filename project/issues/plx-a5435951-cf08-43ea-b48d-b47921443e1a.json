@@ -178,10 +178,22 @@
       "author": "derek.norrbom",
       "text": "Fixed the Python 3.12 evaluation item lookup CI regression and merged it to develop: https://github.com/AnthusAI/Plexus/pull/608. The exact failing file now passes locally under both Python 3.12 and py311. The open develop-to-main promotion PR includes this fix.",
       "created_at": "2026-08-12T20:52:32.261035Z"
+    },
+    {
+      "id": "0c36beef-aa8d-46ae-ad69-187ec1d04092",
+      "author": "derek.norrbom",
+      "text": "The evaluation CI regression fix is now merged to develop after rebasing on current develop: https://github.com/AnthusAI/Plexus/pull/608. Exact lookup tests pass under Python 3.12 locally. The develop-to-main promotion PR includes it and GitHub has started its updated checks.",
+      "created_at": "2026-08-12T20:53:20.698393Z"
+    },
+    {
+      "id": "07591afa-5480-4d0f-9e1b-3f868b727d7c",
+      "author": "derek.norrbom",
+      "text": "Production foundation deployment completed successfully in us-east-1. Verified CREATE_COMPLETE, all five production SSM contract parameters, and the required production Amplify deployment-role environment variable. The first runbook command required PYTHONPATH at repository root; correcting that documentation detail now.",
+      "created_at": "2026-08-12T20:58:17.172041Z"
     }
   ],
   "created_at": "2026-08-05T22:49:02.682710Z",
-  "updated_at": "2026-08-12T20:52:32.261035Z",
+  "updated_at": "2026-08-12T20:58:17.172041Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
