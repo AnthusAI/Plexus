@@ -76,10 +76,28 @@
       "author": "derek.norrbom",
       "text": "Implemented bounded Click-abort diagnostics in the command-worker executor and added a regression test. A CLI Abort now preserves its captured stdout/stderr in the durable terminal error; ordinary exceptions and cancellation semantics remain unchanged. Validation: python -m pytest -q tests/command_worker/test_plexus_cli_executor.py tests/scores/test_dashboard_runtime_data_policy.py (17 passed).",
       "created_at": "2026-08-12T16:05:44.602263Z"
+    },
+    {
+      "id": "72097423-36ca-44f7-8309-31a5cc0dcba1",
+      "author": "derek.norrbom",
+      "text": "Approved fast-iteration improvement: extend the existing report-dispatch canary rather than create a new framework. It will execute the current worker image locally against a disposable staging control-plane task/configuration and assert terminal Task plus Report projection, with cleanup. This validates command argument handling, worker CLI execution, and report lifecycle before Amplify; ECS-specific networking and task-role wiring remain deployment concerns.",
+      "created_at": "2026-08-12T16:34:32.828989Z"
+    },
+    {
+      "id": "61a9dd1c-72fe-45e3-94ed-d90eae6c5ca3",
+      "author": "derek.norrbom",
+      "text": "Implemented a local Docker worker report smoke script. It builds the current command-worker image (or accepts a prebuilt image), exports the active AWS CLI session without placing credentials in process arguments, forwards the staging runtime inputs, and invokes the real PlexusCliExecutor with a report-run configuration argument. It requires a caller-supplied configuration ID and retains generated artifacts for supported inspection/cleanup rather than deleting potentially active report resources. Validation: Python compile and --help completed successfully.",
+      "created_at": "2026-08-12T16:37:00.351820Z"
+    },
+    {
+      "id": "2f9262a1-fbe0-4c2e-93f5-bbdb0b7078e8",
+      "author": "derek.norrbom",
+      "text": "Corrected local report smoke observability: it now announces image build/reuse and worker-command start immediately, and relays final container output. Run it with conda run --no-capture-output so Conda does not buffer those stage messages. Validation repeated: Python compile and --help.",
+      "created_at": "2026-08-12T17:27:18.893291Z"
     }
   ],
   "created_at": "2026-08-05T22:49:02.682710Z",
-  "updated_at": "2026-08-12T16:05:44.602263Z",
+  "updated_at": "2026-08-12T17:27:18.893291Z",
   "closed_at": null,
   "custom": {}
 }

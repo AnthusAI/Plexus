@@ -107,7 +107,9 @@
     },
     "report.run": {
       "inherits": ["feedback.report"],
-      "appsync": [],
+      "appsync": [
+        "Query/getReportConfiguration"
+      ],
       "storage": [],
       "evidence": [
         "plexus/cli/report/report_commands.py",
