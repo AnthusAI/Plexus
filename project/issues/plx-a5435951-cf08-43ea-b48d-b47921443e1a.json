@@ -172,10 +172,16 @@
       "author": "derek.norrbom",
       "text": "Reproduced the production-promotion CI failure locally under Python 3.12 against the checkout. AccuracyEvaluation.score_text directly reads account_key, but focused lookup tests construct the evaluator without __init__. Fix is to use optional attribute lookup so real initialized evaluations still propagate account context while lightweight callers remain valid.",
       "created_at": "2026-08-12T20:51:59.983635Z"
+    },
+    {
+      "id": "b9e2869d-456d-4f88-bd4a-f43977866b5a",
+      "author": "derek.norrbom",
+      "text": "Fixed the Python 3.12 evaluation item lookup CI regression and merged it to develop: https://github.com/AnthusAI/Plexus/pull/608. The exact failing file now passes locally under both Python 3.12 and py311. The open develop-to-main promotion PR includes this fix.",
+      "created_at": "2026-08-12T20:52:32.261035Z"
     }
   ],
   "created_at": "2026-08-05T22:49:02.682710Z",
-  "updated_at": "2026-08-12T20:51:59.983635Z",
+  "updated_at": "2026-08-12T20:52:32.261035Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
