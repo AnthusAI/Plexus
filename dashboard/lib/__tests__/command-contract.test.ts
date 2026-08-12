@@ -27,12 +27,11 @@ describe('command contract', () => {
     const action: RegisteredCommandAction = 'evaluation.accuracy'
     const args = { scorecardName: 'Card', scoreName: 'Score', numberOfSamples: 10, loadFresh: true, logToLanggraph: true }
 
-    expect(() => rejectUnsupportedArguments(action, args)).toThrow('unsupported arguments: logToLanggraph')
+    expect(() => rejectUnsupportedArguments(action, args)).toThrow('unsupported arguments: loadFresh, logToLanggraph')
     expect(sanitizeCommandArguments(action, args)).toEqual({
       scorecardName: 'Card',
       scoreName: 'Score',
       numberOfSamples: 10,
-      loadFresh: true,
     })
   })
 
