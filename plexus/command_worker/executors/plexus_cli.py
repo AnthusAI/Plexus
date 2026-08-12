@@ -11,6 +11,8 @@ from pathlib import Path
 from threading import RLock
 import sys
 
+import click
+
 from plexus.cli.shared.CommandProgress import CommandProgress, ProgressState
 
 from ..models import CommandEnvelope, JSONValue
@@ -77,7 +79,13 @@ class PlexusCliExecutor:
                     os.environ[_RUNTIME_PROFILE_ENV] = _DASHBOARD_RUNTIME_PROFILE
                     if task_id is not None:
                         os.environ["PLEXUS_DISPATCH_TASK_ID"] = task_id
-                    self._invoke_cli()
+                    try:
+                        self._invoke_cli()
+                    except click.Abort as exc:
+                        diagnostic = self._cli_abort_diagnostic(
+                            stdout.getvalue(), stderr.getvalue()
+                        )
+                        raise RuntimeError(diagnostic) from exc
                     context.raise_if_cancellation_requested()
             finally:
                 sys.argv = previous_argv
@@ -100,6 +108,22 @@ class PlexusCliExecutor:
             "stdout": self._bounded_output(stdout.getvalue()),
             "stderr": self._bounded_output(stderr.getvalue()),
         }
+
+    def _cli_abort_diagnostic(self, stdout: str, stderr: str) -> str:
+        """Preserve the CLI's actionable reason when Click raises a blank Abort.
+
+        Click's ``Abort`` stringifies to an empty value.  The dashboard worker
+        captures CLI streams so they do not pollute its Celery logs, which used
+        to turn a meaningful report prerequisite failure into just ``Abort:``
+        on the durable Task.  Keep the bounded streams in the terminal error
+        without changing cancellation or other worker exception semantics.
+        """
+        output = self._bounded_output(
+            "".join(part for part in (stdout, stderr) if part)
+        ).strip()
+        if not output:
+            return "CLI command aborted without diagnostic output"
+        return f"CLI command aborted: {output}"
 
     @staticmethod
     def _guard_langchain_cache_writability() -> None:
