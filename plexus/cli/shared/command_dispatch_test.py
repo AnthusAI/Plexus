@@ -2,6 +2,7 @@ import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+import uuid
 
 import click
 from click.testing import CliRunner
@@ -394,6 +395,101 @@ class TestCommandDispatchConfig(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.output)
         client.execute.assert_not_called()
         claimed_task.update.assert_called_once()
+
+
+class TestCommandDispatchSubmission(unittest.TestCase):
+    def test_dispatch_local_async_submits_envelope_task(self):
+        fake_client = Mock()
+        fixed_uuid = uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+
+        with (
+            patch("plexus.cli.shared.CommandDispatch._resolve_dispatch_mode", return_value="local"),
+            patch("plexus.cli.shared.CommandDispatch.create_client", return_value=fake_client),
+            patch("plexus.cli.shared.CommandDispatch._resolve_required_dispatch_account_id", return_value="account-1"),
+            patch("plexus.cli.shared.CommandDispatch._submit_envelope_task") as submit_task,
+            patch("plexus.cli.shared.CommandDispatch.uuid.uuid4", return_value=fixed_uuid),
+            patch("plexus.cli.shared.TaskTargeting.TaskTargetMatcher.validate_target", return_value=True),
+            patch.dict("os.environ", {"USER": "tester"}, clear=True),
+        ):
+            result = CliRunner().invoke(
+                command,
+                ["dispatch", "report run --config cfg-1", "--async", "--target", "report/run"],
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        submit_task.assert_called_once()
+        _, submitted = submit_task.call_args.args
+        self.assertEqual(submitted["accountId"], "account-1")
+        self.assertEqual(submitted["target"], "report/run")
+        self.assertEqual(submitted["submittedBy"], "tester")
+        self.assertEqual(submitted["lifecycleStatus"], "ANNOUNCED")
+        self.assertEqual(submitted["dispatchStatus"], "READY")
+        payload = json.loads(submitted["commandPayload"])
+        self.assertEqual(payload["argv"], ["report", "run", "--config", "cfg-1"])
+        self.assertTrue(payload["task_id"].startswith("cmd_"))
+
+    def test_dispatch_local_sync_waits_for_terminal_task(self):
+        fake_client = Mock()
+        fake_task = SimpleNamespace(
+            lifecycleStatus="SUCCEEDED",
+            status="COMPLETED",
+            commandResult={"stdout": "ok", "stderr": ""},
+            errorMessage=None,
+        )
+
+        with (
+            patch("plexus.cli.shared.CommandDispatch._resolve_dispatch_mode", return_value="local"),
+            patch("plexus.cli.shared.CommandDispatch.create_client", return_value=fake_client),
+            patch("plexus.cli.shared.CommandDispatch._resolve_required_dispatch_account_id", return_value="account-1"),
+            patch("plexus.cli.shared.CommandDispatch._submit_envelope_task"),
+            patch("plexus.cli.shared.CommandDispatch._wait_for_envelope_task_completion", return_value=fake_task) as wait_task,
+            patch("plexus.cli.shared.CommandDispatch._print_task_terminal_summary") as print_summary,
+            patch("plexus.cli.shared.TaskTargeting.TaskTargetMatcher.validate_target", return_value=True),
+            patch.dict("os.environ", {"USER": "tester"}, clear=True),
+        ):
+            result = CliRunner().invoke(
+                command,
+                ["dispatch", "procedure run abc --output json", "--target", "procedure/run"],
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        wait_task.assert_called_once()
+        print_summary.assert_called_once_with(fake_task)
+
+    def test_status_reads_task_record_not_celery(self):
+        fake_task = SimpleNamespace(
+            id="cmd_123",
+            status="RUNNING",
+            dispatchStatus="DISPATCHED",
+            lifecycleStatus="RUNNING",
+            progressMessage="Generating predictions",
+        )
+        with (
+            patch("plexus.cli.shared.CommandDispatch.create_client", return_value=Mock()),
+            patch("plexus.cli.shared.CommandDispatch.Task.get_by_id", return_value=fake_task),
+        ):
+            result = CliRunner().invoke(command, ["status", "cmd_123"])
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("Task ID: cmd_123", result.output)
+        self.assertIn("Lifecycle Status: RUNNING", result.output)
+
+    def test_cancel_requests_task_cancellation(self):
+        fake_client = Mock()
+        fake_client.execute.return_value = {}
+        fake_task = SimpleNamespace(id="cmd_456")
+        with (
+            patch("plexus.cli.shared.CommandDispatch.create_client", return_value=fake_client),
+            patch("plexus.cli.shared.CommandDispatch.Task.get_by_id", return_value=fake_task),
+        ):
+            result = CliRunner().invoke(command, ["cancel", "cmd_456"])
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        fake_client.execute.assert_called_once()
+        mutation, variables = fake_client.execute.call_args.args
+        self.assertIn("UpdateTask", mutation)
+        self.assertEqual(variables["input"]["id"], "cmd_456")
+        self.assertEqual(variables["input"]["lifecycleStatus"], "CANCEL_REQUESTED")
 
 
 if __name__ == "__main__":

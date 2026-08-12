@@ -2,6 +2,7 @@ import click
 import os
 import time
 import shlex
+import uuid
 from dotenv import load_dotenv
 from celery import Celery
 from plexus.CustomLogging import logging
@@ -131,6 +132,111 @@ def _validate_celery_requirements() -> None:
         raise click.ClickException(
             "Missing required Celery environment configuration."
         )
+
+
+def _build_envelope_task_record(
+    *,
+    account_id: str,
+    command_string: str,
+    target: str,
+    idempotency_key: str,
+    submitted_by: str,
+) -> dict[str, typing.Any]:
+    """Create a durable command envelope Task payload compatible with ECS worker."""
+    from plexus.command_worker.models import request_digest
+
+    argv = shlex.split(command_string)
+    if not argv:
+        raise click.ClickException("COMMAND_STRING must include at least one argument")
+
+    command_id = f"cmd_{uuid.uuid4().hex}"
+    payload = {"argv": argv, "task_id": command_id}
+    digest = request_digest(target, payload)
+    now = datetime.datetime.now(timezone.utc).isoformat()
+    return {
+        "id": command_id,
+        "accountId": account_id,
+        "type": "CLI Command",
+        "status": "PENDING",
+        "target": target,
+        "command": command_string,
+        "dispatchStatus": "READY",
+        "submittedBy": submitted_by,
+        "idempotencyNamespace": "command.submit:v1",
+        "idempotencyKey": idempotency_key,
+        "idempotencyDigest": digest.value,
+        "digestAlgorithm": digest.algorithm,
+        "digestCanonicalizationVersion": digest.canonicalization_version,
+        "commandPayload": json.dumps(payload, separators=(",", ":")),
+        "lifecycleStatus": "ANNOUNCED",
+        "fencingToken": 0,
+        "createdAt": now,
+        "updatedAt": now,
+    }
+
+
+def _submit_envelope_task(client: PlexusDashboardClient, task_input: dict[str, typing.Any]) -> None:
+    mutation = """
+    mutation CreateTask($input: CreateTaskInput!) {
+      createTask(input: $input) {
+        id
+      }
+    }
+    """
+    response = client.execute(mutation, {"input": task_input})
+    if response.get("errors"):
+        raise click.ClickException(f"Task submission failed: {response['errors']}")
+
+
+def _print_task_terminal_summary(task: Task) -> None:
+    lifecycle = (task.lifecycleStatus or "").upper()
+    status = (task.status or "").upper()
+    result = task.commandResult if isinstance(task.commandResult, dict) else {}
+    stdout = result.get("stdout") if isinstance(result, dict) else None
+    stderr = result.get("stderr") if isinstance(result, dict) else None
+
+    if lifecycle == "SUCCEEDED" or status in {"COMPLETED", "COMPLETE"}:
+        console.print("\n--- COMMAND EXECUTION SUCCESSFUL ---")
+        console.print("[green]Command executed successfully")
+        if stdout:
+            console.print("\n[bold]Command Output:[/bold]")
+            console.print(str(stdout), end="")
+        if stderr:
+            console.print("\n[bold]Command Errors/Warnings:[/bold]")
+            console.print(str(stderr), end="", style="yellow")
+        return
+
+    console.print("\n--- COMMAND EXECUTION FAILED ---")
+    if task.errorMessage:
+        console.print(f"[red]Command failed: {task.errorMessage}")
+    elif lifecycle:
+        console.print(f"[red]Command failed with lifecycle status: {lifecycle}")
+    elif status:
+        console.print(f"[red]Command failed with task status: {status}")
+    else:
+        console.print("[red]Command failed")
+    if stderr:
+        console.print("\n[bold]Error Details:[/bold]")
+        console.print(str(stderr), end="", style="red")
+
+
+def _wait_for_envelope_task_completion(
+    client: PlexusDashboardClient,
+    task_id: str,
+    timeout: int,
+) -> Task:
+    deadline = time.monotonic() + timeout
+    while True:
+        task = Task.get_by_id(task_id, client)
+        lifecycle = (task.lifecycleStatus or "").upper() if task else ""
+        status = (task.status or "").upper() if task else ""
+        if lifecycle in {"SUCCEEDED", "FAILED", "CANCELLED"}:
+            return task
+        if status in {"COMPLETED", "COMPLETE", "FAILED", "ERROR"}:
+            return task
+        if time.monotonic() >= deadline:
+            raise TimeoutError()
+        time.sleep(1.0)
 
 
 def _list_pending_tasks_for_account(
@@ -635,206 +741,53 @@ def dispatch(
     loglevel: str,
     target: str
 ) -> None:
-    """Execute a Plexus command remotely via Celery."""
+    """Execute a Plexus command through the canonical Task envelope path."""
     from .TaskTargeting import TaskTargetMatcher
-    mode = _resolve_dispatch_mode()
-    if mode != "celery":
-        raise click.ClickException("`plexus command dispatch` requires PLEXUS_DISPATCH_MODE=celery")
 
     logging.getLogger().setLevel(loglevel)
-    logging.info(f"Dispatch mode: {mode} | Queue: {_resolve_queue_name()}")
+    logging.info("Dispatch mode: command envelope")
     
     if not TaskTargetMatcher.validate_target(target):
         raise click.BadParameter(
             "Target must be in format 'domain/subdomain' with valid identifiers"
         )
-    
+
     logging.info(f"Dispatching command: {command_string}")
     logging.info(f"Target: {target}")
-    ensure_tasks_registered()
-    celery_app = get_celery_app()
-    logging.debug("Celery app: %s", celery_app)
-    logging.debug("Broker URL: %s", celery_app.conf.broker_url)
-    logging.debug("Backend URL: %s", celery_app.conf.result_backend)
-    
+    client = create_client()
+    account_id = _resolve_required_dispatch_account_id(client, account=None)
+    submitted_by = os.getenv("PLEXUS_SUBMITTED_BY") or os.getenv("USER") or "plexus-cli"
+    idempotency_key = str(uuid.uuid4())
+    task_input = _build_envelope_task_record(
+        account_id=account_id,
+        command_string=command_string,
+        target=target,
+        idempotency_key=idempotency_key,
+        submitted_by=submitted_by,
+    )
+    _submit_envelope_task(client, task_input)
+
     console = Console()
-    
+
     try:
-        # Send the task to Celery
-        task = celery_app.send_task(
-            'plexus.execute_command',
-            args=[command_string],
-            expires=timeout,
-            kwargs={'target': target}
-        )
-        
-        logging.info(f"Successfully dispatched Celery task. Task ID: {task.id}")
-        logging.debug("Task ID: %s", task.id)
-        
+        task_id = str(task_input["id"])
+        logging.info(f"Successfully dispatched envelope task. Task ID: {task_id}")
         if is_async:
             console.print(f"[green]Task dispatched successfully[/green]")
-            console.print(f"Task ID: {task.id}")
+            console.print(f"Task ID: {task_id}")
             console.print(f"\nTo check status, run:")
-            console.print(f"  plexus command status {task.id}")
-        else:
-            # Wait for the result while showing progress
-            try:
-                logging.debug("Waiting for task result...")
-                
-                with Progress(
-                    # First row - status only
-                    TextColumn("[bright_magenta]{task.fields[status]}"),
-                    TextColumn(""),  # Empty column for spacing
-                    # New line for visual separation
-                    TextColumn("\n"),
-                    # Second row - progress bar and details
-                    SpinnerColumn(style="bright_magenta"),
-                    ItemCountColumn(),
-                    BarColumn(
-                        complete_style="bright_magenta",
-                        finished_style="bright_magenta"
-                    ),
-                    TaskProgressColumn(),
-                    TimeElapsedColumn(),
-                    TimeRemainingColumn(),
-                    expand=True
-                ) as progress:
-                    # Add a single task that tracks both status and progress
-                    stage_configs = {
-                        "Setup": StageConfig(
-                            order=1,
-                            status_message="Setting up...",
-                            total_items=100  # Set a default total
-                        )
-                    }
-                    task_progress = progress.add_task(
-                        "Processing...",
-                        total=100,  # Set a default total
-                        status=stage_configs["Setup"].status_message
-                    )
-                
-                with Progress(
-                    TextColumn("[bright_magenta]{task.fields[status]}"),
-                    TextColumn(""), 
-                    TextColumn("\n"),
-                    SpinnerColumn(style="bright_magenta"),
-                    ItemCountColumn(),
-                    BarColumn(
-                        complete_style="bright_magenta",
-                        finished_style="bright_magenta"
-                    ),
-                    TaskProgressColumn(),
-                    TimeElapsedColumn(),
-                    TimeRemainingColumn(),
-                    expand=True
-                ) as progress:
-                    stage_configs = {
-                        "Setup": StageConfig(
-                            order=1,
-                            status_message="Setting up...",
-                            total_items=100  # Set a default total
-                        )
-                    }
-                    task_progress = progress.add_task(
-                        "Processing...",
-                        total=100,  # Set a default total
-                        status=stage_configs["Setup"].status_message
-                    )
-                    
-                    while not task.ready():
-                        if task.info and isinstance(task.info, dict):
-                            current = task.info.get('current')
-                            total_from_worker = task.info.get('total')
-                            status_from_worker = task.info.get('status')
-                            
-                            if all([current is not None, total_from_worker is not None, status_from_worker is not None]):
-                                progress.update(
-                                    task_progress,
-                                    total=float(total_from_worker),
-                                    completed=float(current),
-                                    status=status_from_worker
-                                )
-                                    
-                        time.sleep(0.5)  # Brief pause between updates
-                    
-                    # Ensure progress bar reaches 100% on success if it hasn't already
-                    if task.successful():
-                        # Initialize defaults for final update
-                        final_current = None
-                        final_total = None
-                        final_status_message = "Finished processing items."
+            console.print(f"  plexus task info {task_id}")
+            return
 
-                        # Attempt to get last known values from the loop if they were set
-                        try:
-                            final_current = current # Will use 'current' from the loop if it was set
-                            final_total = total_from_worker # Will use 'total_from_worker' from the loop if it was set
-                        except NameError: # If current or total_from_worker were not set in the loop
-                            pass # Keep them as None, they will be fetched from task.info or defaulted
-
-                        # Fetch the final state from task.info one last time if available
-                        if task.info and isinstance(task.info, dict):
-                            final_current = task.info.get('current', final_current)
-                            final_total = task.info.get('total', final_total)
-                            # Potentially use a final status message from the task info if one exists
-                            final_status_message = task.info.get('status', final_status_message)
-
-                        # Ensure final_total is not None and not 0 before using for completed if final_current is None
-                        # This prevents division by zero if progress.tasks[task_progress].total is 0
-                        # and provides a fallback if final_total isn't set.
-                        effective_total = float(final_total if final_total is not None else 0)
-                        effective_current = float(final_current if final_current is not None 
-                                                else (effective_total if effective_total > 0 else 0))
-
-                        progress.update(
-                            task_progress,
-                            completed=effective_current, 
-                            total=effective_total,
-                            status=final_status_message
-                        )
-
-                # Get the final result
-                result = task.get(timeout=timeout)
-                
-                # Clear progress display for final results
-                console.print("\n")
-                
-                if result['status'] == 'success':
-                    console.print("\n--- COMMAND EXECUTION SUCCESSFUL ---")
-                    console.print("[green]Command executed successfully on worker")
-                    
-                    # Print command output
-                    if result.get('stdout'):
-                        console.print("\n[bold]Command Output:[/bold]")
-                        console.print(result['stdout'], end='')
-                    if result.get('stderr'):
-                        console.print("\n[bold]Command Errors/Warnings:[/bold]")
-                        console.print(result['stderr'], end='', style="yellow")
-                else:
-                    error_msg = result.get('error', 'Unknown error')
-                    console.print("\n--- COMMAND EXECUTION FAILED ---")
-                    console.print(f"[red]Command failed: {error_msg}")
-                    
-                    # Print error output if available
-                    if result.get('stderr'):
-                        console.print("\n[bold]Error Details:[/bold]")
-                        console.print(result['stderr'], end='', style="red")
-                    if result.get('stdout'):
-                        console.print("\n[bold]Command Output (before failure):[/bold]")
-                        console.print(result['stdout'], end='')
-            except TimeoutError:
-                console.print("\n--- COMMAND TIMEOUT ---")
-                console.print(f"[yellow]Command timed out after {timeout} seconds")
-                logging.error(f"Command timed out after {timeout} seconds")
-                console.print(f"\nTask ID: {task.id}")
-                console.print(f"You can still check the status later with:")
-                console.print(f"  plexus command status {task.id}")
-            except Exception as e:
-                console.print("\n--- MONITORING ERROR ---")
-                console.print(f"[red]Error monitoring task: {str(e)}")
-                logging.error(f"Error getting task result: {e}", exc_info=True)
-                console.print(f"\nTask ID: {task.id}")
-                console.print(f"You can still check the status later with:")
-                console.print(f"  plexus command status {task.id}")
+        try:
+            task = _wait_for_envelope_task_completion(client, task_id, timeout)
+            _print_task_terminal_summary(task)
+        except TimeoutError:
+            console.print("\n--- COMMAND TIMEOUT ---")
+            console.print(f"[yellow]Command timed out after {timeout} seconds")
+            console.print(f"\nTask ID: {task_id}")
+            console.print("You can still check the status later with:")
+            console.print(f"  plexus task info {task_id}")
     except Exception as e:
         console.print("\n--- DISPATCH ERROR ---")
         console.print(f"[red]Error dispatching task: {str(e)}")
@@ -1086,53 +1039,60 @@ def dispatcher(account: Optional[str], interval: float, limit: int, once: bool, 
 @click.argument('task_id')
 @click.option('--loglevel', default='INFO', help='Logging level')
 def status(task_id: str, loglevel: str) -> None:
-    """Check the status of a dispatched command."""
+    """Check the status of a dispatched command task."""
     logging.getLogger().setLevel(loglevel)
-    
     try:
-        # Attempt to retrieve the task status
-        task = get_celery_app().AsyncResult(task_id)
-        
-        # Log the Celery state clearly, before anything else
-        logging.info(f"CELERY_TASK_STATE: {task.state}")
-        
-        # Log the raw task data as JSON for complete transparency
-        if task.ready() and task.successful():
-            result = task.get()
-            logging.info(f"Task result: {result}")
-            console.print("Status: " + ("[green]Success" if result['status'] == 'success' else "[red]Failed"))
-            if result['status'] == 'success':
-                if result.get('stdout'):
-                    console.print("\nOutput:")
-                    console.print(result['stdout'], end='')
-                if result.get('stderr'):
-                    console.print("\nErrors:")
-                    console.print(result['stderr'], end='')
-            else:
-                console.print(f"\nError: {result.get('error', 'Unknown error')}")
-                if result.get('stderr'):
-                    console.print("\nError Details:")
-                    console.print(result['stderr'], end='')
-            
-            import json
-            logging.info(f"TASK_RESULT_JSON: {json.dumps(result, default=str)}")
-        elif task.failed():
-            console.print("[red]Status: Failed with exception")
-            if task.info:
-                console.print(f"Error: {str(task.info)}")
-        else:
-            console.print("[bright_magenta]Status: Running")
-            
+        client = create_client()
+        task = Task.get_by_id(task_id, client)
+        if not task:
+            raise click.ClickException(f"Task not found: {task_id}")
+
+        console.print(f"Task ID: {task.id}")
+        console.print(f"Status: {task.status or 'UNKNOWN'}")
+        console.print(f"Dispatch Status: {task.dispatchStatus or 'UNKNOWN'}")
+        console.print(f"Lifecycle Status: {task.lifecycleStatus or 'UNKNOWN'}")
+        if task.progressMessage:
+            console.print(f"Progress: {task.progressMessage}")
+
+        lifecycle = (task.lifecycleStatus or "").upper()
+        if lifecycle in {"SUCCEEDED", "FAILED", "CANCELLED"}:
+            _print_task_terminal_summary(task)
     except Exception as e:
         logging.error(f"Error retrieving task status: {e}", exc_info=True)
+        raise
 
 @command.command()
 @click.argument('task_id')
 def cancel(task_id: str) -> None:
-    """Cancel a running command."""
-    task = get_celery_app().AsyncResult(task_id)
-    task.revoke(terminate=True)
-    logging.info(f"Cancelled command task: {task_id}")
+    """Request cancellation for a running command task."""
+    client = create_client()
+    task = Task.get_by_id(task_id, client)
+    if not task:
+        raise click.ClickException(f"Task not found: {task_id}")
+    now = datetime.datetime.now(timezone.utc).isoformat()
+    mutation = """
+    mutation UpdateTask($input: UpdateTaskInput!) {
+      updateTask(input: $input) {
+        id
+        lifecycleStatus
+        cancellationRequestedAt
+      }
+    }
+    """
+    response = client.execute(
+        mutation,
+        {
+            "input": {
+                "id": task_id,
+                "lifecycleStatus": "CANCEL_REQUESTED",
+                "cancellationRequestedAt": now,
+                "updatedAt": now,
+            }
+        },
+    )
+    if response.get("errors"):
+        raise click.ClickException(f"Failed to request cancellation: {response['errors']}")
+    console.print(f"[yellow]Cancellation requested for task {task_id}[/yellow]")
 
 def get_progress_status(current: int, total: int) -> str:
     """Get a status message based on progress percentage."""
