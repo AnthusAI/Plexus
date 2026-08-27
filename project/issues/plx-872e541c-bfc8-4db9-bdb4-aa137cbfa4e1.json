@@ -1,0 +1,40 @@
+{
+  "id": "plx-872e541c-bfc8-4db9-bdb4-aa137cbfa4e1",
+  "title": "Register detector Score in plexus.scores",
+  "description": "Register the programmatic detector Score in plexus.scores.resolve_score_class / _SCORE_CLASS_MODULES, following KeywordClassifier. Do not use Tactus.\n\nBehavior is specified by the child story on this epic. DataParade scanner callable is DATAP task under DATAP-95d339.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-41fcbefd-8217-4018-ad46-1f6cef20c3b0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ce360817-7241-4dbe-89e6-b7d983c4159d",
+      "author": "ryan",
+      "text": "Wave 5b started on feature/plx-611fbe-span-overlap-score from the Virtuus store branch. Register SourceSpanOverlapScore. No client product names. Tactus not used. Scanner JSON contract is filePath/startLine/endLine.",
+      "created_at": "2026-08-27T15:56:58.034005Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "026851a2-3604-4abc-b013-f22f010f8563",
+      "author": "ryan",
+      "text": "SourceSpanOverlapScore registered in _SCORE_CLASS_MODULES on feature/plx-611fbe-span-overlap-score.",
+      "created_at": "2026-08-27T16:03:13.394156Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "b4ca5c2e-e7d4-4918-92bd-407877f84617",
+      "author": "ryan",
+      "text": "Landed on develop: https://github.com/AnthusAI/Plexus/pull/613",
+      "created_at": "2026-08-27T17:36:55.111901Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-08-27T14:52:23.546306Z",
+  "updated_at": "2026-08-27T17:36:55.122066Z",
+  "closed_at": "2026-08-27T17:36:55.122066Z",
+  "custom": {}
+}
