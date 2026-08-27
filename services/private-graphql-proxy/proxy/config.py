@@ -7,6 +7,8 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class Settings:
+    store_type: str
+    virtuus_data_dir: Optional[str]
     database_url: str
     backend_mode: str
     upstream_api_url: Optional[str]
@@ -31,6 +33,8 @@ class Settings:
             else ("api_key" if proxy_api_key else "trusted_open")
         )
         return cls(
+            store_type=os.getenv("PLEXUS_STORE", "postgres").strip().lower(),
+            virtuus_data_dir=os.getenv("PLEXUS_VIRTUUS_DATA_DIR") or os.getenv("PLEXUS_DATA_DIR"),
             database_url=os.getenv(
                 "PLEXUS_PROXY_DATABASE_URL",
                 "postgresql://plexus:plexus@localhost:5432/plexus_proxy",

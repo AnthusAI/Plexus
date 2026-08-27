@@ -25,12 +25,13 @@ from .graphql_tools import (
     build_root_only_query,
 )
 from .schema_contract import get_schema_contract
-from .store import PostgresStore, cache_key_for, utcnow
+from .store import cache_key_for, utcnow
+from .store_factory import create_store
 from .upstream import UpstreamAppSyncClient
 
 
 settings = Settings.from_env()
-store = PostgresStore(settings.database_url)
+store = create_store(settings)
 artifact_ticket_configuration = ArtifactTicketConfiguration.from_env()
 artifact_tickets = ArtifactTicketService(artifact_ticket_configuration, store)
 upstream = UpstreamAppSyncClient(
