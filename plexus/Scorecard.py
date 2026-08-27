@@ -1397,6 +1397,16 @@ class Scorecard:
 
             except Score.SkippedScoreException as e:
                 logging.info(f"Score {score_name} was skipped: {e.reason}")
+                result = Score.Result(
+                    value="SKIPPED",
+                    explanation=e.reason,
+                    parameters=Score.Parameters(
+                        name=score_name,
+                        scorecard=self.name() if callable(self.name) else self.name,
+                    ),
+                )
+                results_by_score_id[score_id] = result
+                results.append({"id": score_id, "name": score_name, "result": result})
                 return
 
             except Exception as e:

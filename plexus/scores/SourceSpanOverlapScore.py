@@ -18,6 +18,11 @@ class SourceSpanOverlapScore(Score):
     injected or command-produced findings, not by regex on Item.text.
     """
 
+    @classmethod
+    async def create(cls, **parameters):
+        """Async factory used by Scorecard when loading YAML/API configurations."""
+        return cls(**parameters)
+
     def __init__(
         self,
         scorecard_name=None,
