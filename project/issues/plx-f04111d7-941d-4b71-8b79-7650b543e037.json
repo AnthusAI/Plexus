@@ -1,0 +1,33 @@
+{
+  "id": "plx-f04111d7-941d-4b71-8b79-7650b543e037",
+  "title": "FastAPI persists GraphQL models as files without a database server",
+  "description": "Update Gherkin to match the process-first Virtuus decision.\n\nFeature: File-backed local GraphQL storage\n\n  Scenario: Create and read an Item with no database server\n    Given a local GraphQL process configured for Virtuus file storage\n    And no database server is running\n    And no container runtime is required\n    When I create an Item through GraphQL\n    Then I can read that Item through GraphQL\n    And a JSON file on disk contains the Item document\n\n  Scenario: Records survive a FastAPI restart\n    Given Items and ScoreResults stored as Virtuus files\n    When the FastAPI process restarts\n    Then those records are still available through GraphQL\n\n  Scenario: GraphQL contract is unchanged\n    Given the same CLI commands used against the Postgres-backed local proxy\n    When the store is Virtuus files instead of Postgres\n    Then create, get, list, and evaluation writes still work",
+  "type": "story",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6d41d02f-3d42-4f41-bf5d-08166e99af43",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "cc68985c-a7ac-4158-a8f2-f97631ea4bbc",
+      "author": "ryan",
+      "text": "Executable Gherkin is in the private GraphQL proxy feature file on PR https://github.com/AnthusAI/Plexus/pull/612 (base `develop`).\n\nScenarios that pass:\n1. Create and read an Item with no database server (URL unset, `/readyz` 200, disk JSON)\n2. Records survive a FastAPI restart (new store instance on the same data directory)\n3. Composite Identifier roundtrip persists on disk (`createIdentifier` / `getIdentifier` with `itemId`+`name`)\n\nThe original third scenario (list and evaluation writes against Postgres parity) was not a useful duplicate of Item create/get; Identifier composite keys are the non-trivial store path. List and evaluation writes remain the existing GraphQL operations and will be exercised on the evaluate-accuracy path.\n",
+      "created_at": "2026-08-27T15:27:50.320505Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "8ce2fffd-a655-4f46-b0c7-64c29780d38f",
+      "author": "ryan",
+      "text": "Landed on develop: https://github.com/AnthusAI/Plexus/pull/612",
+      "created_at": "2026-08-27T17:36:55.047982Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-08-27T14:22:18.837040Z",
+  "updated_at": "2026-08-27T17:36:55.059195Z",
+  "closed_at": "2026-08-27T17:36:55.059195Z",
+  "custom": {}
+}

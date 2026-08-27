@@ -1,0 +1,40 @@
+{
+  "id": "plx-e789ffe6-e42b-4fbb-a3b0-10d57d7618ef",
+  "title": "VirtuusStore adapter for the local GraphQL proxy",
+  "description": "Implement Store methods on virtuus.Database inside the FastAPI proxy. Embed Virtuus in-process. One worker. No Virtuus HTTP daemon. GraphQL contract unchanged.\n\nBehavior is specified by plx-f04111 and the DataParade host-process story DATAP-e1d873.\n\nVirtuus product changes are not expected; if a gap appears, file it on the Virtuus board and link here.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6d41d02f-3d42-4f41-bf5d-08166e99af43",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8a18302d-ce6b-4f13-94c5-c864c15b6a16",
+      "author": "ryan",
+      "text": "Wave 2 started: Coding Agent on feature/plx-f04111-virtuus-store from origin/develop. VirtuusStore adapter; no Virtuus HTTP daemon.",
+      "created_at": "2026-08-27T15:10:50.090743Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "7c05d883-d9ae-4d75-ae87-b2dc814f10c0",
+      "author": "ryan",
+      "text": "Direct review accepted. Implementation is on `feature/plx-f04111-virtuus-store` (commit `7144f3ae5`), PR against `develop` (not `main`).\n\nIndependent validation in `services/private-graphql-proxy`:\n- `PYTHONPATH=. python3 -m behave features/virtuus_local_storage.feature` — 3 scenarios, 12 steps passed\n- `PYTHONPATH=. python3 -m pytest tests/ -q --ignore=tests/test_smoke_proxy.py --ignore=tests/test_scoring_integration.py` — 65 passed\n\nExecutable spec vs original story text:\n- Item create/get + disk JSON, no database URL, `/readyz` 200\n- Restart survival for Items (in-process store rebind on the same data directory)\n- Composite Identifier create/get + disk JSON (replaced the duplicate Item contract scenario)\n\nResidual: `list_private` is a full table scan; ScoreResult restart is the same single-PK path as Item and is not a separate scenario. Default store is still Postgres. Do not close until the `develop` PR lands.\n",
+      "created_at": "2026-08-27T15:27:26.994590Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "5b5c5844-6562-402c-95c7-ee879e8f5673",
+      "author": "ryan",
+      "text": "Landed on develop: https://github.com/AnthusAI/Plexus/pull/612",
+      "created_at": "2026-08-27T17:36:55.069916Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-08-27T14:52:23.563181Z",
+  "updated_at": "2026-08-27T17:36:55.080432Z",
+  "closed_at": "2026-08-27T17:36:55.080432Z",
+  "custom": {}
+}

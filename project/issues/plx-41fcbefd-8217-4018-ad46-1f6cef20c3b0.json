@@ -1,0 +1,26 @@
+{
+  "id": "plx-41fcbefd-8217-4018-ad46-1f6cef20c3b0",
+  "title": "Programmatic detector Score for recall evaluations",
+  "description": "Purpose: Add a Python Score subclass (not Tactus) that detector-style evaluations can name in YAML class. Register it in plexus.scores.resolve_score_class. predict() is just-in-time scan plus lookup; Yes/No detected.\n\nThis epic is Plexus registry and Score ABC work. Scanner invocation details live on the calling product board. Parked under the local-first initiative because that is the runtime this score is meant to hit first.\n\nDo not start until the local store and scorecard plan are massaged.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-3f0d4750-f6d3-4867-a3ef-36aad4f0d800",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "86c9ebbc-9cd9-4d9c-8c73-8273ba0b74af",
+      "author": "ryan",
+      "text": "SourceSpanOverlapScore is on develop (#613).",
+      "created_at": "2026-08-27T17:36:55.154269Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-08-27T14:16:34.780471Z",
+  "updated_at": "2026-08-27T17:36:55.164772Z",
+  "closed_at": "2026-08-27T17:36:55.164772Z",
+  "custom": {}
+}

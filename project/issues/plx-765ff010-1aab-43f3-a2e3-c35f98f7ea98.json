@@ -1,0 +1,68 @@
+{
+  "id": "plx-765ff010-1aab-43f3-a2e3-c35f98f7ea98",
+  "title": "File-backed local GraphQL storage",
+  "description": "Purpose: For small-scale local Plexus (no AWS), FastAPI should be the only server. Persist GraphQL models on simple files instead of a database server.\n\nContext:\n- DynamoDB is the AWS industrial store\n- PostgreSQL is the non-AWS / Kubernetes store (private-graphql-proxy PostgresStore)\n- A third backend is needed when neither a cloud nor a database server is justified: files on disk, same GraphQL contract\n\nExclusions:\n- Replacing DynamoDB or Postgres for large deployments\n- Changing the GraphQL schema to be file-specific\n- Implementing until the file layout and concurrency story are agreed\n\nDefinition of Done for planning:\n- Backend seam identified (swap PostgresStore, keep FastAPI GraphQL)\n- File layout sketched (readable JSON/YAML vs other)\n- Concurrency and crash safety called out\n- How Evaluation, Item, and ScoreResult files relate to git",
+  "type": "initiative",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7ee630f6-b8da-4766-95cf-108bad8b37b8",
+      "author": "ryan",
+      "text": "## Idea log (2026-08-27) — planning only\n\nThe proxy already has a store seam: PostgresStore in services/private-graphql-proxy/proxy/store.py. Tests use an in-memory fake. A file store should implement that same GraphQL persistence, not a new API.\n\nThree backend story:\n1. AWS: DynamoDB\n2. Containers/K8s without AWS: PostgreSQL\n3. Single-process local: files, FastAPI only\n\nThoughts to massage (not a decision):\n\n- **JSON/YAML files per model** (items/, evaluations/, score_results/). Inspectable, git-friendly, matches \"evaluations as artifacts.\" FastAPI process owns reads/writes. Hard parts: list/filter/index, concurrent evaluate accuracy (~20 items), crash safety (write temp then rename), GraphQL connection fields.\n\n- **SQLite** is one file and still no extra server, so it satisfies \"FastAPI is the only server\" with less GraphQL/query pain. It is not \"simple files\" you can diff as YAML.\n\n- Prefer keeping the GraphQL contract identical so CLI and dashboard do not fork.\n\n- Evaluation records as files would let recall runs live next to the repo; git YAML remains canonical gold, Plexus files are run history.\n\nDo not implement until layout and concurrency are agreed. Human has a specific file-store idea still to record here.\n",
+      "created_at": "2026-08-27T14:16:34.736154Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "eaa0cdbf-7468-49db-94c1-146c257ebc11",
+      "author": "ryan",
+      "text": "## Storage thoughts (2026-08-27) — planning only, not a decision\n\nThe three-backend story is right: DynamoDB for AWS, PostgreSQL for Kubernetes without AWS, files when FastAPI should be the only server. Small local evaluations do not need a database process.\n\n### Seam\n\n`services/private-graphql-proxy/proxy/store.py` is already a document store. In `PLEXUS_BACKEND_MODE=local`, every GraphQL model (26 of them: Account, Item, Evaluation, Score, ScoreResult, Task, …) is a JSON document in `local_data.*` with a primary key, `account_id`, timestamps, and `doc jsonb`. Tests already fake that Store. A file backend should implement the same methods (`upsert_private`, `get_private`, `list_private`, `delete_private`, cache, scoring-job claim) and leave the GraphQL contract alone.\n\n### Mechanical layout (one candidate)\n\n```\n$PLEXUS_DATA_DIR/\n  Item/{id}.json\n  Evaluation/{id}.json\n  ScoreResult/{id}.json\n  Identifier/{itemId}__{name}.json\n  …one directory per model…\n```\n\nEach file is the same document Postgres stores as `doc`. `list_private` at this scale can scan the directory and filter in process. Crash safety is write-temp then `os.replace`. One FastAPI worker plus an in-process lock covers `evaluate accuracy` concurrency (~20). Do not invent a query engine until it hurts.\n\n### Design fork (please record a preference)\n\n1. **Opaque JSON docs** — mechanical mirror of Postgres `doc`. Fast to implement, grep-able, not particularly nice to author by hand.\n2. **Human YAML trees** — Items and evaluations look like scorecard YAML. Better as artifacts; more mapping work; risk of a second schema.\n3. **Hybrid** — scorecard/score *configuration* stays the existing YAML pull/push files; Items / Evaluations / ScoreResults are JSON run history under a data dir (often gitignored). Git YAML for gold labels stays on the calling product; Plexus files are working state.\n\nDo not conflate GraphQL Score records with the YAML score configs that `plexus score pull/push` already writes. Those are already files.\n\n### \"FastAPI is the only server\" is broader than Postgres\n\nThe current smoke compose also runs MinIO (report/object storage) and Qdrant (vectors). Recall evaluations probably need neither. Decide explicitly:\n\n- In: FastAPI + files for GraphQL models\n- Out unless later required: PostgreSQL, MinIO, Qdrant, DynamoDB\n\nLocal report artifacts already have a separate epic; file GraphQL storage should not silently depend on S3.\n\n### What I would not do first\n\n- SQLite: satisfies \"no extra server\" and is easier for filters/leases, but it is still a database and you cannot read an evaluation as a file. Honor \"simple files\" unless we change that intent.\n- Git as the write-ahead log for every ScoreResult during an eval (too chatty). Git remains canonical for gold labels elsewhere.\n- A partial store that only implements Item/Evaluation. Dashboard and CLI will touch Account, Scorecard, Score, DataSet, Task. Implement all local models or name a documented subset.\n\n### Scoring-job claims\n\n`claim_scoring_job` is the one place that wants compare-and-swap. On files: a claim file with `O_EXCL` create, or a single lock file. Fine for one process; spell it out before coding.\n\nHuman has a specific file-store idea still to record on this initiative.\n",
+      "created_at": "2026-08-27T14:22:33.645809Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "3e90b277-40e0-4a30-990e-31c94af9aabd",
+      "author": "ryan",
+      "text": "## Virtuus is this idea (2026-08-27)\n\nThe file layout sketched earlier is the Virtuus storage model, not a new invention.\n\nVirtuus: one directory per table, one JSON file per record, in-memory GSIs derived at load, atomic temp+rename writes. README motivation is explicitly taking Plexus into isolated environments while keeping the API shape. Kanbus uses the same *pattern* (one issue JSON, no SQLite sidecar) but does not import Virtuus; Biblicus already uses `virtuus.Database` from Python.\n\nImplication for this initiative: do not write a custom FileStore that reimplements directories-of-JSON. Prefer an adapter: FastAPI GraphQL Store methods (`upsert_private` / `get_private` / `list_private` / …) over `virtuus.Database`, with FastAPI remaining the only server (embed Virtuus; do not run `virtuus serve` as a second process).\n\nMapping notes (still planning):\n\n- Local GraphQL already stores 26 models as JSON documents. That is a Virtuus schema: table per model, `primary_key` from the Amplify contract, GSIs from `amplify-manifest.json` indexes (`accountId`+`updatedAt`, Item `externalId`, Identifier `value`, etc.).\n- Composite keys (Identifier `itemId`+`name`) may need the same synthetic pk the Postgres local store already hashes.\n- `claim_scoring_job` is still the one compare-and-swap; Virtuus is not a transaction engine (its own \"when not to use\" list). Spell that separately.\n- Kanbus-style cold scan per CLI invocation is the wrong runtime here: the proxy is a long-lived process, so Virtuus index-on-load fits better than Kanbus's per-command file walk.\n\nFork from the previous comment: opaque JSON docs (option 1) *is* Virtuus. Human YAML trees would fight it. Hybrid still holds: score YAML pull/push stays files; GraphQL data plane is Virtuus JSON.\n\nDo not implement until we agree the adapter is Virtuus rather than a from-scratch scanner.\n",
+      "created_at": "2026-08-27T14:26:55.507649Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "bc8d4b93-0733-494e-8c6d-76ef9f48040c",
+      "author": "ryan",
+      "text": "Correction to the previous Virtuus note: Kanbus is why Virtuus exists, not a coincidental similar pattern.\n\nVirtuus is the file-backed indexed table engine extracted so Kanbus (and later Plexus local GraphQL) can treat directories of JSON as tables without a database server. Do not describe Kanbus as \"not using Virtuus\" because a given checkout's Cargo.toml does not list the crate. The product relationship is: Virtuus was written for Kanbus; Plexus local storage should reuse that engine rather than invent another.\n",
+      "created_at": "2026-08-27T14:32:39.013423Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "5f414a98-331e-4834-9074-764e4798ec1c",
+      "author": "ryan",
+      "text": "## How to run FastAPI+Virtuus (2026-08-27) — planning only\n\nContainers existed to boot Postgres (and MinIO/Qdrant). That reason goes away. For this path, **a process is the default; Compose is YAGNI** unless we already need Docker for something else.\n\nSimplest operator loop (laptop, cloud VM, Cursor remote/cloud):\n\n1. Python env with Plexus + `virtuus`\n2. `PLEXUS_BACKEND_MODE=local`, `PLEXUS_DATA_DIR` on the workspace disk\n3. One uvicorn worker serving the existing FastAPI proxy\n4. CLI: `PLEXUS_API_URL=http://localhost:18080/graphql` and an API key\n\nNo Docker daemon, no Postgres client, no Node unless someone wants the dashboard. `evaluate accuracy` only needs GraphQL.\n\nWhy not containerize first:\n\n- Cursor/cloud agent VMs often have Python and a workspace disk; Docker is the fragile part.\n- Virtuus data should live in the workspace (gitignored `.plexus/data` or similar) so restarts and snapshots keep Items/Evaluations.\n- A one-service Compose file is packaging theater once there is no database sidecar.\n- Keep the existing proxy Dockerfile/Helm+Postgres path for Kubernetes. Do not make that the Data Parade / laptop path.\n\nConstraint regardless of process vs container: one worker. Virtuus tables are not internally locked; FastAPI already runs sync store calls on a thread pool. Serialize in the adapter; do not `--workers 4`.\n\nOptional later, still YAGNI: in-process GraphQL inside the CLI (no HTTP server). Only worth it after the file store is boring.\n",
+      "created_at": "2026-08-27T14:46:11.553865Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "389f72fc-b9b6-43c3-a1a1-3d056c6957aa",
+      "author": "ryan",
+      "text": "Operator-facing plan and Gherkin live on DataParade DATAP-bd3b69. This initiative is the Plexus implementation: Virtuus adapter (plx-e789ff) behind story plx-f04111. Behave features in this repo; do not add Jest-style units as the spec.\n",
+      "created_at": "2026-08-27T14:52:54.347454Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "3d322d99-2594-4338-b5c0-8b47d13d0fb6",
+      "author": "ryan",
+      "text": "File-backed local GraphQL storage is on develop via VirtuusStore (#612).",
+      "created_at": "2026-08-27T17:36:55.175573Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-08-27T14:16:13.379316Z",
+  "updated_at": "2026-08-27T17:37:20.429837Z",
+  "closed_at": "2026-08-27T17:37:20.429837Z",
+  "custom": {}
+}
