@@ -1,0 +1,40 @@
+{
+  "id": "plx-611fbe35-68f7-4eec-a485-c8c23e5c2d42",
+  "title": "YAML class resolves a programmatic detector Score",
+  "description": "As an operator of a small local control plane, I want a Python Score subclass named in YAML to run as predict() during evaluate accuracy, so that detector-style evaluations do not use Tactus.\n\nFeature: Programmatic detector Score\n\n  Scenario: YAML class resolves\n    Given a score YAML whose class names a registered Python Score subclass\n    When the scorecard loads that score\n    Then predict() runs that class\n    And Tactus is not used\n\n  Scenario: Yes No prediction\n    Given an Item with ground truth Yes\n    When evaluate accuracy scores that Item\n    Then a ScoreResult stores Yes or No",
+  "type": "story",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-41fcbefd-8217-4018-ad46-1f6cef20c3b0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "17995670-c822-4e0e-9dce-455af0546caf",
+      "author": "ryan",
+      "text": "Direct review accepted after fixing `predict` to `async def predict(self, model_input, **kwargs)` to match production `await score.predict(input_data)`.\n\nBranch `feature/plx-611fbe-span-overlap-score` rebased onto `develop` (does not include the Virtuus store commit). Independent pytest: 13 passed.\n\nUnread files skip via SkippedScoreException. Overlap is file+lines only.\n",
+      "created_at": "2026-08-27T16:03:13.383636Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "0e4b4160-2d72-4728-9f26-bc48633adcbb",
+      "author": "ryan",
+      "text": "SKIPPED scorecard result + SourceSpanOverlapScore.create() pushed to PR 613 so unread files omit from recall. Independent DATAP cucumber: 10 scenarios / 42 steps with PLEXUS_ROOT=eval-local.",
+      "created_at": "2026-08-27T16:36:26.610987Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "34b4289d-aabc-4288-ac3b-5412dbd5fcbd",
+      "author": "ryan",
+      "text": "Landed on develop: https://github.com/AnthusAI/Plexus/pull/613. First local accuracy Evaluation completed with this Score (recall 1.54% on 65 scored Items; unread files omitted).",
+      "created_at": "2026-08-27T17:36:55.091261Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-08-27T14:52:23.528309Z",
+  "updated_at": "2026-08-27T17:36:55.101378Z",
+  "closed_at": "2026-08-27T17:36:55.101378Z",
+  "custom": {}
+}
