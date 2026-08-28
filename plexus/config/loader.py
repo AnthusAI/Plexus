@@ -38,6 +38,12 @@ class ConfigLoader:
         'plexus.account_key': 'PLEXUS_ACCOUNT_KEY',
         'plexus.default_account_id': 'PLEXUS_DEFAULT_ACCOUNT_ID',
         'plexus.enable_batching': 'PLEXUS_ENABLE_BATCHING',
+        'plexus.store': 'PLEXUS_STORE',
+        'plexus.backend_mode': 'PLEXUS_BACKEND_MODE',
+        'plexus.data_dir': 'PLEXUS_DATA_DIR',
+        'plexus.virtuus_data_dir': 'PLEXUS_VIRTUUS_DATA_DIR',
+        'plexus.proxy.upstream_disabled': 'PLEXUS_PROXY_UPSTREAM_DISABLED',
+        'plexus.proxy.auth_mode': 'PLEXUS_PROXY_AUTH_MODE',
         
         # Working directory (special case)
         'plexus.working_directory': '_PLEXUS_WORKING_DIRECTORY',

@@ -16,7 +16,7 @@ from .artifact_tickets import (
     ArtifactTicketRequestError,
     ArtifactTicketService,
 )
-from .config import Settings
+from .config import settings
 from .graphql_tools import (
     RootField,
     all_argument_values,
@@ -30,7 +30,6 @@ from .store_factory import create_store
 from .upstream import UpstreamAppSyncClient
 
 
-settings = Settings.from_env()
 store = create_store(settings)
 artifact_ticket_configuration = ArtifactTicketConfiguration.from_env()
 artifact_tickets = ArtifactTicketService(artifact_ticket_configuration, store)
