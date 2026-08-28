@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
+from plexus.config.loader import load_config
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -61,3 +63,12 @@ class Settings:
                 if origin.strip()
             ),
         )
+
+
+def load_settings() -> Settings:
+    """Load Plexus YAML config, then build proxy settings from the environment."""
+    load_config()
+    return Settings.from_env()
+
+
+settings = load_settings()
