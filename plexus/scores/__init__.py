@@ -32,6 +32,8 @@ _SCORE_CLASS_MODULES = {
     "LangGraphScore": "plexus.scores.LangGraphScore",
     "OpenAIEmbeddingsClassifier": "plexus.scores.OpenAIEmbeddingsClassifier",
     "SourceSpanOverlapScore": "plexus.scores.SourceSpanOverlapScore",
+    "SubjectIdentityScore": "plexus.scores.SubjectIdentityScore",
+    "SubjectSpanOverlapScore": "plexus.scores.SubjectSpanOverlapScore",
     "SVMClassifier": "plexus.scores.SVMClassifier",
     "TactusScore": "plexus.scores.TactusScore",
 }

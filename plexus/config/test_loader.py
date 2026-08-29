@@ -300,6 +300,41 @@ class TestConfigLoader:
         assert os.environ['AWS_ACCESS_KEY_ID'] == 'config-access-key'
         assert os.environ['AWS_SECRET_ACCESS_KEY'] == 'config-secret-key'
         assert os.environ['AWS_REGION_NAME'] == 'us-east-1'
+
+    def test_set_environment_variables_local_virtuus_proxy(self):
+        """Test YAML keys for local Virtuus GraphQL proxy settings."""
+        config = {
+            'plexus': {
+                'store': 'virtuus',
+                'backend_mode': 'local',
+                'data_dir': '.plexus/data',
+                'virtuus_data_dir': '.plexus/virtuus',
+                'proxy': {
+                    'auth_mode': 'trusted_open',
+                    'upstream_disabled': True,
+                },
+            },
+        }
+
+        env_vars_set = self.loader._set_environment_variables(config)
+
+        assert os.environ.get('PLEXUS_STORE') == 'virtuus'
+        assert os.environ.get('PLEXUS_BACKEND_MODE') == 'local'
+        assert os.environ.get('PLEXUS_DATA_DIR') == '.plexus/data'
+        assert os.environ.get('PLEXUS_VIRTUUS_DATA_DIR') == '.plexus/virtuus'
+        assert os.environ.get('PLEXUS_PROXY_AUTH_MODE') == 'trusted_open'
+        assert os.environ.get('PLEXUS_PROXY_UPSTREAM_DISABLED') == 'True'
+        assert env_vars_set == 6
+
+    def test_set_environment_variables_preserves_preset_store(self):
+        """Environment variables must override YAML store selection."""
+        os.environ['PLEXUS_STORE'] = 'postgres'
+        config = {'plexus': {'store': 'virtuus'}}
+
+        env_vars_set = self.loader._set_environment_variables(config)
+
+        assert os.environ['PLEXUS_STORE'] == 'postgres'
+        assert env_vars_set == 0
     
     @patch.object(ConfigLoader, '_load_yaml_file')
     def test_load_config_single_file(self, mock_load_yaml):

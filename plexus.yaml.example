@@ -16,6 +16,16 @@ plexus:
   default_account_id: your-account-id
   enable_batching: true
   
+  # Local Virtuus GraphQL proxy (no Postgres). Copy to `.plexus/config.yaml` for
+  # scanner eval and other single-process local runs:
+  #
+  # store: virtuus
+  # backend_mode: local
+  # data_dir: .plexus/data
+  # proxy:
+  #   auth_mode: trusted_open
+  #   upstream_disabled: true
+  
   # Optional: Change working directory when loading config
   # working_directory: /path/to/your/project
   

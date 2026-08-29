@@ -22,6 +22,26 @@ window is 24 hours.
 
 ## Configuration
 
+Environment variables remain supported and override YAML when both are set.
+For local Virtuus eval runs, prefer `.plexus/config.yaml` in the project
+directory (or `~/.plexus/config.yaml`) so `uvicorn proxy.app` picks up settings
+without exporting a dozen variables:
+
+```yaml
+plexus:
+  store: virtuus
+  backend_mode: local
+  data_dir: .plexus/data
+  proxy:
+    auth_mode: trusted_open
+    upstream_disabled: true
+```
+
+Postgres remains the default when no YAML is present and no `PLEXUS_STORE` is
+set. Existing environment variables still override YAML values.
+
+### Environment variables (Postgres default)
+
 ```bash
 export PLEXUS_PROXY_DATABASE_URL=postgresql://plexus:plexus@localhost:55432/plexus_proxy
 export PLEXUS_PROXY_API_KEY=local-smoke-key
