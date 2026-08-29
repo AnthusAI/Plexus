@@ -5,14 +5,27 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from pathlib import Path
 
+def _scoring_module_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "plexus" / "utils" / "scoring.py"
+
+
 def _load_scoring_module():
-    scoring_path = Path(__file__).resolve().parents[1] / "plexus" / "utils" / "scoring.py"
+    scoring_path = _scoring_module_path()
     spec = importlib.util.spec_from_file_location("plexus_utils_scoring_test", scoring_path)
     module = importlib.util.module_from_spec(spec)
     if "boto3" not in sys.modules:
         sys.modules["boto3"] = SimpleNamespace(client=lambda *_args, **_kwargs: None)
     spec.loader.exec_module(module)
     return module
+
+
+def test_scoring_module_does_not_use_client_specific_cloudwatch_namespace():
+    """Scoring must not ship client-branded CloudWatch metrics (issue #84)."""
+    source = _scoring_module_path().read_text(encoding="utf-8")
+
+    assert "CallCriteria/API" not in source
+    assert "CloudWatchLogger" not in source
+    assert "cloudwatch_logger" not in source
 
 
 def _make_result(value="ok", name="Target Score"):
