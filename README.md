@@ -189,3 +189,11 @@ Plexus is designed to be operated *by* AI agents as much as by humans. The `/MCP
 ## License
 
 Plexus is open-source under the MIT license.
+
+---
+
+Built by [Anthus AI Solutions](https://anth.us). We run this class of system in production.
+
+Plexus is the evaluation and MLOps layer we use on production LLM workloads.
+
+If you need this operated, not just cloned, [talk to us](https://anth.us).
