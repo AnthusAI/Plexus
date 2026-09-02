@@ -1,0 +1,209 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.infrastructure.scoring_service.monitoring_stack module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.infrastructure.scoring_service.network_stack module" href="plexus.infrastructure.scoring_service.network_stack.html" />
+    <link rel="prev" title="plexus.infrastructure.scoring_service.container_repository_stack module" href="plexus.infrastructure.scoring_service.container_repository_stack.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.agentic.html">plexus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.attribution.html">plexus.attribution package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.html">plexus.auth package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.chat.html">plexus.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.command_worker.html">plexus.command_worker package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.html">plexus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.documentation.html">plexus.documentation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.guidelines.html">plexus.guidelines package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.infrastructure.html">plexus.infrastructure package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.infrastructure.html#subpackages">Subpackages</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.logging.html">plexus.logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.html">plexus.optimization package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.rubric_memory.html">plexus.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.runtime.html">plexus.runtime package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.skills.html">plexus.skills package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.infrastructure.html">plexus.infrastructure package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.infrastructure.scoring_service.html">plexus.infrastructure.scoring_service package</a></li>
+      <li class="breadcrumb-item active">plexus.infrastructure.scoring_service.monitoring_stack module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.infrastructure.scoring_service.monitoring_stack.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.infrastructure.scoring_service.monitoring_stack">
+<span id="plexus-infrastructure-scoring-service-monitoring-stack-module"></span><h1>plexus.infrastructure.scoring_service.monitoring_stack module<a class="headerlink" href="#module-plexus.infrastructure.scoring_service.monitoring_stack" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.infrastructure.scoring_service.monitoring_stack.ScoringServiceMonitoringStack">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.infrastructure.scoring_service.monitoring_stack.</span></span><span class="sig-name descname"><span class="pre">ScoringServiceMonitoringStack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.infrastructure.scoring_service.monitoring_stack.ScoringServiceMonitoringStack" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Stack</span></code></p>
+<p>Creates a new stack.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>scope</strong> – Parent of this stack, usually an <code class="docutils literal notranslate"><span class="pre">App</span></code> or a <code class="docutils literal notranslate"><span class="pre">Stage</span></code>, but could be any construct.</p></li>
+<li><p><strong>id</strong> – The construct ID of this stack. If <code class="docutils literal notranslate"><span class="pre">stackName</span></code> is not explicitly defined, this id (and any parent IDs) will be used to determine the physical ID of the stack.</p></li>
+<li><p><strong>analytics_reporting</strong> – Include runtime versioning information in this Stack. Default: <code class="docutils literal notranslate"><span class="pre">analyticsReporting</span></code> setting of containing <code class="docutils literal notranslate"><span class="pre">App</span></code>, or value of ‘aws:cdk:version-reporting’ context key</p></li>
+<li><p><strong>cross_region_references</strong> – Enable this flag to allow native cross region stack references. Enabling this will create a CloudFormation custom resource in both the producing stack and consuming stack in order to perform the export/import This feature is currently experimental Default: false</p></li>
+<li><p><strong>description</strong> – A description of the stack. Default: - No description.</p></li>
+<li><p><strong>env</strong> – The AWS environment (account/region) where this stack will be deployed. Set the <code class="docutils literal notranslate"><span class="pre">region</span></code>/<code class="docutils literal notranslate"><span class="pre">account</span></code> fields of <code class="docutils literal notranslate"><span class="pre">env</span></code> to either a concrete value to select the indicated environment (recommended for production stacks), or to the values of environment variables <code class="docutils literal notranslate"><span class="pre">CDK_DEFAULT_REGION</span></code>/<code class="docutils literal notranslate"><span class="pre">CDK_DEFAULT_ACCOUNT</span></code> to let the target environment depend on the AWS credentials/configuration that the CDK CLI is executed under (recommended for development stacks). If the <code class="docutils literal notranslate"><span class="pre">Stack</span></code> is instantiated inside a <code class="docutils literal notranslate"><span class="pre">Stage</span></code>, any undefined <code class="docutils literal notranslate"><span class="pre">region</span></code>/<code class="docutils literal notranslate"><span class="pre">account</span></code> fields from <code class="docutils literal notranslate"><span class="pre">env</span></code> will default to the same field on the encompassing <code class="docutils literal notranslate"><span class="pre">Stage</span></code>, if configured there. If either <code class="docutils literal notranslate"><span class="pre">region</span></code> or <code class="docutils literal notranslate"><span class="pre">account</span></code> are not set nor inherited from <code class="docutils literal notranslate"><span class="pre">Stage</span></code>, the Stack will be considered “<em>environment-agnostic</em>””. Environment-agnostic stacks can be deployed to any environment but may not be able to take advantage of all features of the CDK. For example, they will not be able to use environmental context lookups such as <code class="docutils literal notranslate"><span class="pre">ec2.Vpc.fromLookup</span></code> and will not automatically translate Service Principals to the right format based on the environment’s AWS partition, and other such enhancements. Default: - The environment of the containing <code class="docutils literal notranslate"><span class="pre">Stage</span></code> if available, otherwise create the stack will be environment-agnostic.</p></li>
+<li><p><strong>notification_arns</strong> – SNS Topic ARNs that will receive stack events. Default: - no notification arns.</p></li>
+<li><p><strong>permissions_boundary</strong> – Options for applying a permissions boundary to all IAM Roles and Users created within this Stage. Default: - no permissions boundary is applied</p></li>
+<li><p><strong>property_injectors</strong> – A list of IPropertyInjector attached to this Stack. Default: - no PropertyInjectors</p></li>
+<li><p><strong>stack_name</strong> – Name to deploy the stack with. Default: - Derived from construct path.</p></li>
+<li><p><strong>suppress_template_indentation</strong> – Enable this flag to suppress indentation in generated CloudFormation templates. If not specified, the value of the <code class="docutils literal notranslate"><span class="pre">&#64;aws-cdk/core:suppressTemplateIndentation</span></code> context key will be used. If that is not specified, then the default value <code class="docutils literal notranslate"><span class="pre">false</span></code> will be used. Default: - the value of <code class="docutils literal notranslate"><span class="pre">&#64;aws-cdk/core:suppressTemplateIndentation</span></code>, or <code class="docutils literal notranslate"><span class="pre">false</span></code> if that is not set.</p></li>
+<li><p><strong>synthesizer</strong> – Synthesis method to use while deploying this stack. The Stack Synthesizer controls aspects of synthesis and deployment, like how assets are referenced and what IAM roles to use. For more information, see the README of the main CDK package. If not specified, the <code class="docutils literal notranslate"><span class="pre">defaultStackSynthesizer</span></code> from <code class="docutils literal notranslate"><span class="pre">App</span></code> will be used. If that is not specified, <code class="docutils literal notranslate"><span class="pre">DefaultStackSynthesizer</span></code> is used if <code class="docutils literal notranslate"><span class="pre">&#64;aws-cdk/core:newStyleStackSynthesis</span></code> is set to <code class="docutils literal notranslate"><span class="pre">true</span></code> or the CDK major version is v2. In CDK v1 <code class="docutils literal notranslate"><span class="pre">LegacyStackSynthesizer</span></code> is the default if no other synthesizer is specified. Default: - The synthesizer specified on <code class="docutils literal notranslate"><span class="pre">App</span></code>, or <code class="docutils literal notranslate"><span class="pre">DefaultStackSynthesizer</span></code> otherwise.</p></li>
+<li><p><strong>tags</strong> – Tags that will be applied to the Stack. These tags are applied to the CloudFormation Stack itself. They will not appear in the CloudFormation template. However, at deployment time, CloudFormation will apply these tags to all resources in the stack that support tagging. You will not be able to exempt resources from tagging (using the <code class="docutils literal notranslate"><span class="pre">excludeResourceTypes</span></code> property of <code class="docutils literal notranslate"><span class="pre">Tags.of(...).add()</span></code>) for tags applied in this way. Default: {}</p></li>
+<li><p><strong>termination_protection</strong> – Whether to enable termination protection for this stack. Default: false</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.infrastructure.scoring_service.monitoring_stack.ScoringServiceMonitoringStack.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scope</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Construct</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">construct_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">resource_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">display_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dashboard_name_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">environment</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alert_topic</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ITopic</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nat_gateway_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state_machine_arns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.infrastructure.scoring_service.monitoring_stack.ScoringServiceMonitoringStack.__init__" title="Link to this definition"></a></dt>
+<dd><p>Creates a new stack.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>scope</strong> – Parent of this stack, usually an <code class="docutils literal notranslate"><span class="pre">App</span></code> or a <code class="docutils literal notranslate"><span class="pre">Stage</span></code>, but could be any construct.</p></li>
+<li><p><strong>id</strong> – The construct ID of this stack. If <code class="docutils literal notranslate"><span class="pre">stackName</span></code> is not explicitly defined, this id (and any parent IDs) will be used to determine the physical ID of the stack.</p></li>
+<li><p><strong>analytics_reporting</strong> – Include runtime versioning information in this Stack. Default: <code class="docutils literal notranslate"><span class="pre">analyticsReporting</span></code> setting of containing <code class="docutils literal notranslate"><span class="pre">App</span></code>, or value of ‘aws:cdk:version-reporting’ context key</p></li>
+<li><p><strong>cross_region_references</strong> – Enable this flag to allow native cross region stack references. Enabling this will create a CloudFormation custom resource in both the producing stack and consuming stack in order to perform the export/import This feature is currently experimental Default: false</p></li>
+<li><p><strong>description</strong> – A description of the stack. Default: - No description.</p></li>
+<li><p><strong>env</strong> – The AWS environment (account/region) where this stack will be deployed. Set the <code class="docutils literal notranslate"><span class="pre">region</span></code>/<code class="docutils literal notranslate"><span class="pre">account</span></code> fields of <code class="docutils literal notranslate"><span class="pre">env</span></code> to either a concrete value to select the indicated environment (recommended for production stacks), or to the values of environment variables <code class="docutils literal notranslate"><span class="pre">CDK_DEFAULT_REGION</span></code>/<code class="docutils literal notranslate"><span class="pre">CDK_DEFAULT_ACCOUNT</span></code> to let the target environment depend on the AWS credentials/configuration that the CDK CLI is executed under (recommended for development stacks). If the <code class="docutils literal notranslate"><span class="pre">Stack</span></code> is instantiated inside a <code class="docutils literal notranslate"><span class="pre">Stage</span></code>, any undefined <code class="docutils literal notranslate"><span class="pre">region</span></code>/<code class="docutils literal notranslate"><span class="pre">account</span></code> fields from <code class="docutils literal notranslate"><span class="pre">env</span></code> will default to the same field on the encompassing <code class="docutils literal notranslate"><span class="pre">Stage</span></code>, if configured there. If either <code class="docutils literal notranslate"><span class="pre">region</span></code> or <code class="docutils literal notranslate"><span class="pre">account</span></code> are not set nor inherited from <code class="docutils literal notranslate"><span class="pre">Stage</span></code>, the Stack will be considered “<em>environment-agnostic</em>””. Environment-agnostic stacks can be deployed to any environment but may not be able to take advantage of all features of the CDK. For example, they will not be able to use environmental context lookups such as <code class="docutils literal notranslate"><span class="pre">ec2.Vpc.fromLookup</span></code> and will not automatically translate Service Principals to the right format based on the environment’s AWS partition, and other such enhancements. Default: - The environment of the containing <code class="docutils literal notranslate"><span class="pre">Stage</span></code> if available, otherwise create the stack will be environment-agnostic.</p></li>
+<li><p><strong>notification_arns</strong> – SNS Topic ARNs that will receive stack events. Default: - no notification arns.</p></li>
+<li><p><strong>permissions_boundary</strong> – Options for applying a permissions boundary to all IAM Roles and Users created within this Stage. Default: - no permissions boundary is applied</p></li>
+<li><p><strong>property_injectors</strong> – A list of IPropertyInjector attached to this Stack. Default: - no PropertyInjectors</p></li>
+<li><p><strong>stack_name</strong> – Name to deploy the stack with. Default: - Derived from construct path.</p></li>
+<li><p><strong>suppress_template_indentation</strong> – Enable this flag to suppress indentation in generated CloudFormation templates. If not specified, the value of the <code class="docutils literal notranslate"><span class="pre">&#64;aws-cdk/core:suppressTemplateIndentation</span></code> context key will be used. If that is not specified, then the default value <code class="docutils literal notranslate"><span class="pre">false</span></code> will be used. Default: - the value of <code class="docutils literal notranslate"><span class="pre">&#64;aws-cdk/core:suppressTemplateIndentation</span></code>, or <code class="docutils literal notranslate"><span class="pre">false</span></code> if that is not set.</p></li>
+<li><p><strong>synthesizer</strong> – Synthesis method to use while deploying this stack. The Stack Synthesizer controls aspects of synthesis and deployment, like how assets are referenced and what IAM roles to use. For more information, see the README of the main CDK package. If not specified, the <code class="docutils literal notranslate"><span class="pre">defaultStackSynthesizer</span></code> from <code class="docutils literal notranslate"><span class="pre">App</span></code> will be used. If that is not specified, <code class="docutils literal notranslate"><span class="pre">DefaultStackSynthesizer</span></code> is used if <code class="docutils literal notranslate"><span class="pre">&#64;aws-cdk/core:newStyleStackSynthesis</span></code> is set to <code class="docutils literal notranslate"><span class="pre">true</span></code> or the CDK major version is v2. In CDK v1 <code class="docutils literal notranslate"><span class="pre">LegacyStackSynthesizer</span></code> is the default if no other synthesizer is specified. Default: - The synthesizer specified on <code class="docutils literal notranslate"><span class="pre">App</span></code>, or <code class="docutils literal notranslate"><span class="pre">DefaultStackSynthesizer</span></code> otherwise.</p></li>
+<li><p><strong>tags</strong> – Tags that will be applied to the Stack. These tags are applied to the CloudFormation Stack itself. They will not appear in the CloudFormation template. However, at deployment time, CloudFormation will apply these tags to all resources in the stack that support tagging. You will not be able to exempt resources from tagging (using the <code class="docutils literal notranslate"><span class="pre">excludeResourceTypes</span></code> property of <code class="docutils literal notranslate"><span class="pre">Tags.of(...).add()</span></code>) for tags applied in this way. Default: {}</p></li>
+<li><p><strong>termination_protection</strong> – Whether to enable termination protection for this stack. Default: false</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.infrastructure.scoring_service.container_repository_stack.html" class="btn btn-neutral float-left" title="plexus.infrastructure.scoring_service.container_repository_stack module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.infrastructure.scoring_service.network_stack.html" class="btn btn-neutral float-right" title="plexus.infrastructure.scoring_service.network_stack module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

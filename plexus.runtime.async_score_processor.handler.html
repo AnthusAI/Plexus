@@ -1,0 +1,235 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.runtime.async_score_processor.handler module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.scores package" href="plexus.scores.html" />
+    <link rel="prev" title="plexus.runtime.async_score_processor package" href="plexus.runtime.async_score_processor.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.agentic.html">plexus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.attribution.html">plexus.attribution package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.html">plexus.auth package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.chat.html">plexus.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.command_worker.html">plexus.command_worker package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.html">plexus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.documentation.html">plexus.documentation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.guidelines.html">plexus.guidelines package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.html">plexus.infrastructure package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.logging.html">plexus.logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.html">plexus.optimization package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.rubric_memory.html">plexus.rubric_memory package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.runtime.html">plexus.runtime package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.runtime.html#subpackages">Subpackages</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.skills.html">plexus.skills package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.runtime.html">plexus.runtime package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.runtime.async_score_processor.html">plexus.runtime.async_score_processor package</a></li>
+      <li class="breadcrumb-item active">plexus.runtime.async_score_processor.handler module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.runtime.async_score_processor.handler.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.runtime.async_score_processor.handler">
+<span id="plexus-runtime-async-score-processor-handler-module"></span><h1>plexus.runtime.async_score_processor.handler module<a class="headerlink" href="#module-plexus.runtime.async_score_processor.handler" title="Link to this heading"></a></h1>
+<p>Isolated Lambda handler for the reusable asynchronous scoring service.</p>
+<p>This implementation intentionally lives outside <code class="docutils literal notranslate"><span class="pre">score-processor-lambda</span></code>.
+That directory remains the compatibility boundary for the existing production
+processor until its workload is retired after cutover.</p>
+<p>This handler processes scoring jobs from SQS. It can be invoked:
+1. SQS event source trigger - automatic trigger from SQS queue (batch_size=1)
+2. Fan-out Lambda - processes specific message passed in event
+3. Manual invocation - polls queue for 1 message</p>
+<p>The handler:
+- For SQS event source: Extracts message from event.Records[0], SQS handles deletion
+- For fan-out invocation: Processes message from event payload, manually deletes
+- For manual invocation: Polls SQS queue for ONE scoring job message, manually deletes
+- Retrieves the ScoringJob from DynamoDB
+- Performs scoring using Plexus scorecard system
+- Creates ScoreResult in DynamoDB
+- Sends response to PLEXUS_RESPONSE_WORKER_QUEUE_URL
+- On success: Message deleted (automatically for SQS trigger, manually for others)
+- On failure: Exception raised to return message to queue (SQS will retry → DLQ)</p>
+<dl class="simple">
+<dt>Environment Variables:</dt><dd><p>PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL: SQS queue URL
+PLEXUS_RESPONSE_WORKER_QUEUE_URL: Response queue URL
+PLEXUS_ACCOUNT_KEY: Plexus account key</p>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.runtime.async_score_processor.handler.LambdaJobProcessor">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.runtime.async_score_processor.handler.</span></span><span class="sig-name descname"><span class="pre">LambdaJobProcessor</span></span><a class="headerlink" href="#plexus.runtime.async_score_processor.handler.LambdaJobProcessor" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Processes a single scoring job for Lambda execution</p>
+<p>Initialize the Lambda job processor</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime.async_score_processor.handler.LambdaJobProcessor.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.runtime.async_score_processor.handler.LambdaJobProcessor.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the Lambda job processor</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime.async_score_processor.handler.LambdaJobProcessor.initialize">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">initialize</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.runtime.async_score_processor.handler.LambdaJobProcessor.initialize" title="Link to this definition"></a></dt>
+<dd><p>Initialize by resolving account ID</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime.async_score_processor.handler.LambdaJobProcessor.poll_sqs_once">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">poll_sqs_once</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.runtime.async_score_processor.handler.LambdaJobProcessor.poll_sqs_once" title="Link to this definition"></a></dt>
+<dd><p>Poll SQS queue for ONE message</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>Dict with job details and receipt_handle if found, None otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime.async_score_processor.handler.LambdaJobProcessor.process_job">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">process_job</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scoring_job_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">receipt_handle</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.runtime.async_score_processor.handler.LambdaJobProcessor.process_job" title="Link to this definition"></a></dt>
+<dd><p>Process a scoring job</p>
+<p>This is adapted from ProcessScoreWorker.process_job()</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.runtime.async_score_processor.handler.async_handler">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.runtime.async_score_processor.handler.</span></span><span class="sig-name descname"><span class="pre">async_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.runtime.async_score_processor.handler.async_handler" title="Link to this definition"></a></dt>
+<dd><p>Async Lambda handler</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.runtime.async_score_processor.handler.configure_lambda_logging">
+<span class="sig-prename descclassname"><span class="pre">plexus.runtime.async_score_processor.handler.</span></span><span class="sig-name descname"><span class="pre">configure_lambda_logging</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.runtime.async_score_processor.handler.configure_lambda_logging" title="Link to this definition"></a></dt>
+<dd><p>Configure deterministic root logging for Lambda runtime.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.runtime.async_score_processor.handler.lambda_handler">
+<span class="sig-prename descclassname"><span class="pre">plexus.runtime.async_score_processor.handler.</span></span><span class="sig-name descname"><span class="pre">lambda_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.runtime.async_score_processor.handler.lambda_handler" title="Link to this definition"></a></dt>
+<dd><p>Lambda entry point - wraps async handler</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.runtime.async_score_processor.html" class="btn btn-neutral float-left" title="plexus.runtime.async_score_processor package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.scores.html" class="btn btn-neutral float-right" title="plexus.scores package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

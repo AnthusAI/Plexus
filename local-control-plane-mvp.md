@@ -1,0 +1,236 @@
+# Local Control Plane MVP Runbook
+
+This runbook proves the local GraphQL control plane is usable by CLI tools and the dashboard without AppSync/Cognito.
+
+## 1) Bootstrap host dependencies
+
+Run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/bootstrap-local-mvp.sh
+```
+
+This script enforces:
+
+- Docker CLI is available and daemon is running.
+- Docker credential helper compatibility for `docker compose` pulls.
+- Host prerequisites are installed/usable: `node@20`, `postgresql@16` client tools (`psql`, `pg_isready`), and `poetry`.
+- `poetry install` succeeds at repo root.
+- `npm ci` succeeds in `dashboard/`.
+
+## 2) Start local control plane and dashboard
+
+Run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane/dashboard
+npm run dev:local-control-plane
+```
+
+Expected local mode settings:
+
+- `PLEXUS_BACKEND_MODE=local`
+- `NEXT_PUBLIC_PLEXUS_BACKEND=local`
+- `PLEXUS_API_URL=http://localhost:18080/graphql`
+- `PLEXUS_API_KEY=local-smoke-key`
+- `PLEXUS_ACCOUNT_KEY=local-demo`
+- `PLEXUS_VECTOR_STORE_PROVIDER=qdrant`
+- `PLEXUS_VECTOR_STORE_URL=http://localhost:19002`
+- `PLEXUS_VECTOR_STORE_COLLECTION=topic-memory-local`
+
+## 3) Assert backend health and seeded data
+
+Health check:
+
+```bash
+curl -s http://localhost:18080/readyz
+```
+
+Expected:
+
+```json
+{
+  "status": "ready",
+  "backendMode": "local",
+  "authMode": "api_key",
+  "authModeExplicit": false,
+  "upstreamDisabled": true,
+  "externalAccessControlRequired": false
+}
+```
+
+Seed assertions are performed by the smoke script and check these IDs:
+
+- `local-demo-account`
+- `local-demo-scorecard`
+- `local-demo-item-1`
+- `local-demo-task`
+- `local-demo-evaluation`
+- `local-demo-report`
+- `local-demo-procedure`
+- `local-demo-chat-session`
+- `nira-demo-scorecard`
+- `nira-demo-score`
+- `nira-demo-score-version`
+- `nira-demo-item-1`
+
+The seed also creates a deterministic feedback-evaluation fixture set:
+
+- 200 Nira `Item` records (`nira-demo-item-1` .. `nira-demo-item-200`)
+- 200 linked Nira `FeedbackItem` records (`nira-demo-feedback-001` .. `nira-demo-feedback-200`)
+- Balanced public-safe ground-truth labels in `finalAnswerValue` (`Yes`/`No`)
+
+## 4) Run CLI smoke
+
+Run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/smoke-local-cli.sh
+```
+
+The script validates:
+
+- Read checks: `items list` and `tasks last` through local index roots. There is no fallback path in proof mode.
+- Write check: `items create` + `items info` roundtrip (by created item ID).
+- Optional cleanup (enabled by default): delete the created smoke item.
+- The proxy debug audit shows no upstream GraphQL requests.
+
+To keep created smoke data for inspection:
+
+```bash
+SMOKE_CLEANUP=0 bash scripts/smoke-local-cli.sh
+```
+
+## 5) Run prediction smoke
+
+Run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/smoke-local-predict.sh
+```
+
+The prediction smoke is strict and validates:
+
+- Nira call-center fixture records exist (`nira-demo-scorecard`, `nira-demo-score`, `nira-demo-score-version`, `nira-demo-item-1`).
+- Champion path is wired (`getScore(...).championVersionId` resolves to the seeded version).
+- Champion version config is executable local score config (`class: TactusScore`).
+- `plexus predict` succeeds against local GraphQL with `--no-cache --format json`.
+- The returned `score_result_id` exists in GraphQL and is linked to expected `itemId`, `accountId`, `scorecardId`, `scoreId`, and `scoreVersionId`.
+- The exact `score_result_id` is written to `tmp/local-control-plane-proof/prediction.json`.
+- The proxy debug audit shows no upstream GraphQL requests.
+
+Note:
+
+- This smoke intentionally uses the champion-version path only.
+- It does not use `--latest` until ScoreVersion index-root naming compatibility is aligned.
+
+## 6) Run browser smoke
+
+After prediction smoke has written `tmp/local-control-plane-proof/prediction.json`, run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/smoke-local-browser.sh
+```
+
+The browser smoke validates:
+
+- Local dashboard pages render through `http://localhost:3000`.
+- The browser makes no non-local hosted HTTP requests, including AWS/AppSync/Cognito/S3.
+- The rendered pages produce no browser console errors.
+- Demo user/account context is visible.
+- The Nira item and Nira scorecard render.
+- Local GraphQL can read back the exact prediction `ScoreResult` from the proof file.
+
+Screenshots are written to:
+
+```bash
+tmp/local-control-plane-browser-smoke/
+```
+
+## 7) Run feedback-evaluation smoke
+
+Run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/smoke-local-feedback-evaluation.sh
+```
+
+The feedback smoke validates:
+
+- The local seed contains at least 200 Nira feedback-labeled fixtures.
+- `plexus evaluate feedback` runs in local mode against the seeded scorecard/score/champion score version.
+- The emitted evaluation record is persisted and linked correctly.
+- At least 200 evaluation `ScoreResult` records are persisted and linked to that evaluation.
+- The proof artifact is written to `tmp/local-control-plane-proof/feedback-evaluation.json`.
+- The proxy debug audit still shows no upstream GraphQL requests.
+
+## 8) Run clean proof harness
+
+To prove the full MVP path from a clean smoke database, run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/prove-local-control-plane.sh
+```
+
+The proof harness:
+
+- Resets only the smoke Docker Compose stack and volumes from `services/private-graphql-proxy/docker-compose.smoke.yml`.
+- Starts PostgreSQL, MinIO, Qdrant, and the local GraphQL proxy with `PLEXUS_BACKEND_MODE=local` and `PLEXUS_PROXY_UPSTREAM_DISABLED=true`.
+- Seeds deterministic local demo data.
+- Runs strict CLI smoke with no fallback reads.
+- Runs prediction smoke and writes the exact proof file.
+- Runs feedback-evaluation smoke and writes an exact evaluation proof file.
+- Runs VectorTopicMemory smoke in local mode with Qdrant and writes `tmp/local-control-plane-proof/vector-topic-memory.json`.
+- Asserts `/debug/upstream-requests` is empty.
+- Runs browser smoke when `http://localhost:3000` is reachable; otherwise it skips only the browser step.
+
+## 9) Run production-vetting evidence harness
+
+After the clean proof harness passes, run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/vet-local-control-plane.sh
+```
+
+The vetting harness writes `tmp/local-control-plane-proof/production-vetting.json` and records production-readiness evidence for auth/tenancy, migration readiness, storage/vector boundaries, realtime behavior, query shape, and observability/backup gaps. The corresponding human-readable risk register is in `documentation/local-control-plane-production-vetting.md`.
+
+## 10) Optional trusted-open smoke
+
+Trusted-open mode is intentionally unauthenticated and unauthorised inside Plexus. Use it only when access to the GraphQL port is controlled externally.
+
+Start the clean proof stack in trusted-open mode:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+PLEXUS_PROXY_AUTH_MODE=trusted_open bash scripts/prove-local-control-plane.sh
+```
+
+Then run:
+
+```bash
+bash scripts/smoke-local-trusted-open.sh
+```
+
+The smoke verifies that `/readyz` declares `authMode=trusted_open`, a GraphQL read succeeds without `x-api-key`, and `/debug/upstream-requests` remains empty.
+
+## 11) Worker orchestration proof (task dispatcher + chat worker)
+
+Use the dedicated runbook:
+
+- [local-control-plane-worker-orchestration.md](./local-control-plane-worker-orchestration.md)
+
+Quick proof commands:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/smoke-local-task-dispatch.sh
+bash scripts/smoke-local-chat-worker.sh
+bash scripts/prove-local-worker-orchestration.sh
+```

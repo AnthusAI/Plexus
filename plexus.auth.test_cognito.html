@@ -1,0 +1,300 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.auth.test_cognito module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.chat package" href="plexus.chat.html" />
+    <link rel="prev" title="plexus.auth.cognito module" href="plexus.auth.cognito.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.agentic.html">plexus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.attribution.html">plexus.attribution package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.auth.html">plexus.auth package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.auth.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.chat.html">plexus.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.command_worker.html">plexus.command_worker package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.html">plexus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.documentation.html">plexus.documentation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.guidelines.html">plexus.guidelines package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.html">plexus.infrastructure package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.logging.html">plexus.logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.html">plexus.optimization package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.rubric_memory.html">plexus.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.runtime.html">plexus.runtime package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.skills.html">plexus.skills package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.auth.html">plexus.auth package</a></li>
+      <li class="breadcrumb-item active">plexus.auth.test_cognito module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.auth.test_cognito.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.auth.test_cognito">
+<span id="plexus-auth-test-cognito-module"></span><h1>plexus.auth.test_cognito module<a class="headerlink" href="#module-plexus.auth.test_cognito" title="Link to this heading"></a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.config">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.config" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_access_token_is_cached_in_memory_until_near_expiry">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_access_token_is_cached_in_memory_until_near_expiry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_access_token_is_cached_in_memory_until_near_expiry" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_access_token_is_refreshed_from_keychain">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_access_token_is_refreshed_from_keychain</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_access_token_is_refreshed_from_keychain" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_access_token_is_refreshed_when_it_is_within_the_pre_expiry_window">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_access_token_is_refreshed_when_it_is_within_the_pre_expiry_window</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_access_token_is_refreshed_when_it_is_within_the_pre_expiry_window" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_configuration_discovers_hosted_authorization_from_amplify_output">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_configuration_discovers_hosted_authorization_from_amplify_output</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tmp_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_configuration_discovers_hosted_authorization_from_amplify_output" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_configuration_discovery_uses_the_hosted_domain_client_and_region">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_configuration_discovery_uses_the_hosted_domain_client_and_region</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_configuration_discovery_uses_the_hosted_domain_client_and_region" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_configuration_explains_when_amplify_has_no_hosted_authorization_output">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_configuration_explains_when_amplify_has_no_hosted_authorization_output</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tmp_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_configuration_explains_when_amplify_has_no_hosted_authorization_output" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_configuration_rejects_any_unregistered_loopback_callback">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_configuration_rejects_any_unregistered_loopback_callback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_configuration_rejects_any_unregistered_loopback_callback" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_confirmed_invalid_grant_removes_refresh_credential_and_requires_login">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_confirmed_invalid_grant_removes_refresh_credential_and_requires_login</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_confirmed_invalid_grant_removes_refresh_credential_and_requires_login" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_environment_configuration_overrides_amplify_output">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_environment_configuration_overrides_amplify_output</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tmp_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_environment_configuration_overrides_amplify_output" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_exchange_stores_only_refresh_token">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_exchange_stores_only_refresh_token</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_exchange_stores_only_refresh_token" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_invalid_grant_raised_directly_by_post_removes_refresh_credential">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_invalid_grant_raised_directly_by_post_removes_refresh_credential</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_invalid_grant_raised_directly_by_post_removes_refresh_credential" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_keyring_store_only_suppresses_the_keyring_not_found_error">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_keyring_store_only_suppresses_the_keyring_not_found_error</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_keyring_store_only_suppresses_the_keyring_not_found_error" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_keyring_store_reports_a_real_delete_failure">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_keyring_store_reports_a_real_delete_failure</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_keyring_store_reports_a_real_delete_failure" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_keyring_store_uses_the_os_keychain">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_keyring_store_uses_the_os_keychain</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_keyring_store_uses_the_os_keychain" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_login_binds_loopback_listener_before_opening_browser">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_login_binds_loopback_listener_before_opening_browser</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_login_binds_loopback_listener_before_opening_browser" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_login_keeps_listener_open_when_browser_does_not_launch">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_login_keeps_listener_open_when_browser_does_not_launch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">capsys</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_login_keeps_listener_open_when_browser_does_not_launch" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_login_url_uses_state_and_s256_pkce">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_login_url_uses_state_and_s256_pkce</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_login_url_uses_state_and_s256_pkce" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_loopback_callback_does_not_wait_for_reverse_dns">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_loopback_callback_does_not_wait_for_reverse_dns</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_loopback_callback_does_not_wait_for_reverse_dns" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_loopback_callback_rejects_missing_or_mismatched_state">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_loopback_callback_rejects_missing_or_mismatched_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_loopback_callback_rejects_missing_or_mismatched_state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_loopback_callback_rejects_provider_errors">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_loopback_callback_rejects_provider_errors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_loopback_callback_rejects_provider_errors" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_loopback_callback_reports_an_occupied_registered_port">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_loopback_callback_reports_an_occupied_registered_port</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_loopback_callback_reports_an_occupied_registered_port" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_missing_refresh_credential_requires_login_without_a_network_refresh">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_missing_refresh_credential_requires_login_without_a_network_refresh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_missing_refresh_credential_requires_login_without_a_network_refresh" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_repeated_transient_refresh_failures_stop_after_the_bounded_retry">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_repeated_transient_refresh_failures_stop_after_the_bounded_retry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_repeated_transient_refresh_failures_stop_after_the_bounded_retry" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_token_exchange_failure_returns_actionable_login_guidance">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_token_exchange_failure_returns_actionable_login_guidance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_token_exchange_failure_returns_actionable_login_guidance" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_transient_refresh_failure_is_retried_before_the_command_fails">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_transient_refresh_failure_is_retried_before_the_command_fails</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_transient_refresh_failure_is_retried_before_the_command_fails" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_typed_refresh_failures_remain_compatible_with_authentication_callers">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_typed_refresh_failures_remain_compatible_with_authentication_callers</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_typed_refresh_failures_remain_compatible_with_authentication_callers" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_unproven_refresh_rejections_preserve_credential">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_unproven_refresh_rejections_preserve_credential</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">response</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">case</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_unproven_refresh_rejections_preserve_credential" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.auth.test_cognito.test_whoami_uses_non_sensitive_identity_from_current_token">
+<span class="sig-prename descclassname"><span class="pre">plexus.auth.test_cognito.</span></span><span class="sig-name descname"><span class="pre">test_whoami_uses_non_sensitive_identity_from_current_token</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.auth.test_cognito.test_whoami_uses_non_sensitive_identity_from_current_token" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.auth.cognito.html" class="btn btn-neutral float-left" title="plexus.auth.cognito module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.chat.html" class="btn btn-neutral float-right" title="plexus.chat package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

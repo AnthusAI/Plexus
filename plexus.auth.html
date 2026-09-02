@@ -1,0 +1,251 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.auth package &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.auth.cognito module" href="plexus.auth.cognito.html" />
+    <link rel="prev" title="plexus.attribution.actor_context module" href="plexus.attribution.actor_context.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.agentic.html">plexus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.attribution.html">plexus.attribution package</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.auth package</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.chat.html">plexus.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.command_worker.html">plexus.command_worker package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.html">plexus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.documentation.html">plexus.documentation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.guidelines.html">plexus.guidelines package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.html">plexus.infrastructure package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.logging.html">plexus.logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.html">plexus.optimization package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.rubric_memory.html">plexus.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.runtime.html">plexus.runtime package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.skills.html">plexus.skills package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+      <li class="breadcrumb-item active">plexus.auth package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.auth.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.auth">
+<span id="plexus-auth-package"></span><h1>plexus.auth package<a class="headerlink" href="#module-plexus.auth" title="Link to this heading"></a></h1>
+<p>Cognito-backed application authentication for the Plexus CLI.</p>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.auth.cognito.html">plexus.auth.cognito module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.ApplicationAuthenticationRequired"><code class="docutils literal notranslate"><span class="pre">ApplicationAuthenticationRequired</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.AuthorizationRequest"><code class="docutils literal notranslate"><span class="pre">AuthorizationRequest</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.AuthorizationRequest.__init__"><code class="docutils literal notranslate"><span class="pre">AuthorizationRequest.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.AuthorizationRequest.code_verifier"><code class="docutils literal notranslate"><span class="pre">AuthorizationRequest.code_verifier</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.AuthorizationRequest.state"><code class="docutils literal notranslate"><span class="pre">AuthorizationRequest.state</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.AuthorizationRequest.url"><code class="docutils literal notranslate"><span class="pre">AuthorizationRequest.url</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthConfig"><code class="docutils literal notranslate"><span class="pre">CognitoAuthConfig</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthConfig.__init__"><code class="docutils literal notranslate"><span class="pre">CognitoAuthConfig.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthConfig.client_id"><code class="docutils literal notranslate"><span class="pre">CognitoAuthConfig.client_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthConfig.domain"><code class="docutils literal notranslate"><span class="pre">CognitoAuthConfig.domain</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthConfig.from_environment"><code class="docutils literal notranslate"><span class="pre">CognitoAuthConfig.from_environment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthConfig.redirect_uri"><code class="docutils literal notranslate"><span class="pre">CognitoAuthConfig.redirect_uri</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthConfig.region"><code class="docutils literal notranslate"><span class="pre">CognitoAuthConfig.region</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthConfig.scopes"><code class="docutils literal notranslate"><span class="pre">CognitoAuthConfig.scopes</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthService"><code class="docutils literal notranslate"><span class="pre">CognitoAuthService</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthService.__init__"><code class="docutils literal notranslate"><span class="pre">CognitoAuthService.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthService.complete_authorization"><code class="docutils literal notranslate"><span class="pre">CognitoAuthService.complete_authorization()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthService.create_authorization_request"><code class="docutils literal notranslate"><span class="pre">CognitoAuthService.create_authorization_request()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthService.get_access_token"><code class="docutils literal notranslate"><span class="pre">CognitoAuthService.get_access_token()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthService.login"><code class="docutils literal notranslate"><span class="pre">CognitoAuthService.login()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthService.logout"><code class="docutils literal notranslate"><span class="pre">CognitoAuthService.logout()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthService.validate_callback"><code class="docutils literal notranslate"><span class="pre">CognitoAuthService.validate_callback()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.CognitoAuthService.whoami"><code class="docutils literal notranslate"><span class="pre">CognitoAuthService.whoami()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.KeyringRefreshTokenStore"><code class="docutils literal notranslate"><span class="pre">KeyringRefreshTokenStore</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.KeyringRefreshTokenStore.__init__"><code class="docutils literal notranslate"><span class="pre">KeyringRefreshTokenStore.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.KeyringRefreshTokenStore.delete"><code class="docutils literal notranslate"><span class="pre">KeyringRefreshTokenStore.delete()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.KeyringRefreshTokenStore.get"><code class="docutils literal notranslate"><span class="pre">KeyringRefreshTokenStore.get()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.KeyringRefreshTokenStore.set"><code class="docutils literal notranslate"><span class="pre">KeyringRefreshTokenStore.set()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.LoopbackCallbackError"><code class="docutils literal notranslate"><span class="pre">LoopbackCallbackError</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.MissingApplicationSession"><code class="docutils literal notranslate"><span class="pre">MissingApplicationSession</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.RefreshCredentialRejected"><code class="docutils literal notranslate"><span class="pre">RefreshCredentialRejected</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.RefreshTokenStore"><code class="docutils literal notranslate"><span class="pre">RefreshTokenStore</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.RefreshTokenStore.__init__"><code class="docutils literal notranslate"><span class="pre">RefreshTokenStore.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.RefreshTokenStore.delete"><code class="docutils literal notranslate"><span class="pre">RefreshTokenStore.delete()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.RefreshTokenStore.get"><code class="docutils literal notranslate"><span class="pre">RefreshTokenStore.get()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.RefreshTokenStore.set"><code class="docutils literal notranslate"><span class="pre">RefreshTokenStore.set()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.RefreshTransportFailure"><code class="docutils literal notranslate"><span class="pre">RefreshTransportFailure</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.TokenSet"><code class="docutils literal notranslate"><span class="pre">TokenSet</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.TokenSet.__init__"><code class="docutils literal notranslate"><span class="pre">TokenSet.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.TokenSet.access_token"><code class="docutils literal notranslate"><span class="pre">TokenSet.access_token</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.TokenSet.expires_at"><code class="docutils literal notranslate"><span class="pre">TokenSet.expires_at</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.cognito.html#plexus.auth.cognito.TokenSet.id_token"><code class="docutils literal notranslate"><span class="pre">TokenSet.id_token</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.auth.test_cognito.html">plexus.auth.test_cognito module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.config"><code class="docutils literal notranslate"><span class="pre">config()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_access_token_is_cached_in_memory_until_near_expiry"><code class="docutils literal notranslate"><span class="pre">test_access_token_is_cached_in_memory_until_near_expiry()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_access_token_is_refreshed_from_keychain"><code class="docutils literal notranslate"><span class="pre">test_access_token_is_refreshed_from_keychain()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_access_token_is_refreshed_when_it_is_within_the_pre_expiry_window"><code class="docutils literal notranslate"><span class="pre">test_access_token_is_refreshed_when_it_is_within_the_pre_expiry_window()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_configuration_discovers_hosted_authorization_from_amplify_output"><code class="docutils literal notranslate"><span class="pre">test_configuration_discovers_hosted_authorization_from_amplify_output()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_configuration_discovery_uses_the_hosted_domain_client_and_region"><code class="docutils literal notranslate"><span class="pre">test_configuration_discovery_uses_the_hosted_domain_client_and_region()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_configuration_explains_when_amplify_has_no_hosted_authorization_output"><code class="docutils literal notranslate"><span class="pre">test_configuration_explains_when_amplify_has_no_hosted_authorization_output()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_configuration_rejects_any_unregistered_loopback_callback"><code class="docutils literal notranslate"><span class="pre">test_configuration_rejects_any_unregistered_loopback_callback()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_confirmed_invalid_grant_removes_refresh_credential_and_requires_login"><code class="docutils literal notranslate"><span class="pre">test_confirmed_invalid_grant_removes_refresh_credential_and_requires_login()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_environment_configuration_overrides_amplify_output"><code class="docutils literal notranslate"><span class="pre">test_environment_configuration_overrides_amplify_output()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_exchange_stores_only_refresh_token"><code class="docutils literal notranslate"><span class="pre">test_exchange_stores_only_refresh_token()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_invalid_grant_raised_directly_by_post_removes_refresh_credential"><code class="docutils literal notranslate"><span class="pre">test_invalid_grant_raised_directly_by_post_removes_refresh_credential()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_keyring_store_only_suppresses_the_keyring_not_found_error"><code class="docutils literal notranslate"><span class="pre">test_keyring_store_only_suppresses_the_keyring_not_found_error()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_keyring_store_reports_a_real_delete_failure"><code class="docutils literal notranslate"><span class="pre">test_keyring_store_reports_a_real_delete_failure()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_keyring_store_uses_the_os_keychain"><code class="docutils literal notranslate"><span class="pre">test_keyring_store_uses_the_os_keychain()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_login_binds_loopback_listener_before_opening_browser"><code class="docutils literal notranslate"><span class="pre">test_login_binds_loopback_listener_before_opening_browser()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_login_keeps_listener_open_when_browser_does_not_launch"><code class="docutils literal notranslate"><span class="pre">test_login_keeps_listener_open_when_browser_does_not_launch()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_login_url_uses_state_and_s256_pkce"><code class="docutils literal notranslate"><span class="pre">test_login_url_uses_state_and_s256_pkce()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_loopback_callback_does_not_wait_for_reverse_dns"><code class="docutils literal notranslate"><span class="pre">test_loopback_callback_does_not_wait_for_reverse_dns()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_loopback_callback_rejects_missing_or_mismatched_state"><code class="docutils literal notranslate"><span class="pre">test_loopback_callback_rejects_missing_or_mismatched_state()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_loopback_callback_rejects_provider_errors"><code class="docutils literal notranslate"><span class="pre">test_loopback_callback_rejects_provider_errors()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_loopback_callback_reports_an_occupied_registered_port"><code class="docutils literal notranslate"><span class="pre">test_loopback_callback_reports_an_occupied_registered_port()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_missing_refresh_credential_requires_login_without_a_network_refresh"><code class="docutils literal notranslate"><span class="pre">test_missing_refresh_credential_requires_login_without_a_network_refresh()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_repeated_transient_refresh_failures_stop_after_the_bounded_retry"><code class="docutils literal notranslate"><span class="pre">test_repeated_transient_refresh_failures_stop_after_the_bounded_retry()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_token_exchange_failure_returns_actionable_login_guidance"><code class="docutils literal notranslate"><span class="pre">test_token_exchange_failure_returns_actionable_login_guidance()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_transient_refresh_failure_is_retried_before_the_command_fails"><code class="docutils literal notranslate"><span class="pre">test_transient_refresh_failure_is_retried_before_the_command_fails()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_typed_refresh_failures_remain_compatible_with_authentication_callers"><code class="docutils literal notranslate"><span class="pre">test_typed_refresh_failures_remain_compatible_with_authentication_callers()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_unproven_refresh_rejections_preserve_credential"><code class="docutils literal notranslate"><span class="pre">test_unproven_refresh_rejections_preserve_credential()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.auth.test_cognito.html#plexus.auth.test_cognito.test_whoami_uses_non_sensitive_identity_from_current_token"><code class="docutils literal notranslate"><span class="pre">test_whoami_uses_non_sensitive_identity_from_current_token()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.attribution.actor_context.html" class="btn btn-neutral float-left" title="plexus.attribution.actor_context module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.auth.cognito.html" class="btn btn-neutral float-right" title="plexus.auth.cognito module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

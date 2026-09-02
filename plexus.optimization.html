@@ -1,0 +1,650 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.optimization package &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.optimization.agent_handoff module" href="plexus.optimization.agent_handoff.html" />
+    <link rel="prev" title="plexus.metrics.test_calculator module" href="plexus.metrics.test_calculator.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.agentic.html">plexus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.attribution.html">plexus.attribution package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.html">plexus.auth package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.chat.html">plexus.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.command_worker.html">plexus.command_worker package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.html">plexus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.documentation.html">plexus.documentation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.guidelines.html">plexus.guidelines package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.html">plexus.infrastructure package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.logging.html">plexus.logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.optimization package</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.optimization.OptimizationDecisionPacket"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.optimization.assess_investment"><code class="docutils literal notranslate"><span class="pre">assess_investment()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.optimization.dispatch_optimization_operation"><code class="docutils literal notranslate"><span class="pre">dispatch_optimization_operation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.optimization.evaluate_score_activity"><code class="docutils literal notranslate"><span class="pre">evaluate_score_activity()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.optimization.normalize_diagnosis"><code class="docutils literal notranslate"><span class="pre">normalize_diagnosis()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.optimization.normalize_structural_state"><code class="docutils literal notranslate"><span class="pre">normalize_structural_state()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.optimization.rank_opportunities"><code class="docutils literal notranslate"><span class="pre">rank_opportunities()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.optimization.review_optimizer_result"><code class="docutils literal notranslate"><span class="pre">review_optimizer_result()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.optimization.summarize_packets"><code class="docutils literal notranslate"><span class="pre">summarize_packets()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.optimization.validate_approved_batch"><code class="docutils literal notranslate"><span class="pre">validate_approved_batch()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.optimization.validate_run_limits"><code class="docutils literal notranslate"><span class="pre">validate_run_limits()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.rubric_memory.html">plexus.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.runtime.html">plexus.runtime package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.skills.html">plexus.skills package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+      <li class="breadcrumb-item active">plexus.optimization package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.optimization.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.optimization">
+<span id="plexus-optimization-package"></span><h1>plexus.optimization package<a class="headerlink" href="#module-plexus.optimization" title="Link to this heading"></a></h1>
+<p>Deterministic, transport-independent optimization decision helpers.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.optimization.</span></span><span class="sig-name descname"><span class="pre">OptimizationDecisionPacket</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">account_id:</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None,</span> <span class="pre">scope:</span> <span class="pre">~typing.Mapping[str,</span> <span class="pre">~typing.Any],</span> <span class="pre">window:</span> <span class="pre">~typing.Mapping[str,</span> <span class="pre">~typing.Any],</span> <span class="pre">evidence:</span> <span class="pre">~typing.Mapping[str,</span> <span class="pre">~typing.Any],</span> <span class="pre">states:</span> <span class="pre">~typing.Mapping[str,</span> <span class="pre">str],</span> <span class="pre">primary_next_action:</span> <span class="pre">str,</span> <span class="pre">policy_version:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'feedback-investment-v1',</span> <span class="pre">champion_version:</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">feedback_watermark:</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">secondary_actions:</span> <span class="pre">~typing.Sequence[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">blockers:</span> <span class="pre">~typing.Sequence[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">evidence_ids:</span> <span class="pre">~typing.Sequence[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">rationale:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'',</span> <span class="pre">evidence_fingerprint:</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">stakeholder_questions:</span> <span class="pre">~typing.Sequence[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Versioned portable result envelope shared by every toolchain stage.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">account_id:</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None,</span> <span class="pre">scope:</span> <span class="pre">~typing.Mapping[str,</span> <span class="pre">~typing.Any],</span> <span class="pre">window:</span> <span class="pre">~typing.Mapping[str,</span> <span class="pre">~typing.Any],</span> <span class="pre">evidence:</span> <span class="pre">~typing.Mapping[str,</span> <span class="pre">~typing.Any],</span> <span class="pre">states:</span> <span class="pre">~typing.Mapping[str,</span> <span class="pre">str],</span> <span class="pre">primary_next_action:</span> <span class="pre">str,</span> <span class="pre">policy_version:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'feedback-investment-v1',</span> <span class="pre">champion_version:</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">feedback_watermark:</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">secondary_actions:</span> <span class="pre">~typing.Sequence[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">blockers:</span> <span class="pre">~typing.Sequence[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">evidence_ids:</span> <span class="pre">~typing.Sequence[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">rationale:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'',</span> <span class="pre">evidence_fingerprint:</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">stakeholder_questions:</span> <span class="pre">~typing.Sequence[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.account_id">
+<span class="sig-name descname"><span class="pre">account_id</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.account_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.blockers">
+<span class="sig-name descname"><span class="pre">blockers</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.blockers" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.champion_version">
+<span class="sig-name descname"><span class="pre">champion_version</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.champion_version" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.evidence">
+<span class="sig-name descname"><span class="pre">evidence</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.evidence" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.evidence_fingerprint">
+<span class="sig-name descname"><span class="pre">evidence_fingerprint</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.evidence_fingerprint" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.evidence_ids">
+<span class="sig-name descname"><span class="pre">evidence_ids</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.evidence_ids" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.feedback_watermark">
+<span class="sig-name descname"><span class="pre">feedback_watermark</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.feedback_watermark" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.policy_version">
+<span class="sig-name descname"><span class="pre">policy_version</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'feedback-investment-v1'</span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.policy_version" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.primary_next_action">
+<span class="sig-name descname"><span class="pre">primary_next_action</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.primary_next_action" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.rationale">
+<span class="sig-name descname"><span class="pre">rationale</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.rationale" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.scope">
+<span class="sig-name descname"><span class="pre">scope</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.scope" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.secondary_actions">
+<span class="sig-name descname"><span class="pre">secondary_actions</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.secondary_actions" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.stakeholder_questions">
+<span class="sig-name descname"><span class="pre">stakeholder_questions</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.stakeholder_questions" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.states">
+<span class="sig-name descname"><span class="pre">states</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.states" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.to_dict" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.optimization.OptimizationDecisionPacket.window">
+<span class="sig-name descname"><span class="pre">window</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.optimization.OptimizationDecisionPacket.window" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.optimization.assess_investment">
+<span class="sig-prename descclassname"><span class="pre">plexus.optimization.</span></span><span class="sig-name descname"><span class="pre">assess_investment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">evidence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">policy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.optimization.assess_investment" title="Link to this definition"></a></dt>
+<dd><p>Apply feedback-investment-v1 gates in documented safety-first order.</p>
+<p>Ordering is: coverage, mechanical structure, guideline/semantic defects,
+stakeholder questions, feedback curation, count, class reachability,
+stability, then Wilson-backed disagreement outcome.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.optimization.dispatch_optimization_operation">
+<span class="sig-prename descclassname"><span class="pre">plexus.optimization.</span></span><span class="sig-name descname"><span class="pre">dispatch_optimization_operation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">operation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">payload</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">dependencies</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.optimization.dispatch_optimization_operation" title="Link to this definition"></a></dt>
+<dd><p>Route transport payloads to pure operations without accessing services.</p>
+<p>Runtime adapters own pagination, semantic jobs, persistence, and optimizer
+dispatch. This router intentionally handles only deterministic decisions.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.optimization.evaluate_score_activity">
+<span class="sig-prename descclassname"><span class="pre">plexus.optimization.</span></span><span class="sig-name descname"><span class="pre">evaluate_score_activity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">score</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_of</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.optimization.evaluate_score_activity" title="Link to this definition"></a></dt>
+<dd><p>Evaluate the fixed rolling cooldown from complete inventory evidence.</p>
+<p>Both the mutable score timestamp and the newest immutable version timestamp
+are required.  Missing or malformed evidence fails closed.  Future
+timestamps are conservatively treated as recent rather than silently
+repairing clock skew.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.optimization.normalize_diagnosis">
+<span class="sig-prename descclassname"><span class="pre">plexus.optimization.</span></span><span class="sig-name descname"><span class="pre">normalize_diagnosis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">diagnosis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.optimization.normalize_diagnosis" title="Link to this definition"></a></dt>
+<dd><p>Normalize asynchronous semantic diagnosis without inventing a model decision.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.optimization.normalize_structural_state">
+<span class="sig-prename descclassname"><span class="pre">plexus.optimization.</span></span><span class="sig-name descname"><span class="pre">normalize_structural_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#plexus.optimization.normalize_structural_state" title="Link to this definition"></a></dt>
+<dd><p>Normalize champion/configuration/terminal-class checks into one state.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.optimization.rank_opportunities">
+<span class="sig-prename descclassname"><span class="pre">plexus.optimization.</span></span><span class="sig-name descname"><span class="pre">rank_opportunities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scores</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">coverage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.optimization.rank_opportunities" title="Link to this definition"></a></dt>
+<dd><p>Rank fully analyzed scores without silently treating partial enumeration as exact.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.optimization.review_optimizer_result">
+<span class="sig-prename descclassname"><span class="pre">plexus.optimization.</span></span><span class="sig-name descname"><span class="pre">review_optimizer_result</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">evidence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.optimization.review_optimizer_result" title="Link to this definition"></a></dt>
+<dd><p>Classify optimizer evidence; it never promotes anything itself.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.optimization.summarize_packets">
+<span class="sig-prename descclassname"><span class="pre">plexus.optimization.</span></span><span class="sig-name descname"><span class="pre">summarize_packets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">packets</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.optimization.summarize_packets" title="Link to this definition"></a></dt>
+<dd><p>Produce a compact, deterministic portfolio summary from decision packets.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.optimization.validate_approved_batch">
+<span class="sig-prename descclassname"><span class="pre">plexus.optimization.</span></span><span class="sig-name descname"><span class="pre">validate_approved_batch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">targets</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">approved</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_fingerprints</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">execution_candidate_policy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'promotion_ready'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.optimization.validate_approved_batch" title="Link to this definition"></a></dt>
+<dd><p>Validate an explicit &lt;=5 target approval and reject stale targets individually.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.optimization.validate_run_limits">
+<span class="sig-prename descclassname"><span class="pre">plexus.optimization.</span></span><span class="sig-name descname"><span class="pre">validate_run_limits</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">payload</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.optimization.validate_run_limits" title="Link to this definition"></a></dt>
+<dd><p>Validate public optimizer-dispatch limits once for every transport.</p>
+<p>Cost may be a positive real number. Sample and iteration caps are positive
+integers, and concurrency is an explicitly bounded integer from one to
+five. Missing values are never defaulted.</p>
+</dd></dl>
+
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.optimization.agent_handoff.html">plexus.optimization.agent_handoff module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.agent_handoff.html#plexus.optimization.agent_handoff.build_agent_handoff_artifacts"><code class="docutils literal notranslate"><span class="pre">build_agent_handoff_artifacts()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.optimization.decision.html">plexus.optimization.decision module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.__init__"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.account_id"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.account_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.blockers"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.blockers</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.champion_version"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.champion_version</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.evidence"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.evidence</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.evidence_fingerprint"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.evidence_fingerprint</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.evidence_ids"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.evidence_ids</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.feedback_watermark"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.feedback_watermark</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.policy_version"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.policy_version</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.primary_next_action"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.primary_next_action</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.rationale"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.rationale</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.scope"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.scope</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.secondary_actions"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.secondary_actions</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.stakeholder_questions"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.stakeholder_questions</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.states"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.states</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.to_dict"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.to_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.OptimizationDecisionPacket.window"><code class="docutils literal notranslate"><span class="pre">OptimizationDecisionPacket.window</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.assess_investment"><code class="docutils literal notranslate"><span class="pre">assess_investment()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.bounded_diagnostic_assessment_failure"><code class="docutils literal notranslate"><span class="pre">bounded_diagnostic_assessment_failure()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.classify_post_run_review"><code class="docutils literal notranslate"><span class="pre">classify_post_run_review()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.dispatch_optimization_operation"><code class="docutils literal notranslate"><span class="pre">dispatch_optimization_operation()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.evaluate_score_activity"><code class="docutils literal notranslate"><span class="pre">evaluate_score_activity()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.evidence_fingerprint"><code class="docutils literal notranslate"><span class="pre">evidence_fingerprint()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.frozen_utc_window"><code class="docutils literal notranslate"><span class="pre">frozen_utc_window()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.normalize_diagnosis"><code class="docutils literal notranslate"><span class="pre">normalize_diagnosis()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.normalize_execution_candidate_policy"><code class="docutils literal notranslate"><span class="pre">normalize_execution_candidate_policy()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.normalize_guideline_state"><code class="docutils literal notranslate"><span class="pre">normalize_guideline_state()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.normalize_rank_scope"><code class="docutils literal notranslate"><span class="pre">normalize_rank_scope()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.normalize_structural_state"><code class="docutils literal notranslate"><span class="pre">normalize_structural_state()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.rank_opportunities"><code class="docutils literal notranslate"><span class="pre">rank_opportunities()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.rank_portfolio"><code class="docutils literal notranslate"><span class="pre">rank_portfolio()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.rank_scope_matches"><code class="docutils literal notranslate"><span class="pre">rank_scope_matches()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.review_optimizer_result"><code class="docutils literal notranslate"><span class="pre">review_optimizer_result()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.run_operation"><code class="docutils literal notranslate"><span class="pre">run_operation()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.summarize_packets"><code class="docutils literal notranslate"><span class="pre">summarize_packets()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.validate_approved_batch"><code class="docutils literal notranslate"><span class="pre">validate_approved_batch()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.validate_public_run_dispatch"><code class="docutils literal notranslate"><span class="pre">validate_public_run_dispatch()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.validate_run_limits"><code class="docutils literal notranslate"><span class="pre">validate_run_limits()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.weekly_buckets"><code class="docutils literal notranslate"><span class="pre">weekly_buckets()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.decision.html#plexus.optimization.decision.wilson_interval"><code class="docutils literal notranslate"><span class="pre">wilson_interval()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.optimization.operator_identity.html">plexus.optimization.operator_identity module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.operator_identity.html#plexus.optimization.operator_identity.OptimizationOperatorIdentity"><code class="docutils literal notranslate"><span class="pre">OptimizationOperatorIdentity</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.operator_identity.html#plexus.optimization.operator_identity.OptimizationOperatorIdentity.__init__"><code class="docutils literal notranslate"><span class="pre">OptimizationOperatorIdentity.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.operator_identity.html#plexus.optimization.operator_identity.OptimizationOperatorIdentity.as_dict"><code class="docutils literal notranslate"><span class="pre">OptimizationOperatorIdentity.as_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.operator_identity.html#plexus.optimization.operator_identity.OptimizationOperatorIdentity.display_scope"><code class="docutils literal notranslate"><span class="pre">OptimizationOperatorIdentity.display_scope</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.operator_identity.html#plexus.optimization.operator_identity.OptimizationOperatorIdentity.display_title"><code class="docutils literal notranslate"><span class="pre">OptimizationOperatorIdentity.display_title</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.operator_identity.html#plexus.optimization.operator_identity.OptimizationOperatorIdentity.kind"><code class="docutils literal notranslate"><span class="pre">OptimizationOperatorIdentity.kind</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.operator_identity.html#plexus.optimization.operator_identity.optimization_operator_identity"><code class="docutils literal notranslate"><span class="pre">optimization_operator_identity()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.optimization.optimizer_dispatch.html">plexus.optimization.optimizer_dispatch module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.optimizer_dispatch.html#plexus.optimization.optimizer_dispatch.OptimizerTaskDispatchService"><code class="docutils literal notranslate"><span class="pre">OptimizerTaskDispatchService</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.optimizer_dispatch.html#plexus.optimization.optimizer_dispatch.OptimizerTaskDispatchService.__init__"><code class="docutils literal notranslate"><span class="pre">OptimizerTaskDispatchService.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.optimizer_dispatch.html#plexus.optimization.optimizer_dispatch.OptimizerTaskDispatchService.step"><code class="docutils literal notranslate"><span class="pre">OptimizerTaskDispatchService.step()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html">plexus.optimization.optimizer_dispatch_backend module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html#plexus.optimization.optimizer_dispatch_backend.GraphQLOptimizerDispatchBackend"><code class="docutils literal notranslate"><span class="pre">GraphQLOptimizerDispatchBackend</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html#plexus.optimization.optimizer_dispatch_backend.GraphQLOptimizerDispatchBackend.__init__"><code class="docutils literal notranslate"><span class="pre">GraphQLOptimizerDispatchBackend.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html#plexus.optimization.optimizer_dispatch_backend.GraphQLOptimizerDispatchBackend.create_procedure"><code class="docutils literal notranslate"><span class="pre">GraphQLOptimizerDispatchBackend.create_procedure()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html#plexus.optimization.optimizer_dispatch_backend.GraphQLOptimizerDispatchBackend.create_task"><code class="docutils literal notranslate"><span class="pre">GraphQLOptimizerDispatchBackend.create_task()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html#plexus.optimization.optimizer_dispatch_backend.GraphQLOptimizerDispatchBackend.get_procedure"><code class="docutils literal notranslate"><span class="pre">GraphQLOptimizerDispatchBackend.get_procedure()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html#plexus.optimization.optimizer_dispatch_backend.GraphQLOptimizerDispatchBackend.get_task"><code class="docutils literal notranslate"><span class="pre">GraphQLOptimizerDispatchBackend.get_task()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html#plexus.optimization.optimizer_dispatch_backend.GraphQLOptimizerDispatchBackend.procedure_pages_for_account"><code class="docutils literal notranslate"><span class="pre">GraphQLOptimizerDispatchBackend.procedure_pages_for_account()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html#plexus.optimization.optimizer_dispatch_backend.GraphQLOptimizerDispatchBackend.read_procedure_artifact"><code class="docutils literal notranslate"><span class="pre">GraphQLOptimizerDispatchBackend.read_procedure_artifact()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html#plexus.optimization.optimizer_dispatch_backend.GraphQLOptimizerDispatchBackend.reconcile_task_stages"><code class="docutils literal notranslate"><span class="pre">GraphQLOptimizerDispatchBackend.reconcile_task_stages()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html#plexus.optimization.optimizer_dispatch_backend.GraphQLOptimizerDispatchBackend.release_held_task"><code class="docutils literal notranslate"><span class="pre">GraphQLOptimizerDispatchBackend.release_held_task()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html#plexus.optimization.optimizer_dispatch_backend.GraphQLOptimizerDispatchBackend.task_pages_for_account"><code class="docutils literal notranslate"><span class="pre">GraphQLOptimizerDispatchBackend.task_pages_for_account()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html#plexus.optimization.optimizer_dispatch_backend.GraphQLOptimizerDispatchBackend.task_stage_pages_for_task"><code class="docutils literal notranslate"><span class="pre">GraphQLOptimizerDispatchBackend.task_stage_pages_for_task()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html#plexus.optimization.optimizer_dispatch_backend.GraphQLOptimizerDispatchBackend.upload_and_verify_procedure_yaml"><code class="docutils literal notranslate"><span class="pre">GraphQLOptimizerDispatchBackend.upload_and_verify_procedure_yaml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.optimizer_dispatch_backend.html#plexus.optimization.optimizer_dispatch_backend.OptimizerDispatchBackendError"><code class="docutils literal notranslate"><span class="pre">OptimizerDispatchBackendError</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.optimization.orchestration.html">plexus.optimization.orchestration module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.orchestration.html#plexus.optimization.orchestration.build_indexed_optimizer_review_evidence"><code class="docutils literal notranslate"><span class="pre">build_indexed_optimizer_review_evidence()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.orchestration.html#plexus.optimization.orchestration.refresh_target_freshness"><code class="docutils literal notranslate"><span class="pre">refresh_target_freshness()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.optimization.persistence.html">plexus.optimization.persistence module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.persistence.html#plexus.optimization.persistence.PersistedDecisionPacket"><code class="docutils literal notranslate"><span class="pre">PersistedDecisionPacket</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.persistence.html#plexus.optimization.persistence.PersistedDecisionPacket.__init__"><code class="docutils literal notranslate"><span class="pre">PersistedDecisionPacket.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.persistence.html#plexus.optimization.persistence.PersistedDecisionPacket.report_id"><code class="docutils literal notranslate"><span class="pre">PersistedDecisionPacket.report_id</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.persistence.html#plexus.optimization.persistence.persist_decision_packet"><code class="docutils literal notranslate"><span class="pre">persist_decision_packet()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.optimization.portfolio_run.html">plexus.optimization.portfolio_run module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.OptimizationPortfolioRunner"><code class="docutils literal notranslate"><span class="pre">OptimizationPortfolioRunner</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.OptimizationPortfolioRunner.__init__"><code class="docutils literal notranslate"><span class="pre">OptimizationPortfolioRunner.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.OptimizationPortfolioRunner.run"><code class="docutils literal notranslate"><span class="pre">OptimizationPortfolioRunner.run()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.__init__"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.assess"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.assess</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.create_action"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.create_action</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.diagnose"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.diagnose</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.diagnosis_preflight"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.diagnosis_preflight</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.dispatch"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.dispatch</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.human_review"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.human_review</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.optimizer_child_request"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.optimizer_child_request</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.optimizer_child_step"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.optimizer_child_step</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.publish_update"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.publish_update</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.rank"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.rank</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.report_service"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.report_service</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.review"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.review</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.summary"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.summary</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.PortfolioRunDependencies.supersede_action"><code class="docutils literal notranslate"><span class="pre">PortfolioRunDependencies.supersede_action</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.portfolio_run.html#plexus.optimization.portfolio_run.drive_optimizer_child_launch"><code class="docutils literal notranslate"><span class="pre">drive_optimizer_child_launch()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.optimization.report_actions.html">plexus.optimization.report_actions module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.report_actions.html#plexus.optimization.report_actions.build_action_projection"><code class="docutils literal notranslate"><span class="pre">build_action_projection()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.report_actions.html#plexus.optimization.report_actions.build_decision_summary"><code class="docutils literal notranslate"><span class="pre">build_decision_summary()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.report_actions.html#plexus.optimization.report_actions.build_guideline_code_conflict_workstream"><code class="docutils literal notranslate"><span class="pre">build_guideline_code_conflict_workstream()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.optimization.run_report.html">plexus.optimization.run_report module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunIntegrityError"><code class="docutils literal notranslate"><span class="pre">OptimizationRunIntegrityError</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunPublicationError"><code class="docutils literal notranslate"><span class="pre">OptimizationRunPublicationError</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportService"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportService</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportService.__init__"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportService.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportService.fail"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportService.fail()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportService.finalize"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportService.finalize()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportService.load_latest_checkpoint"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportService.load_latest_checkpoint()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportService.load_semantic_budget_ledger"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportService.load_semantic_budget_ledger()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportService.persist_semantic_budget_ledger"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportService.persist_semantic_budget_ledger()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportService.publish_milestone"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportService.publish_milestone()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportService.publish_progress"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportService.publish_progress()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportService.start_or_resume"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportService.start_or_resume()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportState"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportState</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportState.__init__"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportState.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportState.attempt_id"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportState.attempt_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportState.blocks"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportState.blocks</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportState.operator_identity"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportState.operator_identity</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportState.report"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportState.report</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportState.run_spec"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportState.run_spec</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportState.stages"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportState.stages</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunReportState.task"><code class="docutils literal notranslate"><span class="pre">OptimizationRunReportState.task</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.OptimizationRunRetryablePublicationError"><code class="docutils literal notranslate"><span class="pre">OptimizationRunRetryablePublicationError</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision"><code class="docutils literal notranslate"><span class="pre">PublishedRevision</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.__init__"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.artifacts"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.artifacts</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.detail_source_revision"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.detail_source_revision</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.detail_status"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.detail_status</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.evidence_checksum"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.evidence_checksum</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.manifest_checksum"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.manifest_checksum</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.manifest_path"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.manifest_path</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.manifest_size_bytes"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.manifest_size_bytes</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.milestone"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.milestone</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.number"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.number</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.overview"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.overview</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.published_at"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.published_at</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.raw_evidence_path"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.raw_evidence_path</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.row_counts"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.row_counts</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.workbook_checksum"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.workbook_checksum</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.PublishedRevision.workbook_path"><code class="docutils literal notranslate"><span class="pre">PublishedRevision.workbook_path</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.WorkbookArtifact"><code class="docutils literal notranslate"><span class="pre">WorkbookArtifact</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.WorkbookArtifact.__init__"><code class="docutils literal notranslate"><span class="pre">WorkbookArtifact.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.WorkbookArtifact.checksum"><code class="docutils literal notranslate"><span class="pre">WorkbookArtifact.checksum</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.WorkbookArtifact.content"><code class="docutils literal notranslate"><span class="pre">WorkbookArtifact.content</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.WorkbookArtifact.row_counts"><code class="docutils literal notranslate"><span class="pre">WorkbookArtifact.row_counts</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.build_scorecard_artifacts"><code class="docutils literal notranslate"><span class="pre">build_scorecard_artifacts()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.build_stakeholder_presentation"><code class="docutils literal notranslate"><span class="pre">build_stakeholder_presentation()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.build_stakeholder_workbook"><code class="docutils literal notranslate"><span class="pre">build_stakeholder_workbook()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.dashboard_base_url_from_account_settings"><code class="docutils literal notranslate"><span class="pre">dashboard_base_url_from_account_settings()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.run_report.html#plexus.optimization.run_report.optimization_run_key"><code class="docutils literal notranslate"><span class="pre">optimization_run_key()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.optimization.semantic_authority.html">plexus.optimization.semantic_authority module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticAttemptAuthority"><code class="docutils literal notranslate"><span class="pre">SemanticAttemptAuthority</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticAttemptAuthority.__init__"><code class="docutils literal notranslate"><span class="pre">SemanticAttemptAuthority.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticAttemptAuthority.direct_plan"><code class="docutils literal notranslate"><span class="pre">SemanticAttemptAuthority.direct_plan()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticAttemptAuthority.reserve"><code class="docutils literal notranslate"><span class="pre">SemanticAttemptAuthority.reserve()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticAttemptAuthority.reserve_direct"><code class="docutils literal notranslate"><span class="pre">SemanticAttemptAuthority.reserve_direct()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticAttemptAuthority.settle"><code class="docutils literal notranslate"><span class="pre">SemanticAttemptAuthority.settle()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticAttemptAuthority.settle_direct"><code class="docutils literal notranslate"><span class="pre">SemanticAttemptAuthority.settle_direct()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticAttemptAuthority.unknown_direct"><code class="docutils literal notranslate"><span class="pre">SemanticAttemptAuthority.unknown_direct()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticAuthorityError"><code class="docutils literal notranslate"><span class="pre">SemanticAuthorityError</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticAuthorityPublicationError"><code class="docutils literal notranslate"><span class="pre">SemanticAuthorityPublicationError</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticBudgetCoordinator"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetCoordinator</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticBudgetCoordinator.__init__"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetCoordinator.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticBudgetCoordinator.ledger"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetCoordinator.ledger</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticBudgetCoordinator.outcome_unknown"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetCoordinator.outcome_unknown()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticBudgetCoordinator.reserve"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetCoordinator.reserve()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticBudgetCoordinator.settle"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetCoordinator.settle()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticBudgetCoordinator.start_or_resume"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetCoordinator.start_or_resume()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticBudgetCoordinator.view"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetCoordinator.view()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticOutcomeUnknown"><code class="docutils literal notranslate"><span class="pre">SemanticOutcomeUnknown</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticReplayBlocked"><code class="docutils literal notranslate"><span class="pre">SemanticReplayBlocked</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticReservationDecision"><code class="docutils literal notranslate"><span class="pre">SemanticReservationDecision</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticReservationDecision.__init__"><code class="docutils literal notranslate"><span class="pre">SemanticReservationDecision.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticReservationDecision.replay_payload"><code class="docutils literal notranslate"><span class="pre">SemanticReservationDecision.replay_payload</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticReservationDecision.reservation_id"><code class="docutils literal notranslate"><span class="pre">SemanticReservationDecision.reservation_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.SemanticReservationDecision.status"><code class="docutils literal notranslate"><span class="pre">SemanticReservationDecision.status</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_authority.html#plexus.optimization.semantic_authority.semantic_budget_spec"><code class="docutils literal notranslate"><span class="pre">semantic_budget_spec()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.optimization.semantic_budget.html">plexus.optimization.semantic_budget module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetConflict"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetConflict</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetError"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetError</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetExceeded"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetExceeded</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetLedger"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetLedger</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetLedger.__init__"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetLedger.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetLedger.cancel_pre_contact"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetLedger.cancel_pre_contact()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetLedger.digest"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetLedger.digest()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetLedger.from_dict"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetLedger.from_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetLedger.get"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetLedger.get()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetLedger.mark_outcome_unknown"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetLedger.mark_outcome_unknown()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetLedger.reserve"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetLedger.reserve()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetLedger.settle"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetLedger.settle()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetLedger.summary"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetLedger.summary()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetLedger.to_dict"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetLedger.to_dict()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetSpec"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetSpec</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetSpec.__init__"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetSpec.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetSpec.from_dict"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetSpec.from_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetSpec.max_cost"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetSpec.max_cost</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetSpec.max_cost_usd"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetSpec.max_cost_usd</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetSpec.pricing_version"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetSpec.pricing_version</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetSpec.schema_version"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetSpec.schema_version</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticBudgetSpec.to_dict"><code class="docutils literal notranslate"><span class="pre">SemanticBudgetSpec.to_dict()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.__init__"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.attempt"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.attempt</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.call_site"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.call_site</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.external_attempt_id"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.external_attempt_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.from_dict"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.from_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.identity_dict"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.identity_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.max_attempts"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.max_attempts</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.max_input_tokens"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.max_input_tokens</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.max_output_tokens"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.max_output_tokens</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.model"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.model</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.pricing_version"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.pricing_version</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.provider"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.provider</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.request_hash"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.request_hash</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.reservation_id"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.reservation_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.run_key"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.run_key</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.schema_version"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.schema_version</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.target_id"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.target_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticCallPlan.to_dict"><code class="docutils literal notranslate"><span class="pre">SemanticCallPlan.to_dict()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticModelPrice"><code class="docutils literal notranslate"><span class="pre">SemanticModelPrice</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticModelPrice.__init__"><code class="docutils literal notranslate"><span class="pre">SemanticModelPrice.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticModelPrice.cached_input_usd_per_million"><code class="docutils literal notranslate"><span class="pre">SemanticModelPrice.cached_input_usd_per_million</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticModelPrice.input_usd_per_million"><code class="docutils literal notranslate"><span class="pre">SemanticModelPrice.input_usd_per_million</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticModelPrice.model"><code class="docutils literal notranslate"><span class="pre">SemanticModelPrice.model</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticModelPrice.output_usd_per_million"><code class="docutils literal notranslate"><span class="pre">SemanticModelPrice.output_usd_per_million</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticModelPrice.provider"><code class="docutils literal notranslate"><span class="pre">SemanticModelPrice.provider</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticPricingSnapshot"><code class="docutils literal notranslate"><span class="pre">SemanticPricingSnapshot</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticPricingSnapshot.__init__"><code class="docutils literal notranslate"><span class="pre">SemanticPricingSnapshot.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticPricingSnapshot.models"><code class="docutils literal notranslate"><span class="pre">SemanticPricingSnapshot.models</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticPricingSnapshot.price_for"><code class="docutils literal notranslate"><span class="pre">SemanticPricingSnapshot.price_for()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticPricingSnapshot.pricing_version"><code class="docutils literal notranslate"><span class="pre">SemanticPricingSnapshot.pricing_version</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticUsage"><code class="docutils literal notranslate"><span class="pre">SemanticUsage</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticUsage.__init__"><code class="docutils literal notranslate"><span class="pre">SemanticUsage.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticUsage.cached_input_tokens"><code class="docutils literal notranslate"><span class="pre">SemanticUsage.cached_input_tokens</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticUsage.from_dict"><code class="docutils literal notranslate"><span class="pre">SemanticUsage.from_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticUsage.input_tokens"><code class="docutils literal notranslate"><span class="pre">SemanticUsage.input_tokens</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticUsage.output_tokens"><code class="docutils literal notranslate"><span class="pre">SemanticUsage.output_tokens</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticUsage.provider_request_id"><code class="docutils literal notranslate"><span class="pre">SemanticUsage.provider_request_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticUsage.schema_version"><code class="docutils literal notranslate"><span class="pre">SemanticUsage.schema_version</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.SemanticUsage.to_dict"><code class="docutils literal notranslate"><span class="pre">SemanticUsage.to_dict()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.UnknownSemanticPricing"><code class="docutils literal notranslate"><span class="pre">UnknownSemanticPricing</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.canonical_json_bytes"><code class="docutils literal notranslate"><span class="pre">canonical_json_bytes()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.decimal_string"><code class="docutils literal notranslate"><span class="pre">decimal_string()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.load_semantic_pricing"><code class="docutils literal notranslate"><span class="pre">load_semantic_pricing()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.optimization.semantic_budget.html#plexus.optimization.semantic_budget.stakeholder_budget_evidence"><code class="docutils literal notranslate"><span class="pre">stakeholder_budget_evidence()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.metrics.test_calculator.html" class="btn btn-neutral float-left" title="plexus.metrics.test_calculator module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.optimization.agent_handoff.html" class="btn btn-neutral float-right" title="plexus.optimization.agent_handoff module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

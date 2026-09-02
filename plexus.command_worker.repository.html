@@ -1,0 +1,241 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.command_worker.repository module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.command_worker.scheduler module" href="plexus.command_worker.scheduler.html" />
+    <link rel="prev" title="plexus.command_worker.ports module" href="plexus.command_worker.ports.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.agentic.html">plexus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.attribution.html">plexus.attribution package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.html">plexus.auth package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.chat.html">plexus.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.command_worker.html">plexus.command_worker package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.AuditEvent"><code class="docutils literal notranslate"><span class="pre">AuditEvent</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.AuditEventType"><code class="docutils literal notranslate"><span class="pre">AuditEventType</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.AuditSink"><code class="docutils literal notranslate"><span class="pre">AuditSink</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.AuthenticatedCommandContext"><code class="docutils literal notranslate"><span class="pre">AuthenticatedCommandContext</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.AuthorizationDecision"><code class="docutils literal notranslate"><span class="pre">AuthorizationDecision</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.AuthorizationDenied"><code class="docutils literal notranslate"><span class="pre">AuthorizationDenied</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.CancellationRequestedError"><code class="docutils literal notranslate"><span class="pre">CancellationRequestedError</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.CancellationResult"><code class="docutils literal notranslate"><span class="pre">CancellationResult</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.Claim"><code class="docutils literal notranslate"><span class="pre">Claim</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.ClaimStatus"><code class="docutils literal notranslate"><span class="pre">ClaimStatus</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.Clock"><code class="docutils literal notranslate"><span class="pre">Clock</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.CommandAuthorizer"><code class="docutils literal notranslate"><span class="pre">CommandAuthorizer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.CommandEnvelope"><code class="docutils literal notranslate"><span class="pre">CommandEnvelope</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.CommandIdGenerator"><code class="docutils literal notranslate"><span class="pre">CommandIdGenerator</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.CommandLimits"><code class="docutils literal notranslate"><span class="pre">CommandLimits</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.CommandNotFound"><code class="docutils literal notranslate"><span class="pre">CommandNotFound</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.CommandRecord"><code class="docutils literal notranslate"><span class="pre">CommandRecord</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.CommandRepository"><code class="docutils literal notranslate"><span class="pre">CommandRepository</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.CommandRequest"><code class="docutils literal notranslate"><span class="pre">CommandRequest</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.CommandService"><code class="docutils literal notranslate"><span class="pre">CommandService</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.CommandStatus"><code class="docutils literal notranslate"><span class="pre">CommandStatus</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.CommandWorker"><code class="docutils literal notranslate"><span class="pre">CommandWorker</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.CommandWorkerService"><code class="docutils literal notranslate"><span class="pre">CommandWorkerService</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.Delivery"><code class="docutils literal notranslate"><span class="pre">Delivery</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.DrainSignal"><code class="docutils literal notranslate"><span class="pre">DrainSignal</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.EventDrainSignal"><code class="docutils literal notranslate"><span class="pre">EventDrainSignal</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.ExecutionContext"><code class="docutils literal notranslate"><span class="pre">ExecutionContext</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.Executor"><code class="docutils literal notranslate"><span class="pre">Executor</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.HeartbeatHandle"><code class="docutils literal notranslate"><span class="pre">HeartbeatHandle</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.HeartbeatScheduler"><code class="docutils literal notranslate"><span class="pre">HeartbeatScheduler</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.IdempotencyConflict"><code class="docutils literal notranslate"><span class="pre">IdempotencyConflict</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.InMemoryCommandRepository"><code class="docutils literal notranslate"><span class="pre">InMemoryCommandRepository</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.LeaseLostError"><code class="docutils literal notranslate"><span class="pre">LeaseLostError</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.LifecycleStore"><code class="docutils literal notranslate"><span class="pre">LifecycleStore</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.ProcessOutcome"><code class="docutils literal notranslate"><span class="pre">ProcessOutcome</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.ProgressUpdate"><code class="docutils literal notranslate"><span class="pre">ProgressUpdate</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.RequestDigest"><code class="docutils literal notranslate"><span class="pre">RequestDigest</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.ServiceOutcome"><code class="docutils literal notranslate"><span class="pre">ServiceOutcome</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.ServiceReceiveError"><code class="docutils literal notranslate"><span class="pre">ServiceReceiveError</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.ServiceStopReason"><code class="docutils literal notranslate"><span class="pre">ServiceStopReason</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.SubmissionDisposition"><code class="docutils literal notranslate"><span class="pre">SubmissionDisposition</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.SubmissionResult"><code class="docutils literal notranslate"><span class="pre">SubmissionResult</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.ThreadHeartbeatScheduler"><code class="docutils literal notranslate"><span class="pre">ThreadHeartbeatScheduler</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.Transport"><code class="docutils literal notranslate"><span class="pre">Transport</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.UUIDCommandIdGenerator"><code class="docutils literal notranslate"><span class="pre">UUIDCommandIdGenerator</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#plexus.command_worker.request_digest"><code class="docutils literal notranslate"><span class="pre">request_digest()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.command_worker.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.command_worker.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.html">plexus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.documentation.html">plexus.documentation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.guidelines.html">plexus.guidelines package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.html">plexus.infrastructure package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.logging.html">plexus.logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.html">plexus.optimization package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.rubric_memory.html">plexus.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.runtime.html">plexus.runtime package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.skills.html">plexus.skills package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.command_worker.html">plexus.command_worker package</a></li>
+      <li class="breadcrumb-item active">plexus.command_worker.repository module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.command_worker.repository.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.command_worker.repository">
+<span id="plexus-command-worker-repository-module"></span><h1>plexus.command_worker.repository module<a class="headerlink" href="#module-plexus.command_worker.repository" title="Link to this heading"></a></h1>
+<p>Provider-neutral in-memory reference semantics for command repositories.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.command_worker.repository.InMemoryCommandRepository">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.command_worker.repository.</span></span><span class="sig-name descname"><span class="pre">InMemoryCommandRepository</span></span><a class="headerlink" href="#plexus.command_worker.repository.InMemoryCommandRepository" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Thread-safe executable reference for the CommandRepository contract.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.command_worker.repository.InMemoryCommandRepository.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.command_worker.repository.InMemoryCommandRepository.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.command_worker.repository.InMemoryCommandRepository.announce">
+<span class="sig-name descname"><span class="pre">announce</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">command</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.command_worker.models.html#plexus.command_worker.models.CommandRecord" title="plexus.command_worker.models.CommandRecord"><span class="pre">CommandRecord</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.command_worker.models.html#plexus.command_worker.models.AnnouncementResult" title="plexus.command_worker.models.AnnouncementResult"><span class="pre">AnnouncementResult</span></a></span></span><a class="headerlink" href="#plexus.command_worker.repository.InMemoryCommandRepository.announce" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.command_worker.repository.InMemoryCommandRepository.discoverable_dispatches">
+<span class="sig-name descname"><span class="pre">discoverable_dispatches</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="plexus.command_worker.models.html#plexus.command_worker.models.CommandEnvelope" title="plexus.command_worker.models.CommandEnvelope"><span class="pre">CommandEnvelope</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.command_worker.repository.InMemoryCommandRepository.discoverable_dispatches" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.command_worker.repository.InMemoryCommandRepository.get">
+<span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tenant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">command_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.command_worker.models.html#plexus.command_worker.models.CommandRecord" title="plexus.command_worker.models.CommandRecord"><span class="pre">CommandRecord</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.command_worker.repository.InMemoryCommandRepository.get" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.command_worker.repository.InMemoryCommandRepository.request_cancel">
+<span class="sig-name descname"><span class="pre">request_cancel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tenant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">command_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">now</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.command_worker.models.html#plexus.command_worker.models.CancellationResult" title="plexus.command_worker.models.CancellationResult"><span class="pre">CancellationResult</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.command_worker.repository.InMemoryCommandRepository.request_cancel" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.command_worker.repository.InMemoryCommandRepository.set_status">
+<span class="sig-name descname"><span class="pre">set_status</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tenant_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">command_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.command_worker.models.html#plexus.command_worker.models.CommandStatus" title="plexus.command_worker.models.CommandStatus"><span class="pre">CommandStatus</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="plexus.command_worker.models.html#plexus.command_worker.models.CommandRecord" title="plexus.command_worker.models.CommandRecord"><span class="pre">CommandRecord</span></a></span></span><a class="headerlink" href="#plexus.command_worker.repository.InMemoryCommandRepository.set_status" title="Link to this definition"></a></dt>
+<dd><p>Advance status in reference integration tests and future adapter tests.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.command_worker.ports.html" class="btn btn-neutral float-left" title="plexus.command_worker.ports module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.command_worker.scheduler.html" class="btn btn-neutral float-right" title="plexus.command_worker.scheduler module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plexus Architectural Presentation</title>
+    <!-- Google Fonts: Inter, Jersey 20, Fira Code -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Jersey+20&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+/* Dashboard-aligned presentation tokens */
+:root {
+    --canvas: #eeedef;
+    --slide: #fdfcfd;
+    --white: #ffffff;
+    --surface: #f4f2f4;
+    --surface-selected: #eeedef;
+    --surface-primary: #eef6ff;
+    --surface-secondary: #ffeff6;
+    --surface-violet: #f4f0fe;
+    --text: #1a1523;
+    --body: #6e6d76;
+    --muted: #86848d;
+    --line: #c8c7cb;
+    --primary: #0090ff;
+    --primary-strong: #0d74ce;
+    --secondary: #c2298a;
+    --selected: #6e56cf;
+    --on-primary: #1a1523;
+    --on-strong: #ffffff;
+    --radius: 8px;
+    --shadow: 0 8px 20px rgba(26, 21, 35, 0.08);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--canvas);
+    display: grid;
+    gap: 24px;
+    grid-template-columns: 1fr;
+    min-height: 100vh;
+    padding: 24px 0;
+    place-items: center;
+    font-family: 'Inter', sans-serif;
+    color: var(--body);
+}
+
+.slide-container {
+    background-color: var(--slide);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    font-family: 'Inter', sans-serif;
+    height: 720px;
+    justify-content: flex-start;
+    overflow: hidden;
+    padding: 50px 60px;
+    position: relative;
+    width: 1280px;
+}
+
+/* TYPOGRAPHY */
+.logo-text {
+    font-family: 'Jersey 20', cursive;
+    font-size: 110px;
+    background: linear-gradient(90deg, #5eb1ef 0%, #0d74ce 42%, #c2298a 72%, #5eb1ef 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    line-height: 0.9;
+    letter-spacing: 2px;
+}
+
+h1, h2, h3, h4 {
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-weight: 700;
+}
+
+.slide-title {
+    font-size: 34px;
+    font-weight: 700;
+    margin-bottom: 30px;
+    color: var(--text);
+    width: 100%;
+}
+
+p, li {
+    font-size: 16px;
+    line-height: 1.5;
+    color: var(--body);
+}
+
+.font-mono, math, code {
+    font-family: 'Fira Code', monospace;
+}
+
+.content-area {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    justify-content: center;
+    width: 100%;
+}
+
+/* LAYOUT UTILITIES & FLAT REGION CARDS */
+.two-column {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    width: 100%;
+}
+
+.flat-card {
+    background-color: var(--surface);
+    border-radius: var(--radius);
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+}
+
+.flat-card-accent {
+    background-color: var(--surface-primary);
+    border-radius: var(--radius);
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+}
+
+.flat-card-secondary {
+    background-color: var(--surface-secondary);
+    border-radius: var(--radius);
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+}
+
+.flat-card-sky {
+    background-color: var(--surface-violet);
+    border-radius: var(--radius);
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+}
+
+.grid-2x2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    width: 100%;
+}
+
+.tiled-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    width: 100%;
+}
+
+.tiled-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    width: 100%;
+}
+
+.mode-card {
+    background-color: var(--surface);
+    border-radius: var(--radius);
+    display: flex;
+    flex-direction: column;
+    min-height: 350px;
+    padding: 18px;
+}
+
+.mode-card-primary {
+    background-color: var(--surface-primary);
+}
+
+.mode-card-secondary {
+    background-color: var(--surface-secondary);
+}
+
+.mode-card-selected {
+    background-color: var(--surface-violet);
+}
+
+.mode-card h3 {
+    font-size: 17px;
+    margin-bottom: 6px;
+}
+
+.mode-card p {
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.mode-diagram {
+    flex-grow: 1;
+    margin: 10px 0 4px;
+    min-height: 150px;
+    width: 100%;
+}
+
+.surface-band {
+    background-color: var(--surface);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    margin-top: 14px;
+    padding: 14px;
+    text-align: center;
+}
+
+.compact-card {
+    background-color: var(--surface);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+}
+
+.compact-card h3 {
+    font-size: 15px;
+    margin-bottom: 4px;
+}
+
+.compact-card p {
+    color: var(--text);
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.badge {
+    background-color: var(--surface-selected);
+    border-radius: 5px;
+    color: var(--text);
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 4px 7px;
+    text-transform: uppercase;
+}
+
+.badge-auto { background-color: var(--surface-primary); color: var(--primary-strong); }
+.badge-human { background-color: var(--surface-secondary); color: var(--secondary); }
+.badge-tech { background-color: var(--surface-violet); color: var(--selected); }
+
+.outcome-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(3, 1fr);
+    width: 100%;
+}
+
+.work-product-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(4, 1fr);
+    width: 100%;
+}
+
+.legacy-slide { display: none; }
+.flow-row { align-items: center; display: flex; gap: 12px; justify-content: center; width: 100%; }
+.flow-node { align-items: center; background: var(--surface); border-radius: var(--radius); color: var(--text); display: flex; flex-direction: column; font-size: 14px; font-weight: 600; justify-content: center; min-height: 72px; padding: 14px 16px; text-align: center; }
+.flow-node small { color: var(--body); font-size: 11px; font-weight: 500; margin-top: 5px; }
+.flow-primary { background: var(--surface-primary); }
+.flow-secondary { background: var(--surface-secondary); }
+.flow-selected { background: var(--surface-violet); }
+.flow-arrow { color: var(--line); font-size: 22px; font-weight: 700; }
+.person { color: var(--text); font-size: 30px; margin-bottom: 7px; }
+.section-kicker { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .1em; margin-bottom: 8px; text-transform: uppercase; }
+.metric-callout { color: var(--text); font-size: 25px; font-weight: 700; line-height: 1.2; }
+
+.attention-row {
+    align-items: center;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 70px 1fr;
+    margin-top: 12px;
+}
+
+.attention-label {
+    color: var(--body);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.attention-track {
+    background-color: var(--surface-selected);
+    border-radius: 5px;
+    height: 10px;
+    overflow: hidden;
+    position: relative;
+}
+
+.attention-span {
+    background-color: var(--primary);
+    border-radius: 3px;
+    height: 6px;
+    left: 2px;
+    position: absolute;
+    top: 2px;
+}
+
+.attention-dot {
+    background-color: var(--primary);
+    border-radius: 50%;
+    height: 8px;
+    position: absolute;
+    top: 1px;
+    width: 8px;
+}
+
+.svg-label {
+    fill: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.svg-small {
+    fill: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+}
+
+.svg-tiny {
+    fill: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 9px;
+}
+
+.svg-lane-label {
+    fill: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
+
+.node-human,
+.lane-neutral {
+    fill: var(--surface);
+}
+
+.node-assistant,
+.lane-assistant {
+    fill: var(--surface-primary);
+}
+
+.node-worker,
+.lane-worker {
+    fill: var(--surface-secondary);
+}
+
+.node-workflow,
+.lane-workflow {
+    fill: var(--surface-violet);
+}
+
+.node-white {
+    fill: var(--white);
+}
+
+.human-head,
+.human-body {
+    fill: var(--text);
+}
+
+.connector {
+    fill: none;
+    stroke: var(--line);
+    stroke-width: 2;
+}
+
+.connector-primary {
+    fill: none;
+    stroke: var(--primary);
+    stroke-width: 2;
+}
+
+.connector-secondary {
+    fill: none;
+    stroke: var(--secondary);
+    stroke-width: 2;
+}
+
+.connector-selected {
+    fill: none;
+    stroke: var(--selected);
+    stroke-width: 2;
+}
+
+.connector-dashed {
+    stroke-dasharray: 5 5;
+}
+
+/* MATHML */
+math {
+    font-size: 20px;
+    color: var(--primary-strong);
+}
+
+/* TABLE STYLING */
+table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background-color: var(--surface);
+}
+
+th {
+    background-color: var(--surface-selected);
+    color: var(--text);
+    font-weight: 600;
+    padding: 16px 20px;
+    text-align: left;
+    font-size: 15px;
+}
+
+td {
+    padding: 16px 20px;
+    border-top: 2px solid var(--slide);
+    color: var(--body);
+    font-size: 15px;
+}
+
+/* DIAGRAM CONTAINERS */
+.diagram-container {
+    background-color: var(--surface);
+    border-radius: var(--radius);
+    padding: 20px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+    </style>
+</head>
+<body>
+
+<!-- Slide 1: Title Slide -->
+<div class="slide-container" id="slide1" style="justify-content: center; align-items: center; background-color: var(--slide);">
+    <div style="text-align: center;">
+        <div class="logo-text" style="margin-bottom: 10px;">PLEXUS</div>
+        <h2 style="font-size: 28px; font-weight: 500; color: var(--muted); margin-top: 10px;">Self-Optimizing AI Scoring Platform</h2>
+    </div>
+</div>
+
+<!-- Slide 2: System Overview -->
+<div class="slide-container" id="slide2">
+    <h2 class="slide-title">System Overview</h2>
+    <div class="content-area">
+        <div class="two-column">
+            <div class="flat-card-accent" style="justify-content: center;">
+                <h3 style="font-size: 22px; color: var(--primary-strong); margin-bottom: 12px;">Real-Time Scoring at Scale</h3>
+                <p style="font-size: 16px;">Processes incoming text streams using serverless micro-agents. Delivers fast, automated evaluations across high-volume operational workloads.</p>
+            </div>
+            <div class="flat-card-secondary" style="justify-content: center;">
+                <h3 style="font-size: 22px; color: var(--secondary); margin-bottom: 12px;">Continuous Meta-Learning</h3>
+                <p style="font-size: 16px;">Captures human feedback, corrections, and explanations. Coordinates bounded optimization cycles that produce candidates, diagnostics, and decision-ready work.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 3: Big-Picture Architecture -->
+<div class="slide-container" id="slide3">
+    <h2 class="slide-title">Big-Picture Architecture</h2>
+    <div class="content-area">
+        <div class="diagram-container">
+            <svg viewBox="0 0 1000 380" style="width: 100%; height: auto;">
+                <!-- Top Flow: Real-Time Scoring -->
+                <rect x="20" y="40" width="960" height="130" rx="8" fill="var(--surface)"/>
+                <text x="40" y="70" font-weight="700" fill="var(--text)" font-size="15">REAL-TIME SCORING WORKLOAD</text>
+
+                <rect x="60" y="90" width="180" height="50" rx="8" fill="var(--white)"/>
+                <text x="150" y="120" text-anchor="middle" fill="var(--body)" font-weight="600" font-size="14">Item Stream</text>
+
+                <path d="M 240 115 L 340 115" stroke="var(--line)" stroke-width="3" fill="none"/>
+
+                <rect x="340" y="90" width="220" height="50" rx="8" fill="var(--surface-primary)"/>
+                <text x="450" y="120" text-anchor="middle" fill="var(--primary-strong)" font-weight="600" font-size="14">Serverless Dispatch</text>
+
+                <path d="M 560 115 L 660 115" stroke="var(--line)" stroke-width="3" fill="none"/>
+
+                <rect x="660" y="90" width="220" height="50" rx="8" fill="var(--surface-primary)"/>
+                <text x="770" y="120" text-anchor="middle" fill="var(--text)" font-weight="600" font-size="14">Scorecard Agents</text>
+
+                <!-- Bottom Flow: Optimization Workload -->
+                <rect x="20" y="210" width="960" height="130" rx="8" fill="var(--surface-secondary)"/>
+                <text x="40" y="240" font-weight="700" fill="var(--secondary)" font-size="15">OPTIMIZATION WORKLOAD (DECOUPLED)</text>
+
+                <rect x="60" y="260" width="220" height="50" rx="8" fill="var(--white)"/>
+                <text x="170" y="290" text-anchor="middle" fill="var(--body)" font-weight="600" font-size="14">Human Labels & Notes</text>
+
+                <path d="M 280 285 L 380 285" stroke="var(--secondary)" stroke-width="3" fill="none"/>
+
+                <rect x="380" y="260" width="220" height="50" rx="8" fill="var(--surface-secondary)"/>
+                <text x="490" y="290" text-anchor="middle" fill="var(--secondary)" font-weight="600" font-size="14">Meta-Engine Analysis</text>
+
+                <path d="M 600 285 L 700 285" stroke="var(--selected)" stroke-width="3" fill="none"/>
+
+                <rect x="700" y="260" width="220" height="50" rx="8" fill="var(--surface-violet)"/>
+                <text x="810" y="290" text-anchor="middle" fill="var(--text)" font-weight="600" font-size="14">Candidates, Findings & Reports</text>
+
+                <!-- Vertical update arrow -->
+                <path d="M 810 260 L 810 140" stroke="var(--selected)" stroke-width="3" stroke-dasharray="6 6" fill="none"/>
+                <text x="820" y="195" fill="var(--text)" font-size="11">human-approved promotion</text>
+            </svg>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 4: Ways to Connect -->
+<div class="slide-container" id="slide4">
+    <h2 class="slide-title">Ways to Connect</h2>
+    <div class="content-area">
+        <div class="tiled-4">
+            <div class="mode-card">
+                <div style="font-size: 26px; color: var(--text); margin-bottom: 12px;"><i class="fa-solid fa-code"></i></div>
+                <h3>Programmatic API</h3>
+                <p>Operational systems call Plexus directly for scoring.</p>
+                <div class="mode-diagram" style="display: flex; align-items: center; justify-content: center;">
+                    <div style="font-family: 'Fira Code', monospace; font-size: 12px; color: var(--body);">System → Score → Result</div>
+                </div>
+            </div>
+            <div class="mode-card mode-card-primary">
+                <div style="font-size: 26px; color: var(--primary-strong); margin-bottom: 12px;"><i class="fa-solid fa-plug"></i></div>
+                <h3>External Assistants</h3>
+                <p>Claude Code, Codex, Cursor, and other MCP hosts use Plexus tools.</p>
+                <div class="mode-diagram" style="display: flex; align-items: center; justify-content: center;">
+                    <div style="font-size: 30px; color: var(--primary-strong);"><i class="fa-solid fa-comments"></i>&nbsp;→&nbsp;<i class="fa-solid fa-wrench"></i></div>
+                </div>
+            </div>
+            <div class="mode-card mode-card-secondary">
+                <div style="font-size: 26px; color: var(--secondary); margin-bottom: 12px;"><i class="fa-solid fa-terminal"></i></div>
+                <h3>Plexus Web Console</h3>
+                <p>Teams share an attributed AI work session inside the dashboard.</p>
+                <div class="mode-diagram" style="display: flex; align-items: center; justify-content: center;">
+                    <div style="font-size: 30px; color: var(--secondary);"><i class="fa-solid fa-user-group"></i>&nbsp;→&nbsp;<i class="fa-solid fa-robot"></i></div>
+                </div>
+            </div>
+            <div class="mode-card mode-card-selected">
+                <div style="font-size: 26px; color: var(--selected); margin-bottom: 12px;"><i class="fa-solid fa-diagram-project"></i></div>
+                <h3>Automated Procedures</h3>
+                <p>Durable procedures run repeatable processes with checkpoints, branches, and loops.</p>
+                <div class="mode-diagram" style="display: flex; align-items: center; justify-content: center;">
+                    <div style="font-size: 30px; color: var(--selected);"><i class="fa-solid fa-circle-nodes"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="surface-band">Different entry points. The same Plexus capabilities underneath.</div>
+    </div>
+</div>
+
+<!-- Slide 5: Human Improvement -->
+<div class="slide-container" id="slide5">
+    <h2 class="slide-title">How a Human Improves One Score</h2>
+    <div class="content-area">
+        <div class="flow-row">
+            <div class="flow-node" style="width:150px"><i class="fa-solid fa-comments person"></i>Read feedback<small>labels + explanations</small></div><span class="flow-arrow">→</span>
+            <div class="flow-node" style="width:150px"><i class="fa-solid fa-magnifying-glass person"></i>Inspect evidence<small>rubric, code, results</small></div><span class="flow-arrow">→</span>
+            <div class="flow-node flow-secondary" style="width:150px"><i class="fa-solid fa-lightbulb person"></i>Form a hypothesis<small>why do we disagree?</small></div><span class="flow-arrow">→</span>
+            <div class="flow-node flow-primary" style="width:150px"><i class="fa-solid fa-pen-to-square person"></i>Edit the score<small>one bounded change</small></div><span class="flow-arrow">→</span>
+            <div class="flow-node flow-selected" style="width:150px"><i class="fa-solid fa-flask person"></i>Evaluate<small>compare evidence</small></div>
+        </div>
+        <div class="surface-band" style="margin-top:34px">The human repeats this loop: spot a pattern in feedback, guess what could improve alignment, test that change, then use the result to choose the next guess.</div>
+        <div class="attention-row" style="margin:28px auto 0;width:78%"><span class="attention-label">Human attention</span><div class="attention-track"><span class="attention-span" style="width:calc(100% - 4px)"></span></div></div>
+    </div>
+</div>
+
+<!-- Slide 6: Manual Scale Limit -->
+<div class="slide-container" id="slide6">
+    <h2 class="slide-title">What Becomes Impractical Manually</h2>
+    <div class="content-area">
+        <div class="two-column" style="align-items:center">
+            <div class="flat-card" style="align-items:center;justify-content:center;min-height:390px">
+                <i class="fa-solid fa-person person" style="font-size:62px"></i>
+                <div class="metric-callout" style="text-align:center;margin-top:14px">One careful analyst</div>
+                <p style="margin-top:10px;text-align:center">works deeply on one score at a time.</p>
+                <div class="flow-arrow" style="margin:10px 0">↓</div>
+                <div class="flow-node flow-primary" style="width:210px">Score A — in progress<small>feedback → hypothesis → edit → test</small></div>
+                <p style="font-size:12px;margin-top:12px;text-align:center">That full learning loop holds the analyst’s attention.</p>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+                <div class="section-kicker" style="grid-column:1/-1;margin:0">Other scores awaiting the same work</div>
+                <div class="flow-node">Score B</div><div class="flow-node flow-secondary">Score C</div><div class="flow-node">Score D</div><div class="flow-node">Score E</div>
+                <div class="flow-node flow-selected">Score F</div><div class="flow-node">Score G</div><div class="flow-node flow-primary">Score H</div><div class="flow-node flow-secondary">Score I</div>
+                <div class="flow-node">Score J</div><div class="flow-node flow-primary">Score K</div><div class="flow-node">Score L</div><div class="flow-node">Score M</div>
+                <div class="surface-band" style="grid-column:1/-1;margin:4px 0 0">While Score A is being improved, new feedback keeps arriving for the rest.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 7: Specific Policy Change -->
+<div class="slide-container" id="slide7">
+    <h2 class="slide-title">Start with One Specific Policy Change</h2>
+    <div class="content-area">
+        <div class="two-column" style="align-items:center">
+            <div class="flat-card-secondary" style="min-height:330px"><div class="section-kicker">New policy</div><div class="metric-callout">“If the required disclosure is missing, classify the interaction as No.”</div><p style="margin-top:20px">A lab worker sees a feedback pattern, turns it into one explicit rule, and asks for that rule to be tested.</p></div>
+            <div class="flat-card-accent" style="min-height:330px"><div class="section-kicker">The change request</div><div class="flow-node" style="margin-top:22px">1. Current score<small>existing DSL</small></div><div class="flow-arrow" style="text-align:center">↓</div><div class="flow-node flow-primary">2. Add rule<small>missing disclosure → No</small></div><div class="flow-arrow" style="text-align:center">↓</div><div class="flow-node flow-selected">3. Candidate score<small>ready to test</small></div><div class="surface-band">The task is concrete: make one change and measure what it does.</div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 8: Delegate Verification -->
+<div class="slide-container" id="slide8">
+    <h2 class="slide-title">Let an Assistant Run the Long Verification Sequence</h2>
+    <div class="content-area">
+        <div class="section-kicker">One approved, composable assistant-driven sequence</div>
+        <div class="tiled-3"><div class="flow-node">1. Brief<small>one requested rule</small></div><div class="flow-node flow-primary">2. Edit + smoke-test</div><div class="flow-node flow-primary">3. Evaluate recent feedback</div><div class="flow-node flow-selected">4. Check regression evidence<small>when available</small></div><div class="flow-node flow-primary">5. Wait for completion</div><div class="flow-node">6. Report results</div></div>
+        <div class="two-column" style="margin-top:34px"><div class="flat-card"><div class="section-kicker">Lab worker</div><div class="attention-row"><span class="attention-label">Attention</span><div class="attention-track"><span class="attention-dot" style="left:2px"></span><span class="attention-dot" style="right:2px"></span></div></div><p style="margin-top:20px">Specify the change, then return for the measured result.</p></div><div class="flat-card-accent"><div class="section-kicker">Assistant</div><div class="attention-row"><span class="attention-label">Work</span><div class="attention-track"><span class="attention-span" style="width:calc(100% - 4px)"></span></div></div><p style="margin-top:20px">Does the editing, dispatching, waiting, and result collection.</p></div></div>
+    </div>
+</div>
+
+<!-- Slide 9: Root Cause -->
+<div class="slide-container" id="slide9">
+    <h2 class="slide-title">The Optimizer Decides What to Try</h2>
+    <div class="content-area">
+        <div class="tiled-4"><div class="flow-node">1. Feedback mismatches<small>labels + explanations</small></div><div class="flow-node flow-secondary">2. Root-cause analysis<small>explain each mismatch</small></div><div class="flow-node flow-secondary">3. Recurring themes<small>group related causes</small></div><div class="flow-node flow-primary">4. Targeted hypotheses<small>what might improve alignment?</small></div></div>
+        <div class="two-column" style="margin-top:32px"><div class="flat-card"><h3 style="font-size:18px">Human steering remains useful</h3><p style="margin-top:10px">A lab worker can seed ideas or constraints at the start of a run.</p></div><div class="flat-card-sky"><h3 style="font-size:18px">The optimizer does the analysis</h3><p style="margin-top:10px">It uses the score, guidelines, evidence, and prior lessons to propose additional testable changes.</p></div></div>
+    </div>
+</div>
+
+<!-- Slide 10: Optimization Cycle -->
+<div class="slide-container" id="slide10">
+    <h2 class="slide-title">One Optimization Cycle Tests Several Ideas</h2>
+    <div class="content-area">
+        <div class="flow-row"><div class="flow-node flow-secondary">Plan hypothesis 1</div><span class="flow-arrow">→</span><div class="flow-node flow-secondary">Plan hypothesis 2<small>sees hypothesis 1</small></div><span class="flow-arrow">→</span><div class="flow-node flow-secondary">Plan hypothesis 3<small>sees prior ideas</small></div></div>
+        <div class="flow-row" style="margin-top:22px"><div class="flow-node flow-primary">Edit candidate 1</div><span class="flow-arrow">→</span><div class="flow-node flow-primary">Edit candidate 2</div><span class="flow-arrow">→</span><div class="flow-node flow-primary">Edit candidate 3</div><span class="flow-arrow">→</span><div class="flow-node flow-selected">Bounded-parallel evaluations</div><span class="flow-arrow">→</span><div class="flow-node">Compare + retain</div></div>
+        <div class="surface-band" style="margin-top:30px">Hypothesis planning and candidate editing are sequential phases. Evaluation jobs are the bounded-parallel part of the cycle.</div>
+    </div>
+</div>
+
+<!-- Slide 11: Hill Climbing -->
+<div class="slide-container" id="slide11">
+    <h2 class="slide-title">Hill-Climbing Builds on What Worked</h2>
+    <div class="content-area">
+        <div class="flow-row"><div class="flow-node">Current leader<small>best measured score</small></div><span class="flow-arrow">→</span><div class="flow-node flow-secondary">Explore this cycle</div><span class="flow-arrow">→</span><div class="flow-node flow-selected">Measure + compare</div><span class="flow-arrow">→</span><div class="flow-node flow-primary">New leader<small>or retain current one</small></div><span class="flow-arrow">↺</span></div>
+        <div class="two-column" style="margin-top:34px"><div class="flat-card"><h3 style="font-size:18px">Carry forward</h3><p style="margin-top:10px">A supported improvement becomes the starting point for the next cycle.</p></div><div class="flat-card-secondary"><h3 style="font-size:18px">Learn from rejection</h3><p style="margin-top:10px">A regression or weak result becomes evidence for what not to repeat.</p></div></div>
+        <div class="surface-band">Compatible, evidence-supported ideas can be synthesized and tested before the next cycle begins.</div>
+    </div>
+</div>
+
+<!-- Slide 12: Evidence Tracks -->
+<div class="slide-container" id="slide12">
+    <h2 class="slide-title">Frozen Evidence Tracks</h2>
+    <div class="content-area"><div class="two-column">
+        <div class="flat-card-accent" style="min-height:310px"><div class="section-kicker">Recent feedback</div><div class="metric-callout">Did the change better match the feedback that triggered it?</div><p style="margin-top:18px">Each candidate is measured against the same frozen set of recent-feedback items.</p></div>
+        <div class="flat-card-sky" style="min-height:310px"><div class="section-kicker">Regression evidence</div><div class="metric-callout">Did the change damage broader behavior?</div><p style="margin-top:18px">When an independent balanced cohort exists, each candidate is measured against that same stable baseline.</p></div>
+    </div><div class="surface-band" style="margin-top:20px">If regression evidence is unavailable, the run can continue feedback-only and records that limitation.</div></div>
+</div>
+
+<!-- Slide 13: Run Work Products -->
+<div class="slide-container" id="slide13">
+    <h2 class="slide-title">What One Run Produces</h2>
+    <div class="content-area"><div class="work-product-grid">
+        <div class="compact-card"><span class="badge badge-auto">Result</span><h3 style="margin-top:9px">Measured candidate</h3><p>Evidence for a score change.</p></div><div class="compact-card"><span class="badge badge-tech">Evidence</span><h3 style="margin-top:9px">Lab report</h3><p>Hypotheses, metrics, and deltas.</p></div><div class="compact-card"><span class="badge badge-auto">Trace</span><h3 style="margin-top:9px">Frozen cohorts</h3><p>Exact evaluated evidence IDs.</p></div><div class="compact-card"><span class="badge badge-auto">Economics</span><h3 style="margin-top:9px">Cost record</h3><p>Measured work and resource use.</p></div>
+        <div class="compact-card"><span class="badge badge-tech">Pattern</span><h3 style="margin-top:9px">Recurring causes</h3><p>Failures worth addressing next.</p></div><div class="compact-card"><span class="badge badge-human">Policy</span><h3 style="margin-top:9px">Contradiction evidence</h3><p>Conflicting labels or guidelines.</p></div><div class="compact-card"><span class="badge badge-human">Question</span><h3 style="margin-top:9px">Stakeholder agenda</h3><p>Issues automation cannot decide.</p></div><div class="compact-card"><span class="badge badge-auto">Next step</span><h3 style="margin-top:9px">Run disposition</h3><p>Optimize, repair, pause, or monitor.</p></div>
+    </div><div class="surface-band">The work product is useful even when no score change is warranted.</div></div>
+</div>
+
+<!-- Slide 14: Outcomes -->
+<div class="slide-container" id="slide14">
+    <h2 class="slide-title">Possible Outcomes and Next Actions</h2>
+    <div class="content-area"><div class="outcome-grid">
+        <div class="compact-card"><span class="badge badge-auto">Continue</span><h3 style="margin-top:7px">Supported candidate</h3><p>Lab worker has measured evidence for a change.</p></div><div class="compact-card"><span class="badge badge-auto">Retain</span><h3 style="margin-top:7px">Current leader</h3><p>No candidate improves available evidence.</p></div><div class="compact-card"><span class="badge badge-auto">Converged</span><h3 style="margin-top:7px">Already aligned</h3><p>No useful change remains.</p></div>
+        <div class="compact-card"><span class="badge badge-auto">Collect</span><h3 style="margin-top:7px">Insufficient evidence</h3><p>Wait for more or more stable feedback.</p></div><div class="compact-card"><span class="badge badge-tech">Repair</span><h3 style="margin-top:7px">Mechanical issue</h3><p>Fix the score structure, then retry.</p></div><div class="compact-card"><span class="badge badge-human">Resolve</span><h3 style="margin-top:7px">Feedback conflict</h3><p>Curate labels or reconcile norms.</p></div>
+        <div class="compact-card"><span class="badge badge-human">Clarify</span><h3 style="margin-top:7px">Guideline question</h3><p>Resolve missing or contradictory policy.</p></div><div class="compact-card"><span class="badge badge-tech">Recover</span><h3 style="margin-top:7px">Interrupted run</h3><p>Resume or retry when recoverable.</p></div><div class="compact-card"><span class="badge badge-auto">Monitor</span><h3 style="margin-top:7px">Cooldown active</h3><p>Wait for the score to stabilize.</p></div>
+    </div></div>
+</div>
+
+<!-- Slide 15: Feedback Investment -->
+<div class="slide-container" id="slide15">
+    <h2 class="slide-title">Feedback Investment Determines Priority</h2>
+    <div class="content-area"><div class="two-column" style="align-items:center">
+        <div class="flat-card-secondary" style="min-height:340px"><div class="section-kicker">Rank opportunity</div><div class="metric-callout">Valid feedback volume × reviewed disagreement rate</div><p style="margin-top:20px">High feedback volume represents meaningful human investment. Repeated reviewed mismatches show where that investment has the largest opportunity to improve the score.</p></div>
+        <div class="flat-card-accent" style="min-height:340px"><div class="section-kicker">Then check readiness</div><div class="flow-node">Evidence coverage</div><div class="flow-node" style="margin-top:10px">Score + guideline health</div><div class="flow-node" style="margin-top:10px">Consistency, stability, and cooldown</div><div class="surface-band">Priority identifies where to look; readiness decides whether work can start.</div></div>
+    </div></div>
+</div>
+
+<!-- Slide 16: Portfolio Scale -->
+<div class="slide-container" id="slide16">
+    <h2 class="slide-title">Scale the Same Loop Across Scores</h2>
+    <div class="content-area">
+        <div class="flow-row"><div class="flow-node flow-primary">Rank scores<small>reviewed-error opportunity</small></div><span class="flow-arrow">→</span><div class="flow-node flow-secondary">Assess readiness<small>diagnose blockers</small></div><span class="flow-arrow">→</span><div class="flow-node flow-selected">Bounded top-K<small>up to five targets</small></div><span class="flow-arrow">→</span><div style="display:grid;gap:8px;width:220px"><div class="flow-node flow-primary" style="min-height:48px">Optimizer loop A</div><div class="flow-node flow-primary" style="min-height:48px">Optimizer loop B</div><div class="flow-node flow-primary" style="min-height:48px">Optimizer loop C</div></div></div>
+        <div class="surface-band" style="margin-top:34px">Each child repeats the single-score hill-climbing loop. The portfolio runs up to five children concurrently, within explicit budgets.</div>
+    </div>
+</div>
+
+<!-- Slide 17: Living Report -->
+<div class="slide-container" id="slide17">
+    <h2 class="slide-title">The Living Portfolio Report</h2>
+    <div class="content-area"><div class="two-column" style="grid-template-columns:1.15fr .85fr">
+        <div class="flat-card-accent" style="min-height:390px"><div class="section-kicker">Continuously updated work product</div><div class="metric-callout">One place to see what improved, what is blocked, and what needs attention next.</div><div class="work-product-grid" style="grid-template-columns:1fr 1fr;margin-top:28px"><div class="flow-node">Ranked opportunities</div><div class="flow-node">Run state + evidence</div><div class="flow-node">Candidates + findings</div><div class="flow-node">Open actions</div></div></div>
+        <div style="display:grid;gap:12px"><div class="compact-card"><span class="badge badge-auto">Running</span><h3 style="margin-top:8px">Awaiting child work</h3><p>Optimizer procedures are still active.</p></div><div class="compact-card"><span class="badge badge-human">Blocked</span><h3 style="margin-top:8px">Policy or evidence action</h3><p>The issue is visible instead of silently deferred.</p></div><div class="compact-card"><span class="badge badge-tech">Recoverable</span><h3 style="margin-top:8px">Retryable publication</h3><p>The report can resume after a transient failure.</p></div><div class="compact-card"><span class="badge badge-auto">Terminal</span><h3 style="margin-top:8px">Completed, unresolved, incomplete, blocked, or failed</h3><p>Every portfolio result is explicit and auditable.</p></div></div>
+    </div></div>
+</div>
+
+<!-- Slide 18: Disposition -->
+<div class="slide-container" id="slide18">
+    <h2 class="slide-title">Every Score Has a Clear Next Disposition</h2>
+    <div class="content-area"><div class="outcome-grid">
+        <div class="compact-card"><span class="badge badge-auto">Optimize</span><h3 style="margin-top:7px">Ready to improve</h3><p>Eligible for the bounded optimizer loop.</p></div><div class="compact-card"><span class="badge badge-auto">Monitor</span><h3 style="margin-top:7px">Collect or stabilize</h3><p>More evidence or time is needed.</p></div><div class="compact-card"><span class="badge badge-tech">Repair</span><h3 style="margin-top:7px">Fix structure</h3><p>Mechanical or score-health work comes first.</p></div>
+        <div class="compact-card"><span class="badge badge-human">Clarify</span><h3 style="margin-top:7px">Resolve guidelines</h3><p>Missing or contradictory policy blocks automation.</p></div><div class="compact-card"><span class="badge badge-human">Curate</span><h3 style="margin-top:7px">Resolve feedback conflict</h3><p>Labels and rubric evidence disagree.</p></div><div class="compact-card"><span class="badge badge-auto">Act</span><h3 style="margin-top:7px">Use a measured candidate</h3><p>Lab workers decide the next score action.</p></div>
+    </div><div class="surface-band">The portfolio does not force every disagreement into optimization; it makes the appropriate next action visible.</div></div>
+</div>
+
+<!-- Slide 19: Shared Work Session -->
+<div class="slide-container" id="slide19">
+    <h2 class="slide-title">A Shared AI Work Session</h2>
+    <div class="content-area"><div class="two-column" style="grid-template-columns:.8fr 1.7fr">
+        <div class="flat-card"><div class="section-kicker">Collaborators</div><div class="flow-node" style="margin:10px 0"><i class="fa-solid fa-person"></i>&nbsp; Product</div><div class="flow-node" style="margin:10px 0"><i class="fa-solid fa-person"></i>&nbsp; Lab worker</div><div class="flow-node" style="margin:10px 0"><i class="fa-solid fa-person"></i>&nbsp; Engineer</div><p style="margin-top:18px">Everyone sees one attributed history.</p></div>
+        <div class="flat-card-accent"><div class="section-kicker">One visible session</div><div class="flow-node" style="align-items:flex-start;margin:8px 0"><small>PERSON</small>State the goal and evidence boundary.</div><div class="flow-node flow-primary" style="align-items:flex-start;margin:8px 0"><small>ASSISTANT</small>Inspect, plan, dispatch, and report.</div><div class="flow-node" style="align-items:flex-start;margin:8px 0"><small>PERSON</small>Add context or constraints.</div><div class="flow-node flow-primary" style="align-items:flex-start;margin:8px 0"><small>ASSISTANT</small>Continue from the shared context.</div></div>
+    </div><div class="two-column" style="gap:14px;margin-top:14px"><div class="surface-band" style="margin:0">Team-enabled coding environments</div><div class="surface-band" style="margin:0">Plexus Web Console</div></div></div>
+</div>
+
+<!-- Slide 20: General Delegation -->
+<div class="slide-container" id="slide20">
+    <h2 class="slide-title">AI Can Delegate a One-Off Assignment</h2>
+    <div class="content-area"><div class="section-kicker" style="text-align:center">General team-capable AI pattern—not the optimizer architecture</div>
+        <div class="flow-row" style="margin-top:28px"><div class="flow-node"><i class="fa-solid fa-person person"></i>Define outcome</div><span class="flow-arrow">→</span><div class="flow-node flow-primary">Lead assistant<small>plan + coordinate</small></div><span class="flow-arrow">→</span><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;width:390px"><div class="flow-node flow-secondary">Research</div><div class="flow-node flow-secondary">Diagnose</div><div class="flow-node flow-secondary">Implement</div><div class="flow-node flow-secondary">Evaluate</div></div><span class="flow-arrow">→</span><div class="flow-node flow-selected">Synthesis</div></div>
+        <div class="surface-band" style="margin-top:32px">The lead dynamically chooses the work. That is different from Plexus’s fixed, repeatable optimizer procedure.</div>
+    </div>
+</div>
+
+<!-- Slide 21: Durable Procedure -->
+<div class="slide-container" id="slide21">
+    <h2 class="slide-title">AI Can Execute a Durable Procedure</h2>
+    <div class="content-area"><div class="diagram-container" style="display:block">
+        <div class="section-kicker">People</div><div class="flow-row"><div class="flow-node">Set objective</div><div class="flow-node">Clarify exception</div><div class="flow-node">Receive result</div></div>
+        <div class="section-kicker" style="margin-top:24px">Reusable workflow graph</div><div class="flow-row"><div class="flow-node flow-selected">Load context</div><span class="flow-arrow">→</span><div class="flow-node flow-selected">Diagnose</div><span class="flow-arrow">→</span><div class="flow-node flow-selected">Branch</div><span class="flow-arrow">→</span><div class="flow-node flow-selected">Evaluate</div><span class="flow-arrow">↺</span><div class="flow-node flow-selected">Synthesize</div></div>
+        <div class="section-kicker" style="margin-top:24px">Plexus + workers</div><div class="flow-row"><div class="flow-node flow-primary">Read evidence</div><div class="flow-node flow-primary">Run jobs</div><div class="flow-node flow-primary">Persist state</div><div class="flow-node flow-secondary">Prepare actions</div></div>
+    </div><div class="surface-band">A durable procedure encodes a reusable operating process instead of requiring a lead assistant to invent it again.</div></div>
+</div>
+
+<!-- Superseded: AI Leverage -->
+<div class="slide-container legacy-slide" id="legacy-slide7a">
+    <h2 class="slide-title">Three Levels of AI Leverage</h2>
+    <div class="content-area"><div class="tiled-3">
+        <div class="mode-card mode-card-primary"><h3>Interactive assistant</h3><p>Person and assistant work turn by turn.</p><div class="flow-row" style="flex:1"><i class="fa-solid fa-person person"></i><span class="flow-arrow">⇄</span><div class="flow-node flow-primary">Assistant</div></div><div class="attention-row"><span class="attention-label">Human time</span><div class="attention-track"><span class="attention-span" style="width:calc(100% - 4px)"></span></div></div><p style="margin-top:8px">Continuous steering</p></div>
+        <div class="mode-card mode-card-secondary"><h3>Delegated assignment</h3><p>A lead assistant decomposes one outcome.</p><div class="flow-row" style="flex:1"><i class="fa-solid fa-person person"></i><span class="flow-arrow">→</span><div class="flow-node flow-primary">Lead</div><span class="flow-arrow">↘</span><div><div class="flow-node flow-secondary" style="min-height:42px;margin:5px">Worker</div><div class="flow-node flow-secondary" style="min-height:42px;margin:5px">Worker</div></div></div><div class="attention-row"><span class="attention-label">Human time</span><div class="attention-track"><span class="attention-dot" style="left:2px"></span><span class="attention-dot" style="right:2px"></span></div></div><p style="margin-top:8px">Brief + review</p></div>
+        <div class="mode-card mode-card-selected"><h3>Durable procedure</h3><p>A reusable graph runs with defined gates.</p><div class="flow-row" style="flex:1"><div class="flow-node flow-selected">Input</div><span class="flow-arrow">→</span><div class="flow-node flow-selected">Run</div><span class="flow-arrow">→</span><div class="flow-node flow-selected">Review</div></div><div class="attention-row"><span class="attention-label">Human time</span><div class="attention-track"><span class="attention-dot" style="left:2px"></span><span class="attention-dot" style="left:48%"></span><span class="attention-dot" style="right:2px"></span></div></div><p style="margin-top:8px">Defined checkpoints</p></div>
+    </div></div>
+</div>
+
+<!-- Superseded: Shared Work Session -->
+<div class="slide-container legacy-slide" id="legacy-slide8a">
+    <h2 class="slide-title">A Shared AI Work Session</h2>
+    <div class="content-area">
+        <div class="two-column" style="grid-template-columns:.8fr 1.7fr;align-items:stretch">
+            <div class="flat-card"><div class="section-kicker">Collaborators</div><div class="flow-node" style="margin:7px 0"><i class="fa-solid fa-person"></i>&nbsp; Product</div><div class="flow-node" style="margin:7px 0"><i class="fa-solid fa-person"></i>&nbsp; Engineer</div><div class="flow-node" style="margin:7px 0"><i class="fa-solid fa-person"></i>&nbsp; Reviewer</div><p style="margin-top:16px">Everyone sees the same attributed history.</p></div>
+            <div class="flat-card-accent"><div class="section-kicker">One visible session</div><div class="flow-node" style="align-items:flex-start;margin:7px 0"><small>PRODUCT</small>Set the outcome and evidence boundary.</div><div class="flow-node flow-primary" style="align-items:flex-start;margin:7px 0"><small>ASSISTANT</small>Propose a plan and inspect Plexus.</div><div class="flow-node" style="align-items:flex-start;margin:7px 0"><small>ENGINEER</small>Add a constraint and correct context.</div><div class="flow-node flow-primary" style="align-items:flex-start;margin:7px 0"><small>ASSISTANT</small>Act, dispatch, and report results.</div></div>
+        </div>
+        <div class="two-column" style="gap:14px;margin-top:14px"><div class="surface-band" style="margin:0">Team-enabled coding environments</div><div class="surface-band" style="margin:0">Plexus Web Console</div></div>
+    </div>
+</div>
+
+<!-- Superseded: Delegated Assignment -->
+<div class="slide-container legacy-slide" id="legacy-slide9a">
+    <h2 class="slide-title">AI Can Delegate a One-Off Assignment</h2>
+    <div class="content-area">
+        <div class="section-kicker" style="text-align:center">General team-capable AI pattern—not the optimizer architecture</div>
+        <div class="flow-row" style="margin-top:25px">
+            <div class="flow-node" style="width:150px"><i class="fa-solid fa-person person"></i>Define outcome<small>review synthesis</small></div><span class="flow-arrow">→</span>
+            <div class="flow-node flow-primary" style="width:180px">Lead assistant<small>decompose + coordinate</small></div><span class="flow-arrow">→</span>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;width:420px"><div class="flow-node flow-secondary">Research</div><div class="flow-node flow-secondary">Diagnose</div><div class="flow-node flow-secondary">Implement</div><div class="flow-node flow-secondary">Evaluate</div></div><span class="flow-arrow">→</span>
+            <div class="flow-node flow-selected" style="width:155px">Synthesis<small>evidence + recommendation</small></div>
+        </div>
+        <div class="surface-band" style="margin-top:32px">The lead dynamically plans this assignment. The structure is useful, but it is not yet a repeatable operating procedure.</div>
+    </div>
+</div>
+
+<!-- Superseded: Durable Procedure -->
+<div class="slide-container legacy-slide" id="legacy-slide10a">
+    <h2 class="slide-title">AI Can Execute a Durable Procedure</h2>
+    <div class="content-area">
+        <div class="diagram-container" style="display:block">
+            <div class="section-kicker">People</div><div class="flow-row" style="justify-content:flex-start"><div class="flow-node" style="width:170px">Provide objective</div><div style="width:215px"></div><div class="flow-node" style="width:170px">Approve / clarify</div><div style="width:215px"></div><div class="flow-node" style="width:170px">Review result</div></div>
+            <div class="section-kicker" style="margin-top:22px">Procedure graph</div><div class="flow-row"><div class="flow-node flow-selected">Load context</div><span class="flow-arrow">→</span><div class="flow-node flow-selected">Diagnose</div><span class="flow-arrow">→</span><div class="flow-node flow-selected">Branch</div><span class="flow-arrow">→</span><div class="flow-node flow-selected">Evaluate</div><span class="flow-arrow">↺</span><div class="flow-node flow-selected">Synthesize</div></div>
+            <div class="section-kicker" style="margin-top:22px">Workers + Plexus</div><div class="flow-row"><div class="flow-node flow-secondary">Specialized roles</div><div class="flow-node flow-primary">Read evidence</div><div class="flow-node flow-primary">Run jobs</div><div class="flow-node flow-primary">Persist state</div><div class="flow-node flow-secondary">Prepare actions</div></div>
+        </div>
+        <div class="surface-band">The graph encodes the reusable operating process; human input appears at explicit approval, clarification, and review gates.</div>
+    </div>
+</div>
+
+<!-- Superseded: One Optimizer Run -->
+<div class="slide-container legacy-slide" id="legacy-slide11a">
+    <h2 class="slide-title">One Feedback Optimization Run</h2>
+    <div class="content-area">
+        <div class="flow-row"><div class="flow-node flow-primary">Load score + feedback</div><span class="flow-arrow">→</span><div class="flow-node flow-secondary">Fixed specialist roles<small>analyze + propose</small></div><span class="flow-arrow">→</span><div class="flow-node flow-secondary">Sequential hypotheses<small>plan, then edit</small></div><span class="flow-arrow">→</span><div class="flow-node flow-selected">Bounded evaluations<small>parallel jobs</small></div><span class="flow-arrow">→</span><div class="flow-node flow-primary">Compare + synthesize</div></div>
+        <div class="two-column" style="margin-top:30px"><div class="flat-card"><div class="section-kicker">Inside the run</div><p>Roles are fixed by the procedure. Each candidate builds on what was learned before it; hypotheses are not launched as unrelated agents.</p></div><div class="flat-card-sky"><div class="section-kicker">Outside the run</div><p>A validated candidate is evidence for a decision. Champion promotion remains a separate human-authorized action.</p></div></div>
+        <div class="surface-band">A resumable procedure coordinates learning, evaluation, and decision-ready evidence.</div>
+    </div>
+</div>
+
+<!-- Superseded: Hill Climbing -->
+<div class="slide-container legacy-slide" id="legacy-slide12a">
+    <h2 class="slide-title">Constrained Hill-Climbing</h2>
+    <div class="content-area">
+        <div class="diagram-container" style="min-height:390px;position:relative">
+            <div style="position:absolute;left:70px;bottom:70px;width:150px;height:70px" class="flow-node">Current leader<small>measured baseline</small></div>
+            <div style="position:absolute;left:265px;bottom:145px;width:150px;height:70px" class="flow-node flow-primary">Candidate 1<small>non-regressing evidence</small></div>
+            <div style="position:absolute;left:460px;bottom:220px;width:150px;height:70px" class="flow-node flow-primary">Candidate 2<small>new leader</small></div>
+            <div style="position:absolute;left:655px;bottom:115px;width:150px;height:70px" class="flow-node flow-secondary">Candidate 3<small>regression—reject</small></div>
+            <div style="position:absolute;left:850px;bottom:220px;width:150px;height:70px" class="flow-node flow-selected">Best supported<small>prepare for review</small></div>
+            <div style="position:absolute;left:218px;bottom:165px" class="flow-arrow">↗</div><div style="position:absolute;left:413px;bottom:240px" class="flow-arrow">↗</div><div style="position:absolute;left:608px;bottom:205px" class="flow-arrow">↘</div><div style="position:absolute;left:808px;bottom:205px" class="flow-arrow">↗</div>
+            <div style="position:absolute;left:365px;top:30px" class="section-kicker">Improve only when available evidence remains acceptable</div>
+        </div>
+        <div class="surface-band">The loop climbs through supported changes, retains the current leader when a candidate regresses, and can stop with no safe improvement.</div>
+    </div>
+</div>
+
+<!-- Superseded: Evidence Tracks -->
+<div class="slide-container legacy-slide" id="legacy-slide13a">
+    <h2 class="slide-title">Two Frozen Evidence Tracks</h2>
+    <div class="content-area">
+        <div class="two-column">
+            <div class="flat-card-accent" style="min-height:330px"><div class="section-kicker">Track 1</div><div class="metric-callout">Exact recent-feedback items</div><p style="margin-top:18px">The same frozen item IDs test whether a candidate better matches the feedback that triggered the investigation.</p><div class="surface-band">Alignment evidence</div></div>
+            <div class="flat-card-sky" style="min-height:330px"><div class="section-kicker">Track 2</div><div class="metric-callout">Deterministic regression cohort</div><p style="margin-top:18px">A stable comparison set checks whether improvement on recent feedback damages broader behavior.</p><div class="surface-band">Safety evidence</div></div>
+        </div>
+        <div class="surface-band" style="margin-top:18px">Incomplete evidence blocks comparison. If no balanced regression cohort exists, the run may continue feedback-only—but must report that limitation.</div>
+    </div>
+</div>
+
+<!-- Superseded: Run Work Products -->
+<div class="slide-container legacy-slide" id="legacy-slide14a">
+    <h2 class="slide-title">What One Run Produces</h2>
+    <div class="content-area"><div class="work-product-grid">
+        <div class="compact-card"><span class="badge badge-auto">Decision</span><h3 style="margin-top:9px">Executive summary</h3><p>What happened and why it matters.</p></div>
+        <div class="compact-card"><span class="badge badge-tech">Evidence</span><h3 style="margin-top:9px">Lab report</h3><p>Hypotheses, candidates, metrics, and deltas.</p></div>
+        <div class="compact-card"><span class="badge badge-human">Conversation</span><h3 style="margin-top:9px">SME agenda</h3><p>Questions that need policy judgment.</p></div>
+        <div class="compact-card"><span class="badge badge-human">Action</span><h3 style="margin-top:9px">SME worksheet</h3><p>Concrete examples prepared for review.</p></div>
+        <div class="compact-card"><span class="badge badge-auto">Trace</span><h3 style="margin-top:9px">Evidence IDs</h3><p>Frozen cohorts and evaluated items.</p></div>
+        <div class="compact-card"><span class="badge badge-auto">Economics</span><h3 style="margin-top:9px">Cost record</h3><p>Measured work and resource use.</p></div>
+        <div class="compact-card"><span class="badge badge-tech">Pattern</span><h3 style="margin-top:9px">Recurrence signals</h3><p>Repeated failure modes worth fixing.</p></div>
+        <div class="compact-card"><span class="badge badge-human">Policy</span><h3 style="margin-top:9px">Contradiction evidence</h3><p>Conflicting labels, norms, or rubric rules.</p></div>
+    </div><div class="surface-band">The valuable output is a decision-ready package—even when the score should not be changed.</div></div>
+</div>
+
+<!-- Superseded: Outcomes and Owners -->
+<div class="slide-container legacy-slide" id="legacy-slide15a">
+    <h2 class="slide-title">Possible Outcomes and Next Owners</h2>
+    <div class="content-area"><div class="outcome-grid">
+        <div class="compact-card"><span class="badge badge-human">Human decision</span><h3 style="margin-top:7px">Safe candidate</h3><p>Review evidence; promotion is separate.</p></div>
+        <div class="compact-card"><span class="badge badge-auto">Automated</span><h3 style="margin-top:7px">Leader retained</h3><p>No candidate safely improves the available evidence tracks.</p></div>
+        <div class="compact-card"><span class="badge badge-auto">Automated</span><h3 style="margin-top:7px">Already aligned</h3><p>Converged; no useful change remains.</p></div>
+        <div class="compact-card"><span class="badge badge-auto">Automated</span><h3 style="margin-top:7px">No qualifying feedback</h3><p>Skip until enough evidence arrives.</p></div>
+        <div class="compact-card"><span class="badge badge-tech">Technical</span><h3 style="margin-top:7px">Mechanical defect</h3><p>Route to repair, then re-evaluate.</p></div>
+        <div class="compact-card"><span class="badge badge-tech">Technical</span><h3 style="margin-top:7px">Evidence incomplete</h3><p>Block comparison or report data limits.</p></div>
+        <div class="compact-card"><span class="badge badge-human">Human action</span><h3 style="margin-top:7px">Feedback conflict</h3><p>Resolve suspected mislabels or norms.</p></div>
+        <div class="compact-card"><span class="badge badge-human">Human action</span><h3 style="margin-top:7px">Policy question</h3><p>Clarify an uncovered rubric decision.</p></div>
+        <div class="compact-card"><span class="badge badge-tech">Run state</span><h3 style="margin-top:7px">Stopped or failed</h3><p>Inspect the failure; resume or retry when recoverable.</p></div>
+    </div></div>
+</div>
+
+<!-- Superseded: Priority and Readiness -->
+<div class="slide-container legacy-slide" id="legacy-slide16a">
+    <h2 class="slide-title">Priority and Readiness Are Different</h2>
+    <div class="content-area">
+        <div class="two-column">
+            <div class="flat-card-secondary" style="min-height:330px"><div class="section-kicker">Priority</div><div class="metric-callout">Where is reviewed-error opportunity strongest?</div><p style="margin-top:20px">Rank reviewed-error opportunity and evidence coverage so bounded optimization capacity goes to the best-supported scores.</p><div class="surface-band">High priority does not guarantee a safe launch.</div></div>
+            <div class="flat-card-accent" style="min-height:330px"><div class="section-kicker">Readiness</div><div class="metric-callout">Is the evidence sufficient to act now?</div><p style="margin-top:20px">Check qualifying feedback, recent changes, mechanical health, evaluation prerequisites, and policy ambiguity.</p><div class="surface-band">Ready work may launch automatically or await approval.</div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Superseded: Portfolio Scale -->
+<div class="slide-container legacy-slide" id="legacy-slide17a">
+    <h2 class="slide-title">Optimization at Portfolio Scale</h2>
+    <div class="content-area">
+        <div class="flow-row"><div class="flow-node flow-primary" style="width:150px">Rank<small>survey opportunity</small></div><span class="flow-arrow">→</span><div class="flow-node flow-secondary" style="width:150px">Assess + diagnose<small>priority and readiness</small></div><span class="flow-arrow">→</span><div class="flow-node flow-selected" style="width:165px">Launch gate<small>automatic or approved</small></div><span class="flow-arrow">→</span><div style="display:grid;gap:8px;width:180px"><div class="flow-node flow-primary" style="min-height:52px">Optimizer A</div><div class="flow-node flow-primary" style="min-height:52px">Optimizer B</div><div class="flow-node flow-primary" style="min-height:52px">Optimizer C</div></div><span class="flow-arrow">→</span><div class="flow-node flow-selected" style="width:160px">Await + resume<small>collect child results</small></div><span class="flow-arrow">→</span><div class="flow-node" style="width:150px">Terminal review<small>resolve actions</small></div></div>
+        <div class="surface-band" style="margin-top:30px">One portfolio run coordinates up to five bounded optimizer procedures; “automatic” means eligible launch, never automatic promotion.</div>
+    </div>
+</div>
+
+<!-- Superseded: Living Report -->
+<div class="slide-container legacy-slide" id="legacy-slide18a">
+    <h2 class="slide-title">The Living Portfolio Report</h2>
+    <div class="content-area">
+        <div class="two-column" style="grid-template-columns:1.15fr .85fr">
+            <div class="flat-card-accent" style="min-height:390px"><div class="section-kicker">Continuously updated work product</div><div class="metric-callout">One place to see what changed, what is blocked, and what people should do next.</div><div class="work-product-grid" style="grid-template-columns:1fr 1fr;margin-top:28px"><div class="flow-node">Ranked opportunities</div><div class="flow-node">Run status + evidence</div><div class="flow-node">Findings + candidates</div><div class="flow-node">Open human actions</div></div></div>
+            <div style="display:grid;gap:12px"><div class="compact-card"><span class="badge badge-auto">Workflow</span><h3 style="margin-top:8px">Waiting for children</h3><p>Optimizer procedures are still running.</p></div><div class="compact-card"><span class="badge badge-human">Decision</span><h3 style="margin-top:8px">Unresolved actions</h3><p>Policy or evidence needs human attention.</p></div><div class="compact-card"><span class="badge badge-tech">Recovery</span><h3 style="margin-top:8px">Retryable publication</h3><p>The report can resume after a transient failure.</p></div><div class="compact-card"><span class="badge badge-auto">Terminal</span><h3 style="margin-top:8px">Complete, open actions, incomplete, or blocked</h3><p>The final state remains explicit and auditable.</p></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Superseded: Gated Alignment -->
+<div class="slide-container legacy-slide" id="legacy-slide19a">
+    <h2 class="slide-title">Continuous Alignment, Gated Promotion</h2>
+    <div class="content-area">
+        <div class="flow-row"><div class="flow-node">New feedback<small>human labels + explanations</small></div><span class="flow-arrow">→</span><div class="flow-node flow-primary">Portfolio survey<small>rank + assess</small></div><span class="flow-arrow">→</span><div class="flow-node flow-secondary">Optimizer loops<small>diagnose + learn</small></div><span class="flow-arrow">→</span><div class="flow-node flow-selected">Living report<small>evidence + actions</small></div><span class="flow-arrow">→</span><div class="flow-node">Human authority<small>labels, policy, promotion</small></div></div>
+        <div class="flow-row" style="margin-top:35px"><span class="flow-arrow" style="transform:rotate(180deg)">↪</span><div class="surface-band" style="width:78%;margin:0">After a human-approved deployment, future feedback supplies evidence for the next cycle; blocked work and open questions remain visible.</div></div>
+        <div class="two-column" style="margin-top:28px"><div class="flat-card-accent"><h3 style="font-size:18px">Automation multiplies investigation capacity</h3><p style="margin-top:8px">It repeats disciplined evidence gathering and bounded evaluation across many scores.</p></div><div class="flat-card-secondary"><h3 style="font-size:18px">People keep the authority that matters</h3><p style="margin-top:8px">Humans resolve labels and policy, judge tradeoffs, and decide whether a candidate should be promoted.</p></div></div>
+    </div>
+</div>
+
+<!-- Superseded: Three Ways to Work with AI -->
+<div class="slide-container legacy-slide" id="legacy-slide5">
+    <h2 class="slide-title">Three Ways to Work with AI</h2>
+    <div class="content-area">
+        <div class="tiled-3">
+            <div class="mode-card mode-card-primary">
+                <h3>Interactive</h3>
+                <p>Person and assistant work turn by turn.</p>
+                <svg class="mode-diagram" viewBox="0 0 250 150">
+                    <defs><marker id="s5a" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="var(--primary)"/></marker></defs>
+                    <circle cx="55" cy="58" r="10" class="human-head"/><rect x="42" y="70" width="26" height="28" rx="10" class="human-body"/>
+                    <rect x="150" y="50" width="72" height="52" rx="8" class="node-assistant"/>
+                    <text x="186" y="80" text-anchor="middle" class="svg-label">Assistant</text>
+                    <path d="M75 64 L145 64" class="connector-primary" marker-end="url(#s5a)"/>
+                    <path d="M145 90 L75 90" class="connector-primary" marker-end="url(#s5a)"/>
+                    <text x="55" y="120" text-anchor="middle" class="svg-small">Person</text>
+                </svg>
+                <div class="attention-row"><span class="attention-label">Human time</span><div class="attention-track"><span class="attention-span" style="width: calc(100% - 4px);"></span></div></div>
+                <p style="margin-top: 8px;">Continuous steering</p>
+            </div>
+            <div class="mode-card mode-card-secondary">
+                <h3>Delegated</h3>
+                <p>Person sets an outcome; the lead agent dispatches work.</p>
+                <svg class="mode-diagram" viewBox="0 0 250 150">
+                    <defs><marker id="s5b" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="var(--secondary)"/></marker></defs>
+                    <circle cx="28" cy="58" r="8" class="human-head"/><rect x="18" y="68" width="20" height="24" rx="8" class="human-body"/>
+                    <rect x="78" y="48" width="72" height="48" rx="8" class="node-assistant"/><text x="114" y="76" text-anchor="middle" class="svg-label">Lead</text>
+                    <rect x="184" y="20" width="54" height="28" rx="7" class="node-worker"/><rect x="184" y="58" width="54" height="28" rx="7" class="node-worker"/><rect x="184" y="96" width="54" height="28" rx="7" class="node-worker"/>
+                    <text x="211" y="38" text-anchor="middle" class="svg-tiny">Worker</text><text x="211" y="76" text-anchor="middle" class="svg-tiny">Worker</text><text x="211" y="114" text-anchor="middle" class="svg-tiny">Worker</text>
+                    <path d="M42 72 L73 72" class="connector-secondary" marker-end="url(#s5b)"/><path d="M150 72 L179 34" class="connector-secondary" marker-end="url(#s5b)"/><path d="M150 72 L179 72" class="connector-secondary" marker-end="url(#s5b)"/><path d="M150 72 L179 110" class="connector-secondary" marker-end="url(#s5b)"/>
+                </svg>
+                <div class="attention-row"><span class="attention-label">Human time</span><div class="attention-track"><span class="attention-dot" style="left: 2px;"></span><span class="attention-dot" style="right: 2px;"></span></div></div>
+                <p style="margin-top: 8px;">Brief + review</p>
+            </div>
+            <div class="mode-card mode-card-selected">
+                <h3>Orchestrated</h3>
+                <p>People enter a durable graph only at defined gates.</p>
+                <svg class="mode-diagram" viewBox="0 0 250 150">
+                    <defs><marker id="s5c" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="var(--selected)"/></marker></defs>
+                    <circle cx="28" cy="28" r="7" class="human-head"/><rect x="20" y="37" width="16" height="18" rx="6" class="human-body"/>
+                    <circle cx="125" cy="28" r="7" class="human-head"/><rect x="117" y="37" width="16" height="18" rx="6" class="human-body"/>
+                    <circle cx="222" cy="28" r="7" class="human-head"/><rect x="214" y="37" width="16" height="18" rx="6" class="human-body"/>
+                    <rect x="12" y="88" width="56" height="34" rx="7" class="node-workflow"/><rect x="97" y="88" width="56" height="34" rx="7" class="node-workflow"/><rect x="182" y="88" width="56" height="34" rx="7" class="node-workflow"/>
+                    <text x="40" y="109" text-anchor="middle" class="svg-tiny">Input</text><text x="125" y="109" text-anchor="middle" class="svg-tiny">Run</text><text x="210" y="109" text-anchor="middle" class="svg-tiny">Review</text>
+                    <path d="M68 105 L92 105" class="connector-selected" marker-end="url(#s5c)"/><path d="M153 105 L177 105" class="connector-selected" marker-end="url(#s5c)"/><path d="M28 58 L32 83" class="connector-selected"/><path d="M125 58 L125 83" class="connector-selected"/><path d="M222 58 L214 83" class="connector-selected"/>
+                </svg>
+                <div class="attention-row"><span class="attention-label">Human time</span><div class="attention-track"><span class="attention-dot" style="left: 2px;"></span><span class="attention-dot" style="left: 48%;"></span><span class="attention-dot" style="right: 2px;"></span></div></div>
+                <p style="margin-top: 8px;">Defined checkpoints</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Superseded: Shared AI Work Session -->
+<div class="slide-container legacy-slide" id="legacy-slide6">
+    <h2 class="slide-title">A Shared AI Work Session</h2>
+    <div class="content-area">
+        <div class="diagram-container">
+            <svg viewBox="0 0 1040 390" style="width: 100%; height: auto;">
+                <defs><marker id="s6a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--primary)"/></marker></defs>
+                <rect x="15" y="35" width="175" height="310" rx="8" class="node-human"/>
+                <text x="102" y="62" text-anchor="middle" class="svg-lane-label">PEOPLE</text>
+                <circle cx="55" cy="105" r="10" class="human-head"/><rect x="42" y="118" width="26" height="28" rx="10" class="human-body"/><text x="105" y="128" class="svg-label">Product</text>
+                <circle cx="55" cy="195" r="10" class="human-head"/><rect x="42" y="208" width="26" height="28" rx="10" class="human-body"/><text x="105" y="218" class="svg-label">Engineer</text>
+                <circle cx="55" cy="285" r="10" class="human-head"/><rect x="42" y="298" width="26" height="28" rx="10" class="human-body"/><text x="105" y="308" class="svg-label">Reviewer</text>
+
+                <rect x="235" y="35" width="430" height="310" rx="8" class="node-white"/>
+                <text x="450" y="62" text-anchor="middle" class="svg-lane-label">SHARED ATTRIBUTED SESSION</text>
+                <rect x="270" y="88" width="250" height="42" rx="8" class="node-human"/><text x="287" y="113" class="svg-small">P</text><text x="315" y="113" class="svg-label">Set the outcome</text>
+                <rect x="380" y="145" width="250" height="42" rx="8" class="node-assistant"/><text x="397" y="170" class="svg-small">AI</text><text x="430" y="170" class="svg-label">Proposes a plan</text>
+                <rect x="270" y="202" width="250" height="42" rx="8" class="node-human"/><text x="287" y="227" class="svg-small">E</text><text x="315" y="227" class="svg-label">Adds constraints</text>
+                <rect x="380" y="259" width="250" height="42" rx="8" class="node-assistant"/><text x="397" y="284" class="svg-small">AI</text><text x="430" y="284" class="svg-label">Acts and reports</text>
+                <path d="M190 110 L265 110" class="connector-primary" marker-end="url(#s6a)"/><path d="M190 210 L265 222" class="connector-primary" marker-end="url(#s6a)"/><path d="M190 300 L265 280" class="connector-primary" marker-end="url(#s6a)"/>
+
+                <rect x="710" y="35" width="315" height="310" rx="8" class="node-assistant"/>
+                <text x="867" y="62" text-anchor="middle" class="svg-lane-label">ASSISTANT + PLEXUS</text>
+                <rect x="755" y="92" width="225" height="58" rx="8" class="node-white"/><text x="867" y="119" text-anchor="middle" class="svg-label">Shared context</text><text x="867" y="137" text-anchor="middle" class="svg-small">one visible work history</text>
+                <rect x="755" y="175" width="102" height="48" rx="8" class="node-white"/><text x="806" y="204" text-anchor="middle" class="svg-small">Read</text>
+                <rect x="878" y="175" width="102" height="48" rx="8" class="node-white"/><text x="929" y="204" text-anchor="middle" class="svg-small">Act</text>
+                <rect x="755" y="248" width="102" height="48" rx="8" class="node-white"/><text x="806" y="277" text-anchor="middle" class="svg-small">Dispatch</text>
+                <rect x="878" y="248" width="102" height="48" rx="8" class="node-white"/><text x="929" y="277" text-anchor="middle" class="svg-small">Report</text>
+                <path d="M665 190 L705 190" class="connector-primary" marker-end="url(#s6a)"/>
+            </svg>
+        </div>
+        <div class="two-column" style="gap: 14px; margin-top: 14px;">
+            <div class="surface-band" style="margin: 0;"><i class="fa-solid fa-laptop-code" style="color: var(--primary-strong);"></i>&nbsp;&nbsp;Team-enabled coding IDE</div>
+            <div class="surface-band" style="margin: 0;"><i class="fa-solid fa-terminal" style="color: var(--secondary);"></i>&nbsp;&nbsp;Plexus Web Console</div>
+        </div>
+    </div>
+</div>
+
+<!-- Superseded: AI as a Delegating Manager -->
+<div class="slide-container legacy-slide" id="legacy-slide7">
+    <h2 class="slide-title">AI as a Delegating Manager</h2>
+    <div class="content-area">
+        <div class="diagram-container">
+            <svg viewBox="0 0 1060 360" style="width: 100%; height: auto;">
+                <defs><marker id="s7a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--secondary)"/></marker></defs>
+                <rect x="20" y="70" width="135" height="210" rx="8" class="node-human"/>
+                <circle cx="87" cy="125" r="13" class="human-head"/><rect x="70" y="142" width="34" height="38" rx="13" class="human-body"/>
+                <text x="87" y="215" text-anchor="middle" class="svg-label">Define outcome</text><text x="87" y="236" text-anchor="middle" class="svg-small">Review result</text>
+
+                <rect x="200" y="105" width="190" height="140" rx="8" class="node-assistant"/>
+                <text x="295" y="145" text-anchor="middle" class="svg-lane-label">LEAD ASSISTANT</text>
+                <text x="295" y="176" text-anchor="middle" class="svg-label">Plan + delegate</text><text x="295" y="200" text-anchor="middle" class="svg-small">maintains context</text>
+                <path d="M155 175 L195 175" class="connector-secondary" marker-end="url(#s7a)"/>
+
+                <rect x="445" y="35" width="165" height="66" rx="8" class="node-worker"/><text x="527" y="66" text-anchor="middle" class="svg-label">Research</text><text x="527" y="84" text-anchor="middle" class="svg-small">gather evidence</text>
+                <rect x="445" y="120" width="165" height="66" rx="8" class="node-worker"/><text x="527" y="151" text-anchor="middle" class="svg-label">Diagnose</text><text x="527" y="169" text-anchor="middle" class="svg-small">find root cause</text>
+                <rect x="445" y="205" width="165" height="66" rx="8" class="node-worker"/><text x="527" y="236" text-anchor="middle" class="svg-label">Implement</text><text x="527" y="254" text-anchor="middle" class="svg-small">make candidate</text>
+                <rect x="445" y="290" width="165" height="50" rx="8" class="node-worker"/><text x="527" y="320" text-anchor="middle" class="svg-label">Evaluate</text>
+                <path d="M390 175 L440 68" class="connector-secondary" marker-end="url(#s7a)"/><path d="M390 175 L440 153" class="connector-secondary" marker-end="url(#s7a)"/><path d="M390 175 L440 238" class="connector-secondary" marker-end="url(#s7a)"/><path d="M390 175 L440 315" class="connector-secondary" marker-end="url(#s7a)"/>
+
+                <rect x="670" y="105" width="185" height="140" rx="8" class="node-assistant"/>
+                <text x="762" y="150" text-anchor="middle" class="svg-lane-label">LEAD ASSISTANT</text><text x="762" y="181" text-anchor="middle" class="svg-label">Synthesize</text><text x="762" y="204" text-anchor="middle" class="svg-small">resolve conflicts</text>
+                <path d="M615 68 L665 150" class="connector-secondary" marker-end="url(#s7a)"/><path d="M615 153 L665 165" class="connector-secondary" marker-end="url(#s7a)"/><path d="M615 238 L665 190" class="connector-secondary" marker-end="url(#s7a)"/><path d="M615 315 L665 210" class="connector-secondary" marker-end="url(#s7a)"/>
+
+                <rect x="900" y="105" width="140" height="140" rx="8" class="node-human"/>
+                <circle cx="970" cy="140" r="10" class="human-head"/><rect x="957" y="153" width="26" height="28" rx="10" class="human-body"/><text x="970" y="210" text-anchor="middle" class="svg-label">Review</text><text x="970" y="228" text-anchor="middle" class="svg-small">decide next step</text>
+                <path d="M855 175 L895 175" class="connector-secondary" marker-end="url(#s7a)"/>
+            </svg>
+        </div>
+        <div class="attention-row" style="margin-top: 16px;"><span class="attention-label">Human time</span><div class="attention-track"><span class="attention-dot" style="left: 2px;"></span><span class="attention-dot" style="right: 2px;"></span></div></div>
+    </div>
+</div>
+
+<!-- Superseded: Repeatable Workflow Graphs -->
+<div class="slide-container legacy-slide" id="legacy-slide8">
+    <h2 class="slide-title">Repeatable Workflow Graphs</h2>
+    <div class="content-area">
+        <div class="diagram-container" style="padding: 14px;">
+            <svg viewBox="0 0 1080 430" style="width: 100%; height: auto;">
+                <defs><marker id="s8a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--selected)"/></marker></defs>
+                <rect x="100" y="10" width="960" height="78" rx="8" class="lane-neutral"/><text x="20" y="50" class="svg-lane-label">PEOPLE</text>
+                <rect x="100" y="98" width="960" height="92" rx="8" class="lane-assistant"/><text x="20" y="145" class="svg-lane-label">ORCHESTRATOR</text>
+                <rect x="100" y="200" width="960" height="100" rx="8" class="lane-worker"/><text x="20" y="250" class="svg-lane-label">WORKERS</text>
+                <rect x="100" y="310" width="960" height="100" rx="8" class="lane-workflow"/><text x="20" y="360" class="svg-lane-label">PLEXUS</text>
+
+                <circle cx="180" cy="34" r="8" class="human-head"/><rect x="170" y="45" width="20" height="22" rx="8" class="human-body"/><text x="180" y="80" text-anchor="middle" class="svg-small">Input</text>
+                <circle cx="600" cy="34" r="8" class="human-head"/><rect x="590" y="45" width="20" height="22" rx="8" class="human-body"/><text x="600" y="80" text-anchor="middle" class="svg-small">Approve</text>
+                <circle cx="980" cy="34" r="8" class="human-head"/><rect x="970" y="45" width="20" height="22" rx="8" class="human-body"/><text x="980" y="80" text-anchor="middle" class="svg-small">Review</text>
+
+                <rect x="135" y="122" width="120" height="46" rx="8" class="node-white"/><text x="195" y="150" text-anchor="middle" class="svg-label">Intake</text>
+                <rect x="315" y="122" width="120" height="46" rx="8" class="node-white"/><text x="375" y="150" text-anchor="middle" class="svg-label">Plan</text>
+                <rect x="535" y="122" width="130" height="46" rx="8" class="node-white"/><text x="600" y="150" text-anchor="middle" class="svg-label">Gate</text>
+                <rect x="735" y="122" width="120" height="46" rx="8" class="node-white"/><text x="795" y="150" text-anchor="middle" class="svg-label">Compare</text>
+                <rect x="915" y="122" width="120" height="46" rx="8" class="node-white"/><text x="975" y="150" text-anchor="middle" class="svg-label">Finish</text>
+                <path d="M255 145 L310 145" class="connector-selected" marker-end="url(#s8a)"/><path d="M435 145 L530 145" class="connector-selected" marker-end="url(#s8a)"/><path d="M665 145 L730 145" class="connector-selected" marker-end="url(#s8a)"/><path d="M855 145 L910 145" class="connector-selected" marker-end="url(#s8a)"/>
+
+                <rect x="300" y="225" width="150" height="50" rx="8" class="node-white"/><text x="375" y="255" text-anchor="middle" class="svg-label">Worker A</text>
+                <rect x="525" y="225" width="150" height="50" rx="8" class="node-white"/><text x="600" y="255" text-anchor="middle" class="svg-label">Worker B</text>
+                <rect x="750" y="225" width="150" height="50" rx="8" class="node-white"/><text x="825" y="255" text-anchor="middle" class="svg-label">Worker C</text>
+                <path d="M375 168 L375 220" class="connector-secondary" marker-end="url(#s8a)"/><path d="M435 250 L520 250" class="connector-secondary" marker-end="url(#s8a)"/><path d="M675 250 L745 250" class="connector-secondary" marker-end="url(#s8a)"/><path d="M825 220 L795 173" class="connector-secondary" marker-end="url(#s8a)"/>
+
+                <rect x="250" y="335" width="160" height="52" rx="8" class="node-white"/><text x="330" y="357" text-anchor="middle" class="svg-label">Read evidence</text><text x="330" y="376" text-anchor="middle" class="svg-small">tools + data</text>
+                <rect x="500" y="335" width="160" height="52" rx="8" class="node-white"/><text x="580" y="357" text-anchor="middle" class="svg-label">Run work</text><text x="580" y="376" text-anchor="middle" class="svg-small">async handles</text>
+                <rect x="750" y="335" width="160" height="52" rx="8" class="node-white"/><text x="830" y="357" text-anchor="middle" class="svg-label">Store state</text><text x="830" y="376" text-anchor="middle" class="svg-small">resume safely</text>
+                <path d="M375 275 L330 330" class="connector"/><path d="M600 275 L580 330" class="connector"/><path d="M825 275 L830 330" class="connector"/>
+
+                <path d="M180 88 L195 117" class="connector-selected"/><path d="M600 88 L600 117" class="connector-selected"/><path d="M980 88 L975 117" class="connector-selected"/>
+                <path d="M795 122 C795 95 375 95 375 117" class="connector-selected connector-dashed" marker-end="url(#s8a)"/>
+            </svg>
+        </div>
+        <div class="surface-band">Defined once. Resumable between human checkpoints. Repeatable across many runs.</div>
+    </div>
+</div>
+
+<!-- Superseded: Candidate Ranking -->
+<div class="slide-container legacy-slide" id="legacy-slide9">
+    <h2 class="slide-title">Automated Candidate Prioritization</h2>
+    <div class="content-area">
+        <div class="two-column" style="align-items: center;">
+            <div class="flat-card-secondary">
+                <h3 style="font-size: 20px; color: var(--secondary); margin-bottom: 15px;">Evidence-Priority Model</h3>
+                <p style="font-size: 14px; margin-bottom: 15px;">Focuses optimization effort where human feedback capital is spent and disagreement is high.</p>
+                <div style="background-color: #ffffff; padding: 16px; border-radius: 8px; text-align: center;">
+                    <math>
+                        <mrow>
+                            <msub><mi>Priority</mi><mi>i</mi></msub>
+                            <mo>=</mo>
+                            <msub><mi>N</mi><mi>i</mi></msub>
+                            <mo>×</mo>
+                            <msub><mi>D</mi><mi>i</mi></msub>
+                            <mo>=</mo>
+                            <msub><mi>ReviewedDisagreements</mi><mi>i</mi></msub>
+                        </mrow>
+                    </math>
+                </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div class="flat-card" style="padding: 16px 20px;">
+                    <strong style="color: var(--text); font-size: 15px;">Feedback Volume (N<sub>i</sub>)</strong>
+                    <p style="font-size: 13px; margin: 0;">Valid reviewed items excluding incomplete label pairs.</p>
+                </div>
+                <div class="flat-card" style="padding: 16px 20px;">
+                    <strong style="color: var(--text); font-size: 15px;">Disagreement Rate (D<sub>i</sub>)</strong>
+                    <p style="font-size: 13px; margin: 0;">Ratio of human/agent disagreements within the frozen window.</p>
+                </div>
+                <div class="flat-card" style="padding: 16px 20px;">
+                    <strong style="color: var(--text); font-size: 15px;">Tie-Breaking Logic</strong>
+                    <p style="font-size: 13px; margin: 0;">Ranked by raw volume (N<sub>i</sub>), then deterministic scorecard ID.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Superseded: Diagnostic Policy Gates -->
+<div class="slide-container legacy-slide" id="legacy-slide10">
+    <h2 class="slide-title">Diagnostic Policy Gates</h2>
+    <div class="content-area">
+        <div class="grid-2x2">
+            <div class="flat-card">
+                <h3 style="font-size: 18px; color: var(--text); margin-bottom: 6px;">Missing Champions</h3>
+                <p style="font-size: 14px;">Identifies scorecards lacking an active champion model before optimization begins.</p>
+            </div>
+            <div class="flat-card">
+                <h3 style="font-size: 18px; color: var(--text); margin-bottom: 6px;">Disabled Scorecards</h3>
+                <p style="font-size: 14px;">Flags inactive metrics requiring explicit administrative reactivation.</p>
+            </div>
+            <div class="flat-card">
+                <h3 style="font-size: 18px; color: var(--text); margin-bottom: 6px;">Incomplete Evidence</h3>
+                <p style="font-size: 14px;">Alerts teams when human feedback lacks necessary explanations or label context.</p>
+            </div>
+            <div class="flat-card">
+                <h3 style="font-size: 18px; color: var(--text); margin-bottom: 6px;">Recent Changes</h3>
+                <p style="font-size: 14px;">Enforces stability windows to allow newly deployed scorecards to gather evidence.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Superseded: Optimization at Portfolio Scale -->
+<div class="slide-container legacy-slide" id="legacy-slide11">
+    <h2 class="slide-title">Optimization at Portfolio Scale</h2>
+    <div class="content-area">
+        <div class="diagram-container">
+            <svg viewBox="0 0 1060 390" style="width: 100%; height: auto;">
+                <defs><marker id="s11a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--selected)"/></marker></defs>
+                <rect x="20" y="125" width="145" height="120" rx="8" class="node-assistant"/><text x="92" y="165" text-anchor="middle" class="svg-lane-label">SURVEY</text><text x="92" y="192" text-anchor="middle" class="svg-label">Rank candidates</text><text x="92" y="214" text-anchor="middle" class="svg-small">apply gates</text>
+
+                <rect x="220" y="45" width="135" height="65" rx="8" class="node-workflow"/><text x="287" y="83" text-anchor="middle" class="svg-label">Score A</text>
+                <rect x="220" y="150" width="135" height="65" rx="8" class="node-workflow"/><text x="287" y="188" text-anchor="middle" class="svg-label">Score B</text>
+                <rect x="220" y="255" width="135" height="65" rx="8" class="node-workflow"/><text x="287" y="293" text-anchor="middle" class="svg-label">Score C</text>
+                <path d="M165 185 L215 77" class="connector-selected" marker-end="url(#s11a)"/><path d="M165 185 L215 182" class="connector-selected" marker-end="url(#s11a)"/><path d="M165 185 L215 287" class="connector-selected" marker-end="url(#s11a)"/>
+
+                <rect x="405" y="45" width="155" height="65" rx="8" class="node-assistant"/><text x="482" y="74" text-anchor="middle" class="svg-label">Optimizer A</text><text x="482" y="94" text-anchor="middle" class="svg-small">durable procedure</text>
+                <rect x="405" y="150" width="155" height="65" rx="8" class="node-assistant"/><text x="482" y="179" text-anchor="middle" class="svg-label">Optimizer B</text><text x="482" y="199" text-anchor="middle" class="svg-small">durable procedure</text>
+                <rect x="405" y="255" width="155" height="65" rx="8" class="node-assistant"/><text x="482" y="284" text-anchor="middle" class="svg-label">Optimizer C</text><text x="482" y="304" text-anchor="middle" class="svg-small">durable procedure</text>
+                <path d="M355 77 L400 77" class="connector-primary" marker-end="url(#s11a)"/><path d="M355 182 L400 182" class="connector-primary" marker-end="url(#s11a)"/><path d="M355 287 L400 287" class="connector-primary" marker-end="url(#s11a)"/>
+
+                <rect x="620" y="45" width="185" height="65" rx="8" class="node-worker"/><text x="712" y="72" text-anchor="middle" class="svg-label">Agents + evaluations</text><text x="712" y="93" text-anchor="middle" class="svg-small">plan · test · compare</text>
+                <rect x="620" y="150" width="185" height="65" rx="8" class="node-worker"/><text x="712" y="177" text-anchor="middle" class="svg-label">Agents + evaluations</text><text x="712" y="198" text-anchor="middle" class="svg-small">plan · test · compare</text>
+                <rect x="620" y="255" width="185" height="65" rx="8" class="node-worker"/><text x="712" y="282" text-anchor="middle" class="svg-label">Agents + evaluations</text><text x="712" y="303" text-anchor="middle" class="svg-small">plan · test · compare</text>
+                <path d="M560 77 L615 77" class="connector-secondary" marker-end="url(#s11a)"/><path d="M560 182 L615 182" class="connector-secondary" marker-end="url(#s11a)"/><path d="M560 287 L615 287" class="connector-secondary" marker-end="url(#s11a)"/>
+
+                <rect x="860" y="110" width="175" height="150" rx="8" class="node-workflow"/><text x="947" y="146" text-anchor="middle" class="svg-lane-label">PORTFOLIO REPORT</text><text x="947" y="178" text-anchor="middle" class="svg-label">Results</text><text x="947" y="201" text-anchor="middle" class="svg-small">repairs · questions</text><text x="947" y="221" text-anchor="middle" class="svg-small">candidates · next steps</text>
+                <path d="M805 77 L855 150" class="connector-selected" marker-end="url(#s11a)"/><path d="M805 182 L855 185" class="connector-selected" marker-end="url(#s11a)"/><path d="M805 287 L855 220" class="connector-selected" marker-end="url(#s11a)"/>
+                <circle cx="947" cy="307" r="9" class="human-head"/><rect x="936" y="319" width="22" height="25" rx="9" class="human-body"/><text x="947" y="370" text-anchor="middle" class="svg-small">Human review</text><path d="M947 260 L947 295" class="connector-selected"/>
+            </svg>
+        </div>
+        <div class="surface-band">One survey can coordinate many bounded optimization procedures without losing human oversight.</div>
+    </div>
+</div>
+
+<!-- Superseded: Continuous Alignment Loop -->
+<div class="slide-container legacy-slide" id="legacy-slide12">
+    <h2 class="slide-title">Continuous Alignment Loop</h2>
+    <div class="content-area">
+        <div class="tiled-3">
+            <div class="flat-card">
+                <div style="font-size: 28px; color: var(--primary); margin-bottom: 12px;"><i class="fa-solid fa-user-check"></i></div>
+                <h3 style="font-size: 18px; margin-bottom: 8px;">1. Human Steering</h3>
+                <p style="font-size: 14px;">Reviewers correct classification labels and provide qualitative explanations for edge cases.</p>
+            </div>
+            <div class="flat-card-secondary">
+                <div style="font-size: 28px; color: var(--secondary); margin-bottom: 12px;"><i class="fa-solid fa-brain"></i></div>
+                <h3 style="font-size: 18px; color: var(--secondary); margin-bottom: 8px;">2. Root-Cause Analysis</h3>
+                <p style="font-size: 14px;">Meta-engine isolates contradictions between written guidelines, scorecard code, and feedback.</p>
+            </div>
+            <div class="flat-card-sky">
+                <div style="font-size: 28px; color: var(--primary); margin-bottom: 12px;"><i class="fa-solid fa-sliders"></i></div>
+                <h3 style="font-size: 18px; margin-bottom: 8px;">3. Autonomous Tuning</h3>
+                <p style="font-size: 14px;">Generates updated scorecard DSL definitions to continuously improve score alignment.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Superseded: Decide What Kind of Problem This Is -->
+<div class="slide-container legacy-slide" id="legacy-slide13">
+    <h2 class="slide-title">Decide What Kind of Problem This Is</h2>
+    <div class="content-area">
+        <div class="diagram-container">
+            <svg viewBox="0 0 1060 390" style="width: 100%; height: auto;">
+                <defs><marker id="s13a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--secondary)"/></marker></defs>
+                <text x="100" y="28" text-anchor="middle" class="svg-lane-label">EVIDENCE</text>
+                <rect x="20" y="50" width="160" height="52" rx="8" class="node-human"/><text x="100" y="81" text-anchor="middle" class="svg-label">Feedback</text>
+                <rect x="20" y="118" width="160" height="52" rx="8" class="node-human"/><text x="100" y="149" text-anchor="middle" class="svg-label">Rubric</text>
+                <rect x="20" y="186" width="160" height="52" rx="8" class="node-human"/><text x="100" y="217" text-anchor="middle" class="svg-label">Score code</text>
+                <rect x="20" y="254" width="160" height="52" rx="8" class="node-human"/><text x="100" y="285" text-anchor="middle" class="svg-label">Prior results</text>
+
+                <rect x="270" y="100" width="260" height="160" rx="8" class="node-worker"/><text x="400" y="142" text-anchor="middle" class="svg-lane-label">ROOT-CAUSE ANALYSIS</text><text x="400" y="177" text-anchor="middle" class="svg-label">Compare evidence</text><text x="400" y="202" text-anchor="middle" class="svg-small">find contradictions, gaps,</text><text x="400" y="222" text-anchor="middle" class="svg-small">and mechanical failures</text>
+                <path d="M180 76 L265 140" class="connector-secondary" marker-end="url(#s13a)"/><path d="M180 144 L265 160" class="connector-secondary" marker-end="url(#s13a)"/><path d="M180 212 L265 200" class="connector-secondary" marker-end="url(#s13a)"/><path d="M180 280 L265 220" class="connector-secondary" marker-end="url(#s13a)"/>
+
+                <text x="790" y="28" text-anchor="middle" class="svg-lane-label">ACTION ROUTES</text>
+                <rect x="610" y="50" width="190" height="82" rx="8" class="node-human"/><text x="705" y="82" text-anchor="middle" class="svg-label">Mechanical defect</text><text x="705" y="106" text-anchor="middle" class="svg-small">repair the score</text>
+                <rect x="825" y="50" width="190" height="82" rx="8" class="node-human"/><text x="920" y="82" text-anchor="middle" class="svg-label">Feedback conflict</text><text x="920" y="106" text-anchor="middle" class="svg-small">curate the labels</text>
+                <rect x="610" y="170" width="190" height="100" rx="8" class="node-assistant"/><text x="705" y="202" text-anchor="middle" class="svg-label">Rubric gap</text><text x="705" y="226" text-anchor="middle" class="svg-small">raise a stakeholder question</text><circle cx="705" cy="248" r="7" class="human-head"/>
+                <rect x="825" y="170" width="190" height="100" rx="8" class="node-workflow"/><text x="920" y="202" text-anchor="middle" class="svg-label">Supported mismatch</text><text x="920" y="226" text-anchor="middle" class="svg-small">explore score changes</text><text x="920" y="248" text-anchor="middle" class="svg-small">under evaluation</text>
+                <path d="M530 180 L605 91" class="connector-secondary" marker-end="url(#s13a)"/><path d="M530 180 L820 91" class="connector-secondary" marker-end="url(#s13a)"/><path d="M530 190 L605 220" class="connector-secondary" marker-end="url(#s13a)"/><path d="M530 190 L820 220" class="connector-selected" marker-end="url(#s13a)"/>
+                <rect x="240" y="320" width="580" height="48" rx="8" class="node-white"/><text x="530" y="350" text-anchor="middle" class="svg-label">Not every disagreement should trigger optimization.</text>
+            </svg>
+        </div>
+    </div>
+</div>
+
+<!-- Superseded: Explore Evaluate and Synthesize -->
+<div class="slide-container legacy-slide" id="legacy-slide14">
+    <h2 class="slide-title">Explore, Evaluate, and Synthesize</h2>
+    <div class="content-area">
+        <div class="diagram-container" style="padding: 14px;">
+            <svg viewBox="0 0 1080 420" style="width: 100%; height: auto;">
+                <defs><marker id="s14a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--selected)"/></marker></defs>
+                <rect x="15" y="55" width="180" height="250" rx="8" class="node-assistant"/><text x="105" y="90" text-anchor="middle" class="svg-lane-label">PLAN</text><text x="105" y="123" text-anchor="middle" class="svg-label">Hypothesis planner</text>
+                <rect x="45" y="150" width="120" height="32" rx="7" class="node-white"/><text x="105" y="170" text-anchor="middle" class="svg-small">H1</text>
+                <rect x="45" y="194" width="120" height="32" rx="7" class="node-white"/><text x="105" y="214" text-anchor="middle" class="svg-small">H2 after H1</text>
+                <rect x="45" y="238" width="120" height="32" rx="7" class="node-white"/><text x="105" y="258" text-anchor="middle" class="svg-small">H3 after H2</text>
+
+                <rect x="225" y="55" width="180" height="250" rx="8" class="node-worker"/><text x="315" y="90" text-anchor="middle" class="svg-lane-label">IMPLEMENT</text><text x="315" y="123" text-anchor="middle" class="svg-label">Code editor</text>
+                <rect x="255" y="150" width="120" height="32" rx="7" class="node-white"/><text x="315" y="170" text-anchor="middle" class="svg-small">Candidate 1</text>
+                <rect x="255" y="194" width="120" height="32" rx="7" class="node-white"/><text x="315" y="214" text-anchor="middle" class="svg-small">Candidate 2</text>
+                <rect x="255" y="238" width="120" height="32" rx="7" class="node-white"/><text x="315" y="258" text-anchor="middle" class="svg-small">Candidate 3</text>
+                <path d="M195 180 L220 180" class="connector-selected" marker-end="url(#s14a)"/>
+
+                <rect x="435" y="35" width="220" height="290" rx="8" class="node-workflow"/><text x="545" y="70" text-anchor="middle" class="svg-lane-label">EVALUATE</text><text x="545" y="100" text-anchor="middle" class="svg-label">Bounded parallel jobs</text>
+                <rect x="470" y="132" width="150" height="45" rx="8" class="node-white"/><text x="545" y="160" text-anchor="middle" class="svg-small">Regression + recent 1</text>
+                <rect x="470" y="190" width="150" height="45" rx="8" class="node-white"/><text x="545" y="218" text-anchor="middle" class="svg-small">Regression + recent 2</text>
+                <rect x="470" y="248" width="150" height="45" rx="8" class="node-white"/><text x="545" y="276" text-anchor="middle" class="svg-small">Regression + recent 3</text>
+                <path d="M405 180 L430 180" class="connector-selected" marker-end="url(#s14a)"/>
+
+                <rect x="685" y="55" width="180" height="250" rx="8" class="node-assistant"/><text x="775" y="90" text-anchor="middle" class="svg-lane-label">COMPARE</text><text x="775" y="123" text-anchor="middle" class="svg-label">Analyze + synthesize</text><text x="775" y="160" text-anchor="middle" class="svg-small">what worked?</text><text x="775" y="187" text-anchor="middle" class="svg-small">what regressed?</text><text x="775" y="214" text-anchor="middle" class="svg-small">what combines?</text><rect x="720" y="240" width="110" height="38" rx="8" class="node-white"/><text x="775" y="264" text-anchor="middle" class="svg-small">Next candidate</text>
+                <path d="M655 180 L680 180" class="connector-selected" marker-end="url(#s14a)"/>
+
+                <rect x="895" y="55" width="165" height="250" rx="8" class="node-human"/><text x="977" y="90" text-anchor="middle" class="svg-lane-label">HUMAN GATE</text><circle cx="977" cy="130" r="11" class="human-head"/><rect x="963" y="144" width="28" height="31" rx="11" class="human-body"/><text x="977" y="205" text-anchor="middle" class="svg-label">Review evidence</text><text x="977" y="230" text-anchor="middle" class="svg-small">promote separately</text><text x="977" y="250" text-anchor="middle" class="svg-small">or continue learning</text>
+                <path d="M865 180 L890 180" class="connector-selected" marker-end="url(#s14a)"/>
+
+                <path d="M775 305 C775 390 105 390 105 310" class="connector-selected connector-dashed" marker-end="url(#s14a)"/>
+                <text x="440" y="405" text-anchor="middle" class="svg-small">next cycle when evidence supports another attempt</text>
+            </svg>
+        </div>
+        <div class="surface-band">Planning and editing are sequential. Evaluations fan out within a bounded limit. Promotion stays human-gated.</div>
+    </div>
+</div>
+
+<!-- Slide 22: Scorecard DSL Evolution -->
+<div class="slide-container" id="slide22">
+    <h2 class="slide-title">Beyond Prompt Edits: Scorecard DSL Scope</h2>
+    <div class="content-area">
+        <div class="grid-2x2">
+            <div class="flat-card">
+                <h3 style="font-size: 18px; color: var(--text); margin-bottom: 8px;">Decision Graph Topology</h3>
+                <p style="font-size: 14px;">Determines node count, DAG routing, decision boundaries, and programmatic vs. agentic step division.</p>
+            </div>
+            <div class="flat-card-accent">
+                <h3 style="font-size: 18px; color: var(--primary-strong); margin-bottom: 8px;">Model & Hyperparameters</h3>
+                <p style="font-size: 14px;">Routes across model families, fine-tuned checkpoints, reasoning effort, and temperature settings.</p>
+            </div>
+            <div class="flat-card-accent">
+                <h3 style="font-size: 18px; color: var(--primary-strong); margin-bottom: 8px;">Tools & Pattern Cookbooks</h3>
+                <p style="font-size: 14px;">Selects executable tools and applies human-curated pattern cookbooks to solve complex tasks.</p>
+            </div>
+            <div class="flat-card">
+                <h3 style="font-size: 18px; color: var(--text); margin-bottom: 8px;">Output Schemas & Rules</h3>
+                <p style="font-size: 14px;">Evolves classification boundaries, structural output contracts, and confidence thresholds.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 23: Security Modes -->
+<div class="slide-container" id="slide23">
+    <h2 class="slide-title">Security & Information Handling</h2>
+    <div class="content-area">
+        <div class="two-column">
+            <div class="flat-card-accent">
+                <h3 style="font-size: 20px; color: var(--primary-strong); margin-bottom: 12px;">Zero-Storage Profile</h3>
+                <p style="font-size: 14px; margin-bottom: 12px;">Processes items statelessly in memory for strict privacy environments. No sensitive customer payload data is retained on disk.</p>
+                <div style="font-family: 'Fira Code', monospace; font-size: 12px; color: var(--primary); background: var(--white); padding: 10px; border-radius: 6px;">
+                    Stream → In-Memory Evaluation → Output → Ephemeral Purge
+                </div>
+            </div>
+            <div class="flat-card">
+                <h3 style="font-size: 20px; color: var(--text); margin-bottom: 12px;">Data Mart Profile</h3>
+                <p style="font-size: 14px; margin-bottom: 12px;">Stores items and audit trails for deep analytics integrations (e.g. Call Criteria). Governed by explicit retention and threat policies.</p>
+                <div style="font-family: 'Fira Code', monospace; font-size: 12px; color: var(--body); background: var(--white); padding: 10px; border-radius: 6px;">
+                    Stream → Encrypted Store → Audit & Retraining → Policy Purge
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 24: Questions -->
+<div class="slide-container" id="slide24">
+    <h2 class="slide-title">Questions</h2>
+    <div class="content-area">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 35%;">Question</th>
+                    <th style="width: 65%;">Architectural Answer</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>How does it scale?</strong></td>
+                    <td>Serverless micro-agents scale real-time scoring independently from background optimization.</td>
+                </tr>
+                <tr>
+                    <td><strong>How does it learn?</strong></td>
+                    <td>Bounded optimization cycles turn feedback into candidates, diagnostics, evidence packages, and explicit next actions.</td>
+                </tr>
+                <tr>
+                    <td><strong>How is data secured?</strong></td>
+                    <td>Supports Zero-Storage ephemeral scoring alongside Data Mart modes governed by retention policies.</td>
+                </tr>
+                <tr>
+                    <td><strong>How do humans interact?</strong></td>
+                    <td>Lab workers steer the work, receive measured evidence, and choose the next score action while assistants handle execution and waiting.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+</body>
+</html>

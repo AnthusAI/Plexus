@@ -1,0 +1,234 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.infrastructure.constructs package &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.infrastructure.constructs.async_score_processing module" href="plexus.infrastructure.constructs.async_score_processing.html" />
+    <link rel="prev" title="plexus.infrastructure package" href="plexus.infrastructure.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.agentic.html">plexus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.attribution.html">plexus.attribution package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.auth.html">plexus.auth package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.chat.html">plexus.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.command_worker.html">plexus.command_worker package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.html">plexus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.documentation.html">plexus.documentation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.guidelines.html">plexus.guidelines package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.infrastructure.html">plexus.infrastructure package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.infrastructure.html#subpackages">Subpackages</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.logging.html">plexus.logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.optimization.html">plexus.optimization package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.rubric_memory.html">plexus.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.runtime.html">plexus.runtime package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.skills.html">plexus.skills package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.infrastructure.html">plexus.infrastructure package</a></li>
+      <li class="breadcrumb-item active">plexus.infrastructure.constructs package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.infrastructure.constructs.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.infrastructure.constructs">
+<span id="plexus-infrastructure-constructs-package"></span><h1>plexus.infrastructure.constructs package<a class="headerlink" href="#module-plexus.infrastructure.constructs" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.infrastructure.constructs.AsyncScoreProcessing">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.infrastructure.constructs.</span></span><span class="sig-name descname"><span class="pre">AsyncScoreProcessing</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.infrastructure.constructs.AsyncScoreProcessing" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Construct</span></code></p>
+<p>Reusable async score processing resources for a deployment-owned runtime.</p>
+<p>Creates a new construct node.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>scope</strong> – The scope in which to define this construct.</p></li>
+<li><p><strong>id</strong> – The scoped construct ID. Must be unique amongst siblings. If the ID includes a path separator (<code class="docutils literal notranslate"><span class="pre">/</span></code>), then it will be replaced by double dash <code class="docutils literal notranslate"><span class="pre">--</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.infrastructure.constructs.AsyncScoreProcessing.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scope</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Construct</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">construct_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">props</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps" title="plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps"><span class="pre">AsyncScoreProcessingProps</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.infrastructure.constructs.AsyncScoreProcessing.__init__" title="Link to this definition"></a></dt>
+<dd><p>Creates a new construct node.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>scope</strong> – The scope in which to define this construct.</p></li>
+<li><p><strong>id</strong> – The scoped construct ID. Must be unique amongst siblings. If the ID includes a path separator (<code class="docutils literal notranslate"><span class="pre">/</span></code>), then it will be replaced by double dash <code class="docutils literal notranslate"><span class="pre">--</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html">plexus.infrastructure.constructs.async_score_processing module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessing"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessing</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessing.__init__"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessing.__init__()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.__init__"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.additional_policy_statements"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.additional_policy_statements</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.batch_size"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.batch_size</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.bedrock_model_resources"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.bedrock_model_resources</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.dead_letter_max_receive_count"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.dead_letter_max_receive_count</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.enable_dead_letter_queue_alarms"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.enable_dead_letter_queue_alarms</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.environment_name"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.environment_name</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.environment_variables"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.environment_variables</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.image_repository"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.image_repository</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.image_tag_or_digest"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.image_tag_or_digest</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.lambda_memory_size"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.lambda_memory_size</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.lambda_timeout"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.lambda_timeout</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.log_removal_policy"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.log_removal_policy</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.log_retention"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.log_retention</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.max_event_source_concurrency"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.max_event_source_concurrency</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.queue_removal_policy"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.queue_removal_policy</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.request_queue"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.request_queue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.reserved_concurrency"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.reserved_concurrency</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.resource_prefix"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.resource_prefix</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.response_queue"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.response_queue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.retention_period"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.retention_period</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.runtime_config_secret"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.runtime_config_secret</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.secret_environment"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.secret_environment</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingProps.visibility_timeout"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingProps.visibility_timeout</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingQueues"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingQueues</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingQueues.__init__"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingQueues.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingQueues.request_dead_letter_queue"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingQueues.request_dead_letter_queue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingQueues.request_queue"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingQueues.request_queue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingQueues.response_dead_letter_queue"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingQueues.response_dead_letter_queue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.infrastructure.constructs.async_score_processing.html#plexus.infrastructure.constructs.async_score_processing.AsyncScoreProcessingQueues.response_queue"><code class="docutils literal notranslate"><span class="pre">AsyncScoreProcessingQueues.response_queue</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.infrastructure.html" class="btn btn-neutral float-left" title="plexus.infrastructure package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.infrastructure.constructs.async_score_processing.html" class="btn btn-neutral float-right" title="plexus.infrastructure.constructs.async_score_processing module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
