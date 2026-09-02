@@ -9,19 +9,37 @@ applications:
             - npm --version
             - export PARCEL_WATCHER_BACKEND=inotify
             - npm ci --cache .npm --prefer-offline
-            - /usr/local/bin/dockerd-entrypoint.sh
             - |
-              until docker info >/dev/null 2>&1; do
-                sleep 1
-              done
-            - docker version
-            - docker info
-            - ../dashboard/scripts/build-command-worker-image.sh
-            - |
-              if [ -f .command-worker-image.env ]; then
-                source .command-worker-image.env
-              fi
-              npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID --debug
+              python3 - <<'PY'
+              import re
+              from pathlib import Path
+              p = Path("amplify/backend.ts")
+              text = p.read_text()
+              old = "const shouldDeployConsoleWorker = !isSandbox || enableSandboxConsoleWorker;"
+              if old not in text:
+                  raise SystemExit("console worker patch failed")
+              text = text.replace(old, "const shouldDeployConsoleWorker = false;", 1)
+              text2, n = re.subn(
+                  r"const mcpStack = new McpStack\([\s\S]*?\n\);",
+                  "const mcpStack = undefined as any;",
+                  text,
+                  count=1,
+              )
+              if n != 1:
+                  raise SystemExit(f"mcp patch failed, replacements={n}")
+              text = text2
+              old = "if (!isSandbox) {\n    const dynamoDbBackupStack"
+              if old not in text:
+                  raise SystemExit("backup patch failed")
+              text = text.replace(old, "if (false) {\n    const dynamoDbBackupStack", 1)
+              old = "if (!isSandbox) {\n    topicMemoryVectorStoreStack = new TopicMemoryVectorStoreStack("
+              if old not in text:
+                  raise SystemExit("vector store patch failed")
+              text = text.replace(old, "if (false) {\n    topicMemoryVectorStoreStack = new TopicMemoryVectorStoreStack(", 1)
+              p.write_text(text)
+              print("patched amplify/backend.ts: skip console worker, MCP, backups, vector store")
+              PY
+            - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID --debug
     frontend:
       phases:
         preBuild:
