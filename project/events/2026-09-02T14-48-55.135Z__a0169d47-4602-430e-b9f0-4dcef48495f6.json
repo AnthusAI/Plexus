@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a0169d47-4602-430e-b9f0-4dcef48495f6",
+  "issue_id": "plx-73aa6ea2-37b2-4e27-93a0-e84fcb73e5f8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-09-02T14:48:55.135Z",
+  "actor_id": "home",
+  "payload": {
+    "assignee": null,
+    "description": "## Problem\n\nRestoring plexus.anth.us on a new Amplify app fails after Next.js builds: Amplify WEB_COMPUTE cannot find deploy-manifest.json unless the branch is Next.js SSR with AMPLIFY_MONOREPO_APP_ROOT=dashboard. Setting that env makes repo dashboard/amplify.yml win. That file starts /usr/local/bin/dockerd-entrypoint.sh, which does not exist on Amplify AL2023.\n\nConsole chat Docker is unused for this restore and will be re-engineered later.\n\n## Change\n\nUpdate dashboard/amplify.yml so a monorepo Amplify deploy skips Docker and the unused ConsoleChatResponder/MCP/backup/vector stacks, and still produces a Next.js .next artifact Amplify can package.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Amplify Hosting AL2023 cannot build Console chat Docker; deploy-manifest missing"
+  }
+}
