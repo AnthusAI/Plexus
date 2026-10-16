@@ -92,7 +92,7 @@ All parameters from `primus.procedure.optimize` are supported, plus:
       score = "Acknowledgement AI",
       procedure_id = "uuid-1",
       status = "dispatched",
-      dashboard_url = "https://lab.callcriteria.com/lab/procedures/uuid-1",
+      dashboard_url = "https://primus.anth.us/lab/procedures/uuid-1",
     },
     ...
   },

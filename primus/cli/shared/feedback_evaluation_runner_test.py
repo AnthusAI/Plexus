@@ -195,13 +195,13 @@ def test_format_feedback_run_kanbus_comment_contains_core_identifiers():
                 "primary_next_action": "score_configuration_optimization",
                 "optimization_applicability": "applicable",
             },
-            "dashboard_url": "https://app.plexusanalytics.com/evaluations/eval-123",
+            "dashboard_url": "https://primus.example.com/lab/evaluations/eval-123",
         }
     )
     assert "Feedback Evaluation Runner Result" in comment
     assert "`evaluation_id`: `eval-123`" in comment
     assert "`task_id`: `runner-task-1`" in comment
-    assert "Dashboard: https://app.plexusanalytics.com/evaluations/eval-123" in comment
+    assert "Dashboard: https://primus.example.com/lab/evaluations/eval-123" in comment
 
 
 def test_wait_for_feedback_evaluation_terminal_status_returns_completed(monkeypatch):

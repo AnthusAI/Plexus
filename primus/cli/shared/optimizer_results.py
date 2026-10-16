@@ -13,10 +13,10 @@ from typing import Any, Dict, Iterable, List, Optional
 from primus.cli.shared import get_score_guidelines_path
 from primus.dashboard.api.models.task import Task
 from primus.storage.graphql_artifact_store import ArtifactTransferRequest, GraphQLArtifactStore
+from primus.utils.dashboard_urls import build_evaluation_dashboard_url
 
 logger = logging.getLogger(__name__)
 
-LAB_EVALUATION_BASE_URL = "https://lab.callcriteria.com/lab/evaluations"
 OPTIMIZER_ARTIFACT_SCHEMA_VERSION = 1
 OPTIMIZER_ARTIFACTS_METADATA_KEY = "optimizer_artifacts"
 OPTIMIZER_MANIFEST_SUFFIX = "optimizer/manifest.json"
@@ -94,7 +94,7 @@ def _sort_by_updated_at_desc(items: Iterable[Dict[str, Any]]) -> List[Dict[str, 
 
 
 def _evaluation_url(evaluation_id: Optional[str]) -> Optional[str]:
-    return f"{LAB_EVALUATION_BASE_URL}/{evaluation_id}" if evaluation_id else None
+    return build_evaluation_dashboard_url(evaluation_id) if evaluation_id else None
 
 
 def _finite_number(value: Any) -> Optional[float]:
@@ -1283,7 +1283,7 @@ class OptimizerResultsService:
 
         selected_version_id = selected["version_id"]
         guideline_path = get_score_guidelines_path(scorecard_name, score_name)
-        base_url = "https://lab.callcriteria.com/lab/evaluations"
+        base_url = build_evaluation_dashboard_url()
         return {
             "score_id": score_id,
             "score_name": score_name,

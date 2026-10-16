@@ -16,6 +16,7 @@ from primus.dashboard.api.models.evaluation import Evaluation as DashboardEvalua
 from primus.dashboard.api.models.task import Task
 from primus.cli.shared.stage_configurations import get_feedback_evaluation_stage_configs
 from primus.utils.feedback_selection import normalize_feedback_sampling_mode
+from primus.utils.dashboard_urls import build_evaluation_dashboard_url
 
 
 TERMINAL_EVALUATION_STATUSES = frozenset({"COMPLETED", "FAILED", "CANCELLED", "ERROR"})
@@ -419,7 +420,7 @@ def build_feedback_run_summary(
             "primary_next_action": primary_next_action_value,
             "optimization_applicability": misclassification_analysis.get("optimization_applicability"),
         },
-        "dashboard_url": f"https://app.plexusanalytics.com/evaluations/{evaluation_id}",
+        "dashboard_url": build_evaluation_dashboard_url(evaluation_id),
     }
     return summary
 

@@ -47,6 +47,7 @@ import types  # Add this at the top with other imports
 import uuid
 import inspect
 import subprocess
+from primus.utils.dashboard_urls import build_evaluation_dashboard_url
 
 
 _ACTIVE_CHILD_BUDGET: ContextVar[RuntimeBudgetMeter | None] = ContextVar(
@@ -4791,7 +4792,7 @@ def feedback(
                 evaluation_id = evaluation_record.id
                 
                 console.print(f"\nCreated evaluation record: {evaluation_id}")
-                console.print(f"Dashboard URL: https://app.plexusanalytics.com/evaluations/{evaluation_id}")
+                console.print(f"Dashboard URL: {build_evaluation_dashboard_url(evaluation_id)}")
                 if emit_id_file:
                     try:
                         with open(emit_id_file, "w") as _f:
@@ -5014,7 +5015,7 @@ def feedback(
 
                 console.print("\n[bold green]✓ Feedback Evaluation (with version) Complete[/bold green]")
                 console.print(f"\n[bold]View full results:[/bold]")
-                console.print(f"https://app.plexusanalytics.com/evaluations/{evaluation_id}")
+                console.print(build_evaluation_dashboard_url(evaluation_id))
                 
                 # Fetch the updated evaluation record after completion for MCP tool
                 evaluation_record = DashboardEvaluation.get_by_id(evaluation_id, client=client)
