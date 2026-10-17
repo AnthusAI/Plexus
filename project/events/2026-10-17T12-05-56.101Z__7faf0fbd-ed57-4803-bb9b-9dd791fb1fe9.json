@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7faf0fbd-ed57-4803-bb9b-9dd791fb1fe9",
+  "issue_id": "plx-308fee2f-6f44-4dbf-b2e0-e4b736de2040",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-17T12:05:56.101Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Retire hardcoded Plexus-era domains after the Primus rename",
+    "description": "Remove hardcoded dashboard and app domains (the retired app.plexusanalytics.com and a client-specific lab domain) so every deployment builds its links from configuration.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

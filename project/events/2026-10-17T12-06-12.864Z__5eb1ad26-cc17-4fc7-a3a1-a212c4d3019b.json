@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "event_id": "5eb1ad26-cc17-4fc7-a3a1-a212c4d3019b",
+  "issue_id": "plx-c7c73e87-e87b-4b69-8507-a58da57c8059",
+  "event_type": "comment_added",
+  "occurred_at": "2026-10-17T12:06:12.864Z",
+  "actor_id": "home",
+  "payload": {
+    "comment_id": "cef77590-421b-4d8e-9966-16b337cfbd31",
+    "comment_author": "home",
+    "agent": {
+      "platform": "claude_code",
+      "model": "claude-opus-5-5",
+      "name": "Claude Code (remote control)"
+    }
+  }
+}
