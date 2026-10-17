@@ -22,6 +22,7 @@ from typing import Annotated, Any, Callable, Mapping, Optional
 from fastmcp import Context, FastMCP
 from pydantic import Field
 from primus.runtime_budget import RuntimeBudgetSpec
+from primus.utils.dashboard_urls import build_evaluation_dashboard_url, build_procedure_dashboard_url
 from primus.attribution.actor_context import (
     apply_actor_attribution,
     apply_actor_context_to_env,
@@ -5864,9 +5865,7 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
         "child_budget": _jsonable(child_budget),
         "message": "Evaluation dispatched in background.",
         "dashboard_url": (
-            f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}"
-            if evaluation_id
-            else "https://lab.callcriteria.com/lab/evaluations"
+            build_evaluation_dashboard_url(evaluation_id or "")
         ),
     }
 
@@ -6257,7 +6256,7 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError(f"primus.procedure.optimize: failed to create procedure — {result.message}")
 
     procedure_id = result.procedure.id
-    dashboard_url = f"https://lab.callcriteria.com/lab/procedures/{procedure_id}"
+    dashboard_url = build_procedure_dashboard_url(procedure_id)
 
     if dispatch_mode == "celery":
         # Remote dispatch: procedure will be picked up by worker from task queue
@@ -6487,7 +6486,7 @@ def _default_procedure_continue(args: dict[str, Any]) -> dict[str, Any]:
             f"Continuation dispatched — {info['completed_cycles']} prior cycles, "
             f"running to {info['new_max_iterations']} total."
         ),
-        "dashboard_url": f"https://lab.callcriteria.com/lab/procedures/{procedure_id}",
+        "dashboard_url": build_procedure_dashboard_url(procedure_id),
     }
 
 
@@ -6553,7 +6552,7 @@ def _default_procedure_branch(args: dict[str, Any]) -> dict[str, Any]:
             f"Branch procedure {target_id} created from cycle {cycle}, "
             f"running to {info['new_max_iterations']} total cycles."
         ),
-        "dashboard_url": f"https://lab.callcriteria.com/lab/procedures/{target_id}",
+        "dashboard_url": build_procedure_dashboard_url(target_id),
     }
 
 
@@ -12555,7 +12554,7 @@ class PrimusRuntimeModule:
                         **dispatch_result,
                         "evaluation_id": late_evaluation_id,
                         "evaluation_id_file": None,
-                        "dashboard_url": f"https://lab.callcriteria.com/lab/evaluations/{late_evaluation_id}",
+                        "dashboard_url": build_evaluation_dashboard_url(late_evaluation_id),
                     }
                     record = self._handle_store.update(
                         handle_id,
@@ -12637,7 +12636,7 @@ class PrimusRuntimeModule:
                 "evaluation": evaluation,
                 "status_url": record.get("status_url")
                 or evaluation.get("dashboard_url")
-                or f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}",
+                or build_evaluation_dashboard_url(evaluation_id),
             },
         )
 

@@ -1,0 +1,25 @@
+{
+  "id": "plx-308fee2f-6f44-4dbf-b2e0-e4b736de2040",
+  "title": "Retire hardcoded Plexus-era domains after the Primus rename",
+  "description": "Remove hardcoded dashboard and app domains (the retired app.plexusanalytics.com and a client-specific lab domain) so every deployment builds its links from configuration.",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-17T12:05:56.101412Z",
+  "updated_at": "2026-10-17T12:06:23.885030Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude_code",
+    "model": "claude-opus-5-5",
+    "name": "Claude Code (remote control)"
+  },
+  "right_now_summary": "A PR builds dashboard links from PRIMUS_APP_URL instead of retired hardcoded domains and awaits merge.",
+  "right_now_updated_at": "2026-10-17T12:06:25.797654Z",
+  "custom": {}
+}

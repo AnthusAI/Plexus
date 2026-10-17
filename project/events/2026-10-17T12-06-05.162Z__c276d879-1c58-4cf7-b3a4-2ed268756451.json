@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "c276d879-1c58-4cf7-b3a4-2ed268756451",
+  "issue_id": "plx-c7c73e87-e87b-4b69-8507-a58da57c8059",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-17T12:06:05.162Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Build dashboard links from PRIMUS_APP_URL instead of hardcoded domains",
+    "description": "Replace hardcoded dashboard links (the retired app.plexusanalytics.com, and a client-specific lab domain in 9 places) with a helper, primus/utils/dashboard_urls.py, that builds links from the PRIMUS_APP_URL environment variable.\n\nPR: https://github.com/AnthusAI/Primus/pull/632 (branch claude/project-thread-2eqg2r, base develop).",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-308fee2f-6f44-4dbf-b2e0-e4b736de2040",
+    "labels": [],
+    "agent": {
+      "platform": "claude_code",
+      "model": "claude-opus-5-5",
+      "name": "Claude Code (remote control)"
+    }
+  }
+}
