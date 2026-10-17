@@ -3,7 +3,7 @@
   "title": "Run manual end-to-end sandbox command-worker verification",
   "description": "",
   "type": "sub-task",
-  "status": "open",
+  "status": "backlog",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -12,7 +12,9 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-08-10T18:45:25.183578Z",
-  "updated_at": "2026-08-10T18:45:25.183578Z",
+  "updated_at": "2026-10-17T16:01:10.203683454Z",
   "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

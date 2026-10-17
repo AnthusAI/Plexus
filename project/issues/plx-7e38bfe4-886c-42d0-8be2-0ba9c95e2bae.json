@@ -3,7 +3,7 @@
   "title": "Publish portable command worker image",
   "description": "Produce a genuinely buildable Plexus-owned command-worker container artifact and immutable publication path. The image must install the executor dependencies needed by supported dashboard commands, pass a real container build and startup smoke test, and publish a digest consumed by the companion deployment. Do not modify the mixed infrastructure application, Amplify environment variables, or existing production resources.",
   "type": "sub-task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "5108adf8-b03f-4096-bbca-0365172da6f5",
       "author": "derek.norrbom",
       "text": "## Validation correction\n\nThe previously merged Dockerfile was checked from a clean develop snapshot. Its image build fails because the build invokes plexus-command-worker --help, while the entrypoint immediately requires runtime environment bindings. The existing test only inspects Dockerfile strings and did not build the image. PR #554 was closed without deployment. Terra should correct the artifact and add a real build/startup smoke test before publication work resumes.",
-      "created_at": "2026-08-06T02:16:25.407803Z"
+      "created_at": "2026-08-06T02:16:25.407803Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "e6d5f490-86ef-4c9b-bc6b-f3c44d8cbbc2",
+      "author": "unknown",
+      "text": "Closed in board cleanup 2026-10-17: the command service is implemented and merged (primus/command_worker with Celery delivery, DynamoDB lease and fencing lifecycle, ECS task protection, CLI executor; dashboard submitCommand resolver and dashboard/amplify/command-service), with tests in tests/command_worker and submitCommand.test.ts. The production foundation was deployed per infrastructure/docs/command-service-foundation.md. Reopen if a specific gap surfaces.",
+      "created_at": "2026-10-17T16:01:08.460799646Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-08-06T01:19:26.174634Z",
-  "updated_at": "2026-08-06T02:16:36.248534Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T16:01:08.514568428Z",
+  "closed_at": "2026-10-17T16:01:08.514521441Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

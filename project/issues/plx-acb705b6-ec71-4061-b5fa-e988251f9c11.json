@@ -3,7 +3,7 @@
   "title": "Local storage proof documentation",
   "description": "Document local MinIO ports, bucket names, object-store env vars, smoke commands, verified behavior, and known non-goals for the local control-plane MVP.",
   "type": "sub-task",
-  "status": "open",
+  "status": "backlog",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -12,7 +12,9 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-06-05T18:32:22.014428Z",
-  "updated_at": "2026-06-05T18:32:22.014428Z",
+  "updated_at": "2026-10-17T16:01:10.586210462Z",
   "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

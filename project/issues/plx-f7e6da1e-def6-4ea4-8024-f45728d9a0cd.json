@@ -3,7 +3,7 @@
   "title": "Present successful task stderr without error styling",
   "description": "Improve task-output presentation so completed tasks can show captured stderr as runtime diagnostics without red error styling. Reserve error styling for failed tasks or a terminal task error message. Preserve separate stdout and stderr streams for troubleshooting.\n\nOut of scope: changing process stream routing or suppressing runtime logs.",
   "type": "chore",
-  "status": "open",
+  "status": "backlog",
   "priority": 3,
   "assignee": null,
   "creator": null,
@@ -12,7 +12,9 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-08-06T00:28:35.694453Z",
-  "updated_at": "2026-08-06T00:28:35.694453Z",
+  "updated_at": "2026-10-17T16:01:10.279551895Z",
   "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

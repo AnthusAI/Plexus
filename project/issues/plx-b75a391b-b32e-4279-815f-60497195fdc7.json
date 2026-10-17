@@ -3,7 +3,7 @@
   "title": "Local evaluations and optimizations run without AWS credentials",
   "description": "As a Plexus operator, I want local evaluation and optimization workflows to use application-authorized artifacts, so that routine score improvement work does not depend on an AWS login.\n\nFeature: Credential-free local evaluation and optimization\n\nScenario: Run an evaluation without AWS credentials\nGiven the user completed plexus login\nAnd all AWS profile and session variables are absent\nWhen an evaluation loads a stored reference dataset and persists its evidence\nThen the evaluation completes through GraphQL and signed HTTPS artifact transfers\nAnd no direct S3 client is created\n\nScenario: Run and resume an optimizer without AWS credentials\nGiven the user completed plexus login\nAnd all AWS profile and session variables are absent\nWhen a local optimizer checkpoints, stops, and resumes\nThen procedure state and optimizer artifacts remain available in the dashboard\nAnd no direct S3 client is created\n\nScenario: A required artifact transfer fails\nGiven a required artifact cannot be authorized, transferred, or verified\nWhen the workflow reaches that artifact\nThen the workflow fails with actionable evidence\nAnd it does not use a storage fallback.",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -13,9 +13,19 @@
     "behavior"
   ],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "fdb93e81-e423-4644-8c68-3269faea5f51",
+      "author": "unknown",
+      "text": "Closed in board cleanup 2026-10-17: primus login and whoami with Cognito shipped 2026-07-28 (primus/cli/auth, primus/auth/cognito.py) and signed artifact transfer tickets are merged (dashboard createArtifactTransferTickets resolver, dashboard/lib/artifact-ticket-client.ts), with tests. Known leftover: dataset, evaluation and score-result paths still create direct S3 clients (primus/cli/dataset/datasets.py, primus/cli/evaluation/evaluations.py, primus/utils/score_result_s3_utils.py); Ryan called this YAGNI while the project is on hold.",
+      "created_at": "2026-10-17T16:01:09.949547836Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-07-28T12:52:36.360761Z",
-  "updated_at": "2026-07-28T12:52:36.360761Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T16:01:10.003502918Z",
+  "closed_at": "2026-10-17T16:01:10.003463595Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }
