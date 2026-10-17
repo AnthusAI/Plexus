@@ -3,7 +3,7 @@
   "title": "Local report artifact storage",
   "description": "",
   "type": "task",
-  "status": "open",
+  "status": "backlog",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -55,7 +55,7 @@
     }
   ],
   "created_at": "2026-06-05T16:22:46.101359Z",
-  "updated_at": "2026-10-17T12:36:16.530169930Z",
+  "updated_at": "2026-10-17T16:01:10.358082560Z",
   "closed_at": null,
   "right_now_summary": null,
   "right_now_updated_at": null,

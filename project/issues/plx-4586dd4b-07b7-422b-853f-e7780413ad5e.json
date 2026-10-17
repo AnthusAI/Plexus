@@ -3,7 +3,7 @@
   "title": "Envoy Gateway scoring API POC",
   "description": "",
   "type": "epic",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -24,11 +24,25 @@
       "text": "Paused in board cleanup 2026-10-17: the project is on hold. Finished child work is closed; the unstarted children stay in Ready for later.",
       "created_at": "2026-10-17T12:36:16.631996568Z",
       "comment_type": "default"
+    },
+    {
+      "id": "43aebc1d-97c7-4ebf-a2fa-16fc18aa04ba",
+      "author": "unknown",
+      "text": "Closed 2026-10-17 at Ryan's direction: the Envoy Gateway scoring API spike worked and its chart, gateway, HTTPRoute and setup script are merged on develop (docker/helm/primus-worker, docker/scripts/setup_envoy_gateway_poc.sh). Envoy integration is not being pursued now; reopen if it is.",
+      "created_at": "2026-10-17T13:02:24.175665160Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "46f48dc2-867e-4db2-8da5-40b41f2f7407",
+      "author": "unknown",
+      "text": "Side branches checked against develop: every file on them is on develop in the same or a newer form after the Primus rename, so there was nothing left to merge. Branch tips for recovery: feature/envoy-gateway-scoring-api-poc@0243f4bd36b2 feature/k8s-stdout-logging@0f6feadef700 feature/k8s-trusted-open-backend@75ad7a62b5b5 feature/kubernetes-deployment@69d9670b7928 ",
+      "created_at": "2026-10-17T13:03:07.479509024Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-06-10T00:45:21.979152849Z",
-  "updated_at": "2026-10-17T12:36:16.632014446Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T13:03:07.479541391Z",
+  "closed_at": "2026-10-17T13:02:24.193016237Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {}

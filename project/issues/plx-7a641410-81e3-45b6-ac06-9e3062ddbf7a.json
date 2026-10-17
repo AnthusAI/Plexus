@@ -3,16 +3,26 @@
   "title": "Durable command claims reject stale workers",
   "description": "As a platform operator, I want command ownership to be stored durably with leases and fencing, so that duplicate deliveries and failed workers cannot produce conflicting results.\n\nFeature: Durable command lifecycle ownership\n\nScenario: One worker obtains a command lease\nGiven an announced command envelope\nWhen a worker claims the command\nThen it receives a new fencing token and renewable lease\n\nScenario: A concurrent worker cannot execute an active command\nGiven a command with an unexpired lease\nWhen another worker claims the same envelope\nThen the claim is reported as active without a new fencing token\n\nScenario: A stale worker cannot settle a command\nGiven a replacement worker has claimed a newer fencing token\nWhen the prior worker reports progress or completion\nThen the store rejects that mutation\n\nScenario: A cancellation request is observed durably\nGiven a running claimed command\nWhen cancellation is requested\nThen the owner can settle it as cancelled\nAnd no later success settlement is accepted.",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-36892abd-cc41-4a2c-ba59-ff3e51f88585",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "33091ae3-6846-4dba-a301-3ca6352c0793",
+      "author": "unknown",
+      "text": "Closed in board cleanup 2026-10-17: the command service is implemented and merged (primus/command_worker with Celery delivery, DynamoDB lease and fencing lifecycle, ECS task protection, CLI executor; dashboard submitCommand resolver and dashboard/amplify/command-service), with tests in tests/command_worker and submitCommand.test.ts. The production foundation was deployed per infrastructure/docs/command-service-foundation.md. Reopen if a specific gap surfaces.",
+      "created_at": "2026-10-17T16:01:08.037536696Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-08-05T20:12:55.420134Z",
-  "updated_at": "2026-08-05T20:12:55.420134Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T16:01:08.100289462Z",
+  "closed_at": "2026-10-17T16:01:08.099985970Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

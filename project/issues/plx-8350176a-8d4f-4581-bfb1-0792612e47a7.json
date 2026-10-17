@@ -3,7 +3,7 @@
   "title": "Connect dashboard tasks to the portable command lifecycle",
   "description": "Implement one canonical dashboard command path using the existing Task model as authoritative state. An authenticated submitCommand resolver validates a registered structured action, applies the dashboard's current authenticated account-access semantics, computes deterministic Task identity and request digest, and conditionally creates the Task. Generic Task operations remain available for existing non-command behavior, while command transport/lifecycle/fence fields are read-only to user-pool and API-key callers and writable through IAM only when the caller also has a narrowly scoped principal policy. The Task stream dispatcher publishes one structured Celery envelope using workload identity; worker fencing absorbs duplicate delivery. The always-on worker claims and updates the same Task through conditional IAM-authenticated GraphQL mutations, and subscriptions expose progress and terminal state. Remove dual task paths, the separate command state table, projection bridges, static credentials, and fallbacks. Prove resource counts, authorization denial/allow cases, submission, stream dispatch, claim/fencing, cancellation, completion, and realtime updates in the sandbox before completion.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": "derek.norrbom",
   "creator": null,
@@ -549,11 +549,18 @@
       "text": "Paused in board cleanup 2026-10-17: the project is on hold. Finished child work is closed; the unstarted children stay in Ready for later.",
       "created_at": "2026-10-17T12:36:16.581550228Z",
       "comment_type": "default"
+    },
+    {
+      "id": "26871eb7-6bde-407f-9f91-2dfeeb3e28f5",
+      "author": "unknown",
+      "text": "Closed in board cleanup 2026-10-17: the command service is implemented and merged (primus/command_worker with Celery delivery, DynamoDB lease and fencing lifecycle, ECS task protection, CLI executor; dashboard submitCommand resolver and dashboard/amplify/command-service), with tests in tests/command_worker and submitCommand.test.ts. The production foundation was deployed per infrastructure/docs/command-service-foundation.md. Reopen if a specific gap surfaces.",
+      "created_at": "2026-10-17T16:01:09.248030856Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-08-06T02:16:12.595830Z",
-  "updated_at": "2026-10-17T12:36:16.581718468Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T16:01:09.322350135Z",
+  "closed_at": "2026-10-17T16:01:09.322277375Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

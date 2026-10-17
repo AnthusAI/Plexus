@@ -3,7 +3,7 @@
   "title": "Compose portable command worker deployment",
   "description": "Compose and validate the Plexus-owned command-service companion deployment from the existing portable lifecycle, Celery delivery adapter, durable state, container artifact, and always-on worker constructs. Keep it outside the Amplify stacks and the legacy mixed infrastructure application. Require a complete dashboard submission, execution, projection, and deployment proof before it is eligible for main.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -185,11 +185,18 @@
       "text": "Paused in board cleanup 2026-10-17: the project is on hold. Finished child work is closed; the unstarted children stay in Ready for later.",
       "created_at": "2026-10-17T12:36:16.482266994Z",
       "comment_type": "default"
+    },
+    {
+      "id": "3ddc215b-fb28-4686-a7b8-95bb94b00781",
+      "author": "unknown",
+      "text": "Closed in board cleanup 2026-10-17: the command service is implemented and merged (primus/command_worker with Celery delivery, DynamoDB lease and fencing lifecycle, ECS task protection, CLI executor; dashboard submitCommand resolver and dashboard/amplify/command-service), with tests in tests/command_worker and submitCommand.test.ts. The production foundation was deployed per infrastructure/docs/command-service-foundation.md. Reopen if a specific gap surfaces.",
+      "created_at": "2026-10-17T16:01:09.387449845Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-08-05T20:55:46.003952Z",
-  "updated_at": "2026-10-17T12:36:16.482315361Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T16:01:09.447295051Z",
+  "closed_at": "2026-10-17T16:01:09.447254989Z",
   "right_now_summary": null,
   "right_now_updated_at": null,
   "custom": {

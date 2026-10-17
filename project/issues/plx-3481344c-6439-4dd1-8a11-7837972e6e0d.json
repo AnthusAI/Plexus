@@ -3,16 +3,26 @@
   "title": "Document platform prerequisites for deploying the scoring stack into an existing cluster",
   "description": "The POC setup script assumes cluster-admin: it installs the Envoy Gateway controller, CRDs, and GatewayClass cluster-wide. In a customer-managed cluster those are typically owned by the platform team. Write a prerequisites document separating 'what the platform must provide' from 'what our Helm release deploys':\n\n- Gateway API CRDs and a GatewayClass (or a shared platform-managed Gateway; chart already supports createGateway: false with gatewayName/gatewayNamespace)\n- Namespace, resource quotas, pod security expectations\n- LoadBalancer or ingress policy for the Envoy data plane\n- Private registry access for our images\n- Secret management: chart-created Secrets vs existingSecret references populated by the platform's secret store\n- Outbound network access required by scoring (LLM APIs, backend GraphQL)\n\nDeliverable: a markdown doc in docker/ referenced from the chart READMEs.",
   "type": "chore",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "6b671377-013f-41ca-9b69-24c7260d7c05",
+      "author": "unknown",
+      "text": "Closed 2026-10-17 at Ryan's direction: the Envoy Gateway scoring API spike worked and its chart, gateway, HTTPRoute and setup script are merged on develop (docker/helm/primus-worker, docker/scripts/setup_envoy_gateway_poc.sh). Envoy integration is not being pursued now; reopen if it is.",
+      "created_at": "2026-10-17T13:02:24.089862658Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-06-10T23:10:06.595812Z",
-  "updated_at": "2026-06-10T23:10:06.595812Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T13:02:24.109358710Z",
+  "closed_at": "2026-10-17T13:02:24.109335009Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

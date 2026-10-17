@@ -3,7 +3,7 @@
   "title": "Artifact transfers use application authorization",
   "description": "As an authenticated Plexus user or workload, I want artifact transfers authorized by Plexus, so that large workflow artifacts move without exposing cloud credentials.\n\nFeature: Authorized artifact transfer tickets\n\nScenario: Request a valid transfer\nGiven an authenticated Cognito user or IAM workload owns the requested resource\nWhen it requests a supported artifact transfer\nThen GraphQL returns a canonical object key and a short-lived signed HTTPS request\nAnd the caller cannot choose an arbitrary bucket or object path\n\nScenario: Reject an unauthorized transfer\nGiven the caller does not have access to the resource or artifact type\nWhen it requests a transfer ticket\nThen the request is rejected without returning a signed URL\n\nScenario: Transfer integrity fails\nGiven transferred bytes do not match the declared SHA-256 or size\nWhen the artifact store validates the transfer\nThen the operation fails closed\nAnd it does not fall back to inline data or direct S3 access.",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -13,9 +13,19 @@
     "behavior"
   ],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "085166bf-2ac8-4bfa-8e01-418a1d7db99f",
+      "author": "unknown",
+      "text": "Closed in board cleanup 2026-10-17: primus login and whoami with Cognito shipped 2026-07-28 (primus/cli/auth, primus/auth/cognito.py) and signed artifact transfer tickets are merged (dashboard createArtifactTransferTickets resolver, dashboard/lib/artifact-ticket-client.ts), with tests.",
+      "created_at": "2026-10-17T16:01:09.817637162Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-07-28T12:52:36.021927Z",
-  "updated_at": "2026-07-28T12:52:36.021927Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T16:01:09.877588028Z",
+  "closed_at": "2026-10-17T16:01:09.877532978Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

@@ -3,16 +3,26 @@
   "title": "AWS command transport uses explicitly managed infrastructure",
   "description": "As a platform operator, I want the AWS command transport and worker service provisioned explicitly, so that runtime startup does not create infrastructure or depend on static cloud credentials.\n\nFeature: Managed AWS command transport\n  Scenario: The AWS worker service starts\n    Given its queue, dead-letter queue, roles, logs, and service were deployed through infrastructure as code\n    When a worker starts with its workload identity\n    Then it consumes only its configured queue\n    And it does not create queues or result tables\n    And it does not require static cloud access keys",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-e220db10-ae46-44b7-9537-c4865b808ad0",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "c82d54d3-ad8b-4b9d-adf2-103c2cd1dca8",
+      "author": "unknown",
+      "text": "Closed in board cleanup 2026-10-17: the command service is implemented and merged (primus/command_worker with Celery delivery, DynamoDB lease and fencing lifecycle, ECS task protection, CLI executor; dashboard submitCommand resolver and dashboard/amplify/command-service), with tests in tests/command_worker and submitCommand.test.ts. The production foundation was deployed per infrastructure/docs/command-service-foundation.md. Reopen if a specific gap surfaces.",
+      "created_at": "2026-10-17T16:01:08.593988825Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-08-04T19:45:27.747573Z",
-  "updated_at": "2026-08-04T19:45:27.747573Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T16:01:08.665531509Z",
+  "closed_at": "2026-10-17T16:01:08.665483121Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }
