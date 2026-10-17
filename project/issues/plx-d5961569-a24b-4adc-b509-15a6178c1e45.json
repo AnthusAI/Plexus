@@ -3,7 +3,7 @@
   "title": "Start Console responses without request-time runtime initialization",
   "description": "As a Console user, I want the first response chunk promptly, so that interactive scorecard work feels responsive and predictable.\n\nFeature: Interactive Console latency\n\nScenario: First request on a provisioned instance\nGiven a provisioned Console responder is ready\nWhen a user sends a simple message\nThen Tactus model infrastructure was already initialized\nAnd the response records separate preparation, model initialization, provider first-chunk, and streaming timings\nAnd the client receives the first chunk in approximately five seconds or less under normal provider conditions\n\nScenario: Supported integration only\nGiven Plexus runs a Tactus agent\nWhen the agent executes\nThen Plexus uses released public Tactus APIs\nAnd does not replace Tactus private methods at runtime.",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "5d49b5ba-4a21-47f4-b318-3718b05c3919",
       "author": "ryan.porter",
       "text": "Sandbox latency verification found two repeatable request-time costs before provider dispatch: the model prewarm cache does not match the effective agent configuration, and a short Console turn performs an unnecessary remote mid-run steering lookup. The first visible response was 15.2s; server telemetry showed 5.3s agent preparation, request-time LM initialization, and 3.9s provider first chunk. Warm turns repeated 4.2-4.6s preparation and request-time LM initialization. Fixing both before dependency publication and rerunning the benchmark.",
-      "created_at": "2026-07-23T20:11:07.214460Z"
+      "created_at": "2026-07-23T20:11:07.214460Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "936a18b9-4bfc-4336-8230-998ee457bbe5",
+      "author": "unknown",
+      "text": "Closed in board cleanup 2026-10-17: the project is on hold and Ryan called the remaining gaps YAGNI; reopen if they become an issue. Known gap at close: Code for both scenarios is merged, but the ~5s first-chunk target was never confirmed. The last benchmark (on e4aec8) reported about 7.3-7.6s visible latency. The owner needs to accept that or run a fresh sandbox/production benchmark.",
+      "created_at": "2026-10-17T12:36:03.523232747Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-23T18:45:38.514701Z",
-  "updated_at": "2026-07-23T20:11:07.214460Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:36:03.540711776Z",
+  "closed_at": "2026-10-17T12:36:03.540687445Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

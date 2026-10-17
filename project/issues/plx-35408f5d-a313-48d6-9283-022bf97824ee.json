@@ -3,7 +3,7 @@
   "title": "Prevent clipped living-report overview cells",
   "description": "As a stakeholder, I want the living-report workbook overview to display its complete labels and values, so that the cover sheet is readable without manual resizing.\n\nFeature: Readable optimization workbook overview\n\nScenario: Open a generated living-report workbook\n  Given a stakeholder workbook with lifecycle metadata and a plain-language summary\n  When the workbook is opened or rendered at its default layout\n  Then the complete overview headings, labels, and values are visible without clipping\n  And every other stakeholder sheet remains readable\n\nOut of scope: changing report evidence, adding resources, or altering optimization decisions.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "80e94da9-14a8-41e3-80b4-cdb72f5c6c51",
       "author": "ryan.porter",
       "text": "Reproduced the defect with a rendered eight-sheet workbook: the Overview title and labels were clipped at default column widths. Added an outside-in regression test, observed the expected failure, and implemented bounded Overview sizing with wrapped values. Regenerated and imported the workbook, reconciled every sheet, found no formula errors, and visually confirmed the Overview is fully readable. Focused living-report and ChatMessage suites now pass (312 tests). The bug remains open until the change lands.",
-      "created_at": "2026-07-29T18:18:12.159350Z"
+      "created_at": "2026-07-29T18:18:12.159350Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "1b4d43ae-2e0f-4558-a871-d23c45a49d5c",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Overview sheet column sizing and wrapped values are in primus/optimization/run_report.py. Covered by test_workbook_overview_is_sized_and_wrapped_for_default_opening in run_report_test.py.",
+      "created_at": "2026-10-17T12:34:47.979632103Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-29T18:14:44.097366Z",
-  "updated_at": "2026-07-29T18:18:12.159350Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:48.037956433Z",
+  "closed_at": "2026-10-17T12:34:48.037920664Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

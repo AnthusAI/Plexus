@@ -3,19 +3,29 @@
   "title": "Project stable score references for report artifacts",
   "description": "Implement the production projection support required by story plx-2e4b79f2-947d-4959-81e7-206cba0f67a7.\n\nScope:\n- Add a stable non-displayed score_ref to portfolio, priority, question/issue, feedback-investment, and optimization-outcome stakeholder rows.\n- Derive it deterministically from the exact opaque score ID without displaying or exporting the raw ID.\n- Keep scorecard_ref behavior unchanged.\n- Add outside-in tests proving duplicate score display names remain distinguishable through the projection and raw opaque IDs do not enter displayed workbook cells.\n\nNo client-specific data, GraphQL schema changes, resource changes, or operational mutations.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": "ryan.porter",
   "creator": null,
   "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "84df1451-9596-40c1-b644-b4a9721147fa",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Stakeholder rows carry a stable hashed score_ref derived from the opaque score ID without exporting it (primus/optimization/portfolio_run.py). Covered by portfolio_run_test.py::test_stakeholder_projection_uses_stable_distinct_score_refs_without_exporting_opaque_score_ids.",
+      "created_at": "2026-10-17T12:34:38.307256179Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-07-31T18:21:32.372405Z",
-  "updated_at": "2026-07-31T18:21:38.847680Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:38.354995968Z",
+  "closed_at": "2026-10-17T12:34:38.354970161Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {
-    "source": "shared",
-    "project_label": "plx"
+    "project_label": "plx",
+    "source": "shared"
   }
 }

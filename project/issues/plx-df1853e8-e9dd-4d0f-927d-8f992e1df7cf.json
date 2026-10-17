@@ -3,7 +3,7 @@
   "title": "Finalize living report state with procedure completion",
   "description": "As an operator, I want a living optimization Report to publish a terminal revision when its Procedure completes, so that the Report lifecycle, current activity, and linked Task status agree.\n\nOut of scope: automatic score mutations, schema changes, or changing approval authority.\n\nFeature: Terminal living Report reconciliation\n\nScenario: Complete a portfolio procedure\nGiven a living Report is running with a linked Procedure Task\nWhen the portfolio procedure reaches a successful terminal result\nThen the Report publishes a final terminal revision\nAnd its lifecycle status is complete rather than running\nAnd its current activity and next checkpoint describe the terminal outcome\nAnd the linked Task, Procedure, and Report states agree\n\nScenario: Fail final publication\nGiven the procedure result is otherwise terminal\nWhen the final Report publication fails\nThen the procedure fails closed\nAnd the Report does not falsely claim completion",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "db4c9594-f914-43aa-aa88-49de79faf146",
       "author": "ryan.porter",
       "text": "Added failing outside-in coverage for successful and incomplete terminal revisions. The runner now decides and records terminal_status before publishing the final immutable revision, includes it in raw evidence, and emits terminal-specific current activity and next steps. Focused portfolio, living-report, and runtime suites pass: 310 tests.",
-      "created_at": "2026-07-30T17:53:50.886627Z"
+      "created_at": "2026-07-30T17:53:50.886627Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "599939f7-ea1b-496b-a3b3-5e1cc3ef7ddf",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. The portfolio runner records terminal_status before publishing a final immutable revision with terminal-specific activity and next steps, and a failed final publication leaves the attempt unfinished rather than claiming completion (primus/optimization/run_report.py, portfolio_run.py). Covered by run_report_test.py finalize tests and portfolio_run_test.py finalization-recovery tests.",
+      "created_at": "2026-10-17T12:34:46.070403658Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-30T17:51:29.394743Z",
-  "updated_at": "2026-07-30T17:53:50.886627Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:46.121961462Z",
+  "closed_at": "2026-10-17T12:34:46.121935472Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

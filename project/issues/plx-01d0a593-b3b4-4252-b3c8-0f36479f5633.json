@@ -3,7 +3,7 @@
   "title": "Run credential-free artifact persistence in local Kubernetes",
   "description": "As a Plexus platform engineer, I want the local Kubernetes stack to execute credential-free procedure and optimizer artifact persistence, so that the repeatable public demo validates the same supported artifact boundary as hosted deployments.\n\nFeature: Local Kubernetes artifact transfer compatibility\n\nScenario: Procedure and optimizer artifacts use authorized transfer tickets\nGiven Plexus is deployed in Docker Desktop Kubernetes with the trusted local control plane and persistent local object storage\nWhen the public demo runs procedure persistence, optimizer output, interruption recovery, and retained verification\nThen each migrated artifact is authorized through the existing GraphQL transfer-ticket operation\nAnd bytes are transferred over verified HTTPS\nAnd no direct-S3, insecure transport, authentication, or storage fallback is used for migrated consumers\nAnd evaluation consumers not migrated by PR 513 remain explicitly identified as out of scope",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,23 +15,35 @@
       "id": "8c942288-c9b6-4935-b232-76480e85d75a",
       "author": "ryan.porter",
       "text": "Additional compatibility scenario found by the live strict suite:\n\nScenario: Resume optimization from the demo feedback baseline\nGiven a run-scoped feedback evaluation selected from the retained deterministic seed anchor\nWhen the Kubernetes demo passes that completed evaluation to the optimizer as its recent baseline\nThen the evaluation records explicit feedback_start_at and feedback_end_at bounds, the positive lookback days, and the requested maximum item count\nAnd the optimizer resumes the exact frozen cohort without selecting a new one",
-      "created_at": "2026-07-28T18:55:10.651588Z"
+      "created_at": "2026-07-28T18:55:10.651588Z",
+      "comment_type": "default"
     },
     {
       "id": "97b985b4-5725-47ca-bcae-6b3f197a8666",
       "author": "ryan.porter",
       "text": "Additional observable scenario:\n\nScenario: Ticket authorization is visible without leaking artifact details\nGiven a local Kubernetes client requests an authorized artifact transfer ticket\nWhen the private GraphQL proxy issues the ticket\nThen kubectl logs exposes a correlation identifier, request count, and resource types through the proxy application logger\nAnd the log omits signed URLs, object keys, filenames, checksums, resource IDs, and credentials",
-      "created_at": "2026-07-28T20:15:25.434219Z"
+      "created_at": "2026-07-28T20:15:25.434219Z",
+      "comment_type": "default"
     },
     {
       "id": "a2bcaf0f-db96-4aee-9543-6a62e79a5b18",
       "author": "ryan.porter",
       "text": "Additional observable scenario:\n\nScenario: Every worker entry point uses explicit local authentication\nGiven the local Helm release configures workers for GraphQL API-key authentication\nWhen the main worker deployment and scheduled procedure-recovery workload start\nThen both receive PLEXUS_GRAPHQL_AUTH_MODE=api_key and the Secret-backed API key\nAnd neither attempts Cognito, IAM, or another authentication fallback",
-      "created_at": "2026-07-28T20:26:46.529333Z"
+      "created_at": "2026-07-28T20:26:46.529333Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "16e396d1-b48a-4072-8399-e60a2bf63641",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Delivered through PR #513 (merged as d71e383): local GraphQL artifact transfer tickets over verified HTTPS in services/private-graphql-proxy/proxy/artifact_tickets.py, frozen-window feedback baseline in docker/demo/harness.py, and explicit api_key auth on the worker deployment and procedure-recovery CronJob. Covered by test_artifact_tickets.py (including the sanitized correlation-log spec), docker/demo/test_harness.py and docker/demo/test_local_chart.py; docker/demo/README.md records the PR 513 migration scope.",
+      "created_at": "2026-10-17T12:34:55.616181199Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-28T17:57:47.425636Z",
-  "updated_at": "2026-07-28T20:26:46.529333Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:55.670838946Z",
+  "closed_at": "2026-10-17T12:34:55.670813218Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

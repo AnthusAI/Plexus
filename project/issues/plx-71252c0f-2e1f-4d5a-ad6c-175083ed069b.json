@@ -3,7 +3,7 @@
   "title": "Publish exhaustive portfolio ranking into living report",
   "description": "A production-shaped read-only portfolio run completed exhaustive ranking but failed while publishing the ranking milestone into its living Report. Preserve the fatal-publication rule while making the full ranked packet publishable.\n\nFeature: Durable ranking milestone\n\nScenario: Publish a large exhaustive rank packet\nGiven an account-wide rank packet contains hundreds of score rows and complete coverage\nWhen the portfolio runner publishes the ranking milestone\nThen the living Report receives a reconciled evidence revision and workbook\nAnd the run continues into deterministic assessment\n\nScenario: Expose the underlying publication cause\nGiven ranking publication fails\nWhen the portfolio runner records the failure\nThen the durable failure evidence includes the underlying cause\nAnd the workflow remains failed closed",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "4977dae3-67ca-43bc-a81d-8d38059277c9",
       "author": "ryan.porter",
       "text": "Root cause reproduced with a failing outside-in test: the stakeholder projection added Rank to all score rows, but the workbook allowlist permitted Rank only on two sheets, so deterministic validation rejected the first feedback-investment row. Rank is now an explicit column on every score-level sheet and optimization outcomes retain their one-based rank. Evidence: 53 focused portfolio/report tests pass.",
-      "created_at": "2026-07-30T18:16:48.575016Z"
+      "created_at": "2026-07-30T18:16:48.575016Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "fc57f5e5-bc14-4c2c-8a9e-15f76b60c1b9",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Rank is an explicit column on every score-level workbook sheet so the ranking milestone validates, and core publication failures remain fatal while recording the operation and underlying exception class. Covered by run_report_test core-publication-failure and large-portfolio tests and the portfolio_run_test workbook projection tests.",
+      "created_at": "2026-10-17T12:34:41.601182687Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-30T18:08:29.386227Z",
-  "updated_at": "2026-07-30T18:16:48.575016Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:41.663348526Z",
+  "closed_at": "2026-10-17T12:34:41.663312137Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

@@ -3,7 +3,7 @@
   "title": "Define portfolio disposition and contradiction projections",
   "description": "Implement the deterministic projection for story plx-d092bf: one primary score disposition, separate evidence-health and activity axes, conservative incomplete handling, contradiction categories and stable priority ordering, ordinary-language rationale, and action routing. Reuse decision packets and do not add another semantic parser.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,17 +15,28 @@
       "id": "2cdbc7ad-b0ee-40a2-8e0a-fdafbd1d1ed7",
       "author": "ryan.porter",
       "text": "Started: writing outside-in specifications for deterministic stakeholder-safe outcome and contradiction projection in the living report. Scope is reporting only; no operational mutations or new resources.",
-      "created_at": "2026-07-31T00:51:05.978190Z"
+      "created_at": "2026-07-31T00:51:05.978190Z",
+      "comment_type": "default"
     },
     {
       "id": "ad78f401-294c-4484-a9b0-90015f06bbcf",
       "author": "ryan.porter",
       "text": "Outside-in specs added and green: deterministic primary-disposition precedence, overlapping issue flags, and deterministic issue ordering. Implemented safe report/workbook/scorecard projection updates with no resource changes or operational mutations. Focused portfolio/report test suite passes (106 tests); compile and diff checks pass. Ruff/Black executables are not installed in this environment.",
-      "created_at": "2026-07-31T00:55:25.455206Z"
+      "created_at": "2026-07-31T00:55:25.455206Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "9dfadd76-3fec-4f21-a7a7-932eef6703a1",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Deterministic primary disposition precedence, overlapping secondary issue flags (including contradiction categories) and stable question ordering live in portfolio_run._stakeholder_view and flow to the workbook and dashboard. Covered by the stakeholder projection precedence and ordering tests in portfolio_run_test.py and OptimizationRunStatus tests.",
+      "created_at": "2026-10-17T12:34:40.744438467Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-30T22:44:49.901955Z",
-  "updated_at": "2026-07-31T00:55:25.455206Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:40.795580686Z",
+  "closed_at": "2026-10-17T12:34:40.795553451Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

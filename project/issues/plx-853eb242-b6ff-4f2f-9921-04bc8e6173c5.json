@@ -3,7 +3,7 @@
   "title": "Distinguish scope inventory from the selected optimization portfolio",
   "description": "A scoped run must enumerate the account inventory to resolve opaque IDs and literal prefixes, but the living Report currently presents that inventory count as though every inspected scorecard were in the optimization portfolio.\n\nFeature: Honest scoped-run coverage\n\nScenario: View a scoped optimization run after ranking\n  Given exhaustive inventory inspected more scorecards than the selected scope contains\n  When a stakeholder views the Report cover or aggregate presentation\n  Then the Report separately identifies the inventory inspected and the scorecards in scope\n  And ranked, assessed, and diagnosed counts are clearly associated with the selected scope\n\nScenario: View an account-wide run\n  Given no scorecard selectors were supplied\n  When a stakeholder views coverage\n  Then the account inventory and selected scope are clearly equivalent\n\nOut of scope:\n- Changing exhaustive inventory behavior.\n- Exposing opaque identifiers in stakeholder presentation.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": "ryan.porter",
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "400e447d-fdcb-497f-899b-91440cf434e5",
       "author": "ryan.porter",
       "text": "Production dogfood confirmed selector behavior was correct but presentation was ambiguous: a one-scorecard run displayed all 56 enumerated account scorecards as 'inspected' beside one ranked score. The stakeholder overview and aggregate component now separate account inventory inspected from scorecards in scope, while retaining scoped ranked/assessment/diagnosis counts. Focused validation is green: 46 Python tests, 11 dashboard tests, and TypeScript compilation. No change to exhaustive inventory or opaque-ID behavior.",
-      "created_at": "2026-07-30T16:43:47.569898Z"
+      "created_at": "2026-07-30T16:43:47.569898Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "36ea5e3c-b83e-41f2-8cff-8d9fb728ccd0",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. The stakeholder overview, Report cover and dashboard aggregate now show inventory inspected separately from scorecards in scope, with ranked/assessed/diagnosed counts tied to the scope. Covered by portfolio_run_test, run_report_test cover assertions and OptimizationRunStatus Jest tests.",
+      "created_at": "2026-10-17T12:34:42.343416066Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-30T16:38:58.230223Z",
-  "updated_at": "2026-07-30T16:43:47.569898Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:42.393888870Z",
+  "closed_at": "2026-10-17T12:34:42.393865104Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

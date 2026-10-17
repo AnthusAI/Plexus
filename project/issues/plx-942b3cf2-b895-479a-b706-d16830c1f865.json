@@ -3,7 +3,7 @@
   "title": "Preserve intended cooldown rejection in optimizer launch contract",
   "description": "A launch-contract fixture does not provide the frozen run identity required by an earlier safety gate, so the test cannot exercise its intended recent-activity rejection.\n\nFeature: Optimizer launch safety contracts\n  Scenario: Recent activity remains the observable rejection after earlier preconditions pass\n    Given an optimization target with complete frozen-run provenance\n    And the score has activity inside the cooldown window\n    When launch preconditions are evaluated\n    Then the target is rejected for recent score activity\n    And no optimizer procedure is dispatched",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "59856b79-49b8-409b-9fe2-17fb25701fe6",
       "author": "ryan.porter",
       "text": "Reproduced after dependency integration: the fixed activity timestamp aged beyond the 168-hour policy window, so the fixture reached later launch-authority gates. Updated the fixture to use activity one hour before execution and supplied its frozen run key. Validation: the two launch-precondition contracts pass, followed by 712 focused optimization and procedure tests passing.",
-      "created_at": "2026-08-03T16:43:11.530589Z"
+      "created_at": "2026-08-03T16:43:11.530589Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "b272682e-ac8a-4ca8-8357-e6d06744f052",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. The launch-contract fixture now supplies a frozen run key and activity one hour before execution so the recent-activity cooldown is the observable rejection. Covered by test_default_optimization_run_rejects_recent_score_activity_before_launch in MCP/tools/tactus_runtime/execute_test.py.",
+      "created_at": "2026-10-17T12:34:42.814968288Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-08-03T16:40:52.548479Z",
-  "updated_at": "2026-08-03T16:43:11.530589Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:42.862695205Z",
+  "closed_at": "2026-10-17T12:34:42.862661621Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

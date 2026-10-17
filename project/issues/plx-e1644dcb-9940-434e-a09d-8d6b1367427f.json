@@ -3,16 +3,26 @@
   "title": "Return the selected optimizer version to automation",
   "description": "As an automation caller, I want a completed optimizer task to return the selected score version, so that guarded promotion can use the same persisted result contract as human-readable optimizer reporting.\n\nFeature: Optimizer result identity\n\nScenario: Accepted candidate is returned to the caller\nGiven an optimization cycle accepts a candidate and records it as the last accepted version\nWhen the procedure completes and persists its declared output\nThen the task result includes winning_version_id for that accepted version\nAnd the indexed optimizer summary and task result identify the same winning version\nAnd no promotion occurs inside the optimizer itself",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "9e789b0a-f3d8-4490-b366-523f61be7528",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. The optimizer procedure declares winning_version_id as a persisted output set from last_accepted_version_id, and the indexed summary (primus/cli/shared/optimizer_results.py) reports the same version. test_feedback_alignment_optimizer_config.py covers the output declaration and that the optimizer never promotes.",
+      "created_at": "2026-10-17T12:34:59.664984561Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-07-28T19:18:38.035031Z",
-  "updated_at": "2026-07-28T19:18:45.392148Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:59.716776056Z",
+  "closed_at": "2026-10-17T12:34:59.716743137Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

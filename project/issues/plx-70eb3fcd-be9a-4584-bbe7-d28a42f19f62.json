@@ -3,7 +3,7 @@
   "title": "Correct optimization persistence terminology",
   "description": "As an optimization-tool user, I want public guidance to describe the canonical artifact persistence interface, so that I do not depend on a retired storage-specific contract.\n\nFeature: Canonical optimization persistence terminology\n\nScenario: Public optimization guidance describes persistence\nGiven the integrated optimization tools and documentation\nWhen a user reads the runtime contract, CLI help, or optimizer guidance\nThen persistence is described as artifact persistence\nAnd no public contract promises a storage-specific Report/S3 path\n\nExcludes changes to persistence behavior or storage architecture.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "607a908b-11fd-4a9c-80b9-ee54fac5f899",
       "author": "ryan.porter",
       "text": "Recorded the integration follow-up with behavior-first coverage. The runtime persistence error and CLI help now use canonical artifact-persistence language; focused optimization suites pass (475 tests). The issue remains in progress until the follow-up lands.",
-      "created_at": "2026-07-29T14:26:02.468842Z"
+      "created_at": "2026-07-29T14:26:02.468842Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "e5751550-c016-4052-8635-a2174e5c4268",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. The runtime error in MCP/tools/tactus_runtime/execute.py and the CLI help in primus/cli/optimization/commands.py now say 'artifact persistence', with no Report/S3 wording. Asserted in execute_test.py and commands_test.py.",
+      "created_at": "2026-10-17T12:34:49.716316485Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-29T14:23:58.326264Z",
-  "updated_at": "2026-07-29T14:26:02.468842Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:49.768093694Z",
+  "closed_at": "2026-10-17T12:34:49.768054526Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

@@ -3,7 +3,7 @@
   "title": "Continue independent semantic diagnoses after an incomplete candidate",
   "description": "As an optimization operator, I want each selected score to receive its own semantic diagnosis when evidence and budget remain available, so that one inconclusive score cannot prevent unrelated candidates from reaching automatic optimization.\n\nOut of scope: increasing the frozen semantic budget, bypassing evidence gates, automatically promoting versions, or continuing after an unknown provider outcome or authority failure.\n\nFeature: Independent semantic diagnosis coverage\n\nScenario: An ordinary incomplete diagnosis does not stop its siblings\nGiven three exact targets are selected for semantic diagnosis\nAnd the first target returns complete transport evidence but an inconclusive semantic result\nWhen the portfolio run continues\nThen the second and third targets are still diagnosed\nAnd only the incomplete target remains ineligible for optimization\n\nScenario: A safety-critical semantic failure stops further spend\nGiven multiple targets remain\nWhen a diagnosis reports budget exhaustion, an unknown provider outcome, or an authority-publication failure\nThen later diagnoses are deferred with the exact structured reason\nAnd no target with incomplete evidence becomes optimization-ready\n\nScenario: A resumed partial diagnosis completes remaining targets\nGiven a durable diagnosis milestone records completed or incomplete results for only part of its scheduled scope\nWhen the same run resumes with unchanged evidence and budget\nThen it diagnoses only the remaining exact targets\nAnd preserves the already published diagnosis evidence",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 0,
   "assignee": null,
   "creator": null,
@@ -15,17 +15,28 @@
       "id": "ae3dd39f-7dfa-4836-8ec7-66f9343bbcf7",
       "author": "ryan.porter",
       "text": "Dogfood evidence showed a selected semantic scope larger than one but only the first target was attempted because an ordinary incomplete result triggered a batch-wide break. The remaining exact targets were reported as awaiting diagnosis and could not become launch candidates. Beginning with outside-in batch-independence and replay specifications.",
-      "created_at": "2026-07-31T17:40:13.492083Z"
+      "created_at": "2026-07-31T17:40:13.492083Z",
+      "comment_type": "default"
     },
     {
       "id": "60466e4d-8bd3-424d-a390-101e7f201b55",
       "author": "ryan.porter",
       "text": "Added a failing batch-order specification proving an ordinary inconclusive first target previously prevented a complete second target from being diagnosed or launched. Implemented target-local continuation while preserving batch stops for budget exhaustion, unknown provider outcomes, and authority-publication failures. Focused safety tests: 31 passed; combined portfolio/report/resume suite: 293 passed.",
-      "created_at": "2026-07-31T17:42:26.843215Z"
+      "created_at": "2026-07-31T17:42:26.843215Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "b1975757-b636-4dca-9dc1-15a0679d009c",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Ordinary inconclusive diagnoses no longer stop sibling targets, while budget exhaustion, unknown provider outcomes and authority failures still stop further spend (portfolio_run.py). Covered by the independence, safety-stop and partial-resume tests in portfolio_run_test.py.",
+      "created_at": "2026-10-17T12:34:43.137575553Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-31T17:40:07.583168Z",
-  "updated_at": "2026-07-31T17:42:26.843215Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:43.187561411Z",
+  "closed_at": "2026-10-17T12:34:43.187521604Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

@@ -3,7 +3,7 @@
   "title": "Published scoring runtime excludes unnecessary vulnerable system packages",
   "description": "As a platform operator, I want the scoring-only container to contain only required runtime packages and pass image vulnerability gates, so that promoted artifacts do not expose avoidable operating-system attack surface.\n\nFeature: Minimal secure scoring runtime image\n\nScenario: Build the scoring-only runtime\nGiven scoring dependencies are available as Python wheels or copied source\nWhen the scoring runtime container is built\nThen it does not install source-control, visualization, or native client packages that scoring does not execute\nAnd the published image contains no critical or high scan findings before promotion",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 0,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "488a237a-bf3e-43c6-80b3-b74e34466836",
       "author": "derek.norrbom",
       "text": "Executable specification now asserts the stable Bookworm base, no apt installation in the scoring-only Dockerfile, and no Graphviz membership in the scoring runtime extra. The specification failed against the prior image definition and passes after remediation.",
-      "created_at": "2026-07-29T19:34:11.115473Z"
+      "created_at": "2026-07-29T19:34:11.115473Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "b12e5ed4-ebbc-428c-af6d-ce78c3a4ba0f",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. The scoring-only image (score-processor-lambda/Dockerfile.scoring-runtime) uses a digest-pinned AWS Lambda Python 3.12 base with no apt, git or Graphviz installs, and the scoring extra excludes Graphviz and openai-cost-calculator. Enforced by test_scoring_runtime_avoids_unnecessary_system_packages; the published artifact's ECR scan reported zero findings (recorded on plx-606326). There is no automated scan gate blocking promotion; ECR scan-on-push is enabled.",
+      "created_at": "2026-10-17T12:34:53.433351530Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-29T19:31:30.009712Z",
-  "updated_at": "2026-07-29T19:34:11.115473Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:53.503492861Z",
+  "closed_at": "2026-10-17T12:34:53.503438496Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

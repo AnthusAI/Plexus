@@ -3,16 +3,26 @@
   "title": "Render optimization reports as open-action briefs",
   "description": "Reorganize the dashboard Report block around current conclusion and open workstreams, preserve progressive disclosure, and keep realtime updates stable.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "599eb6fb-0f00-45c7-beec-0a464f25adc0",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. The Report block now leads with the current conclusion and groups open workstreams by next action with progressive disclosure (OptimizationRunStatus.tsx, b7e67fe90). Covered by OptimizationRunStatus.test.tsx conclusion/workstream and progressive-disclosure cases.",
+      "created_at": "2026-10-17T12:34:41.270827876Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-08-03T18:12:36.378731Z",
-  "updated_at": "2026-08-03T18:15:37.523525Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:41.321361320Z",
+  "closed_at": "2026-10-17T12:34:41.321333620Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

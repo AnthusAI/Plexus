@@ -3,16 +3,26 @@
   "title": "Report incomplete semantic diagnoses honestly",
   "description": "Distinguish a diagnosis call returning incomplete evidence from a completed semantic diagnosis, and keep its remediation guidance visible.\n\nFeature: Semantic diagnosis completion\n  Scenario: A selected diagnosis returns complete evidence\n    Given semantic diagnosis completes with full coverage\n    When the living report updates diagnosis coverage\n    Then the completed count increases\n    And the score uses the diagnosed state, rationale, and next action\n\n  Scenario: A selected diagnosis returns incomplete evidence\n    Given semantic diagnosis returns incomplete coverage or an incomplete state\n    When the living report updates diagnosis coverage\n    Then the completed count does not increase\n    And the incomplete count increases\n    And the report does not claim all selected diagnoses completed\n    And the run cannot become optimization-ready",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": "ryan.porter",
   "creator": null,
   "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "1e331444-1cf1-4e3e-ae30-d3cd090ba327",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Diagnosis coverage counts incomplete semantic results separately from completed ones and keeps them out of optimization-ready (portfolio_run.py). Covered by the incomplete-diagnosis tests in portfolio_run_test.py.",
+      "created_at": "2026-10-17T12:34:43.300763823Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-07-30T19:05:24.854684Z",
-  "updated_at": "2026-07-30T19:07:13.317574Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:43.346673520Z",
+  "closed_at": "2026-10-17T12:34:43.346646583Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

@@ -3,7 +3,7 @@
   "title": "Evaluate command lifecycle and dashboard state ownership",
   "description": "Compare authoritative lifecycle ownership and dashboard synchronization options before implementing a projection. Evaluate correctness, user experience, operational cost, and portability across deployment targets. Record a defensible recommendation, rejection criteria, and validation plan without client-specific information.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "b19e0c9e-9f57-4dd9-9b88-dace8586fe2c",
       "author": "derek.norrbom",
       "text": "Completed the ownership comparison and documented the decision. Evidence considered: the AWS TaskDispatcher conditionally claims PENDING tasks, but current task dispatch does not provide renewable leases, fencing tokens, immutable request identity, or portable authoritative lifecycle semantics. The record compares dashboard-authoritative state, dedicated lifecycle plus projection, and separate logical schemas in one database. Validation: git diff --check.",
-      "created_at": "2026-08-05T22:34:51.241852Z"
+      "created_at": "2026-08-05T22:34:51.241852Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "33f2bf77-008e-490e-a5e5-d10829d9bb56",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. The decision record is in documentation/supplemental/architecture/command-lifecycle-state-ownership.md, covering the recommendation, the three alternatives, reconsideration criteria and the validation plan. Later command_worker lifecycle work (tests/command_worker/features/command_lifecycle.feature) builds on it.",
+      "created_at": "2026-10-17T12:34:58.049929202Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-08-05T22:33:53.563721Z",
-  "updated_at": "2026-08-05T22:34:51.241852Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:58.107898232Z",
+  "closed_at": "2026-10-17T12:34:58.107871255Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

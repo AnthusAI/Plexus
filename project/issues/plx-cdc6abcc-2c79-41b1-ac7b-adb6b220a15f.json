@@ -3,16 +3,26 @@
   "title": "Preserve renamed-label mappings in evaluations",
   "description": "Ensure evaluation datasets and label lookup use a consistent configured label column when a score’s stored name differs from its human-label name. Definition of Done: an automated regression test proves configured label aliases resolve to populated human labels during accuracy evaluation.",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "a1c1ea77-66be-429d-b1b4-f10ac6d071ad",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: all child issues are closed and their work is merged on develop.",
+      "created_at": "2026-10-17T12:35:09.361853165Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-07-29T18:55:56.582206101Z",
-  "updated_at": "2026-07-29T18:56:01.419513145Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:35:09.377905857Z",
+  "closed_at": "2026-10-17T12:35:09.377885976Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

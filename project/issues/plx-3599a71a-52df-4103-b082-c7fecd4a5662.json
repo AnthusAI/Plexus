@@ -3,7 +3,7 @@
   "title": "Replace CloudWatch logging with stdout for K8s log capture",
   "description": "",
   "type": "chore",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "60c45b2f-9b22-4d2d-9e2e-5d14f9e1b10d",
       "author": "derek.norrbom",
       "text": "**Context:** K8s MVP scoring path (scoring_api.py, scoring_job.py, TactusScore.py) already uses stdlib logging (logging.getLogger) — no CloudWatch dependency was ever wired in. However, best practice requires: (1) explicit PLEXUS_DISABLE_CLOUDWATCH_LOGS=1 in Helm values as defensive guard against transitive imports, (2) explicit logging.basicConfig in scoring_api lifespan for structured output, (3) verification that kubectl logs captures scoring worker output. This is a hardening chore, not a migration — CloudWatch code remains for AWS production path.",
-      "created_at": "2026-06-16T17:31:25.690073Z"
+      "created_at": "2026-06-16T17:31:25.690073Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "f1274621-2772-4fe3-a597-3c52c7df4b16",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Helm values set PRIMUS_DISABLE_CLOUDWATCH_LOGS=1 and primus/workers/scoring_api.py configures structured stdout logging via logging.basicConfig, so kubectl logs captures scoring output. The behavior is documented in docker/LOCAL_TESTING.md and checked by docker/scripts/smoke_test_k8s_logging.sh.",
+      "created_at": "2026-10-17T12:34:55.974528682Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-06-16T17:31:18.379671Z",
-  "updated_at": "2026-06-16T17:31:28.258758Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:56.032918839Z",
+  "closed_at": "2026-10-17T12:34:56.032888750Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

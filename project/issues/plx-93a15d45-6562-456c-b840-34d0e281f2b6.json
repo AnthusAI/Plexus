@@ -3,7 +3,7 @@
   "title": "Preserve scheduled portfolio suspension through local dispatch",
   "description": "A suspended portfolio procedure is currently translated into completion by the local command-dispatch boundary, and the checked-in replay test does not persist procedure state.\n\nFeature: Preserve scheduled portfolio continuation\n\nScenario: Future continuation remains suspended\n  Given a portfolio procedure defers until a future UTC timestamp\n  When the local command dispatcher records the procedure result\n  Then the Procedure and Task remain WAITING_FOR_TIME\n  And the Task retains no completion timestamp or worker ownership\n  And no completed result is reported\n\nScenario: Scheduled publication retry replays durably\n  Given a portfolio run records one scheduled publication retry\n  When the procedure is invoked again before that retry is due\n  Then the persisted retry is replayed without another portfolio call\n  And the procedure remains WAITING_FOR_TIME\n\nScenario: Consecutive retries append and complete\n  Given two consecutive publication retries\n  When each due timestamp is reached in order\n  Then each continuation is replayed exactly once\n  And the portfolio operation runs three times before terminal completion",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "e83f056c-4695-4374-a1c3-d2909f80c608",
       "author": "ryan.porter",
       "text": "Implemented the minimal local-dispatch boundary fix after the failing observable spec: WAITING_FOR_TIME is mapped as durable suspension, resume_once scheduled tasks are eligible after the due-time claimant transitions dispatchStatus to PENDING, and a successful child process exit reloads and preserves the runner-authored waiting Task rather than writing completion. Focused command-dispatch tests pass within the 114-test runtime gate.",
-      "created_at": "2026-07-31T15:15:56.486239Z"
+      "created_at": "2026-07-31T15:15:56.486239Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "2452615b-ed96-435e-b8a2-5549991cb22c",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Local dispatch keeps WAITING_FOR_TIME procedures and tasks suspended (primus/cli/shared/CommandDispatch.py) without completion timestamp or worker ownership, covered by command_dispatch_test.py. Durable retry replay and the two-retry/three-call completion are covered by test_checked_in_portfolio_replays_defer_before_retrying_publication.",
+      "created_at": "2026-10-17T12:34:58.228132879Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-31T15:11:12.420508Z",
-  "updated_at": "2026-07-31T15:15:56.486239Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:58.279196548Z",
+  "closed_at": "2026-10-17T12:34:58.279127689Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

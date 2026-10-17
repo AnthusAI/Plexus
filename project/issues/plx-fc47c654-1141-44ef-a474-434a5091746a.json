@@ -3,7 +3,7 @@
   "title": "Show incremental portfolio analysis progress",
   "description": "As an operator, I want a living optimization Report to show assessment and diagnosis progress while those loops run, so that I can distinguish active work from a stalled process.\n\nOut of scope: per-score workbook revisions, new backend resources, and optimizer mutations.\n\nFeature: Incremental portfolio analysis progress\n\nScenario: Deterministic assessment is running\nGiven a living optimization Report has published its ranked portfolio\nWhen ranked scores are assessed over a long-running loop\nThen the existing Analysis TaskStage exposes processed and total work\nAnd the Report overview displays the same current progress without a new immutable workbook revision\n\nScenario: Semantic diagnosis is running\nGiven deterministic assessment is complete\nWhen selected scores receive semantic diagnosis\nThen progress continues from the assessment count through the combined analysis total\nAnd the current activity clearly identifies semantic diagnosis\n\nScenario: Progress publication fails\nGiven stakeholder-visible progress cannot be durably updated\nWhen the orchestrator attempts to advance analysis\nThen the run fails closed rather than continuing ahead of its visible state",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,17 +15,28 @@
       "id": "a22967db-7b11-46cd-8b15-c959e1e4571f",
       "author": "ryan.porter",
       "text": "Observed acceptance gap: a newly opened living report can render before its Task link hydrates. If the linking Report update is missed, the current refresh hook does not subscribe or poll because taskId is absent; ProcedureTask and cover metrics then appear only after navigation or reload. Add a scenario requiring selected reports to reconcile while Task authority is still hydrating.",
-      "created_at": "2026-07-30T19:09:09.107529Z"
+      "created_at": "2026-07-30T19:09:09.107529Z",
+      "comment_type": "default"
     },
     {
       "id": "8ce3fb38-1f59-4635-9563-4ff898790d3b",
       "author": "ryan.porter",
       "text": "Acceptance evidence: with a newly created selected Report left mounted, the dashboard updated without navigation or reload from revision 1 with 0 inspected / 0 in scope / 0 portfolio scores to revision 2 with 56 scorecards inspected / 1 in scope / 30 portfolio scores and 10 of 30 assessments. The Report card subtitle also hydrated live. Focused hook tests and dashboard frontend/backend typechecks pass.",
-      "created_at": "2026-07-30T19:18:51.982239Z"
+      "created_at": "2026-07-30T19:18:51.982239Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "a2118519-b674-4676-9630-da276b026fef",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Assessment and semantic diagnosis progress update the existing Analysis TaskStage and live cover without new revisions, continuing across a combined total (primus/optimization/run_report.py publish_progress, portfolio_run.py), and the dashboard reconciles selected Reports while the Task link hydrates. Covered by run_report_test.py and portfolio_run_test.py progress tests and use-living-report-refresh.test.tsx.",
+      "created_at": "2026-10-17T12:34:47.317797455Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-30T18:42:20.029516Z",
-  "updated_at": "2026-07-30T19:18:51.982239Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:47.363245375Z",
+  "closed_at": "2026-10-17T12:34:47.363211808Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

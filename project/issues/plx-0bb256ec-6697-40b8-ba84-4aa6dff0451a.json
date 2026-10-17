@@ -3,7 +3,7 @@
   "title": "Clarify automatic portfolio non-selection and terminal analysis status",
   "description": "A finalized living Report can describe every assessed candidate as rejected even when no optimizer launch was attempted, and an incomplete semantic result can be presented as pending. Stakeholders need selection outcomes and analysis completeness stated in plain language.\n\nFeature: Honest automatic-run status\n\nScenario: policy does not select an assessed candidate\nGiven an automatic portfolio run assessed candidates\nAnd no optimizer launch was attempted for candidates that did not pass the policy gates\nWhen the stakeholder Report is rendered\nThen those candidates are described as not selected rather than rejected\nAnd launched targets and actual launch failures remain distinguishable\n\nScenario: semantic analysis ends incomplete\nGiven portfolio inventory is complete\nAnd a scheduled semantic diagnosis ends with incomplete evidence\nWhen the terminal Report is rendered\nThen inventory is labeled complete\nAnd semantic analysis is labeled incomplete rather than pending.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,14 +15,24 @@
       "id": "c867d21c-d4e1-4b7e-97c0-c4e9ca40c90d",
       "author": "ryan.porter",
       "text": "Dogfood evidence showed the terminal stakeholder view describing all assessed but non-selected candidates as rejected, while no optimizer launch was attempted. Added outside-in tests and changed human-facing dashboard, workbook run-log, and Markdown artifact wording to not selected while preserving the machine execution contract and exact decision reasons. Current code already projects terminal incomplete semantic evidence as analysis incomplete. Validation: Report/portfolio 224 passed; focused dashboard/report stability 33 passed; live local page now reads 0 policy-selected, 0 launched, 696 not selected. No new production run or mutation was performed.",
-      "created_at": "2026-07-31T17:02:59.112672Z"
+      "created_at": "2026-07-31T17:02:59.112672Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "f9cfe00c-62a6-41c4-8d13-1454109794ae",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Human-facing dashboard, workbook run-log and Markdown wording now say 'not selected' for policy non-selection while launches/launch failures stay distinct, and terminal incomplete semantic evidence shows 'Analysis incomplete'. Covered by OptimizationRunStatus.test.tsx and run_report_test.py.",
+      "created_at": "2026-10-17T12:34:37.059908407Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-31T16:58:09.478121Z",
-  "updated_at": "2026-07-31T17:02:59.112672Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:37.121418225Z",
+  "closed_at": "2026-10-17T12:34:37.121374004Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {
-    "source": "shared",
-    "project_label": "plx"
+    "project_label": "plx",
+    "source": "shared"
   }
 }

@@ -3,7 +3,7 @@
   "title": "Dashboard scorecard demo fidelity",
   "description": "Ensure the seeded local demo scorecard and score render reliably in dashboard local mode. Track scorecard-page contract fidelity issues found during browser verification.",
   "type": "sub-task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "0fe40269-5663-44cb-b095-3cc50c172555",
       "author": "ryan.porter",
       "text": "Found local dashboard issue where account records loaded without primary-key fields from the local Amplify shim. This prevented `selectedAccount.id` from being populated, so the scorecards page never issued scorecard queries. The local shim should always include manifest primary-key fields in generated selection sets. Browser verification now shows local scorecards and score counts rendering.",
-      "created_at": "2026-06-04T22:51:39.216972Z"
+      "created_at": "2026-06-04T22:51:39.216972Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "fe3484e4-c160-4670-972d-919adec7894f",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. The local Amplify data shim (dashboard/lib/local-amplify/data.ts) now always selects manifest primary-key fields, so the seeded account, scorecard and score render in local mode. Covered by local-amplify.test.ts (primary-key selection test) and scripts/smoke-local-browser.sh.",
+      "created_at": "2026-10-17T12:34:57.040930401Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-06-04T22:51:22.273750Z",
-  "updated_at": "2026-06-04T22:51:39.216972Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:57.089894595Z",
+  "closed_at": "2026-10-17T12:34:57.089867668Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }
