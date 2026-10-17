@@ -3,7 +3,7 @@
   "title": "Raise execute_tactus runtime budget defaults",
   "description": "Increase the local MCP execute_tactus parent budget defaults and make them configurable via environment variables so async child operations can request practical budgets without pre-dispatch failures.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "f762e17b-0a94-4b9a-8664-018136dfc609",
       "author": "ryan",
       "text": "Implemented env-overridable execute_tactus parent budget defaults and raised local defaults to allow practical async child-operation dispatches. Focused MCP runtime budget tests pass locally.",
-      "created_at": "2026-06-29T20:00:48.982483Z"
+      "created_at": "2026-06-29T20:00:48.982483Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "1112c683-47b7-4d92-938a-6c73cbd4f6a0",
+      "author": "unknown",
+      "text": "Closed in board cleanup 2026-10-17: the project is on hold and Ryan called the remaining gaps YAGNI; reopen if they become an issue. Known gap at close: Parent budget defaults were neither raised nor made env-configurable in merged code. The change was probably only local. Re-implement it or close it as superseded by explicit per-call/child budgets.",
+      "created_at": "2026-10-17T12:36:04.090235656Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-06-29T19:59:52.627759Z",
-  "updated_at": "2026-06-29T20:00:48.982483Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:36:04.112297608Z",
+  "closed_at": "2026-10-17T12:36:04.112267121Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

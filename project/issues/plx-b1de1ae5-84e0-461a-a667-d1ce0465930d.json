@@ -3,7 +3,7 @@
   "title": "Supported optimizer runtime integrations",
   "description": "# Supported optimizer runtime integrations\n\n## Purpose\n\nIntegrate Plexus optimization workflows through stable, supported Tactus lifecycle, model, telemetry, storage, authentication, and artifact-transfer interfaces. The current program removes the need for AWS CLI credentials from local evaluation and optimization while preserving explicit IAM authentication for deployed workloads.\n\n## Exclusions\n\n- Runtime monkeypatching or private Tactus method replacement.\n- AWS SSO, public API-key, inline-data, direct-S3, or silent storage fallbacks for the migrated local workflow.\n- Remote task execution.\n- Unrelated reporting and deployment utilities that legitimately run under workload IAM.\n- Client-specific data or incidents.\n\n## Official interfaces\n\n- plexus login\n- plexus whoami\n- plexus logout\n- Explicit Cognito and IAM modes in PlexusDashboardClient\n- createArtifactTransferTickets\n- GraphQLArtifactStore\n\n## Architecture and rollout\n\n```mermaid\nflowchart TD\n    C[\"plx-0c9d2e Freeze contracts\"]\n    A[\"plx-0431ae Cognito CLI and client\"]\n    B[\"plx-8b44b9 Artifact ticket backend\"]\n    S[\"plx-18708d GraphQLArtifactStore\"]\n    P[\"plx-52c1bd Procedure persistence\"]\n    E[\"plx-5dc035 Evaluation artifacts\"]\n    O[\"plx-dbe0cf Optimizer and task artifacts\"]\n    I[\"plx-9b1f3d Integration and rollout\"]\n\n    C --> A\n    C --> B\n    C --> S\n    A --> P\n    B --> P\n    S --> P\n    A --> E\n    B --> E\n    S --> E\n    A --> O\n    B --> O\n    S --> O\n    P --> I\n    E --> I\n    O --> I\n```\n\nWave 1 builds additive application authentication, transfer authorization, and the shared artifact client in parallel. The additive backend deploys before Wave 2 migrates storage consumers. Wave 2 migrates three independent artifact families in parallel. Final integration proves the complete workflow without local AWS credentials.\n\n## Behavior stories\n\n- [ ] plx-a9471c CLI users authenticate without AWS credentials\n- [ ] plx-c4ca2e Artifact transfers use application authorization\n- [ ] plx-b75a39 Local evaluations and optimizations run without AWS credentials\n\n## Implementation and acceptance tasks\n\n- [ ] plx-0c9d2e Freeze authentication and artifact-transfer contracts\n- [ ] plx-0431ae Implement Cognito CLI authentication and dashboard client support\n- [ ] plx-8b44b9 Implement authenticated GraphQL artifact-transfer tickets\n- [ ] plx-18708d Implement GraphQLArtifactStore\n- [ ] plx-52c1bd Migrate procedure and Tactus persistence\n- [ ] plx-5dc035 Migrate evaluation datasets, evidence, logs, and traces\n- [ ] plx-dbe0cf Migrate optimizer and task artifacts\n- [ ] plx-9b1f3d Run credential-free integration acceptance and rollout\n\n## Dependencies\n\nReleased public Tactus lifecycle and storage interfaces remain the supported integration boundary. Each task records its own worktree, branch, base commit, agent owner, focused tests, evidence, and handoff. Explicit Kanbus blocked-by relations are authoritative for dispatch readiness.\n\n## Definition of Done\n\n- The three behavior stories pass their executable specifications.\n- Local evaluation and optimization run after one Plexus application login with all AWS profile and session variables removed.\n- Authentication refresh, artifact authorization, integrity validation, resume, and dashboard visibility are proven.\n- Python 3.11 and 3.12 CI plus dashboard typecheck, unit, Storybook, and browser tests pass.\n- Additive backend support is deployed before migrated clients.\n- No private runtime replacement, direct-S3 fallback, API-key fallback, AWS-SSO fallback, or silent storage fallback remains in the migrated path.\n- Final rollout evidence is recorded before this epic closes.\n\n## Running log\n\nRecord sanitized decisions, attempts, outcomes, dependency changes, test evidence, PRs, and next steps in this epic or its child tasks. Every coding-agent kickoff must name its canonical agent task, isolated worktree, branch, base commit, owned scope, and dependency boundary.",
   "type": "epic",
-  "status": "in_progress",
+  "status": "open",
   "priority": 1,
   "assignee": "codex/root",
   "creator": null,
@@ -17,26 +17,38 @@
       "id": "0e1104d7-338d-4c93-a918-22f6a4abf3cf",
       "author": "ryan.porter",
       "text": "Program preparation is complete. Contract task plx-0c9d2e is closed after validation. Wave 1 will use three isolated Terra agent worktrees based on the administrative merge commit: authentication and CLI, artifact ticket backend, and GraphQLArtifactStore. Each agent will post its branch, worktree, base commit, specifications, milestones, and handoff on the owned task.",
-      "created_at": "2026-07-28T12:55:19.708705Z"
+      "created_at": "2026-07-28T12:55:19.708705Z",
+      "comment_type": "default"
     },
     {
       "id": "e20a5425-59a1-4cd8-a5c6-ea6c3ebbb236",
       "author": "ryan.porter",
       "text": "Release-validation handoff: draft PR #513 head d6f60e219 was tested together with PR #495 head 98f7b0dd at local-only synthetic SHA 97690eb6. Results: 470 cross-PR tests; 4,026 Python tests on each of 3.11 and 3.12; dashboard typecheck plus 680 unit tests; Storybook build plus 700 Chromium tests; Cognito and IAM-role sandbox canaries passed without direct S3 or stored AWS credentials. Four narrow fix commits were pushed only to PR #513; synthetic merge commits were not pushed. Existing bugs remain open until develop landing. Complete model-backed evaluation was not claimed because no model-provider credential was available.",
-      "created_at": "2026-07-28T19:38:10.558408Z"
+      "created_at": "2026-07-28T19:38:10.558408Z",
+      "comment_type": "default"
     },
     {
       "id": "642e788d-2177-473a-b923-232e8f3d98f6",
       "author": "ryan.porter",
       "text": "Final release-validation update: current develop merged cleanly at the source level; the sole conflict was a shared Kanbus snapshot, and both branches' comments were preserved through Kanbus. Final local-only PR #513 + PR #495 candidate dbb2d70f4 passed 764 changed-file tests, the full Python 3.12 suite, dashboard web/backend typecheck, 669 dashboard tests with 11 skipped, Storybook build, and 700 Chromium tests. The PR #513-only current-develop head passed 3,939 Python 3.11 tests. The synthetic merge remains local and will not be pushed. Application logout, sandbox test-password rotation, and browser-session cleanup are complete.",
-      "created_at": "2026-07-28T19:50:42.561906Z"
+      "created_at": "2026-07-28T19:50:42.561906Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "853b8219-e646-4f01-a432-d4de62925b09",
+      "author": "unknown",
+      "text": "Paused in board cleanup 2026-10-17: the project is on hold. Finished child work is closed; the unstarted children stay in Ready for later.",
+      "created_at": "2026-10-17T12:36:16.863729992Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-27T20:52:49.656913Z",
-  "updated_at": "2026-07-28T19:50:42.561906Z",
+  "updated_at": "2026-10-17T12:36:16.863758685Z",
   "closed_at": null,
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {
-    "source": "shared",
-    "project_label": "plx"
+    "project_label": "plx",
+    "source": "shared"
   }
 }
