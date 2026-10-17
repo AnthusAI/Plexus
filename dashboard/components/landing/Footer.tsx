@@ -5,7 +5,6 @@ export const Footer = () => {
   return (
     <AnthusFooter
       siteId="primus"
-      subtitle="Part of the Anthus Platform"
       description="Primus is the Anthus MLOps platform and agent incubator for evaluating, deploying, and continuously improving AI agents."
       additionalColumns={[
         {
