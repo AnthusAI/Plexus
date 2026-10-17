@@ -3,7 +3,7 @@
   "title": "Safely inject array procedure parameters",
   "description": "As a procedure author, I want array-valued runtime parameters to reach Lua unchanged, so that exact scoped orchestration can execute safely.\n\nOut of scope: changing parameter semantics or adding a second execution path.\n\nFeature: Safe structured parameter injection\n\n  Scenario: Inject an array into a YAML-backed procedure\n    Given a Tactus procedure parameter contains a JSON-compatible array\n    When Plexus injects the runtime context into Lua\n    Then the Lua source parses successfully\n    And the procedure receives the complete array unchanged\n\n  Scenario: Preserve scalar parameter behavior\n    Given existing scalar procedure parameters\n    When Plexus injects the runtime context into Lua\n    Then their values remain unchanged",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,17 +15,28 @@
       "id": "bcb401a5-f6aa-46b8-89ca-e07804d265e4",
       "author": "ryan.porter",
       "text": "Added an outside-in runtime regression proving array-valued procedure parameters parse and round-trip unchanged, including Lua delimiter-like content. Replaced the ambiguous short long-string encoding with collision-safe JSON decoding. Focused regression passes.",
-      "created_at": "2026-07-29T18:51:38.305901Z"
+      "created_at": "2026-07-29T18:51:38.305901Z",
+      "comment_type": "default"
     },
     {
       "id": "69a8ab9e-ef51-429b-b4b1-0e2bcdbe58b7",
       "author": "ryan.porter",
       "text": "Sandbox retry exposed a second caller-side path: procedure --set retained JSON arrays as strings. Added one shared typed parser for persisted YAML values and runtime context, retaining existing scalar coercion. Array, nested-object, scalar, and malformed-input regressions pass.",
-      "created_at": "2026-07-29T19:14:36.171963Z"
+      "created_at": "2026-07-29T19:14:36.171963Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "9b3b77f8-5390-42ed-91b7-54f2534c7890",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Array and nested parameters are injected via a collision-safe Json.decode long string and --set preserves JSON arrays through a shared typed parser (primus/cli/procedure/procedure_executor.py). Covered by test_procedure_executor_compat.py array-injection test and test_procedure_run_params.py.",
+      "created_at": "2026-10-17T12:34:39.882450791Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-29T18:46:57.625336Z",
-  "updated_at": "2026-07-29T19:14:36.171963Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:39.938952412Z",
+  "closed_at": "2026-10-17T12:34:39.938923319Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

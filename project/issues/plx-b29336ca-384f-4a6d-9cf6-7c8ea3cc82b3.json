@@ -3,7 +3,7 @@
   "title": "Align active dashboard runtime to main Plexus chat fixes",
   "description": "Apply the dashboard frontend auth fallback fix into main Plexus, run web/chat from main Plexus instead of Plexus-2, and verify latency instrumentation fields are visible in active chat responses.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": "ryan",
   "creator": null,
@@ -15,65 +15,84 @@
       "id": "e69fd14f-acb4-48af-93c4-d04884437963",
       "author": "ryan",
       "text": "Starting implementation in /Users/ryan/Projects/Plexus. Will patch frontend auth fallback files, stop Plexus-2 dev process, start dashboard + chat worker from main Plexus, and verify active runtime/latency outputs.",
-      "created_at": "2026-07-01T20:17:54.804246Z"
+      "created_at": "2026-07-01T20:17:54.804246Z",
+      "comment_type": "default"
     },
     {
       "id": "9244c135-86fa-4518-8390-d4c79596f693",
       "author": "ryan",
       "text": "Resuming validation setup: local dashboard is running main Plexus but points at stale sandbox outputs. Repointing local runtime to current sandbox resources and verifying login plus chat latency fields in Chrome.",
-      "created_at": "2026-07-01T21:07:14.586536Z"
+      "created_at": "2026-07-01T21:07:14.586536Z",
+      "comment_type": "default"
     },
     {
       "id": "98952e83-c09d-4fee-9c33-a0bd94ffaac3",
       "author": "ryan",
       "text": "Local sandbox validation complete: dashboard outputs now target the current sandbox, localhost:3000 logs in with the sandbox test user, old URL/key auth error is absent, local response target is wired to the worker, and warm console chat responses are visible with latency fields including pre-model and model-first-chunk timings.",
-      "created_at": "2026-07-01T21:19:17.381563Z"
+      "created_at": "2026-07-01T21:19:17.381563Z",
+      "comment_type": "default"
     },
     {
       "id": "679fa737-f6f8-4751-9830-c243a4640dda",
       "author": "ryan",
       "text": "Continuing browser-visible validation. API rows exist for assistant replies, but the selected console session is not rendering persisted assistant rows after reload; investigating session-index hydration and rendering before changing code.",
-      "created_at": "2026-07-01T21:28:34.593704Z"
+      "created_at": "2026-07-01T21:28:34.593704Z",
+      "comment_type": "default"
     },
     {
       "id": "6f12ee1f-71a2-4459-b204-f107194b4003",
       "author": "ryan",
       "text": "Validation update: fixed selected-session message hydration so persisted assistant replies render after a stale procedure-index load. Browser validation on localhost showed the prior assistant replies after reload, then a new short chat turn rendered the assistant response and cleared Thinking. Focused dashboard conversation tests pass, and console runtime latency tests pass with explicit coverage for the new timing fields.",
-      "created_at": "2026-07-01T21:37:14.099135Z"
+      "created_at": "2026-07-01T21:37:14.099135Z",
+      "comment_type": "default"
     },
     {
       "id": "a6bea199-83eb-4de9-97ac-beb420314083",
       "author": "ryan",
       "text": "Implementing next latency pass: reduce pending assistant fallback from the old 30s delay, add local worker startup identity/warmup logging, persist server latency metadata on completed trigger messages, and keep model choice unchanged until measurements show model latency is the bottleneck.",
-      "created_at": "2026-07-01T21:51:29.377665Z"
+      "created_at": "2026-07-01T21:51:29.377665Z",
+      "comment_type": "default"
     },
     {
       "id": "9b393e20-9c5e-4aa7-a4ec-690b2f08aecb",
       "author": "ryan",
       "text": "Implemented sandbox latency pass and validated locally. Changes: pending assistant recovery now starts at 500ms with fast retries; selected-session hydration is reused when session updates advance; local worker logs owner/pid/cwd/API/SHA and warms runtime before polling; user-row metadata now persists server latency fields. Focused tests pass. Sandbox validation with local worker shows 30s reveal stall removed, but warm visible latency remains about 6.5-8.0s because model first chunk is about 3.1-3.6s and post-persist/claim adds the rest.",
-      "created_at": "2026-07-01T22:10:38.359516Z"
+      "created_at": "2026-07-01T22:10:38.359516Z",
+      "comment_type": "default"
     },
     {
       "id": "8d604c1b-54f3-4681-8716-a090d0a7fe45",
       "author": "ryan",
       "text": "Starting direct-console reply completion fix. The dashboard will scope live message subscriptions to the selected chat session, preserve direct reply procedure identity, and use terminal trigger completion for one authoritative session hydration. Focused behavior tests will cover direct streaming completion, session switching, terminal hydration, and event ordering.",
-      "created_at": "2026-07-16T18:51:39.150339Z"
+      "created_at": "2026-07-16T18:51:39.150339Z",
+      "comment_type": "default"
     },
     {
       "id": "6d2029f3-3738-4657-a396-3e59c872a073",
       "author": "ryan",
       "text": "Implementation complete. ChatMessage subscriptions now scope to the active session so direct assistant replies retain their distinct procedure identity while their stream and terminal updates reach the visible conversation. Removed timer-driven assistant reconciliation; terminal trigger completion performs one authoritative session-index hydration. Focused dashboard tests and TypeScript typecheck pass. Local dashboard reload is clean; end-to-end validation is ready with a fresh local chat message.",
-      "created_at": "2026-07-16T18:56:22.022053Z"
+      "created_at": "2026-07-16T18:56:22.022053Z",
+      "comment_type": "default"
     },
     {
       "id": "96129bd4-fee7-40b6-bf9d-2766ff3e0cf5",
       "author": "ryan",
       "text": "Follow-up diagnosis: a sandbox turn was claimed and completed by the local worker, with a durable assistant row, while the browser remained at one message and Thinking. Stored session updates also did not reach the browser. The filtered AppSync model-subscription path is silently dropping events in this sandbox. Updated Console to use unfiltered model subscriptions and enforce procedure/session boundaries client-side; focused tests and typecheck pass. A fresh browser turn is required to validate the repaired live subscription path.",
-      "created_at": "2026-07-16T19:03:49.554613Z"
+      "created_at": "2026-07-16T19:03:49.554613Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "800e483f-9716-4c91-9ecb-feab0258112d",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. The Console chat fixes are merged: conversation-viewer.tsx uses unfiltered ChatMessage subscriptions with client-side session boundaries and session-index hydration, and server latency fields persist on completed messages (primus/console/chat_runtime.py, covered by test_chat_runtime.py). The local-environment alignment steps were one-time developer setup.",
+      "created_at": "2026-10-17T12:34:58.773386994Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-01T20:17:50.590444Z",
-  "updated_at": "2026-07-16T19:03:49.554613Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:58.840468509Z",
+  "closed_at": "2026-10-17T12:34:58.840440456Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

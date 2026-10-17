@@ -3,16 +3,26 @@
   "title": "Preserve evidence timestamps from item attachments",
   "description": "Purpose: Make score timestamp enrichment reliable when transcript artifacts are attached to an Item rather than embedded in metadata.\n\nDefinition of Done:\n- Behavior is specified with an executable test.\n- Timestamp enrichment can load a Deepgram attachment using the Item's recorded attachment key.\n- Existing metadata-based enrichment behavior remains supported.\n- Focused tests pass.",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "0c6f8d9c-a51c-4eae-b171-ffece488585f",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: all child issues are closed and their work is merged on develop.",
+      "created_at": "2026-10-17T12:35:09.328058480Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-06-24T18:45:56.790113847Z",
-  "updated_at": "2026-06-24T18:46:07.776531031Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:35:09.341475237Z",
+  "closed_at": "2026-10-17T12:35:09.341446060Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

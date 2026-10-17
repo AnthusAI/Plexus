@@ -3,19 +3,29 @@
   "title": "Implement bounded score brief selection",
   "description": "Implement the bounded score-brief selection specified by plx-2e4b79f2-947d-4959-81e7-206cba0f67a7.\n\nScope:\n- Add outside-in tests that fail before production changes.\n- Select score briefs from stakeholder priorities, questions/issues, and optimization outcomes.\n- Preserve every portfolio row in the workbook, scorecard CSV, summary, and presentation.\n- Preserve immutable revision, reuse, reconciliation, privacy, and fatal-publication behavior.\n- Update publication totals to use the identical selection contract.\n\nValidation:\n- Focused run_report tests.\n- Existing artifact reuse, interruption recovery, reconciliation, and privacy tests.\n\nNo client-specific data and no GraphQL/backend resource changes.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": "ryan.porter",
   "creator": null,
   "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "0555b5e0-07f0-45f6-b2db-7d84619b9f45",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Score briefs are now selected only for rows represented in stakeholder priorities, questions/issues and optimization outcomes while the workbook and scorecard exports keep every row (run_report._score_brief_*). Covered by the bounded score-brief tests in run_report_test.py alongside existing reuse and recovery tests.",
+      "created_at": "2026-10-17T12:34:41.960653590Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-07-31T18:09:20.261192Z",
-  "updated_at": "2026-07-31T18:09:23.126239Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:42.006352586Z",
+  "closed_at": "2026-10-17T12:34:42.006324463Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {
-    "source": "shared",
-    "project_label": "plx"
+    "project_label": "plx",
+    "source": "shared"
   }
 }

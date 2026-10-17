@@ -3,7 +3,7 @@
   "title": "Show scoped identity consistently in optimization reports",
   "description": "Ensure the embedded procedure summary and living report use the same sanitized scope identity.\n\nFeature: Scoped optimization identity\n  Scenario: A scorecard-scoped portfolio run is displayed\n    Given an optimization portfolio procedure has one or more scorecard selectors\n    When the procedure task and living report are rendered\n    Then both surfaces identify the run as scorecard-scoped\n    And neither surface describes the run as account-wide\n\n  Scenario: An account-wide portfolio run is displayed\n    Given an optimization portfolio procedure has no scorecard selectors\n    When the procedure task and living report are rendered\n    Then both surfaces identify the run as account-wide",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": "ryan.porter",
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "91d3ccdb-87d4-4b1d-aca9-64a3b45db913",
       "author": "ryan.porter",
       "text": "Acceptance: a production-backed read-only portfolio run retained a scorecard-scoped identity consistently in the Report title, adopted Procedure Task description, and embedded summary. Focused Python and dashboard tests passed; no schema or backend resource changed. Committed as d8a2de1d1.",
-      "created_at": "2026-07-30T20:04:39.621693Z"
+      "created_at": "2026-07-30T20:04:39.621693Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "22b38e09-03f4-4e1e-81f6-6a00d8a96f27",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Procedure task summary and living Report use the same sanitized scorecard-scoped or account-wide identity. Covered by ProcedureTask.optimizer-auth.test.tsx scope tests and run_report_test.py self-identifying start test.",
+      "created_at": "2026-10-17T12:34:39.199285161Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-30T18:53:50.296969Z",
-  "updated_at": "2026-07-30T20:04:39.621693Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:39.260769757Z",
+  "closed_at": "2026-10-17T12:34:39.260742188Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

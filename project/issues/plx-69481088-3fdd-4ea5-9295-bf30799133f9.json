@@ -3,7 +3,7 @@
   "title": "Seed local control-plane demo data",
   "description": "",
   "type": "sub-task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "cbbb7847-be6c-42d1-953e-ad8faa00f414",
       "author": "ryan.porter",
       "text": "Next seed expansion is tracked under epic plx-89823a (Local feedback evaluation MVP), task plx-d513c9, to add 200 deterministic Nira feedback-evaluation fixtures (Items + FeedbackItems) for feedback-run smoke.",
-      "created_at": "2026-06-05T15:33:11.914516Z"
+      "created_at": "2026-06-05T15:33:11.914516Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "0a3e9158-2aa8-4b89-84d7-3456ba7027f4",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Deterministic local demo data is seeded by services/private-graphql-proxy/scripts/seed_local_demo.py, which the local control-plane proof and dev scripts call. scripts/smoke-local-cli.sh checks the seeded records, and the 200-fixture expansion was finished under plx-d513c9.",
+      "created_at": "2026-10-17T12:34:56.723202502Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-06-04T18:34:00.534738Z",
-  "updated_at": "2026-06-05T15:33:11.914516Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:56.767695898Z",
+  "closed_at": "2026-10-17T12:34:56.767673141Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

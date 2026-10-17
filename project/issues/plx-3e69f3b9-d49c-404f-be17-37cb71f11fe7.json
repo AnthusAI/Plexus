@@ -3,7 +3,7 @@
   "title": "Restore standard GitHub Actions validation triggers",
   "description": "GitHub Actions were temporarily restricted while release automation was being repaired. Restore the repository validation workflows to their established pull-request and branch triggers without redesigning the workflows or changing release credentials.\n\nAcceptance:\n- The restored triggers match the last intentional enabled configuration.\n- Workflow YAML parses successfully.\n- The change remains separate from release-authentication redesign.",
   "type": "chore",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": "ryan.porter",
   "creator": null,
@@ -15,17 +15,28 @@
       "id": "49b9c55c-f075-4351-b300-a323af8c2104",
       "author": "ryan.porter",
       "text": "Implementation started. Scope is limited to reversing the four temporary .bak renames from commit 7f3bf775d; release authentication and workflow redesign are explicitly deferred. The workflow-enabled specification failed first because ci.yaml was disabled.",
-      "created_at": "2026-07-28T20:16:12.770779Z"
+      "created_at": "2026-07-28T20:16:12.770779Z",
+      "comment_type": "default"
     },
     {
       "id": "39a23cc6-9155-4512-a621-b77a0bbea919",
       "author": "ryan.porter",
       "text": "Restored the four standard workflow filenames as exact 100 percent renames reversing the temporary disable commit; no trigger, credential, or workflow-body redesign was included. Validation: workflow contract tests parse all four enabled YAML files and confirm no backup filenames remain; focused suite passes 8 of 8 and diff check passes.",
-      "created_at": "2026-07-28T20:21:20.848435Z"
+      "created_at": "2026-07-28T20:21:20.848435Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "d36048c9-c5ad-4167-9baf-92163fb9724a",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Standard workflows ci.yaml, documentation.yml and release.yml were restored in 0d9f2bf6a and are guarded by tests/test_github_workflows_enabled.py, which parses each YAML and checks no .bak copy remains. ruleset-sync stays disabled on purpose, and the later main-only trigger limit (bcba6b837) was a separate billing decision.",
+      "created_at": "2026-10-17T12:34:56.204739568Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-28T20:15:59.732603Z",
-  "updated_at": "2026-07-28T20:21:20.848435Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:56.254782271Z",
+  "closed_at": "2026-10-17T12:34:56.254746868Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

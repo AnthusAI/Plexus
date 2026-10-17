@@ -3,16 +3,26 @@
   "title": "Amplify Hosting AL2023 cannot build Console chat Docker; deploy-manifest missing",
   "description": "## Problem\n\nRestoring plexus.anth.us on a new Amplify app fails after Next.js builds: Amplify WEB_COMPUTE cannot find deploy-manifest.json unless the branch is Next.js SSR with AMPLIFY_MONOREPO_APP_ROOT=dashboard. Setting that env makes repo dashboard/amplify.yml win. That file starts /usr/local/bin/dockerd-entrypoint.sh, which does not exist on Amplify AL2023.\n\nConsole chat Docker is unused for this restore and will be re-engineered later.\n\n## Change\n\nUpdate dashboard/amplify.yml so a monorepo Amplify deploy skips Docker and the unused ConsoleChatResponder/MCP/backup/vector stacks, and still produces a Next.js .next artifact Amplify can package.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "f6a13d78-330e-4620-a719-60b8bdef4b62",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. dashboard/amplify.yml no longer starts dockerd. Its backend build patches backend.ts to skip the console worker, MCP, backup and vector stacks, and the frontend publishes the .next artifact for Amplify WEB_COMPUTE. Config-only change with no automated test; the patch targets were confirmed present in backend.ts.",
+      "created_at": "2026-10-17T12:34:57.393049314Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-09-02T14:48:55.134998Z",
-  "updated_at": "2026-09-02T14:49:19.330597Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:57.452508839Z",
+  "closed_at": "2026-10-17T12:34:57.452477941Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

@@ -3,16 +3,26 @@
   "title": "Implement local GraphQL MVP storage and resolvers",
   "description": "",
   "type": "sub-task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "d2ee07e2-1e83-4a47-9a36-93e1fc85b3b8",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Local GraphQL storage and manifest-driven resolvers are in services/private-graphql-proxy/proxy (store, document_store, virtuus_store, schema_contract, app). They are covered by test_app_routing.py, test_schema_contract.py, features/virtuus_local_storage.feature and the scripts/smoke-local-cli.sh seeded-record checks.",
+      "created_at": "2026-10-17T12:34:56.382885471Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-06-04T18:33:59.254663Z",
-  "updated_at": "2026-06-04T18:34:06.837016Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:56.436761178Z",
+  "closed_at": "2026-10-17T12:34:56.436735283Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

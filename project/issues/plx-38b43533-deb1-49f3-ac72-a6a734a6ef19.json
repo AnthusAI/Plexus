@@ -3,7 +3,7 @@
   "title": "Complete exhaustive portfolio ranking under production page limits",
   "description": "",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,17 +15,28 @@
       "id": "3e93d09e-4ded-4a80-8ae6-83fbdf2b2279",
       "author": "ryan.porter",
       "text": "Feature: Exhaustive portfolio ranking tolerates production GraphQL response limits\n\nScenario: Inventory spans several bounded pages\n  Given an account has more scores than fit in one safe GraphQL response\n  When optimization ranking enumerates the portfolio\n  Then it requests bounded pages until the end cursor\n  And every scorecard is represented exactly once\n  And the feedback analysis still uses one frozen account-wide evidence window\n\nScenario: A page read fails transiently\n  Given one bounded inventory page fails once\n  When the same page is retried\n  Then ranking continues without duplicating or skipping records\n\nScenario: A page cannot be recovered\n  Given a bounded inventory page still fails after one retry\n  When ranking reports coverage\n  Then the portfolio is incomplete\n  And no exact priority ordering or optimization-ready target is claimed\n\nObserved failure: the current inventory request uses a page size of 1000 and can exceed the production GraphQL response budget before the living Report reaches useful ranking content. The repair will reduce the page size, add exactly one same-page retry, preserve exhaustive coverage evidence, and fail closed.",
-      "created_at": "2026-07-30T14:53:28.896646Z"
+      "created_at": "2026-07-30T14:53:28.896646Z",
+      "comment_type": "default"
     },
     {
       "id": "aeb241a6-402d-44ee-a002-0b583f8f81d0",
       "author": "ryan.porter",
       "text": "The outside-in page-limit specification failed against the previous implementation because all inventory requests omitted a limit and defaulted to 1000. Added a fixed 100-scorecard page limit to the existing exhaustive cursor loop; the existing one-retry and fail-closed semantics were preserved. Focused ranking/scoping validation passes (39 tests). Production-backed dogfood then completed exhaustive inventory and ranking with complete coverage across 56 scorecards, proving the bounded page path works under the real response shape. The bug remains open until the change lands.",
-      "created_at": "2026-07-30T15:05:47.695316Z"
+      "created_at": "2026-07-30T15:05:47.695316Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "9f04714a-9e8c-4285-a97c-a78728a7bb3a",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Exhaustive ranking inventory in MCP/tools/tactus_runtime/execute.py pages 100 scorecards at a time, with one same-page retry and a fail-closed incomplete result. Covered by test_default_optimization_rank_paginates_with_one_retry_and_one_frozen_alignment_read and test_rank_scope_failed_continuation_does_not_analyze_partial_scope_or_claim_exact.",
+      "created_at": "2026-10-17T12:34:48.337992077Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-30T14:53:21.933135Z",
-  "updated_at": "2026-07-30T15:05:47.695316Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:48.396712988Z",
+  "closed_at": "2026-10-17T12:34:48.396685668Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

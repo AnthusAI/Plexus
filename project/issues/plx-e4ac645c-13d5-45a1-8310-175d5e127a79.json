@@ -3,7 +3,7 @@
   "title": "Continue structured approval across every portfolio batch",
   "description": "As a portfolio operator, I want every ready target batch to receive an independent structured review, so that portfolios larger than five targets neither skip decisions nor stop after the first batch.\n\nFeature: Multi-batch optimization approval continuation\n\nScenario: More than five targets require approval\n  Given a portfolio has more than five optimization-ready targets\n  When the procedure requests structured approval\n  Then it presents no more than five exact targets at a time\n  And after one batch is resolved it requests the next unresolved batch\n  And it dispatches nothing until every batch has a valid independent decision\n\nScenario: Procedure replay\n  Given one approval batch was resolved before a human wait checkpoint\n  When the procedure resumes for a later batch\n  Then the earlier response remains bound to its original evidence\n  And the earlier batch is not requested or dispatched twice.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,17 +15,28 @@
       "id": "b47afd94-49bb-4331-8bb7-b600d532295f",
       "author": "ryan.porter",
       "text": "Outside-in proof complete: the new six-target specification first showed both batches remaining pending after the first decision. The procedure now persists evidence-bound responses across checkpoints, requests only the next unresolved batch of at most five, and dispatches nothing until every batch is resolved. Focused regression is green.",
-      "created_at": "2026-07-29T19:54:57.523521Z"
+      "created_at": "2026-07-29T19:54:57.523521Z",
+      "comment_type": "default"
     },
     {
       "id": "e1c24c6c-f094-4b2d-b4e0-6644431df7b0",
       "author": "ryan.porter",
       "text": "Final post-fix validation passed on Python 3.11 and 3.12: 356 focused tests and 4,088 full-suite tests on each runtime, plus lint, dispatch regression, lock, version, and diff checks.",
-      "created_at": "2026-07-29T20:06:54.512610Z"
+      "created_at": "2026-07-29T20:06:54.512610Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "390a38ae-3f31-4c53-a35b-810b20a6361c",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. primus/optimization/portfolio_run.py keeps evidence-bound responses across checkpoints and requests the next unresolved batch of at most five, with no dispatch until every batch is resolved. Covered by test_every_five_target_approval_batch_is_resolved_before_any_dispatch.",
+      "created_at": "2026-10-17T12:34:51.385419119Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-29T19:50:11.827027Z",
-  "updated_at": "2026-07-29T20:06:54.512610Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:51.455858035Z",
+  "closed_at": "2026-10-17T12:34:51.455813794Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

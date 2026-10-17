@@ -3,7 +3,7 @@
   "title": "Render aggregate living-report presentation on the Report cover",
   "description": "The living-report service publishes a specialized aggregate status block, but the Report cover omits the block reference, so operators see only the legacy prose projection.\n\nFeature: Living-report aggregate presentation\n\nScenario: Open a published living optimization Report\n  Given the Report has a published OptimizationRunStatus block\n  And that block points to a verified stakeholder-presentation artifact\n  When an operator opens the Report detail view\n  Then the Report cover renders the aggregate optimization presentation\n  And the compact prose remains available as supporting context\n\nScenario: Open the Report before aggregate evidence exists\n  Given the Report status block exists but its first presentation revision is not yet available\n  When an operator opens the Report detail view\n  Then the cover presents an honest loading or unavailable state\n  And it does not invent aggregate findings\n\nOut of scope:\n- New GraphQL models or infrastructure resources.\n- Changing the immutable artifact contract.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": "ryan.porter",
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "4b2c1e1e-e678-4153-88f2-f1516eadcbd8",
       "author": "ryan.porter",
       "text": "Dogfood reproduced the defect against a fresh production-backed Report: the specialized status block and immutable presentation descriptor were present, but the cover rendered only prose because it omitted the normal report-block code fence. Added the cover reference plus a dashboard ReportTask integration specification. Validation is green: 46 focused Python tests, 11 dashboard tests, and TypeScript compilation. No schema or infrastructure resources changed. The bounded test run completed in 4m44s with zero model cost and no operational mutations.",
-      "created_at": "2026-07-30T16:37:04.776140Z"
+      "created_at": "2026-07-30T16:37:04.776140Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "fb241003-91b6-4c9e-b7e9-3121152511e2",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. The Report cover now includes the OptimizationRunStatus block reference so the aggregate presentation renders alongside the compact prose (primus/optimization/run_report.py). Covered by the ReportTask.optimization-status dashboard integration test.",
+      "created_at": "2026-10-17T12:34:37.424445396Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-30T16:33:04.039531Z",
-  "updated_at": "2026-07-30T16:37:04.776140Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:37.476979822Z",
+  "closed_at": "2026-10-17T12:34:37.476948732Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

@@ -3,16 +3,26 @@
   "title": "Add local control-plane smoke coverage",
   "description": "",
   "type": "sub-task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "6269e811-dcf7-4f1a-97cd-b92f2858b4c4",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Local control-plane smoke coverage is in scripts/smoke-local-*.sh (CLI, predict, browser, feedback evaluation, task dispatch, report, chat worker) with proxy smoke tests in services/private-graphql-proxy/tests/test_smoke_proxy.py.",
+      "created_at": "2026-10-17T12:34:59.496516401Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-06-04T18:34:01.133002Z",
-  "updated_at": "2026-06-04T18:45:53.062984Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:59.550102024Z",
+  "closed_at": "2026-10-17T12:34:59.550075474Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

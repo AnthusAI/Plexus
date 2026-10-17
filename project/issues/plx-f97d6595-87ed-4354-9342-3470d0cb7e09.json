@@ -3,7 +3,7 @@
   "title": "Preserve living-report attachments when storing terminal output",
   "description": "As an operator, I want terminal procedure output persistence to preserve every previously attached living-report artifact, so that completing a procedure cannot erase the Task's durable evidence index.\n\nFeature: Merge terminal output attachments\nScenario: Final output is added to an existing living-report task\n  Given a running Task already references immutable report evidence and workbook attachments\n  When the procedure stores its terminal output artifact\n  Then the output artifact is appended exactly once\n  And every existing attachment remains present\n  And concurrent or stale Task objects cannot replace the authoritative attachment list\n\nOut of scope: new storage resources, inline artifact fallbacks, retention policy, and client-specific evidence.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 0,
   "assignee": null,
   "creator": null,
@@ -15,23 +15,35 @@
       "id": "50733c3a-bde0-4d21-8c15-4f35e6f60b31",
       "author": "ryan.porter",
       "text": "Production dogfooding reproduced the defect: the Task referenced living-report revisions during execution, but terminal output persistence left attachedFiles containing only the compact output artifact. Writing a stale-object regression test before changing merge behavior.",
-      "created_at": "2026-07-31T14:31:03.304722Z"
+      "created_at": "2026-07-31T14:31:03.304722Z",
+      "comment_type": "default"
     },
     {
       "id": "99ba2c33-eb03-4b3c-94a4-efc7125aee6b",
       "author": "ryan.porter",
       "text": "Implemented an uncommitted minimal fix: terminal procedure output reloads the authoritative Task attachment list immediately before adding output.json, validates it fail-closed, and uses that list for the append. Added an outside-in stale-task regression. Focused suites passed: 31 tests across experiment-runner, task-output storage, and Task model tests.",
-      "created_at": "2026-07-31T14:34:02.646750Z"
+      "created_at": "2026-07-31T14:34:02.646750Z",
+      "comment_type": "default"
     },
     {
       "id": "11145903-786d-4f0b-8296-f177ba757cab",
       "author": "ryan.porter",
       "text": "Revalidated terminal attachment preservation alongside scheduled continuation and portfolio execution. The combined portfolio/report/runtime gate is green: 421 portfolio/report/optimizer/rubric tests and 114 runner/executor/resume/dispatcher/config tests passed. The authoritative Task reload remains the single attachment-merge path.",
-      "created_at": "2026-07-31T15:15:56.749937Z"
+      "created_at": "2026-07-31T15:15:56.749937Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "bae3d45f-792d-4b65-954c-aae2f76bffe1",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Terminal output persistence reloads the authoritative Task attachment list before appending output.json, so living-report attachments survive stale Task objects (primus/cli/shared/experiment_runner.py). Covered by test_experiment_runner.py's stale-task regression and task_output_storage_test.py duplicate-merge test.",
+      "created_at": "2026-10-17T12:34:46.968317501Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-31T14:30:53.286125Z",
-  "updated_at": "2026-07-31T15:15:56.749937Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:47.019409008Z",
+  "closed_at": "2026-10-17T12:34:47.019381536Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

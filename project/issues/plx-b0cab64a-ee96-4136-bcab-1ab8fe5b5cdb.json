@@ -3,16 +3,26 @@
   "title": "Score evidence timestamps from attached transcript artifacts",
   "description": "As a scoring platform operator, I want timestamp enrichment to use transcript artifacts attached to an Item, so that asynchronous scoring preserves evidence positions without embedding large transcript payloads in metadata.\n\nFeature: Evidence timestamp enrichment from Item attachments\n\nScenario: Deepgram is available only as an Item attachment\nGiven a score explanation contains quoted evidence\nAnd the score metadata does not embed a Deepgram payload\nAnd the Item has an attached Deepgram JSON file\nWhen timestamp enrichment runs\nThen the explanation is enriched with timestamp brackets\nAnd the resulting score result exposes start and end time seconds.\n\nOut of scope:\n- Changing score prompt behavior.\n- Re-embedding raw Deepgram payloads in Item metadata.",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "plx-cf9c8bd5-c6a3-4f71-896b-3b849c027677",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "4291098b-06eb-4280-8528-194dd6087e3c",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. LangGraphScore loads Deepgram JSON from the Item's recorded attachment keys (primus/utils/deepgram_attachments.py) when metadata has no embedded payload, then fills start/end time seconds on the Score.Result. Covered by test_timestamp_enrichment_uses_recorded_deepgram_attachment_key in primus/scores/LangGraphScore_test.py.",
+      "created_at": "2026-10-17T12:34:58.582089475Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-06-24T18:46:03.843397843Z",
-  "updated_at": "2026-06-24T18:46:07.784404085Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:58.654982464Z",
+  "closed_at": "2026-10-17T12:34:58.654946110Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

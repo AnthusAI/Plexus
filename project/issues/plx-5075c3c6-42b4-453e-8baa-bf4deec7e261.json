@@ -3,19 +3,29 @@
   "title": "Record concrete toolchain identity in portfolio Reports",
   "description": "As an optimization operator, I want every portfolio Report to identify the Plexus and Tactus code that produced it, so that findings and optimizer decisions can be reproduced and audited.\n\nFeature: Optimization toolchain identity\n\nScenario: Caller omits toolchain identity\n  Given a portfolio procedure is launched through the supported runtime\n  When the frozen run specification is created\n  Then it records the installed Plexus version\n  And it records the loaded Tactus version\n  And it does not publish the value unknown\n\nScenario: Explicit build identity is available\n  Given a deployment provides an immutable build revision\n  When the toolchain identity is recorded\n  Then the immutable build revision is included with package versions\n\nScenario: Run resumes\n  Given a living Report has frozen a toolchain identity\n  When the same attempt resumes\n  Then the stored identity remains unchanged\n  And a changed runtime identity cannot silently rewrite prior evidence\n\nOut of scope: schema resources, deployment, source mutation, automatic promotion, and client-specific data.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "eb5ada9e-2ce0-492d-be5d-39d5a8b4d64f",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. The frozen run spec and run key now record concrete primus/ and tactus/ package versions plus an immutable build revision when available (portfolio_run._toolchain_version). Covered by portfolio_run_test toolchain tests; changed identity on resume is rejected by the existing frozen-spec checks in run_report_test.",
+      "created_at": "2026-10-17T12:34:40.582918703Z",
+      "comment_type": "default"
+    }
+  ],
   "created_at": "2026-07-31T17:55:27.773689Z",
-  "updated_at": "2026-07-31T17:55:32.968846Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:40.631880522Z",
+  "closed_at": "2026-10-17T12:34:40.631853709Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {
-    "source": "shared",
-    "project_label": "plx"
+    "project_label": "plx",
+    "source": "shared"
   }
 }

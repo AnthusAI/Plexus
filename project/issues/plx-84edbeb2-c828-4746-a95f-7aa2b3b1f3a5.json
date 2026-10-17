@@ -3,7 +3,7 @@
   "title": "Publish deterministic report evidence before diagnosis",
   "description": "As a stakeholder, I want completed ranking and assessment evidence published before semantic diagnosis finishes, so that a living report reflects durable progress during long model work.\n\nOut of scope: per-score workbook publication or changing ranking and diagnosis algorithms.\n\nFeature: Living report milestone ordering\n\n  Scenario: Publish deterministic evidence before semantic diagnosis\n    Given exhaustive ranking and all deterministic assessments complete\n    When semantic diagnosis begins\n    Then the ranking and assessment milestone has already been published\n    And diagnosis evidence is published only after diagnosis completes\n\n  Scenario: Diagnosis fails after deterministic evidence is published\n    Given the ranking and assessment milestone is durable\n    When semantic diagnosis fails\n    Then the existing milestone remains visible\n    And the run reports the diagnosis failure without relabeling prior evidence as incomplete",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "cd7f3224-4ed3-485d-9ceb-1d20d82919d6",
       "author": "ryan.porter",
       "text": "Added outside-in lifecycle regressions for milestone ordering and diagnosis failure. The runner now publishes all deterministic assessments before semantic diagnosis, and a later diagnosis failure preserves that published milestone. Focused regressions pass.",
-      "created_at": "2026-07-29T18:51:38.497928Z"
+      "created_at": "2026-07-29T18:51:38.497928Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "b63ac3ed-f7c5-4703-bf14-c5dd174201a9",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. The portfolio runner publishes ranking and all deterministic assessments as durable milestones before semantic diagnosis, and a later diagnosis failure leaves that milestone intact. Covered by the milestone-ordering and diagnosis-failure tests in portfolio_run_test.py.",
+      "created_at": "2026-10-17T12:34:42.131038887Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-29T18:46:57.850257Z",
-  "updated_at": "2026-07-29T18:51:38.497928Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:42.207585752Z",
+  "closed_at": "2026-10-17T12:34:42.207549972Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

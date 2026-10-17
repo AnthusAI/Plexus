@@ -3,7 +3,7 @@
   "title": "Preserve evidence rank across optimization policy gates",
   "description": "As an operator, I want every quantified optimization opportunity to retain its original evidence rank while policy gates determine whether it is selected, so that deferred work remains visible, explainable, and monitorable.\n\nFeature: Evidence rank and action disposition\n\nScenario: Recent activity defers a high-ranked score\nGiven a score has a high reviewed-error opportunity\nAnd recent score activity places it in cooldown\nWhen the portfolio is ranked and candidates are selected\nThen its evidence rank remains unchanged in the complete opportunity order\nAnd its action disposition is deferred with the cooldown reason and eligibility time\nAnd it is not dispatched for optimization\n\nScenario: Top-K selection follows policy gates\nGiven quantified opportunities have complete evidence ranks\nWhen structural and activity gates are applied\nThen up to K eligible scores receive a selected disposition\nAnd eligible scores below the budget remain visible with a below-current-selection disposition\nAnd no policy gate silently renumbers the evidence rank\n\nScenario: Operator reviews the opportunity distribution\nGiven the living Report contains quantified opportunities with mixed dispositions\nWhen the overview is rendered\nThen a shared-scale opportunity curve shows their relative magnitudes\nAnd selected, cooldown, blocked, and below-selection scores have distinct labeled marks\nAnd the detailed list retains the evidence rank, quantified value, disposition, reason, and resource links\n\nScenario: Evidence is incomplete\nGiven ranking or policy evidence is incomplete\nWhen the Report is published\nThen affected scores remain visible with an incomplete disposition\nAnd the Report does not claim an exact selection cutoff.",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,11 +15,21 @@
       "id": "de81a61e-3f4f-42fa-9ff8-f08184176859",
       "author": "ryan.porter",
       "text": "Acceptance update: a read-only living-report run confirmed that pre-policy evidence rank remains stable after cooldown and structural gates, while candidate rank and policy disposition remain separate. The deferred row stayed visible in the stakeholder projection and retained its original rank. Focused optimization tests, dashboard tests, dashboard typechecks, and MCP runtime coverage passed. No optimizer launch or production mutation occurred.",
-      "created_at": "2026-07-30T19:43:58.484430Z"
+      "created_at": "2026-07-30T19:43:58.484430Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "0270d724-a441-4c79-ade5-5218cc188ab9",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Evidence rank stays stable across cooldown/structural gates with separate dispositions (selected, cooldown, blocked, eligible_below_selection), shown on a shared-scale list in original order (primus/optimization/portfolio_run.py, OptimizationRunStatus.tsx). Covered by portfolio_run_test.py rank-preservation test and decision_test.py inexact-rank test.",
+      "created_at": "2026-10-17T12:34:40.071322332Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-30T19:19:12.544090Z",
-  "updated_at": "2026-07-30T19:43:58.484430Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:40.120430453Z",
+  "closed_at": "2026-10-17T12:34:40.120402085Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }

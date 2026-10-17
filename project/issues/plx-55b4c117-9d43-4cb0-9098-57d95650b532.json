@@ -3,7 +3,7 @@
   "title": "Keep procedure active until living report finalizes",
   "description": "As an operator, I want a retryable living-report publication state to keep its procedure active, so that the authoritative Report cannot remain behind a falsely completed procedure.\n\nFeature: Retryable living-report publication\nScenario: Publication must be retried before procedure completion\n  Given a portfolio run has completed analysis\n  And publishing the next durable Report revision returns a retryable running state\n  When the Tactus procedure evaluates the portfolio-run result\n  Then the procedure remains active for replay\n  And it does not mark the procedure completed\n  And it does not advance to a terminal finalization stage\n\nScenario: Terminal completion requires an authoritative final Report revision\n  Given a portfolio run reaches a terminal decision\n  When the Tactus procedure completes\n  Then the linked Report contains a terminal finalization revision\n  And the Report and Procedure show consistent terminal status\n\nOut of scope: client-specific findings, automatic score changes, champion promotion, and new backend resources.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 0,
   "assignee": null,
   "creator": null,
@@ -15,29 +15,42 @@
       "id": "8bd06436-81b3-4725-9ef5-c258e5f901ad",
       "author": "ryan.porter",
       "text": "Production dogfooding reproduced the contract violation: a retryable running result from living-report publication was treated as terminal by the outer procedure, leaving the Report at a nonterminal milestone while the Procedure completed. Writing an outside-in runtime contract test before changing control flow.",
-      "created_at": "2026-07-31T14:26:43.655758Z"
+      "created_at": "2026-07-31T14:26:43.655758Z",
+      "comment_type": "default"
     },
     {
       "id": "dd14e0b2-fa48-40a8-b538-ca5f0121211e",
       "author": "ryan.porter",
       "text": "Implementing the Plexus side of native scheduled continuation: preserve Tactus WAITING_FOR_TIME across the runner, executor, durable Procedure/Task metadata, dispatcher, and resume service; add fail-closed boundary coverage without schema changes.",
-      "created_at": "2026-07-31T14:40:02.999753Z"
+      "created_at": "2026-07-31T14:40:02.999753Z",
+      "comment_type": "default"
     },
     {
       "id": "7c54a30e-7ae3-495c-8fda-b9934bd943da",
       "author": "ryan.porter",
       "text": "Native scheduled-continuation integration is now green across the checked-in portfolio procedure. Added append-only replay coverage for two consecutive publication retries, stable run identity, pending-checkpoint recovery, and local dispatcher preservation of WAITING_FOR_TIME. Red proof caught early execution and false completion before the fixes. Current focused evidence: 114 runner/executor/resume/dispatcher/config tests passed and 421 portfolio/report/optimizer/rubric tests passed; no new backend resources.",
-      "created_at": "2026-07-31T15:15:56.240038Z"
+      "created_at": "2026-07-31T15:15:56.240038Z",
+      "comment_type": "default"
     },
     {
       "id": "54da884a-e826-4d44-a48d-1068edfb95ec",
       "author": "ryan.porter",
       "text": "Final read-only review found and red tests reproduced three additional safety gaps. Fixed checkpoint loading to require the exact Tactus replay boundary at replay_index minus one, fixed WAITING_FOR_CHILDREN so TaskStages remain resumable rather than failed, and added distinct Procedure-first scheduled-wait crash recovery coverage. Revalidated 117 focused Plexus runtime tests, 156 focused Tactus tests, 421 portfolio/report tests, and both repository diff checks.",
-      "created_at": "2026-07-31T15:18:27.921189Z"
+      "created_at": "2026-07-31T15:18:27.921189Z",
+      "comment_type": "default"
+    },
+    {
+      "id": "3444896e-0096-41d7-baf7-15b8ac38027d",
+      "author": "unknown",
+      "text": "Board audit 2026-10-17: verified against develop. Retryable living-report publication now returns a scheduled WAITING_FOR_TIME continuation that the runner, executor, dispatcher and resume service preserve, so the procedure stays active until a terminal Report revision exists. Covered by the portfolio procedure config replay tests, local scheduled continuation tests, resume-service and executor compat tests.",
+      "created_at": "2026-10-17T12:34:40.912224850Z",
+      "comment_type": "default"
     }
   ],
   "created_at": "2026-07-31T14:26:35.636015Z",
-  "updated_at": "2026-07-31T15:18:27.921189Z",
-  "closed_at": null,
+  "updated_at": "2026-10-17T12:34:40.973595976Z",
+  "closed_at": "2026-10-17T12:34:40.973560757Z",
+  "right_now_summary": null,
+  "right_now_updated_at": null,
   "custom": {}
 }
