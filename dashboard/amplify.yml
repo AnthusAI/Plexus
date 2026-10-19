@@ -48,6 +48,7 @@ applications:
             - npm --version
             - export PARCEL_WATCHER_BACKEND=inotify
             - npm ci --cache .npm --prefer-offline
+            - npm update anthus-footer
             # Fetch brand assets if BRAND_ASSETS_URL or BRAND_ASSETS_REPO is set
             # Supports: 
             #   - BRAND_ASSETS_URL: Public HTTPS URLs, S3 presigned URLs
