@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import BrandableLogo from '@/components/BrandableLogo'
@@ -36,6 +37,7 @@ export const CTASection = () => {
           <div className="py-8 md:py-8 px-4 md:px-8">
             <div className="flex flex-col md:flex-row items-center gap-12">
               <div className="flex-1 text-center md:text-left">
+                <Badge variant="outline" className="mb-4">Early access</Badge>
                 <h2 className="text-3xl md:text-4xl font-bold mb-4">
                   Ready to get started?
                 </h2>
