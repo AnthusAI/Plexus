@@ -19,6 +19,11 @@ describe('CTASection', () => {
     expect(screen.getByText(/Join the growing community/)).toBeInTheDocument()
   })
 
+  it('labels the section as early access', () => {
+    render(<CTASection />)
+    expect(screen.getByText('Early access')).toBeInTheDocument()
+  })
+
   it('shows loading state when clicking early access button', async () => {
     render(<CTASection />)
     const button = screen.getByRole('button', { name: /request early access/i })
