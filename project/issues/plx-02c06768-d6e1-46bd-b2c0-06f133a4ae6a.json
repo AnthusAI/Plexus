@@ -1,0 +1,20 @@
+{
+  "id": "plx-02c06768-d6e1-46bd-b2c0-06f133a4ae6a",
+  "title": "Primus: reconnect Amplify app to renamed repo",
+  "description": "PRIMUS Amplify app divicqm3nhcwt (legacy account 335163751677, profile legacy, us-east-1).\nSTATE: primus.anth.us shows the \"Early access\" chip (verified live 2026-10-19 12:29Z); a main build succeeded 07:17 ET. The app still points at the pre-rename repo name (Plexus), so pushes to main do not trigger builds. Repo was renamed (Plexus -> Primus).\nTODO: Ryan reconnects the repository in the Amplify console (needs his GitHub sign-in; CLI update-app needs --access-token and was blocked by the Mac permission check), or approve `aws amplify update-app --app-id divicqm3nhcwt --repository https://github.com/AnthusAI/Primus --access-token \"$(gh auth token)\"` with AWS_PROFILE=legacy. Then confirm a push to main triggers a build. Do not start extra builds without checking list-jobs first.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-19T16:24:16.498948Z",
+  "updated_at": "2026-10-19T16:24:16.498975Z",
+  "closed_at": null,
+  "right_now_summary": "The Amplify app still points to the old repo name, so main pushes do not trigger builds.",
+  "right_now_updated_at": "2026-10-19T16:24:17.978025Z",
+  "custom": {}
+}
