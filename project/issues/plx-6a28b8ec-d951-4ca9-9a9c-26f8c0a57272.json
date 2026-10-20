@@ -1,0 +1,25 @@
+{
+  "id": "plx-6a28b8ec-d951-4ca9-9a9c-26f8c0a57272",
+  "title": "README setup is stale: Next.js 14 vs 15, missing mkdir -p .primus, hardcoded /home/ec2-user/miniconda3 path",
+  "description": "**Problem**\nThe README setup instructions do not match the repo: it names Next.js 14 where the dashboard uses 15, omits the `mkdir -p .primus` step, and contains a machine-specific path (/home/ec2-user/miniconda3).\n\n**Evidence**\nREADME.md (develop): Next.js version line, the setup block without `mkdir -p .primus`, and the miniconda path. Compare dashboard/package.json for the Next.js version.\n\n**Fix**\nCorrect the version, add the missing step, and replace the path with a generic instruction.\n\n**How to verify**\nFollow the README on a clean machine; `grep -n 'ec2-user\\|Next.js 14' README.md` returns nothing.\n\nSource: Anthus repo audit, 2026-10-20.",
+  "type": "bug",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-20T04:28:11.314197Z",
+  "updated_at": "2026-10-20T04:28:11.314240Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude_code",
+    "model": "claude-opus-5-5",
+    "name": "audit-filing"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

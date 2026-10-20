@@ -1,0 +1,25 @@
+{
+  "id": "plx-4159f89c-daba-4bbb-a424-09de4549e896",
+  "title": "Docs tell people to pip install primus-cli and primus-sdk, which do not exist on PyPI (typosquat risk)",
+  "description": "**Problem**\nThe live docs at https://primus.anth.us/documentation/advanced/cli and https://primus.anth.us/documentation/advanced/sdk instruct readers to `pip install primus-cli` and `pip install primus-sdk`. Neither package exists on PyPI. The name `primus` on PyPI belongs to an unrelated third party, so anyone who falls back to it, or anyone who registers the missing names, gets someone else's code on a reader's machine.\n\n**Evidence**\n- dashboard/app/documentation/advanced/cli/page.tsx:55 `<code>pip install primus-cli</code>`\n- dashboard/app/documentation/advanced/sdk/page.tsx:27 `<code>pip install primus-sdk</code>`\n- `curl -s -o /dev/null -w '%{http_code}' https://pypi.org/pypi/primus-cli/json` returns 404; same for primus-sdk; `primus` returns 200 (not ours).\n\n**Fix**\nReplace the commands with the real install path (for example install from the repository), or publish the packages and reserve both names on PyPI first. Remove any wording that implies the unrelated `primus` package.\n\n**How to verify**\n`curl -s https://primus.anth.us/documentation/advanced/cli | grep -c 'pip install primus-cli'` returns 0, or both names resolve on PyPI to packages owned by AnthusAI.\n\nSource: Anthus repo audit, 2026-10-20.",
+  "type": "bug",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-20T04:28:06.304218Z",
+  "updated_at": "2026-10-20T04:28:06.304257Z",
+  "closed_at": null,
+  "agent": {
+    "platform": "claude_code",
+    "model": "claude-opus-5-5",
+    "name": "audit-filing"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "da0712ae-d7a3-46c2-b4ec-52e83bb304a2",
+  "issue_id": "plx-50449480-0e13-47da-b92f-a3d35943719a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-20T04:28:07.314Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Docs concepts page links to /documentation/basics/* and evaluation-metrics, which return 404",
+    "description": "**Problem**\nhttps://primus.anth.us/documentation/concepts links to pages that do not exist.\n\n**Evidence** (HTTP status on 2026-10-20)\n- /documentation/basics/items 404, /documentation/basics/sources 404, /documentation/basics/scores 404, /documentation/basics/scorecards 404, /documentation/basics/tasks 404\n- /documentation/concepts/evaluation-metrics 404, /documentation/basics 404\n- /documentation/basics/evaluations now returns 200 (the audit saw 404; recheck).\n\n**Fix**\nPoint each link at the page that exists (most concept pages live under /documentation/concepts/*), or create the missing pages.\n\n**How to verify**\nCrawl https://primus.anth.us/documentation/concepts and confirm every internal link returns 200, for example with `curl -s -o /dev/null -w '%{http_code}' <url>` on each.\n\nSource: Anthus repo audit, 2026-10-20.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": [],
+    "agent": {
+      "platform": "claude_code",
+      "model": "claude-opus-5-5",
+      "name": "audit-filing"
+    }
+  }
+}
