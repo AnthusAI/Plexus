@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "c49c1fa7-6196-4314-9192-3cf1ce025e5e",
+  "issue_id": "plx-25f017db-ddc1-4f9a-8d90-9aa4f84535e8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-20T04:28:10.348Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Public docs show an internal ticket ID in --kanbus-issue-id examples",
+    "description": "**Problem**\nThe public documentation examples pass an internal ticket ID to `--kanbus-issue-id`, leaking an internal board reference into customer-facing docs.\n\n**Evidence**\n- dashboard/app/documentation/concepts/evaluations/page.tsx:224\n- dashboard/app/documentation/methods/evaluate-score/page.tsx:350 and :359\n\n**Fix**\nReplace with an obvious placeholder such as `<issue-id>`.\n\n**How to verify**\n`git grep -n 'kanbus-issue-id plx-' -- dashboard` returns nothing.\n\nSource: Anthus repo audit, 2026-10-20.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": [],
+    "agent": {
+      "platform": "claude_code",
+      "model": "claude-opus-5-5",
+      "name": "audit-filing"
+    }
+  }
+}

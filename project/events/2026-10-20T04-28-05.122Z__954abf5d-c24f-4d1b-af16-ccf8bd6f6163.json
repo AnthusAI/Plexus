@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "954abf5d-c24f-4d1b-af16-ccf8bd6f6163",
+  "issue_id": "plx-6d50826e-45a5-47c9-8a8b-5b0670a44a84",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-20T04:28:05.122Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "An AWS access key ID and account details sit in a board comment on branch feature/client-redaction-skill",
+    "description": "**Problem**\nAn AWS access key ID and account details (account number, IAM user name) are in an incident comment on one board issue, committed on branch feature/client-redaction-skill only. No secret access key is present. No values are quoted in this issue.\n\n**Evidence**\n- Branch origin/feature/client-redaction-skill, file project/issues/plx-db955190-5a74-41ea-95fb-a729e155ad1f.json, around line 101 (the AWS incident comment).\n- The file is not on main or develop.\n\n**Fix**\nThis needs an AWS sign-in by Ryan. Nothing in AWS has been attempted by the audit.\n1. Confirm the IAM access key was deactivated (then deleted) and the IAM user's other keys are accounted for.\n2. Review CloudTrail for use of that key since it was exposed, and review unauthenticated identities on any related identity pool.\n3. Redact the comment, or delete the branch if it is abandoned, so the details do not reach main or develop by merge.\n\n**How to verify**\nIn IAM the key shows Inactive or is gone, and `git grep -n 'AKIA' origin/feature/client-redaction-skill -- project` returns nothing after the branch is redacted or deleted.\n\nSource: Anthus repo audit, 2026-10-20.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": null,
+    "labels": [],
+    "agent": {
+      "platform": "claude_code",
+      "model": "claude-opus-5-5",
+      "name": "audit-filing"
+    }
+  }
+}

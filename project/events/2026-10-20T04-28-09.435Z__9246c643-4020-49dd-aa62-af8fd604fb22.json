@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "9246c643-4020-49dd-aa62-af8fd604fb22",
+  "issue_id": "plx-479a497d-ebe9-49ea-a6ae-0b9ca98bc0f3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-20T04:28:09.435Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Home page card links to /call-center-qa, which returns 404",
+    "description": "**Problem**\nA card on the primus.anth.us home page links to /call-center-qa, which does not exist.\n\n**Evidence**\n`curl -s -o /dev/null -w '%{http_code}' https://primus.anth.us/call-center-qa` returns 404 (2026-10-20).\n\n**Fix**\nPoint the card at an existing page or remove the card.\n\n**How to verify**\n`curl -s -o /dev/null -w '%{http_code}' https://primus.anth.us/call-center-qa` returns 200, or the home page no longer links to it.\n\nSource: Anthus repo audit, 2026-10-20.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": [],
+    "agent": {
+      "platform": "claude_code",
+      "model": "claude-opus-5-5",
+      "name": "audit-filing"
+    }
+  }
+}

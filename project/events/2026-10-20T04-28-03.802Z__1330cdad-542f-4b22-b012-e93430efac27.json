@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "1330cdad-542f-4b22-b012-e93430efac27",
+  "issue_id": "plx-f94b67e4-9c52-4609-8668-e36d41dedf7a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-20T04:28:03.802Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "An AppSync API key (da2- prefix) is committed in amplify_outputs.json at commit 0ddc64cc",
+    "description": "**Problem**\nAn AppSync API key (da2- prefix) is committed in amplify_outputs.json at commit 0ddc64cc (2025-06-10), reachable from main and develop. The same file also had unauthenticated identities enabled. The key is probably expired (AppSync API keys last at most 365 days) but that has not been confirmed. No key material is quoted in this issue.\n\n**Evidence**\n- Commit 0ddc64cc, file amplify_outputs.json, present in the history of origin/main and origin/develop (verified with `git branch -r --contains 0ddc64cc`).\n- The secret scan on develop reported 0 verified secrets, so the key is either expired or not verifiable by the scanner; neither is confirmation.\n\n**Fix**\nThis needs an AWS sign-in by Ryan. Nothing in AWS has been attempted by the audit.\n1. Confirm in AppSync (us-west-2) that the API key is deleted or expired; if it is still live, delete it and rotate it.\n2. Review the Cognito identity pool for unauthenticated identities and disable them if they are not needed.\n3. Optionally purge the file from history once the key is dead (history rewrite is Ryan's call).\n\n**How to verify**\nIn the AWS console (us-west-2) the AppSync API lists no key matching the committed prefix or it shows as expired, and the identity pool has unauthenticated access off or deliberately scoped.\n\nSource: Anthus repo audit, 2026-10-20.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 0,
+    "assignee": null,
+    "parent": null,
+    "labels": [],
+    "agent": {
+      "platform": "claude_code",
+      "model": "claude-opus-5-5",
+      "name": "audit-filing"
+    }
+  }
+}
