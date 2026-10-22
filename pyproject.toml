@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "primus"
-version = "1.67.4"
+version = "1.68.0"
 description = "A Python module for configuring and managing data scoring"
 readme = "README.md"
 license = "MIT"
