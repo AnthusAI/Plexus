@@ -53,7 +53,7 @@ export default function LandingPage() {
   return (
     <Layout>
       <StandardSection
-        headline="AI Agent Incubator"
+        headline="The classifier lab"
         headlinePosition="inline"
         variant="hero"
         useWordReveal={true}
@@ -64,7 +64,7 @@ export default function LandingPage() {
         leftContent={
           <>
             <p className="text-xl text-muted-foreground mb-8 w-full">
-              Primus gives your team a reliable way to evaluate, deploy, and improve AI agents. It's built for running agent workflows at scale, making it easy to capture feedback, measure accuracy, and automatically refine how your AI behaves.
+              Primus is the classifier lab: evaluate, deploy and improve AI with reviewer feedback. It's built for running AI workflows at scale, making it easy to capture feedback, measure accuracy, and automatically refine how your AI behaves.
             </p>
             <p className="text-xl text-muted-foreground mb-8 w-full">
               Instead of guessing if your prompts work, use Primus to set up a continuous learning loop where human feedback directly improves the models and logic behind your agents.

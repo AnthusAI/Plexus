@@ -1,0 +1,25 @@
+{
+  "id": "plx-68110b09-2311-4c52-b4a3-309df50c5686",
+  "title": "Replace the Google Form popup with a link to the Anth.us engage page and refresh the stale Incubator title",
+  "description": "The landing page Request Early Access button used window.open to a Google Form and failed when popups were blocked. Make it a plain link to https://anth.us/engage/?solution=Primus&cta=early-access and update the page title and headline to the current classifier lab positioning.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-10-22T15:20:56.270672Z",
+  "updated_at": "2026-10-22T15:32:57.591687Z",
+  "closed_at": "2026-10-22T15:32:57.591638Z",
+  "agent": {
+    "platform": "claude_code",
+    "model": "Claude Sonnet 5.5",
+    "name": "Claude"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}

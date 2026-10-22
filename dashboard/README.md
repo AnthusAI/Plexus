@@ -1,6 +1,6 @@
 # Primus Dashboard
 
-This is a Next.js/Shadcn dashboard built on Amplify Gen2 for Primus, with a Python API client code and a CLI tool. This dashboard is part of the [Primus AI Agent Incubator](../README.md), providing a visual interface for managing scorecards and monitoring classification performance.
+This is a Next.js/Shadcn dashboard built on Amplify Gen2 for Primus, with a Python API client code and a CLI tool. This dashboard is part of the [Primus classifier lab](../README.md), providing a visual interface for managing scorecards and monitoring classification performance.
 
 ## Overview
 

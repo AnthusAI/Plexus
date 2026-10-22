@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a3aa4e78-86f7-445d-a9b8-f03441a281a9",
+  "issue_id": "plx-68110b09-2311-4c52-b4a3-309df50c5686",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T15:20:56.271Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Replace the Google Form popup with a link to the Anth.us engage page and refresh the stale Incubator title",
+    "description": "The landing page Request Early Access button used window.open to a Google Form and failed when popups were blocked. Make it a plain link to https://anth.us/engage/?solution=Primus&cta=early-access and update the page title and headline to the current classifier lab positioning.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}
