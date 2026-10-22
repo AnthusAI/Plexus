@@ -71,7 +71,7 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Button size="lg" className="w-full sm:w-auto bg-primary text-white hover:bg-primary/90 text-lg font-semibold" asChild>
-                <Link href="/solutions/platform">
+                <Link href="/solutions/platform" data-cta-location="hero">
                   Learn More
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d833c125-57e4-4639-96aa-cea5cf1f3dd6",
+  "issue_id": "plx-deea84cb-f9f9-4cad-812d-dad46da5e105",
+  "event_type": "issue_created",
+  "occurred_at": "2026-10-22T16:09:34.131Z",
+  "actor_id": "home",
+  "payload": {
+    "title": "Add GA4 with Consent Mode v2 and cta_click to the marketing landing",
+    "description": "Marketing landing (primus.anth.us) only, not the authenticated app: Google tag with Consent Mode v2 defaults, accessible consent banner, Cookie settings link, privacy page, cta_click events per the Anthus analytics conventions. No personal data in events.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

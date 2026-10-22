@@ -1,0 +1,33 @@
+{
+  "id": "plx-deea84cb-f9f9-4cad-812d-dad46da5e105",
+  "title": "Add GA4 with Consent Mode v2 and cta_click to the marketing landing",
+  "description": "Marketing landing (primus.anth.us) only, not the authenticated app: Google tag with Consent Mode v2 defaults, accessible consent banner, Cookie settings link, privacy page, cta_click events per the Anthus analytics conventions. No personal data in events.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2749e946-8d2d-4e11-853e-26b31e1171bb",
+      "author": "home",
+      "text": "GA4 (G-31SC26SDGX) with Consent Mode v2, banner, Cookie settings, /privacy and cta_click added to the marketing landing layout only; unit tests pass.",
+      "created_at": "2026-10-22T16:33:02.665408Z",
+      "comment_type": "default"
+    }
+  ],
+  "created_at": "2026-10-22T16:09:34.131551Z",
+  "updated_at": "2026-10-22T16:33:02.724893Z",
+  "closed_at": "2026-10-22T16:33:02.724282Z",
+  "agent": {
+    "platform": "claude_code",
+    "model": "Claude Sonnet 5.5",
+    "name": "Claude Code"
+  },
+  "right_now_summary": null,
+  "right_now_updated_at": null,
+  "custom": {}
+}
