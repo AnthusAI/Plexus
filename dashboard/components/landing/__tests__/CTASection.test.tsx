@@ -1,18 +1,9 @@
 import React from 'react'
 import '@testing-library/jest-dom'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
-import { CTASection } from '../CTASection'
+import { render, screen } from '@testing-library/react'
+import { CTASection, EARLY_ACCESS_URL } from '../CTASection'
 
 describe('CTASection', () => {
-  beforeEach(() => {
-    // Mock window.open since we can't actually open windows in tests
-    window.open = jest.fn().mockReturnValue(window)
-  })
-
-  afterEach(() => {
-    jest.clearAllMocks()
-  })
-
   it('renders the main heading and description', () => {
     render(<CTASection />)
     expect(screen.getByText('Ready to get started?')).toBeInTheDocument()
@@ -24,50 +15,21 @@ describe('CTASection', () => {
     expect(screen.getByText('Early access')).toBeInTheDocument()
   })
 
-  it('shows loading state when clicking early access button', async () => {
+  it('offers Request Early Access as a plain link to the Anth.us engage page', () => {
     render(<CTASection />)
-    const button = screen.getByRole('button', { name: /request early access/i })
-    
-    await act(async () => {
-      fireEvent.click(button)
-    })
-    
-    await waitFor(() => {
-      expect(button).toBeDisabled()
-      expect(screen.getByRole('img', { name: 'loading' })).toBeInTheDocument()
-    })
+    const link = screen.getByRole('link', { name: /request early access/i })
+    expect(link).toHaveAttribute('href', 'https://anth.us/engage/?solution=Primus&cta=early-access')
+    expect(EARLY_ACCESS_URL).toBe('https://anth.us/engage/?solution=Primus&cta=early-access')
   })
 
-  it('opens Google Forms in new window when clicking early access button', async () => {
+  it('does not open a window or need a popup, so a popup blocker cannot break it', () => {
+    window.open = jest.fn()
     render(<CTASection />)
-    const button = screen.getByRole('button', { name: /request early access/i })
-    
-    await act(async () => {
-      fireEvent.click(button)
-    })
-    
-    await waitFor(() => {
-      expect(window.open).toHaveBeenCalledWith(
-        'https://docs.google.com/forms/d/e/1FAIpQLSdWlt4KpwPSBHzg3o8fikHcfrzxo5rCcV-0-zDt815NZ1tcyg/viewform?usp=sf_link',
-        '_blank'
-      )
-    })
+    const link = screen.getByRole('link', { name: /request early access/i })
+    link.addEventListener('click', (event) => event.preventDefault())
+    link.click()
+    expect(window.open).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /request early access/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/popup/i)).not.toBeInTheDocument()
   })
-
-  it('shows error message when popup is blocked', async () => {
-    // Mock window.open to return null, simulating blocked popup
-    (window.open as jest.Mock).mockReturnValue(null)
-    
-    render(<CTASection />)
-    const button = screen.getByRole('button', { name: /request early access/i })
-    
-    await act(async () => {
-      fireEvent.click(button)
-    })
-    
-    await waitFor(() => {
-      expect(screen.getByText('Failed to open form. Please disable popup blocker and try again.')).toBeInTheDocument()
-    })
-    expect(button).not.toBeDisabled()
-  })
-}) 
+})
