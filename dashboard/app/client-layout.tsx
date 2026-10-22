@@ -54,6 +54,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/solutions/call-center-qa',
     '/solutions/enterprise',
     '/solutions/resources',
+    '/privacy',
     '/documentation',
     '/documentation/advanced/worker-nodes',
     '/documentation/advanced/cli',

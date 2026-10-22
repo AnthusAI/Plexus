@@ -14,6 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
+import { MarketingAnalytics } from './MarketingAnalytics'
 
 const landingPages = [
   { href: '/solutions/platform', label: 'Platform' },
@@ -141,6 +142,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
       <main>{children}</main>
+      <MarketingAnalytics />
     </div>
   )
 }

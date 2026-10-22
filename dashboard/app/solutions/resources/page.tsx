@@ -38,7 +38,7 @@ export default function ResourcesPage() {
             </p>
             <div className="flex justify-center">
               <Button size="lg" className="bg-primary text-white" asChild>
-                <Link href="/documentation">
+                <Link href="/documentation" data-cta-location="hero">
                   Browse Documentation
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
@@ -99,7 +99,7 @@ export default function ResourcesPage() {
               Learn the basics of building AI agents with Primus in our comprehensive getting started guide.
             </p>
             <Button className="bg-primary text-white" asChild>
-              <Link href="/documentation/basics">Read Guide</Link>
+              <Link href="/documentation/basics" data-cta-location="card">Read Guide</Link>
             </Button>
           </div>
           <div className="space-y-4">

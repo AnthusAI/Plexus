@@ -31,7 +31,7 @@ export const CTASection = () => {
                   className="bg-gradient-to-r from-secondary to-primary text-white hover:from-secondary/90 hover:to-primary/90 text-lg font-semibold"
                   asChild
                 >
-                  <a href={EARLY_ACCESS_URL}>
+                  <a href={EARLY_ACCESS_URL} data-cta-location="band">
                     Request Early Access
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </a>
