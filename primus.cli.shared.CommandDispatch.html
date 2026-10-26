@@ -1,0 +1,270 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>primus.cli.shared.CommandDispatch module &mdash; Primus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="primus.cli.shared.CommandLineInterface module" href="primus.cli.shared.CommandLineInterface.html" />
+    <link rel="prev" title="primus.cli.shared package" href="primus.cli.shared.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Primus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="primus.html">primus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="primus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="primus.agentic.html">primus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.analysis.html">primus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.attribution.html">primus.attribution package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.auth.html">primus.auth package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.chat.html">primus.chat package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="primus.cli.html">primus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="primus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="primus.command_worker.html">primus.command_worker package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.config.html">primus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.console.html">primus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.core.html">primus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.dashboard.html">primus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.data.html">primus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.documentation.html">primus.documentation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.guidelines.html">primus.guidelines package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.infrastructure.html">primus.infrastructure package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.input_sources.html">primus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.linting.html">primus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.logging.html">primus.logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.metrics.html">primus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.optimization.html">primus.optimization package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.primus_logging.html">primus.primus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.processors.html">primus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.reports.html">primus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.rubric_memory.html">primus.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.runtime.html">primus.runtime package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.html">primus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scoring.html">primus.scoring package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.skills.html">primus.skills package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.storage.html">primus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.utils.html">primus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="primus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="primus.data.html">primus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="primus.scores.html">primus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="primus.processors.html">primus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="primus.storage.html">primus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="primus.cli.html">primus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="primus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.analyze.html">primus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.auth.html">primus.cli.auth package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.batch.html">primus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.bertopic.html">primus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.chat.html">primus.cli.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.cost.html">primus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.data.html">primus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.data_lake.html">primus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.dataset.html">primus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.evaluation.html">primus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.execute.html">primus.cli.execute package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.feedback.html">primus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.item.html">primus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.metrics.html">primus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.optimization.html">primus.cli.optimization package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.prediction.html">primus.cli.prediction package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.html">primus.cli.procedure package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.record_count.html">primus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.report.html">primus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.result.html">primus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.rubric_memory.html">primus.cli.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.score.html">primus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.score_chat.html">primus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.scorecard.html">primus.cli.scorecard package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="primus.cli.shared.html">primus.cli.shared package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="primus.cli.shared.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.task.html">primus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.training.html">primus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.tuning.html">primus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="primus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="primus.dashboard.html">primus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Primus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="primus.html">primus package</a></li>
+          <li class="breadcrumb-item"><a href="primus.cli.html">primus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="primus.cli.shared.html">primus.cli.shared package</a></li>
+      <li class="breadcrumb-item active">primus.cli.shared.CommandDispatch module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/primus.cli.shared.CommandDispatch.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-primus.cli.shared.CommandDispatch">
+<span id="primus-cli-shared-commanddispatch-module"></span><h1>primus.cli.shared.CommandDispatch module<a class="headerlink" href="#module-primus.cli.shared.CommandDispatch" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="primus.cli.shared.CommandDispatch.ItemCountColumn">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">primus.cli.shared.CommandDispatch.</span></span><span class="sig-name descname"><span class="pre">ItemCountColumn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table_column</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Column</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.shared.CommandDispatch.ItemCountColumn" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ProgressColumn</span></code></p>
+<p>Renders item count and total.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.shared.CommandDispatch.ItemCountColumn.render">
+<span class="sig-name descname"><span class="pre">render</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Task</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#primus.cli.shared.CommandDispatch.ItemCountColumn.render" title="Link to this definition"></a></dt>
+<dd><p>Show item count and total.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="primus.cli.shared.CommandDispatch.OrderCommands">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">primus.cli.shared.CommandDispatch.</span></span><span class="sig-name descname"><span class="pre">OrderCommands</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">commands</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">MutableMapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Command</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">Command</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">attrs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.shared.CommandDispatch.OrderCommands" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Group</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.shared.CommandDispatch.OrderCommands.list_commands">
+<span class="sig-name descname"><span class="pre">list_commands</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Context</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#primus.cli.shared.CommandDispatch.OrderCommands.list_commands" title="Link to this definition"></a></dt>
+<dd><p>Returns a list of subcommand names in the order they should
+appear.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="primus.cli.shared.CommandDispatch.StatusColumn">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">primus.cli.shared.CommandDispatch.</span></span><span class="sig-name descname"><span class="pre">StatusColumn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table_column</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Column</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.shared.CommandDispatch.StatusColumn" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ProgressColumn</span></code></p>
+<p>Renders status in a full line above the progress bar.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.shared.CommandDispatch.StatusColumn.render">
+<span class="sig-name descname"><span class="pre">render</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Task</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#primus.cli.shared.CommandDispatch.StatusColumn.render" title="Link to this definition"></a></dt>
+<dd><p>Should return a renderable object.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="primus.cli.shared.CommandDispatch.create_celery_app">
+<span class="sig-prename descclassname"><span class="pre">primus.cli.shared.CommandDispatch.</span></span><span class="sig-name descname"><span class="pre">create_celery_app</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Celery</span></span></span><a class="headerlink" href="#primus.cli.shared.CommandDispatch.create_celery_app" title="Link to this definition"></a></dt>
+<dd><p>Create a configured Celery application with AWS credentials.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="primus.cli.shared.CommandDispatch.create_cli">
+<span class="sig-prename descclassname"><span class="pre">primus.cli.shared.CommandDispatch.</span></span><span class="sig-name descname"><span class="pre">create_cli</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.shared.CommandDispatch.create_cli" title="Link to this definition"></a></dt>
+<dd><p>Create and configure the command line interface.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="primus.cli.shared.CommandDispatch.ensure_tasks_registered">
+<span class="sig-prename descclassname"><span class="pre">primus.cli.shared.CommandDispatch.</span></span><span class="sig-name descname"><span class="pre">ensure_tasks_registered</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.shared.CommandDispatch.ensure_tasks_registered" title="Link to this definition"></a></dt>
+<dd><p>Ensure tasks are registered, registering them lazily on first access.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="primus.cli.shared.CommandDispatch.get_celery_app">
+<span class="sig-prename descclassname"><span class="pre">primus.cli.shared.CommandDispatch.</span></span><span class="sig-name descname"><span class="pre">get_celery_app</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.shared.CommandDispatch.get_celery_app" title="Link to this definition"></a></dt>
+<dd><p>Get the Celery app instance, creating it lazily on first access.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="primus.cli.shared.CommandDispatch.get_progress_status">
+<span class="sig-prename descclassname"><span class="pre">primus.cli.shared.CommandDispatch.</span></span><span class="sig-name descname"><span class="pre">get_progress_status</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">current</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#primus.cli.shared.CommandDispatch.get_progress_status" title="Link to this definition"></a></dt>
+<dd><p>Get a status message based on progress percentage.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="primus.cli.shared.CommandDispatch.safequote">
+<span class="sig-prename descclassname"><span class="pre">primus.cli.shared.CommandDispatch.</span></span><span class="sig-name descname"><span class="pre">safequote</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#primus.cli.shared.CommandDispatch.safequote" title="Link to this definition"></a></dt>
+<dd><p>Safely quote a string value, handling None.</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="primus.cli.shared.html" class="btn btn-neutral float-left" title="primus.cli.shared package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="primus.cli.shared.CommandLineInterface.html" class="btn btn-neutral float-right" title="primus.cli.shared.CommandLineInterface module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

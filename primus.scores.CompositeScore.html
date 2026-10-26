@@ -1,0 +1,401 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>primus.scores.CompositeScore module &mdash; Primus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="primus.scores.DeepLearningOneStepSemanticClassifier module" href="primus.scores.DeepLearningOneStepSemanticClassifier.html" />
+    <link rel="prev" title="primus.scores.AgenticValidator module" href="primus.scores.AgenticValidator.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Primus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="primus.html">primus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="primus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="primus.agentic.html">primus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.analysis.html">primus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.attribution.html">primus.attribution package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.auth.html">primus.auth package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.chat.html">primus.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.html">primus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.command_worker.html">primus.command_worker package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.config.html">primus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.console.html">primus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.core.html">primus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.dashboard.html">primus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.data.html">primus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.documentation.html">primus.documentation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.guidelines.html">primus.guidelines package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.infrastructure.html">primus.infrastructure package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.input_sources.html">primus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.linting.html">primus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.logging.html">primus.logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.metrics.html">primus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.optimization.html">primus.optimization package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.primus_logging.html">primus.primus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.processors.html">primus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.reports.html">primus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.rubric_memory.html">primus.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.runtime.html">primus.runtime package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="primus.scores.html">primus.scores package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="primus.scores.html#primus.scores.AWSComprehendEntityExtractor"><code class="docutils literal notranslate"><span class="pre">AWSComprehendEntityExtractor</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.scores.html#primus.scores.AWSComprehendSentimentScore"><code class="docutils literal notranslate"><span class="pre">AWSComprehendSentimentScore</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.scores.html#primus.scores.AgenticExtractor"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.scores.html#primus.scores.AgenticValidator"><code class="docutils literal notranslate"><span class="pre">AgenticValidator</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.scores.html#primus.scores.ExplainableClassifier"><code class="docutils literal notranslate"><span class="pre">ExplainableClassifier</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.scores.html#primus.scores.FastTextClassifier"><code class="docutils literal notranslate"><span class="pre">FastTextClassifier</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.scores.html#primus.scores.OpenAIEmbeddingsClassifier"><code class="docutils literal notranslate"><span class="pre">OpenAIEmbeddingsClassifier</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.scores.html#primus.scores.Score"><code class="docutils literal notranslate"><span class="pre">Score</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.scores.html#primus.scores.SubjectIdentityScore"><code class="docutils literal notranslate"><span class="pre">SubjectIdentityScore</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.scores.html#primus.scores.SubjectSpanOverlapScore"><code class="docutils literal notranslate"><span class="pre">SubjectSpanOverlapScore</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.scores.html#primus.scores.TactusScore"><code class="docutils literal notranslate"><span class="pre">TactusScore</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.scores.html#primus.scores.resolve_score_class"><code class="docutils literal notranslate"><span class="pre">resolve_score_class()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.scores.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="primus.scores.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scoring.html">primus.scoring package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.skills.html">primus.skills package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.storage.html">primus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.utils.html">primus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="primus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="primus.data.html">primus.data package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="primus.scores.html">primus.scores package</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="primus.scores.html#primus.scores.AWSComprehendEntityExtractor"><code class="docutils literal notranslate"><span class="pre">AWSComprehendEntityExtractor</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="primus.scores.html#primus.scores.AWSComprehendSentimentScore"><code class="docutils literal notranslate"><span class="pre">AWSComprehendSentimentScore</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="primus.scores.html#primus.scores.AgenticExtractor"><code class="docutils literal notranslate"><span class="pre">AgenticExtractor</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="primus.scores.html#primus.scores.AgenticValidator"><code class="docutils literal notranslate"><span class="pre">AgenticValidator</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="primus.scores.html#primus.scores.ExplainableClassifier"><code class="docutils literal notranslate"><span class="pre">ExplainableClassifier</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="primus.scores.html#primus.scores.FastTextClassifier"><code class="docutils literal notranslate"><span class="pre">FastTextClassifier</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="primus.scores.html#primus.scores.OpenAIEmbeddingsClassifier"><code class="docutils literal notranslate"><span class="pre">OpenAIEmbeddingsClassifier</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="primus.scores.html#primus.scores.Score"><code class="docutils literal notranslate"><span class="pre">Score</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="primus.scores.html#primus.scores.SubjectIdentityScore"><code class="docutils literal notranslate"><span class="pre">SubjectIdentityScore</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="primus.scores.html#primus.scores.SubjectSpanOverlapScore"><code class="docutils literal notranslate"><span class="pre">SubjectSpanOverlapScore</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="primus.scores.html#primus.scores.TactusScore"><code class="docutils literal notranslate"><span class="pre">TactusScore</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="primus.scores.html#primus.scores.resolve_score_class"><code class="docutils literal notranslate"><span class="pre">resolve_score_class()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="primus.scores.html#subpackages">Subpackages</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="primus.scores.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.AWSComprehendEntityExtractor.html">primus.scores.AWSComprehendEntityExtractor module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.AWSComprehendSentimentScore.html">primus.scores.AWSComprehendSentimentScore module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.AgenticExtractor.html">primus.scores.AgenticExtractor module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.AgenticValidator.html">primus.scores.AgenticValidator module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">primus.scores.CompositeScore module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#primus.scores.CompositeScore.CompositeScore"><code class="docutils literal notranslate"><span class="pre">CompositeScore</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.DeepLearningOneStepSemanticClassifier.html">primus.scores.DeepLearningOneStepSemanticClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.DeepLearningSemanticClassifier.html">primus.scores.DeepLearningSemanticClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.DeepLearningSlidingWindowSemanticClassifier.html">primus.scores.DeepLearningSlidingWindowSemanticClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.ExplainableClassifier.html">primus.scores.ExplainableClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.FastTextClassifier.html">primus.scores.FastTextClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.KeywordClassifier.html">primus.scores.KeywordClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.LLMGenerator.html">primus.scores.LLMGenerator module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.LangGraphScore.html">primus.scores.LangGraphScore module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.OpenAIEmbeddingsClassifier.html">primus.scores.OpenAIEmbeddingsClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.SVMClassifier.html">primus.scores.SVMClassifier module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.Score.html">primus.scores.Score module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.SourceSpanOverlapScore.html">primus.scores.SourceSpanOverlapScore module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.SubjectIdentityScore.html">primus.scores.SubjectIdentityScore module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.SubjectSpanOverlapScore.html">primus.scores.SubjectSpanOverlapScore module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.TactusScore.html">primus.scores.TactusScore module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.prompt_trace.html">primus.scores.prompt_trace module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.test_lang_graph_cost_calculator.html">primus.scores.test_lang_graph_cost_calculator module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.test_langgraph_cost_components.html">primus.scores.test_langgraph_cost_components module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.test_langgraphscore_routing.html">primus.scores.test_langgraphscore_routing module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.test_lazy_class_resolution.html">primus.scores.test_lazy_class_resolution module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.test_prompt_trace.html">primus.scores.test_prompt_trace module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.test_tactus_score_runtime_controls.html">primus.scores.test_tactus_score_runtime_controls module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="primus.processors.html">primus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="primus.storage.html">primus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="primus.cli.html">primus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="primus.dashboard.html">primus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Primus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="primus.html">primus package</a></li>
+          <li class="breadcrumb-item"><a href="primus.scores.html">primus.scores package</a></li>
+      <li class="breadcrumb-item active">primus.scores.CompositeScore module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/primus.scores.CompositeScore.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-primus.scores.CompositeScore">
+<span id="primus-scores-compositescore-module"></span><h1>primus.scores.CompositeScore module<a class="headerlink" href="#module-primus.scores.CompositeScore" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">primus.scores.CompositeScore.</span></span><span class="sig-name descname"><span class="pre">CompositeScore</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="primus.scores.Score.html#primus.scores.Score.Score" title="primus.scores.Score.Score"><code class="xref py py-class docutils literal notranslate"><span class="pre">Score</span></code></a></p>
+<p>A composite score is a score that is composed of multiple elements, each of which is a score.
+This class handles the work of computing the values of each individual element and then
+combining them into a single composite score.  It also handles the work of computing the
+costs of the individual elements and the composite score.</p>
+<p>Initializes a new instance of the CompositeScore class.</p>
+<p>This constructor sets up the initial state of the CompositeScore object, including initializing
+token accumulators for tracking API usage costs and preparing the list to store individual
+element results.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initializes a new instance of the CompositeScore class.</p>
+<p>This constructor sets up the initial state of the CompositeScore object, including initializing
+token accumulators for tracking API usage costs and preparing the list to store individual
+element results.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.break_text_into_chunks">
+<span class="sig-name descname"><span class="pre">break_text_into_chunks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_chunk_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2000</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.break_text_into_chunks" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.compute_element">
+<span class="sig-name descname"><span class="pre">compute_element</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.compute_element" title="Link to this definition"></a></dt>
+<dd><p>Compute the result for a single element of the composite score by processing
+the filtered text in chunks and aggregating the results.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>name (str): The name of the element to compute the score for.
+text (str, optional): The text text to use for computing the score.</p>
+</dd>
+<dt>Returns:</dt><dd><p>A boolean value that indicates whether the score result was “Yes” or not.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.compute_element_for_chunk">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">compute_element_for_chunk</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">element_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">previous_messages</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prompt</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.compute_element_for_chunk" title="Link to this definition"></a></dt>
+<dd><p>The orchestration framework in CompositeScore calls this function to do the work specific to a composite score element.</p>
+<p>This method must be implemented by subclasses.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.compute_explanation_and_relevant_quote">
+<span class="sig-name descname"><span class="pre">compute_explanation_and_relevant_quote</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.compute_explanation_and_relevant_quote" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.compute_result">
+<span class="sig-name descname"><span class="pre">compute_result</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">tree</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.compute_result" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.concatenate_chat_history">
+<span class="sig-name descname"><span class="pre">concatenate_chat_history</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">selected_results</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.concatenate_chat_history" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.construct_system_prompt">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">construct_system_prompt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">text</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.construct_system_prompt" title="Link to this definition"></a></dt>
+<dd><p>Defines the system prompt used at the start of the chat history.  This system prompt
+includes minimal, basic instructions, and the text.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.create_from_markdown">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">create_from_markdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">markdown_file_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.create_from_markdown" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.extract_yaml_section">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">extract_yaml_section</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">markdown_content</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">section_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.extract_yaml_section" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.filtered_text_is_empty">
+<span class="sig-name descname"><span class="pre">filtered_text_is_empty</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.filtered_text_is_empty" title="Link to this definition"></a></dt>
+<dd><p>A common decision used at the start of decision trees.  If the filtered text is blank
+then it means that nothing in the text was judged to be relevant to the classification,
+and we can skip any further processing for that chunk.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.get_accumulated_costs">
+<span class="sig-name descname"><span class="pre">get_accumulated_costs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.get_accumulated_costs" title="Link to this definition"></a></dt>
+<dd><p>Get the expenses that have been accumulated over all the computed elements.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>dict: A dictionary containing the accumulated expenses:</dt><dd><p>‘llm_request_count’, ‘prompt_tokens’, ‘completion_tokens’, ‘input_cost’, ‘output_cost’, ‘total_cost’</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.get_element_by_name">
+<span class="sig-name descname"><span class="pre">get_element_by_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.get_element_by_name" title="Link to this definition"></a></dt>
+<dd><p>Get the element by name from the list of elements or a function pointer if the name matches a whitelist of allowed function names.
+If the name does not match an element or an allowed function name, return None.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>name (str): The name of the element to retrieve from the composite score’s elements or the name of the function.</p>
+</dd>
+<dt>Returns:</dt><dd><p>dict or function or None: The element dictionary if an element with the given name exists, a function pointer if a valid function name is specified and found, or None if no match is found.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.get_total_token_count">
+<span class="sig-name descname"><span class="pre">get_total_token_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chat_history</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.get_total_token_count" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.group_element_results_by_name">
+<span class="sig-name descname"><span class="pre">group_element_results_by_name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.group_element_results_by_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.load_results_from_json">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">load_results_from_json</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_directory_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.load_results_from_json" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.multiple">
+<span class="sig-name descname"><span class="pre">multiple</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ordered_results</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.multiple" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.na">
+<span class="sig-name descname"><span class="pre">na</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.na" title="Link to this definition"></a></dt>
+<dd><p>A shorthand function for returning a ‘NA’ score result, with the element results
+for the individual elements of the composite score.  This helps keep the code minimal
+in the concrete implementations.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.no">
+<span class="sig-name descname"><span class="pre">no</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.no" title="Link to this definition"></a></dt>
+<dd><p>A shorthand function for returning a ‘No’ score result, with the element results
+for the individual elements of the composite score.  This helps keep the code minimal
+in the concrete implementations.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.normalize_element_name">
+<span class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">normalize_element_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.normalize_element_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.return_result_with_context">
+<span class="sig-name descname"><span class="pre">return_result_with_context</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">result_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.return_result_with_context" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.save_results_to_json">
+<span class="sig-name descname"><span class="pre">save_results_to_json</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_directory_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.save_results_to_json" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.select_element_results_to_include">
+<span class="sig-name descname"><span class="pre">select_element_results_to_include</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grouped_results</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.select_element_results_to_include" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.to_dict" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.scores.CompositeScore.CompositeScore.yes">
+<span class="sig-name descname"><span class="pre">yes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#primus.scores.CompositeScore.CompositeScore.yes" title="Link to this definition"></a></dt>
+<dd><p>A shorthand function for returning a ‘Yes’ score result, with the element results
+for the individual elements of the composite score.  This helps keep the code minimal
+in the concrete implementations.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="primus.scores.AgenticValidator.html" class="btn btn-neutral float-left" title="primus.scores.AgenticValidator module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="primus.scores.DeepLearningOneStepSemanticClassifier.html" class="btn btn-neutral float-right" title="primus.scores.DeepLearningOneStepSemanticClassifier module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,613 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>primus.cli.procedure.tactus_adapters package &mdash; Primus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="primus.cli.procedure.tactus_adapters.chat module" href="primus.cli.procedure.tactus_adapters.chat.html" />
+    <link rel="prev" title="primus.cli.procedure.lua_dsl.yaml_parser module" href="primus.cli.procedure.lua_dsl.yaml_parser.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Primus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="primus.html">primus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="primus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="primus.agentic.html">primus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.analysis.html">primus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.attribution.html">primus.attribution package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.auth.html">primus.auth package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.chat.html">primus.chat package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="primus.cli.html">primus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="primus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="primus.command_worker.html">primus.command_worker package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.config.html">primus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.console.html">primus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.core.html">primus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.dashboard.html">primus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.data.html">primus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.documentation.html">primus.documentation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.guidelines.html">primus.guidelines package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.infrastructure.html">primus.infrastructure package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.input_sources.html">primus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.linting.html">primus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.logging.html">primus.logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.metrics.html">primus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.optimization.html">primus.optimization package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.primus_logging.html">primus.primus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.processors.html">primus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.reports.html">primus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.rubric_memory.html">primus.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.runtime.html">primus.runtime package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scores.html">primus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.scoring.html">primus.scoring package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.skills.html">primus.skills package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.storage.html">primus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.utils.html">primus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="primus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="primus.data.html">primus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="primus.scores.html">primus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="primus.processors.html">primus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="primus.storage.html">primus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="primus.cli.html">primus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="primus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.analyze.html">primus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.auth.html">primus.cli.auth package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.batch.html">primus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.bertopic.html">primus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.chat.html">primus.cli.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.cost.html">primus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.data.html">primus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.data_lake.html">primus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.dataset.html">primus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.evaluation.html">primus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.execute.html">primus.cli.execute package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.feedback.html">primus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.item.html">primus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.metrics.html">primus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.optimization.html">primus.cli.optimization package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.prediction.html">primus.cli.prediction package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="primus.cli.procedure.html">primus.cli.procedure package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="primus.cli.procedure.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="primus.cli.procedure.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.record_count.html">primus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.report.html">primus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.result.html">primus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.rubric_memory.html">primus.cli.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.score.html">primus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.score_chat.html">primus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.scorecard.html">primus.cli.scorecard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.shared.html">primus.cli.shared package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.task.html">primus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.training.html">primus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.tuning.html">primus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="primus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="primus.dashboard.html">primus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Primus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="primus.html">primus package</a></li>
+          <li class="breadcrumb-item"><a href="primus.cli.html">primus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="primus.cli.procedure.html">primus.cli.procedure package</a></li>
+      <li class="breadcrumb-item active">primus.cli.procedure.tactus_adapters package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/primus.cli.procedure.tactus_adapters.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-primus.cli.procedure.tactus_adapters">
+<span id="primus-cli-procedure-tactus-adapters-package"></span><h1>primus.cli.procedure.tactus_adapters package<a class="headerlink" href="#module-primus.cli.procedure.tactus_adapters" title="Link to this heading"></a></h1>
+<p>Primus adapters for Tactus protocols.</p>
+<p>These adapters implement Tactus protocols to integrate the standalone
+Tactus library with Primus’s GraphQL-based infrastructure.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.OptimizerExternalChildResolver">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">primus.cli.procedure.tactus_adapters.</span></span><span class="sig-name descname"><span class="pre">OptimizerExternalChildResolver</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.OptimizerExternalChildResolver" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Resolve exact, persisted optimizer children without account scans.</p>
+<p>A malformed/missing/mismatched record is an incomplete child, never a
+substitute identity and never a success. Failed or cancelled children are
+terminal only after both indexed records corroborate the same immutable
+launch identity.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.OptimizerExternalChildResolver.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.OptimizerExternalChildResolver.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusChatAdapter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">primus.cli.procedure.tactus_adapters.</span></span><span class="sig-name descname"><span class="pre">PrimusChatAdapter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusChatAdapter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Implements Tactus ChatRecorder protocol by wrapping ProcedureChatRecorder.</p>
+<p>This is a thin adapter that converts Pydantic ChatMessage models to
+the kwargs format expected by ProcedureChatRecorder.</p>
+<p>Initialize Primus chat adapter.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>chat_recorder: ProcedureChatRecorder instance</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusChatAdapter.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusChatAdapter.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize Primus chat adapter.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>chat_recorder: ProcedureChatRecorder instance</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusChatAdapter.end_session">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">end_session</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'COMPLETED'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusChatAdapter.end_session" title="Link to this definition"></a></dt>
+<dd><p>End the chat session.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>session_id: Session ID to end
+status: Final status (COMPLETED, FAILED, CANCELLED)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusChatAdapter.get_session_history">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">get_session_history</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">ChatMessage</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusChatAdapter.get_session_history" title="Link to this definition"></a></dt>
+<dd><p>Get the message history for a session.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>session_id: Session ID</p>
+</dd>
+<dt>Returns:</dt><dd><p>List of ChatMessage objects</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusChatAdapter.record_message">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">record_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ChatMessage</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusChatAdapter.record_message" title="Link to this definition"></a></dt>
+<dd><p>Record a message in the chat session.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>message: ChatMessage to record</p>
+</dd>
+<dt>Returns:</dt><dd><p>Message ID</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusChatAdapter.start_session">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">start_session</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusChatAdapter.start_session" title="Link to this definition"></a></dt>
+<dd><p>Start a new chat session.</p>
+<p>Note: This signature matches how TactusRuntime actually calls it (runtime.py:214),
+which only passes context. The Tactus ChatRecorder protocol definition incorrectly
+specifies procedure_id as the first parameter, but this is not how it’s used.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>context: Optional context data</p>
+</dd>
+<dt>Returns:</dt><dd><p>Session ID</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusHITLAdapter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">primus.cli.procedure.tactus_adapters.</span></span><span class="sig-name descname"><span class="pre">PrimusHITLAdapter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage_adapter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusHITLAdapter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Tactus HITLHandler implementation backed by Primus ChatMessage records.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusHITLAdapter.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage_adapter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusHITLAdapter.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusHITLAdapter.cancel_pending_request">
+<span class="sig-name descname"><span class="pre">cancel_pending_request</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">message_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusHITLAdapter.cancel_pending_request" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusHITLAdapter.check_pending_response">
+<span class="sig-name descname"><span class="pre">check_pending_response</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">message_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">HITLRequest</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">HITLResponse</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusHITLAdapter.check_pending_response" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusHITLAdapter.request_interaction">
+<span class="sig-name descname"><span class="pre">request_interaction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">HITLRequest</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">execution_context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">HITLResponse</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusHITLAdapter.request_interaction" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">primus.cli.procedure.tactus_adapters.</span></span><span class="sig-name descname"><span class="pre">PrimusStorageAdapter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">artifact_store</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Implements Tactus StorageBackend protocol using Primus GraphQL.</p>
+<p>Stores all procedure data (checkpoints, state, lua_state) in the
+Procedure.metadata JSON field via GraphQL mutations.</p>
+<p>Initialize Primus storage adapter.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>client: PrimusDashboardClient instance
+procedure_id: ID of the procedure</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">artifact_store</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize Primus storage adapter.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>client: PrimusDashboardClient instance
+procedure_id: ID of the procedure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.checkpoint_clear_after">
+<span class="sig-name descname"><span class="pre">checkpoint_clear_after</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.checkpoint_clear_after" title="Link to this definition"></a></dt>
+<dd><p>Clear checkpoint and all subsequent ones.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.checkpoint_clear_all">
+<span class="sig-name descname"><span class="pre">checkpoint_clear_all</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.checkpoint_clear_all" title="Link to this definition"></a></dt>
+<dd><p>Clear all checkpoints (but preserve state).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.checkpoint_exists">
+<span class="sig-name descname"><span class="pre">checkpoint_exists</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.checkpoint_exists" title="Link to this definition"></a></dt>
+<dd><p>Check if checkpoint exists.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.checkpoint_get">
+<span class="sig-name descname"><span class="pre">checkpoint_get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.checkpoint_get" title="Link to this definition"></a></dt>
+<dd><p>Get checkpoint value.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.checkpoint_save">
+<span class="sig-name descname"><span class="pre">checkpoint_save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.checkpoint_save" title="Link to this definition"></a></dt>
+<dd><p>Save a checkpoint.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.get_state">
+<span class="sig-name descname"><span class="pre">get_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.get_state" title="Link to this definition"></a></dt>
+<dd><p>Get mutable state dictionary.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.load_procedure_metadata">
+<span class="sig-name descname"><span class="pre">load_procedure_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ProcedureMetadata</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.load_procedure_metadata" title="Link to this definition"></a></dt>
+<dd><p>Load verified procedure state and checkpoints through artifact tickets.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.save_procedure_metadata">
+<span class="sig-name descname"><span class="pre">save_procedure_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcedureMetadata</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.save_procedure_metadata" title="Link to this definition"></a></dt>
+<dd><p>Save procedure metadata to Primus via GraphQL.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>procedure_id: Procedure ID (for API compatibility)
+metadata: ProcedureMetadata to save</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.set_state">
+<span class="sig-name descname"><span class="pre">set_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.set_state" title="Link to this definition"></a></dt>
+<dd><p>Set mutable state dictionary.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.state_clear">
+<span class="sig-name descname"><span class="pre">state_clear</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.state_clear" title="Link to this definition"></a></dt>
+<dd><p>Clear all state.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.state_delete">
+<span class="sig-name descname"><span class="pre">state_delete</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.state_delete" title="Link to this definition"></a></dt>
+<dd><p>Delete state key.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.state_get">
+<span class="sig-name descname"><span class="pre">state_get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.state_get" title="Link to this definition"></a></dt>
+<dd><p>Get state value.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.state_set">
+<span class="sig-name descname"><span class="pre">state_set</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.state_set" title="Link to this definition"></a></dt>
+<dd><p>Set state value.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.update_procedure_status">
+<span class="sig-name descname"><span class="pre">update_procedure_status</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">waiting_on_message_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusStorageAdapter.update_procedure_status" title="Link to this definition"></a></dt>
+<dd><p>Update procedure status in Primus.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>procedure_id: Procedure ID
+status: New status
+waiting_on_message_id: Optional message ID if waiting for human</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusTraceSink">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">primus.cli.procedure.tactus_adapters.</span></span><span class="sig-name descname"><span class="pre">PrimusTraceSink</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusTraceSink" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Persist Tactus trace records into Primus ChatSession/ChatMessage models.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusTraceSink.STREAM_UPDATE_MAX_INTERVAL_SECONDS">
+<span class="sig-name descname"><span class="pre">STREAM_UPDATE_MAX_INTERVAL_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.25</span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusTraceSink.STREAM_UPDATE_MAX_INTERVAL_SECONDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusTraceSink.STREAM_UPDATE_MIN_CHARS_DELTA">
+<span class="sig-name descname"><span class="pre">STREAM_UPDATE_MIN_CHARS_DELTA</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">16</span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusTraceSink.STREAM_UPDATE_MIN_CHARS_DELTA" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusTraceSink.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusTraceSink.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusTraceSink.end_session">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">end_session</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'COMPLETED'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusTraceSink.end_session" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusTraceSink.flush">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">flush</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusTraceSink.flush" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusTraceSink.mark_runtime_execute_started">
+<span class="sig-name descname"><span class="pre">mark_runtime_execute_started</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusTraceSink.mark_runtime_execute_started" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusTraceSink.record">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">record</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusTraceSink.record" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.PrimusTraceSink.start_session">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">start_session</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.PrimusTraceSink.start_session" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.TerminalHITLAdapter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">primus.cli.procedure.tactus_adapters.</span></span><span class="sig-name descname"><span class="pre">TerminalHITLAdapter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">auto_approve</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.TerminalHITLAdapter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Tactus HITLHandler that resolves HITL requests via terminal prompts.</p>
+<p>Used when running procedures from the CLI so that Human.approve() and
+Human.input() calls block at the terminal rather than suspending the
+procedure and waiting for a dashboard response.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>auto_approve: If True, automatically approve all requests without prompting.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.TerminalHITLAdapter.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">auto_approve</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.TerminalHITLAdapter.__init__" title="Link to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>Args:</dt><dd><p>auto_approve: If True, automatically approve all requests without prompting.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="primus.cli.procedure.tactus_adapters.TerminalHITLAdapter.request_interaction">
+<span class="sig-name descname"><span class="pre">request_interaction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">HITLRequest</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">execution_context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">HITLResponse</span></span></span><a class="headerlink" href="#primus.cli.procedure.tactus_adapters.TerminalHITLAdapter.request_interaction" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.chat.html">primus.cli.procedure.tactus_adapters.chat module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.chat.html#primus.cli.procedure.tactus_adapters.chat.PrimusChatAdapter"><code class="docutils literal notranslate"><span class="pre">PrimusChatAdapter</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.chat.html#primus.cli.procedure.tactus_adapters.chat.PrimusChatAdapter.__init__"><code class="docutils literal notranslate"><span class="pre">PrimusChatAdapter.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.chat.html#primus.cli.procedure.tactus_adapters.chat.PrimusChatAdapter.end_session"><code class="docutils literal notranslate"><span class="pre">PrimusChatAdapter.end_session()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.chat.html#primus.cli.procedure.tactus_adapters.chat.PrimusChatAdapter.get_session_history"><code class="docutils literal notranslate"><span class="pre">PrimusChatAdapter.get_session_history()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.chat.html#primus.cli.procedure.tactus_adapters.chat.PrimusChatAdapter.record_message"><code class="docutils literal notranslate"><span class="pre">PrimusChatAdapter.record_message()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.chat.html#primus.cli.procedure.tactus_adapters.chat.PrimusChatAdapter.start_session"><code class="docutils literal notranslate"><span class="pre">PrimusChatAdapter.start_session()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.external_children.html">primus.cli.procedure.tactus_adapters.external_children module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.external_children.html#primus.cli.procedure.tactus_adapters.external_children.OptimizerExternalChildResolver"><code class="docutils literal notranslate"><span class="pre">OptimizerExternalChildResolver</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.external_children.html#primus.cli.procedure.tactus_adapters.external_children.OptimizerExternalChildResolver.__init__"><code class="docutils literal notranslate"><span class="pre">OptimizerExternalChildResolver.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.hitl.html">primus.cli.procedure.tactus_adapters.hitl module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.hitl.html#primus.cli.procedure.tactus_adapters.hitl.PrimusHITLAdapter"><code class="docutils literal notranslate"><span class="pre">PrimusHITLAdapter</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.hitl.html#primus.cli.procedure.tactus_adapters.hitl.PrimusHITLAdapter.__init__"><code class="docutils literal notranslate"><span class="pre">PrimusHITLAdapter.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.hitl.html#primus.cli.procedure.tactus_adapters.hitl.PrimusHITLAdapter.cancel_pending_request"><code class="docutils literal notranslate"><span class="pre">PrimusHITLAdapter.cancel_pending_request()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.hitl.html#primus.cli.procedure.tactus_adapters.hitl.PrimusHITLAdapter.check_pending_response"><code class="docutils literal notranslate"><span class="pre">PrimusHITLAdapter.check_pending_response()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.hitl.html#primus.cli.procedure.tactus_adapters.hitl.PrimusHITLAdapter.request_interaction"><code class="docutils literal notranslate"><span class="pre">PrimusHITLAdapter.request_interaction()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.rubric_memory_toolset.html">primus.cli.procedure.tactus_adapters.rubric_memory_toolset module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.rubric_memory_toolset.html#primus.cli.procedure.tactus_adapters.rubric_memory_toolset.register_on_transport"><code class="docutils literal notranslate"><span class="pre">register_on_transport()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.score_editor_toolset.html">primus.cli.procedure.tactus_adapters.score_editor_toolset module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.score_editor_toolset.html#primus.cli.procedure.tactus_adapters.score_editor_toolset.ScoreEditorToolset"><code class="docutils literal notranslate"><span class="pre">ScoreEditorToolset</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.score_editor_toolset.html#primus.cli.procedure.tactus_adapters.score_editor_toolset.ScoreEditorToolset.__init__"><code class="docutils literal notranslate"><span class="pre">ScoreEditorToolset.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.score_editor_toolset.html#primus.cli.procedure.tactus_adapters.score_editor_toolset.ScoreEditorToolset.get_content"><code class="docutils literal notranslate"><span class="pre">ScoreEditorToolset.get_content()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.score_editor_toolset.html#primus.cli.procedure.tactus_adapters.score_editor_toolset.ScoreEditorToolset.get_result"><code class="docutils literal notranslate"><span class="pre">ScoreEditorToolset.get_result()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.score_editor_toolset.html#primus.cli.procedure.tactus_adapters.score_editor_toolset.ScoreEditorToolset.register_on_transport"><code class="docutils literal notranslate"><span class="pre">ScoreEditorToolset.register_on_transport()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.score_editor_toolset.html#primus.cli.procedure.tactus_adapters.score_editor_toolset.ScoreEditorToolset.setup"><code class="docutils literal notranslate"><span class="pre">ScoreEditorToolset.setup()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.score_editor_toolset.html#primus.cli.procedure.tactus_adapters.score_editor_toolset.ScoreEditorToolset.str_replace_editor"><code class="docutils literal notranslate"><span class="pre">ScoreEditorToolset.str_replace_editor()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.score_editor_toolset.html#primus.cli.procedure.tactus_adapters.score_editor_toolset.ScoreEditorToolset.submit_score_version"><code class="docutils literal notranslate"><span class="pre">ScoreEditorToolset.submit_score_version()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html">primus.cli.procedure.tactus_adapters.storage module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.__init__"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.checkpoint_clear_after"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.checkpoint_clear_after()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.checkpoint_clear_all"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.checkpoint_clear_all()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.checkpoint_exists"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.checkpoint_exists()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.checkpoint_get"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.checkpoint_get()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.checkpoint_save"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.checkpoint_save()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.get_state"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.get_state()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.load_procedure_metadata"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.load_procedure_metadata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.save_procedure_metadata"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.save_procedure_metadata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.set_state"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.set_state()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.state_clear"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.state_clear()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.state_delete"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.state_delete()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.state_get"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.state_get()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.state_set"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.state_set()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.PrimusStorageAdapter.update_procedure_status"><code class="docutils literal notranslate"><span class="pre">PrimusStorageAdapter.update_procedure_status()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.ProcedureArtifactStorageError"><code class="docutils literal notranslate"><span class="pre">ProcedureArtifactStorageError</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.download_procedure_attachment"><code class="docutils literal notranslate"><span class="pre">download_procedure_attachment()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.storage.html#primus.cli.procedure.tactus_adapters.storage.upload_procedure_attachment"><code class="docutils literal notranslate"><span class="pre">upload_procedure_attachment()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.terminal_hitl.html">primus.cli.procedure.tactus_adapters.terminal_hitl module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.terminal_hitl.html#primus.cli.procedure.tactus_adapters.terminal_hitl.TerminalHITLAdapter"><code class="docutils literal notranslate"><span class="pre">TerminalHITLAdapter</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.terminal_hitl.html#primus.cli.procedure.tactus_adapters.terminal_hitl.TerminalHITLAdapter.__init__"><code class="docutils literal notranslate"><span class="pre">TerminalHITLAdapter.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.terminal_hitl.html#primus.cli.procedure.tactus_adapters.terminal_hitl.TerminalHITLAdapter.request_interaction"><code class="docutils literal notranslate"><span class="pre">TerminalHITLAdapter.request_interaction()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.trace.html">primus.cli.procedure.tactus_adapters.trace module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.trace.html#primus.cli.procedure.tactus_adapters.trace.PrimusTraceSink"><code class="docutils literal notranslate"><span class="pre">PrimusTraceSink</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.trace.html#primus.cli.procedure.tactus_adapters.trace.PrimusTraceSink.STREAM_UPDATE_MAX_INTERVAL_SECONDS"><code class="docutils literal notranslate"><span class="pre">PrimusTraceSink.STREAM_UPDATE_MAX_INTERVAL_SECONDS</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.trace.html#primus.cli.procedure.tactus_adapters.trace.PrimusTraceSink.STREAM_UPDATE_MIN_CHARS_DELTA"><code class="docutils literal notranslate"><span class="pre">PrimusTraceSink.STREAM_UPDATE_MIN_CHARS_DELTA</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.trace.html#primus.cli.procedure.tactus_adapters.trace.PrimusTraceSink.__init__"><code class="docutils literal notranslate"><span class="pre">PrimusTraceSink.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.trace.html#primus.cli.procedure.tactus_adapters.trace.PrimusTraceSink.assistant_message_texts"><code class="docutils literal notranslate"><span class="pre">PrimusTraceSink.assistant_message_texts</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.trace.html#primus.cli.procedure.tactus_adapters.trace.PrimusTraceSink.console_audit_events"><code class="docutils literal notranslate"><span class="pre">PrimusTraceSink.console_audit_events</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.trace.html#primus.cli.procedure.tactus_adapters.trace.PrimusTraceSink.end_session"><code class="docutils literal notranslate"><span class="pre">PrimusTraceSink.end_session()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.trace.html#primus.cli.procedure.tactus_adapters.trace.PrimusTraceSink.flush"><code class="docutils literal notranslate"><span class="pre">PrimusTraceSink.flush()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.trace.html#primus.cli.procedure.tactus_adapters.trace.PrimusTraceSink.mark_runtime_execute_started"><code class="docutils literal notranslate"><span class="pre">PrimusTraceSink.mark_runtime_execute_started()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.trace.html#primus.cli.procedure.tactus_adapters.trace.PrimusTraceSink.record"><code class="docutils literal notranslate"><span class="pre">PrimusTraceSink.record()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.trace.html#primus.cli.procedure.tactus_adapters.trace.PrimusTraceSink.session_id"><code class="docutils literal notranslate"><span class="pre">PrimusTraceSink.session_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="primus.cli.procedure.tactus_adapters.trace.html#primus.cli.procedure.tactus_adapters.trace.PrimusTraceSink.start_session"><code class="docutils literal notranslate"><span class="pre">PrimusTraceSink.start_session()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="primus.cli.procedure.lua_dsl.yaml_parser.html" class="btn btn-neutral float-left" title="primus.cli.procedure.lua_dsl.yaml_parser module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="primus.cli.procedure.tactus_adapters.chat.html" class="btn btn-neutral float-right" title="primus.cli.procedure.tactus_adapters.chat module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

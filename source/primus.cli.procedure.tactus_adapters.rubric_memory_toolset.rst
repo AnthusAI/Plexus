@@ -1,0 +1,7 @@
+primus.cli.procedure.tactus\_adapters.rubric\_memory\_toolset module
+====================================================================
+
+.. automodule:: primus.cli.procedure.tactus_adapters.rubric_memory_toolset
+   :members:
+   :show-inheritance:
+   :undoc-members:
